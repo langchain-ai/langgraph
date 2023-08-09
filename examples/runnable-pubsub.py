@@ -5,7 +5,7 @@ from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 from langchain.runnables.openai_functions import OpenAIFunctionsRouter
 
-from permchain.connection_queue import InMemoryPubSubConnection
+from permchain.connection_inmemory import InMemoryPubSubConnection
 from permchain.pubsub import PubSub
 from permchain.topic import Topic
 
