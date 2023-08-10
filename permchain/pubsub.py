@@ -20,7 +20,8 @@ from typing import (
 from langchain.callbacks.manager import CallbackManager
 from langchain.load.dump import dumpd
 from langchain.load.serializable import Serializable
-from langchain.schema.runnable import Runnable, RunnableConfig, _patch_config
+from langchain.schema.runnable import Runnable, RunnableConfig
+from langchain.schema.runnable.base import patch_config
 
 from permchain.connection import PubSubConnection
 from permchain.topic import INPUT_TOPIC, OUTPUT_TOPIC, RunnableSubscriber
@@ -144,7 +145,7 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                     process.invoke,
                     value,
                     config={
-                        **_patch_config(
+                        **patch_config(
                             config, run_manager.get_child(process.topic.name)
                         ),
                         "send": send,

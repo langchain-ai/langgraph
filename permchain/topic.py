@@ -19,9 +19,8 @@ from langchain.schema.runnable import (
     RunnableConfig,
     RunnablePassthrough,
     RunnableSequence,
-    Other,
-    _coerce_to_runnable,
 )
+from langchain.schema.runnable.base import Other, coerce_to_runnable
 from pydantic import Field
 
 T = TypeVar("T")
@@ -81,9 +80,7 @@ class RunnableSubscriber(RunnableBinding[T, Any]):
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
     ) -> RunnableSequence[T, Other]:
         if isinstance(self.bound, RunnablePassthrough):
-            return RunnableSubscriber(
-                topic=self.topic, bound=_coerce_to_runnable(other)
-            )
+            return RunnableSubscriber(topic=self.topic, bound=coerce_to_runnable(other))
         else:
             return RunnableSubscriber(topic=self.topic, bound=self.bound | other)
 
