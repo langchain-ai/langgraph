@@ -1,4 +1,5 @@
 from operator import itemgetter
+from pprint import pprint
 
 from langchain.chat_models.openai import ChatOpenAI
 from langchain.prompts import SystemMessagePromptTemplate
@@ -103,10 +104,16 @@ web_researcher = PubSub(
     connection=InMemoryPubSubConnection(),
 )
 
-for output in web_researcher.stream({"question": "What food do turtles eat?"}):
-    print("got output", output)
+# for output in web_researcher.stream({"question": "What food do turtles eat?"}):
+#     print("got output", output)
 
-print("---done---")
+# print("---done with stream()---")
+
+pprint(
+    web_researcher.batch(
+        [{"question": "What food do turtles eat?"}, {"question": "What is art?"}]
+    )
+)
 
 
 # agent = PubSub(

@@ -1,5 +1,4 @@
 from __future__ import annotations
-from ctypes import Union
 
 import queue
 from abc import ABC
@@ -16,6 +15,7 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
+    Union,
 )
 
 from langchain.load.dump import dumpd
@@ -78,7 +78,7 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
         input: Sequence[Any],
         config: Optional[Union[RunnableConfig, List[RunnableConfig]]] = None,
     ) -> Any:
-        configs = self._get_config_list(config)
+        configs = self._get_config_list(config, len(input))
         with get_executor_for_config(configs[0]) as executor:
             return super().batch(
                 input,
