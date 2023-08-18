@@ -1,17 +1,19 @@
 # main.py
 
+from duckduckgo_search import DDGS
 from fastapi import FastAPI
 from langchain.document_loaders import AsyncHtmlLoader
 from langchain.document_transformers import Html2TextTransformer
-from duckduckgo_search import DDGS
 
 ddgs = DDGS()
 
 app = FastAPI()
 
+
 @app.get("/")
 def read_root():
     return {"Hello": "World"}
+
 
 @app.get("/query")
 def read_item(query: str):

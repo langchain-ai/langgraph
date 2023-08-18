@@ -25,7 +25,7 @@ syrupy = "^4.0.2"
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.0.249"
-black = "^23.1.0"
+black = {extras = ["jupyter"], version = "^23.7.0"}
 
 [tool.poetry.group.typing.dependencies]
 mypy = "^0.991"

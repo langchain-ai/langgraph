@@ -1,39 +1,42 @@
 from operator import itemgetter
 
-from langchain.chat_models import ChatOpenAI, ChatAnthropic
-from langchain.prompts import SystemMessagePromptTemplate, ChatPromptTemplate
-from langchain.schema.output_parser import StrOutputParser
-from langchain.runnables.openai_functions import OpenAIFunctionsRouter
 import requests
 from fastapi import FastAPI
-
+from langchain.chat_models import ChatAnthropic, ChatOpenAI
+from langchain.output_parsers.openai_functions import JsonKeyOutputFunctionsParser
+from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
+from langchain.runnables.openai_functions import OpenAIFunctionsRouter
+from langchain.schema.output_parser import StrOutputParser
 
 from permchain.connection_inmemory import InMemoryPubSubConnection
 from permchain.pubsub import PubSub
 from permchain.topic import Topic
-from langchain.output_parsers.openai_functions import JsonKeyOutputFunctionsParser
 
 template = """Write between 2 and 5 sub questions that serve as google search queries to search online that form an objective opinion from the following: {question}"""
 functions = [
     {
-                "name": "sub_questions",
-                "description": "List of sub questions",
-                "parameters": {
-                    "type": "object",
-                    "properties": {
-                        "questions": {
-                            "type": "array",
-                            "description": "List of sub questions to ask.",
-                              "items": {
-                                "type": "string"
-                              }
-                        },
-                    },
+        "name": "sub_questions",
+        "description": "List of sub questions",
+        "parameters": {
+            "type": "object",
+            "properties": {
+                "questions": {
+                    "type": "array",
+                    "description": "List of sub questions to ask.",
+                    "items": {"type": "string"},
                 },
             },
+        },
+    },
 ]
 prompt = ChatPromptTemplate.from_template(template)
-question_chain = prompt | ChatOpenAI(temperature=0).bind(functions=functions, function_call={"name":"sub_questions"}) | JsonKeyOutputFunctionsParser(key_name="questions")
+question_chain = (
+    prompt
+    | ChatOpenAI(temperature=0).bind(
+        functions=functions, function_call={"name": "sub_questions"}
+    )
+    | JsonKeyOutputFunctionsParser(key_name="questions")
+)
 
 template = """You are tasked with writing a research report to answer the following question:
 
@@ -54,9 +57,13 @@ report_chain = prompt | ChatOpenAI() | StrOutputParser()
 research_inbox = Topic("research")
 writer_inbox = Topic("writer_inbox")
 
+
 def web_researcher(questions):
-    response = requests.post("http://127.0.0.1:8081/batch", json={"questions": questions})
+    response = requests.post(
+        "http://127.0.0.1:8081/batch", json={"questions": questions}
+    )
     return response.json()
+
 
 subquestion_actor = (
     # Listed in inputs
@@ -69,15 +76,13 @@ research_actor = (
     research_inbox.subscribe()
     | {
         "research": lambda x: web_researcher(x),
-        #"research": (lambda x: [web_researcher(i) for i in x]),
+        # "research": (lambda x: [web_researcher(i) for i in x]),
         "question": Topic.IN.current() | itemgetter("question"),
     }
     | writer_inbox.publish()
 )
 write_actor = (
-    writer_inbox.subscribe()
-    | {"response": report_chain}
-    | Topic.OUT.publish()
+    writer_inbox.subscribe() | {"response": report_chain} | Topic.OUT.publish()
 )
 
 longer_researcher = PubSub(
@@ -86,6 +91,8 @@ longer_researcher = PubSub(
 )
 
 app = FastAPI()
+
+
 @app.get("/report")
 def read_item(question: str):
-    return longer_researcher.invoke({"question":question})
+    return longer_researcher.invoke({"question": question})
