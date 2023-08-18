@@ -1,7 +1,6 @@
-from abc import ABC, abstractmethod
 import asyncio
+from abc import ABC, abstractmethod
 from typing import Any, Callable
-
 
 PubSubListener = Callable[[Any], None]
 

@@ -1,7 +1,6 @@
 from __future__ import annotations
 
 from abc import ABC
-
 from typing import (
     Any,
     Callable,
@@ -13,6 +12,7 @@ from typing import (
 )
 
 from langchain.load.serializable import Serializable
+from langchain.pydantic_v1 import Field
 from langchain.schema.runnable import (
     Runnable,
     RunnableBinding,
@@ -21,7 +21,8 @@ from langchain.schema.runnable import (
     RunnableSequence,
 )
 from langchain.schema.runnable.base import Other, coerce_to_runnable
-from pydantic import Field
+
+from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
 
 T = TypeVar("T")
 T_in = TypeVar("T_in")
@@ -97,7 +98,7 @@ class RunnablePublisher(RunnablePassthrough[T]):
     topic: Topic[T]
 
     def invoke(self, input: T, config: Optional[RunnableConfigForPubSub] = None) -> T:
-        send = config.get("send", None)
+        send = config.get(CONFIG_SEND_KEY, None)
         if send is not None:
             send(self.topic.name, input)
         return super().invoke(input, config)
@@ -117,7 +118,7 @@ class RunnableCurrentValue(Serializable, Runnable[Any, T]):
     topic: Topic[T]
 
     def invoke(self, input: T, config: Optional[RunnableConfigForPubSub] = None) -> T:
-        get = config.get("get", None)
+        get = config.get(CONFIG_GET_KEY, None)
         if get is not None:
             return get(self.topic.name)
         else:

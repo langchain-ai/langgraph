@@ -1,5 +1,5 @@
-from collections import defaultdict
 import threading
+from collections import defaultdict
 from typing import Any
 
 from permchain.connection import PubSubConnection, PubSubListener
