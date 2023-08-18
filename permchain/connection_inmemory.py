@@ -6,6 +6,9 @@ from permchain.connection import PubSubConnection, PubSubListener
 
 
 class InMemoryPubSubConnection(PubSubConnection):
+    topics: defaultdict[str, list[PubSubListener]]
+    lock: threading.Lock
+
     def __init__(self) -> None:
         self.topics = defaultdict(list)
         self.lock = threading.Lock()

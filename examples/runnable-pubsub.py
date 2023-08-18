@@ -109,6 +109,8 @@ web_researcher = PubSub(
 
 # print("---done with stream()---")
 
+# pprint(web_researcher.invoke({"question": "What food do turtles eat?"}))
+
 pprint(
     web_researcher.batch(
         [{"question": "What food do turtles eat?"}, {"question": "What is art?"}]

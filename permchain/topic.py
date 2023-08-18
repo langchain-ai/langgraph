@@ -118,7 +118,7 @@ class RunnableCurrentValue(Serializable, Runnable[Any, T]):
     topic: Topic[T]
 
     def invoke(self, input: T, config: Optional[RunnableConfigForPubSub] = None) -> T:
-        get = config.get(CONFIG_GET_KEY, None)
+        get: Callable[[str], None] = config.get(CONFIG_GET_KEY, None)
         if get is not None:
             return get(self.topic.name)
         else:

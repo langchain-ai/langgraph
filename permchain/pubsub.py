@@ -49,13 +49,13 @@ def partition(
 class IterableQueue(queue.SimpleQueue):
     done_sentinel = object()
 
-    def get(self, block: bool = True, timeout: float = None):
+    def get(self, block: bool = True, timeout: float | None = None) -> Any:
         return super().get(block=block, timeout=timeout)
 
-    def __iter__(self):
+    def __iter__(self) -> Iterator[Any]:
         return iter(self.get, self.done_sentinel)
 
-    def close(self):
+    def close(self) -> None:
         self.put(self.done_sentinel)
 
 
@@ -191,11 +191,11 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                         final_output += chunk
             finally:
                 # Cleanup
-                while inflight:
-                    inflight.pop().cancel()
-
                 for process in listener_processes:
                     self.connection.disconnect(prefix_topic_name(process.topic.name))
+
+                while inflight:
+                    inflight.pop().cancel()
 
                 # Raise exceptions if any
                 if exceptions:
