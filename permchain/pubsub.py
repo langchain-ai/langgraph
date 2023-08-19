@@ -202,7 +202,11 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                     run_manager.on_chain_error(exceptions[0])
                     raise exceptions[0]
                 else:
-                    run_manager.on_chain_end(final_output)
+                    run_manager.on_chain_end(
+                        final_output
+                        if isinstance(final_output, dict)
+                        else {"output": final_output}
+                    )
 
 
 PubSub.update_forward_refs()
