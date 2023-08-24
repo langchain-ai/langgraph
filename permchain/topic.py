@@ -94,14 +94,14 @@ class RunnableSubscriber(RunnableBinding[T, Any]):
         raise NotImplementedError()
 
 
-class RunnablePublisher(RunnablePassthrough[T]):
+class RunnablePublisher(Runnable[T, T]):
     topic: Topic[T]
 
     def invoke(self, input: T, config: Optional[RunnableConfigForPubSub] = None) -> T:
         send = config.get(CONFIG_SEND_KEY, None)
         if send is not None:
             send(self.topic.name, input)
-        return super().invoke(input, config)
+        return input
 
 
 class RunnablePublisherEach(RunnablePublisher[Sequence[T]]):

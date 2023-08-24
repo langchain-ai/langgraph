@@ -15,17 +15,12 @@ from typing import (
     Set,
     Tuple,
     TypeVar,
-    Union,
 )
 
-from langchain.load.dump import dumpd
+from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.load.serializable import Serializable
 from langchain.schema.runnable import Runnable, RunnableConfig, patch_config
-from langchain.schema.runnable.config import (
-    ensure_config,
-    get_callback_manager_for_config,
-    get_executor_for_config,
-)
+from langchain.schema.runnable.config import get_executor_for_config
 
 from permchain.connection import PubSubConnection
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
@@ -67,38 +62,22 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
     class Config:
         arbitrary_types_allowed = True
 
-    def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
-        collected = []
-        for chunk in self.stream(input, config):
-            collected.append(chunk)
-        return collected
-
-    def batch(
+    def _transform(
         self,
-        input: Sequence[Any],
-        config: Optional[Union[RunnableConfig, List[RunnableConfig]]] = None,
-    ) -> Any:
-        configs = self._get_config_list(config, len(input))
-        with get_executor_for_config(configs[0]) as executor:
-            return super().batch(
-                input,
-                [patch_config(config, executor=executor) for config in configs],
-            )
-
-    def stream(
-        self,
-        input: Any,
-        config: Optional[RunnableConfig] = None,
+        input: Iterator[Any],
+        run_manager: CallbackManagerForChainRun,
+        config: RunnableConfig,
     ) -> Iterator[Any]:
         input_processes, listener_processes = partition(
             lambda r: r.topic.name == INPUT_TOPIC, self.processes
         )
 
-        # setup callbacks
-        config = ensure_config(config)
-        callback_manager = get_callback_manager_for_config(config)
-        # start the root run
-        run_manager = callback_manager.on_chain_start(dumpd(self), {"input": input})
+        input_value = None
+        for chunk in input:
+            if input_value is None:
+                input_value = chunk
+            else:
+                input_value += chunk
 
         with get_executor_for_config(config) as executor:
             # Track inflight futures
@@ -143,7 +122,7 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
 
                 def get(topic_name: str) -> Any:
                     if topic_name == INPUT_TOPIC:
-                        return input
+                        return input_value
                     elif topic_name == process.topic.name:
                         return value
                     else:
@@ -158,8 +137,8 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                     config={
                         **patch_config(
                             config,
-                            callbacks=run_manager.get_child(process.topic.name),
-                            executor=executor,
+                            callbacks=run_manager.get_child(),
+                            run_name=f"Topic: {process.topic.name}",
                         ),
                         CONFIG_SEND_KEY: send,
                         CONFIG_GET_KEY: get,
@@ -176,37 +155,42 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                     prefix_topic_name(process.topic.name), partial(run_once, process)
                 )
 
-            # Run input processes once
+            # Send input to each input process
             for process in input_processes:
-                run_once(process, input)
+                run_once(process, input_value)
 
             try:
                 # Yield output until all processes are done
-                final_output = None
                 for chunk in output:
                     yield chunk
-                    if final_output is None:
-                        final_output = chunk
-                    else:
-                        final_output += chunk
             finally:
-                # Cleanup
+                # Disconnect from all topics
                 for process in listener_processes:
                     self.connection.disconnect(prefix_topic_name(process.topic.name))
 
+                # Cancel all inflight futures
                 while inflight:
                     inflight.pop().cancel()
 
                 # Raise exceptions if any
                 if exceptions:
-                    run_manager.on_chain_error(exceptions[0])
                     raise exceptions[0]
-                else:
-                    run_manager.on_chain_end(
-                        final_output
-                        if isinstance(final_output, dict)
-                        else {"output": final_output}
-                    )
+
+    def stream(
+        self,
+        input: Any,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Optional[Any],
+    ) -> Iterator[Any]:
+        yield from self._transform_stream_with_config(
+            iter([input]), self._transform, config, **kwargs
+        )
+
+    def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+        collected = []
+        for chunk in self.stream(input, config):
+            collected.append(chunk)
+        return collected
 
 
 PubSub.update_forward_refs()
