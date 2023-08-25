@@ -20,7 +20,9 @@ from typing import (
 from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.load.serializable import Serializable
 from langchain.schema.runnable import Runnable, RunnableConfig, patch_config
+from langchain.schema.runnable.base import Runnable
 from langchain.schema.runnable.config import get_executor_for_config
+from tenacity import BaseRetrying
 
 from permchain.connection import PubSubConnection
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
@@ -61,6 +63,12 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
 
     class Config:
         arbitrary_types_allowed = True
+
+    def with_retry(self, retry: BaseRetrying) -> Runnable[Any, Any]:
+        return self.__class__(
+            processes=[p.with_retry(retry) for p in self.processes],
+            connection=self.connection,
+        )
 
     def _transform(
         self,
