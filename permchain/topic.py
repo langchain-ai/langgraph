@@ -94,7 +94,7 @@ class RunnableSubscriber(RunnableBinding[T, Any]):
         raise NotImplementedError()
 
 
-class RunnablePublisher(Runnable[T, T]):
+class RunnablePublisher(Serializable, Runnable[T, T]):
     topic: Topic[T]
 
     def invoke(self, input: T, config: Optional[RunnableConfigForPubSub] = None) -> T:
