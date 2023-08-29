@@ -21,7 +21,7 @@ assert pubsub.invoke('a') == ['abc']
 
 Check `tests` and `examples` for more examples.
 
-## Roadmap
+## Near-term Roadmap
 
 - [ ] Add initial retry support (pending changes in `langchain`)
 - [ ] Detect cycles (aka. infinite loops) and throw an error

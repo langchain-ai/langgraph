@@ -14,57 +14,11 @@ coverage:
 		--cov-report xml \
 		--cov-report term-missing:skip-covered
 
-######################
-# DOCUMENTATION
-######################
-
-clean: docs_clean api_docs_clean
-
-
-docs_build:
-	docs/.local_build.sh
-
-docs_clean:
-	rm -r docs/_dist
-
-docs_linkcheck:
-	poetry run linkchecker docs/_dist/docs_skeleton/ --ignore-url node_modules
-
-api_docs_build:
-	poetry run python docs/api_reference/create_api_rst.py
-	cd docs/api_reference && poetry run make html
-
-api_docs_clean:
-	rm -f docs/api_reference/api_reference.rst
-	cd docs/api_reference && poetry run make clean
-
-api_docs_linkcheck:
-	poetry run linkchecker docs/api_reference/_build/html/index.html
-
-# Define a variable for the test file path.
-TEST_FILE ?= tests/unit_tests/
-
 test:
-	poetry run pytest --disable-socket --allow-unix-socket $(TEST_FILE)
-
-tests: 
-	poetry run pytest --disable-socket --allow-unix-socket $(TEST_FILE)
-
-extended_tests:
-	poetry run pytest --disable-socket --allow-unix-socket --only-extended tests/unit_tests
+	poetry run pytest
 
 test_watch:
-	poetry run ptw --now . -- tests/unit_tests
-
-integration_tests:
-	poetry run pytest tests/integration_tests
-
-scheduled_tests:
-	poetry run pytest -m scheduled tests/integration_tests
-
-docker_tests:
-	docker build -t my-langchain-image:test .
-	docker run --rm my-langchain-image:test
+	poetry run ptw
 
 ######################
 # LINTING AND FORMATTING

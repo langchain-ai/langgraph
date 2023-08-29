@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "permchain"
-version = "0.0.1"
-description = "Longchain, Langchaaaaain, etc."
+version = "0.0.2"
+description = "permchain"
 authors = []
 license = "MIT"
 readme = "README.md"
@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/permchain"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain = {path = "../langchain/libs/langchain", develop = true}
+langchain = "^0.0.275"
 
 
 [tool.poetry.group.test.dependencies]
