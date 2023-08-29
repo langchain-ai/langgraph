@@ -180,7 +180,6 @@ def test_invoke_two_processes_no_in(mocker: MockerFixture):
     assert conn.listeners == {}
 
 
-@pytest.mark.skip("TODO")
 def test_invoke_two_processes_simple_cycle(mocker: MockerFixture):
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     topic_one = Topic("one")
