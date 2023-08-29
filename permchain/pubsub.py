@@ -64,11 +64,11 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
     class Config:
         arbitrary_types_allowed = True
 
-    def with_retry(self, retry: BaseRetrying) -> Runnable[Any, Any]:
-        return self.__class__(
-            processes=[p.with_retry(retry) for p in self.processes],
-            connection=self.connection,
-        )
+    # def with_retry(self, retry: BaseRetrying) -> Runnable[Any, Any]:
+    #     return self.__class__(
+    #         processes=[p.with_retry(retry) for p in self.processes],
+    #         connection=self.connection,
+    #     )
 
     def _transform(
         self,
