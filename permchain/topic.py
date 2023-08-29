@@ -9,6 +9,7 @@ from typing import (
     Optional,
     Sequence,
     TypeVar,
+    TypedDict,
 )
 
 from langchain.load.serializable import Serializable
@@ -31,6 +32,13 @@ T_out = TypeVar("T_out")
 
 INPUT_TOPIC = "__in__"
 OUTPUT_TOPIC = "__out__"
+INFLIGHT_TOPIC = "__inflight__"
+
+
+class InflightMessage(TypedDict):
+    message: Any
+    topic_name: str
+    started_at: str
 
 
 class Topic(Serializable, Generic[T], ABC):
@@ -60,6 +68,11 @@ class Topic(Serializable, Generic[T], ABC):
     @property
     def OUT(cls) -> Topic[T_out]:
         return cls[T_out](OUTPUT_TOPIC)
+
+    @classmethod
+    @property
+    def INFLIGHT(cls) -> Topic[InflightMessage]:
+        return cls[InflightMessage](INFLIGHT_TOPIC)
 
 
 class RunnableConfigForPubSub(RunnableConfig):

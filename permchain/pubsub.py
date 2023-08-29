@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import datetime
 import queue
 import threading
 from abc import ABC
@@ -26,7 +27,15 @@ from langchain.schema.runnable.config import get_executor_for_config
 
 from permchain.connection import PubSubConnection
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
-from permchain.topic import INPUT_TOPIC, OUTPUT_TOPIC, RunnableSubscriber
+from permchain.inflight import CycleMonitor
+from permchain.topic import (
+    INFLIGHT_TOPIC,
+    INPUT_TOPIC,
+    OUTPUT_TOPIC,
+    InflightMessage,
+    RunnableSubscriber,
+    Topic,
+)
 
 T = TypeVar("T")
 T_in = TypeVar("T_in")
@@ -80,6 +89,8 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
             lambda r: r.topic.name == INPUT_TOPIC, self.processes
         )
 
+        listener_processes += [Topic.INFLIGHT.subscribe() | CycleMonitor()]
+
         if not input_processes:
             # TODO raise exception?
             return
@@ -127,6 +138,9 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                     if exc is not None:
                         exceptions.append(exc)
 
+                    if process.topic.name == INFLIGHT_TOPIC and not exc:
+                        return
+
                     # Close output iterator if
                     # - all processes are done, or
                     # - an exception occurred
@@ -163,6 +177,23 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                 # Add callback to cleanup
                 inflight.add(fut)
                 fut.add_done_callback(cleanup_run)
+
+                # Send message to inflight topic
+                if process.topic.name != INFLIGHT_TOPIC:
+                    # TODO why does it fail if `send` is called in the main thread
+                    fut = executor.submit(
+                        send,
+                        INFLIGHT_TOPIC,
+                        InflightMessage(
+                            message=value,
+                            topic_name=process.topic.name,
+                            started_at=datetime.datetime.now().isoformat(),
+                        ),
+                    )
+
+                    # Add callback to cleanup
+                    inflight.add(fut)
+                    fut.add_done_callback(cleanup_run)
 
             # Listen on all subscribed topics
             for process in listener_processes:
