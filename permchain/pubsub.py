@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import queue
+import threading
 from abc import ABC
 from concurrent.futures import CancelledError, Future
 from functools import partial
@@ -22,7 +23,6 @@ from langchain.load.serializable import Serializable
 from langchain.schema.runnable import Runnable, RunnableConfig, patch_config
 from langchain.schema.runnable.base import Runnable
 from langchain.schema.runnable.config import get_executor_for_config
-from tenacity import BaseRetrying
 
 from permchain.connection import PubSubConnection
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
@@ -80,6 +80,11 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
             lambda r: r.topic.name == INPUT_TOPIC, self.processes
         )
 
+        if not input_processes:
+            # TODO raise exception?
+            return
+
+        # Consume input iterator into a single value
         input_value = None
         for chunk in input:
             if input_value is None:
@@ -106,27 +111,29 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                 else:
                     self.connection.send(prefix_topic_name(topic_name), message)
 
-            def cleanup_run(fut: Future) -> None:
-                """Cleanup after a process runs."""
-                inflight.discard(fut)
-
-                try:
-                    exc = fut.exception()
-                except CancelledError:
-                    exc = None
-                except Exception as e:
-                    exc = e
-                if exc is not None:
-                    exceptions.append(exc)
-
-                # Close output iterator if
-                # - all processes are done, or
-                # - an exception occurred
-                if not inflight or exc is not None:
-                    output.close()
-
             def run_once(process: RunnableSubscriber[Any], value: Any) -> None:
                 """Run a process once."""
+
+                def cleanup_run(fut: Future) -> None:
+                    """Cleanup after a process runs."""
+                    inflight.discard(fut)
+
+                    try:
+                        exc = fut.exception()
+                    except CancelledError:
+                        exc = None
+                    except Exception as e:
+                        exc = e
+                    if exc is not None:
+                        exceptions.append(exc)
+
+                    # Close output iterator if
+                    # - all processes are done, or
+                    # - an exception occurred
+                    if not inflight or exc is not None:
+                        # TODO remove timer once the condition includes
+                        # checking for messages not yet read from the topics
+                        threading.Timer(0.1, output.close).start()
 
                 def get(topic_name: str) -> Any:
                     if topic_name == INPUT_TOPIC:
@@ -146,7 +153,7 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                         **patch_config(
                             config,
                             callbacks=run_manager.get_child(),
-                            run_name=f"Topic: {process.topic.name}",
+                            # run_name=f"Topic: {process.topic.name}",
                         ),
                         CONFIG_SEND_KEY: send,
                         CONFIG_GET_KEY: get,
@@ -173,8 +180,8 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                     yield chunk
             finally:
                 # Disconnect from all topics
-                for process in listener_processes:
-                    self.connection.disconnect(prefix_topic_name(process.topic.name))
+                for topic_name in set(p.topic.name for p in listener_processes):
+                    self.connection.disconnect(prefix_topic_name(topic_name))
 
                 # Cancel all inflight futures
                 while inflight:
