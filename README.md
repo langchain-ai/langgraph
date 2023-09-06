@@ -30,4 +30,6 @@ Check `tests` and `examples` for more examples.
   - [ ] eg. https://anyio.readthedocs.io/en/3.x/streams.html
   - [ ] Implement IN and OUT topics as regular topics
 - [ ] Enable resuming PubSub from the "middle" of the computation
+- [ ] Add "human in the loop" pattern
+- [ ] Add "wait until topic X is done" pattern
 - [ ] Add Redis-backed Connection implementation
