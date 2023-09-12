@@ -33,6 +33,9 @@ Check `tests` and `examples` for more examples.
   - [ ] Use this to build retry mechanism, where any inflight messages are moved back to the respective topics when restarting
 - [ ] Detect cycles (aka. infinite loops) and throw an error
   - [ ] Allow user to catch that error (by subcribing to an error topic?)
-- [ ] Add "human in the loop" pattern
+- [ ] Add "human in the loop" pattern, one of the two below
+  - [ ] Example with one permchain, which runs until it produces either 1. request for input or 2. output. The consumer code then gets the needed info, and restarts the permchain with answer, and same state id
+  - [ ] Allow interrupting execution by breaking out of the iterator returned by .stream()
+    - [ ] Build example showing a simple "human in the loop" pattern using this, ie. if a certain message asking for input is published the consumer of the iterator breaks out, does something and then restarts it
 - [ ] Add "wait until topic X is done" pattern, aka. `Topic.reduce()`
 - [ ] Add Redis-backed Connection implementation

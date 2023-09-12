@@ -50,8 +50,8 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                 input_value += chunk
 
         with get_executor_for_config(config) as executor:
-            # Namespace topics for each run
-            topic_prefix = str(run_manager.parent_run_id or run_manager.run_id)
+            # Namespace topics for each run, default to run_id, ie. isolate runs
+            topic_prefix = str(config.get("state_id") or run_manager.run_id)
             # Track inflight futures
             inflight: Set[Future] = set()
             # Track exceptions
