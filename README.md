@@ -27,11 +27,11 @@ Check `tests` and `examples` for more examples.
 - [x] Implement OUT as regular topic
 - [x] Implement IN as regular topic
 - [x] Add Connection.peek() to monitor past messages from all topics
+- [x] Enable resuming PubSub from the "middle" of the computation
 - [ ] Move tracking of inflight processes/messages to Connection
   - [ ] Use this to build retry mechanism, where any inflight messages are moved back to the respective topics when restarting
 - [ ] Detect cycles (aka. infinite loops) and throw an error
   - [ ] Allow user to catch that error (by subcribing to an error topic?)
-- [x] Enable resuming PubSub from the "middle" of the computation
 - [ ] Add "human in the loop" pattern
 - [ ] Add "wait until topic X is done" pattern, aka. `Topic.reduce()`
 - [ ] Add Redis-backed Connection implementation

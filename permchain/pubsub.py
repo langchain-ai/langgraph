@@ -109,11 +109,11 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                 fut.add_done_callback(cleanup_run)
 
             # Listen on all subscribed topics
-            listeners_by_topic = groupby(
+            processes_by_topic = groupby(
                 sorted(self.processes, key=lambda p: p.topic.name),
                 lambda p: p.topic.name,
             )
-            for topic_name, processes in listeners_by_topic:
+            for topic_name, processes in processes_by_topic:
                 self.connection.listen(
                     topic_prefix,
                     topic_name,
@@ -126,6 +126,8 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
             try:
                 if inflight:
                     # Yield output until all processes are done
+                    # This blocks the current thread, all other work needs to go
+                    # through the executor
                     for chunk in self.connection.iterate(topic_prefix, OUTPUT_TOPIC):
                         yield chunk
                 else:
