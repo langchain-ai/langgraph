@@ -13,10 +13,12 @@ class LogMessage(TypedDict):
 
 class PubSubConnection(ABC):
     def full_topic_name(self, prefix: str, topic_name: str) -> str:
+        """Return the full topic name for a given prefix and topic name."""
         return f"{prefix}:{topic_name}"
 
     @abstractmethod
     def iterate(self, prefix: str, topic_name: str) -> Iterator[Any]:
+        """Iterate over all currently queued messages for a topic, consuming them."""
         ...
 
     # TODO add aiterate() method
