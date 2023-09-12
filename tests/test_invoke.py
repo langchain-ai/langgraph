@@ -1,8 +1,9 @@
 import pytest
 from pytest_mock import MockerFixture
+
+from langchain.callbacks.manager import trace_as_chain_group
 from permchain.connection_inmemory import InMemoryPubSubConnection
 from permchain.pubsub import PubSub
-
 from permchain.topic import RunnableSubscriber, Topic
 
 
@@ -43,6 +44,32 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture):
     assert conn.listeners == {}
     # Then invoke pubsub
     assert pubsub.invoke(2) == [4]
+    # After invoke returns the listeners were cleaned up
+    assert conn.listeners == {}
+
+
+def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture):
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    topic_one = Topic("one")
+    chain_one = Topic.IN.subscribe() | add_one | topic_one.publish()
+    chain_two = topic_one.subscribe() | add_one | Topic.OUT.publish()
+
+    # Chains can be invoked directly for testing
+    assert chain_one.invoke(2) == 3
+    assert chain_two.invoke(2) == 3
+
+    conn = InMemoryPubSubConnection(clear_on_disconnect=False)
+    pubsub_one = PubSub(processes=(chain_one,), connection=conn)
+    pubsub_two = PubSub(processes=(chain_two,), connection=conn)
+
+    # Using in-memory conn internals to make assertions about pubsub
+    # If we start with 0 listeners
+    assert conn.listeners == {}
+    # Then invoke both pubsubs, as a group
+    # The second picks up where the first left off
+    with trace_as_chain_group("PubSubGroup") as cm:
+        assert pubsub_one.invoke(2, {"callbacks": cm}) == []
+        assert pubsub_two.invoke(None, {"callbacks": cm}) == [4]
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
 

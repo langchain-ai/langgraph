@@ -1,9 +1,9 @@
 from __future__ import annotations
 
-from itertools import groupby
 from abc import ABC
 from concurrent.futures import CancelledError, Future
 from functools import partial
+from itertools import groupby
 from typing import Any, Iterator, List, Optional, Sequence, Set, TypeVar
 
 from langchain.callbacks.manager import CallbackManagerForChainRun
@@ -50,19 +50,12 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                 input_value += chunk
 
         with get_executor_for_config(config) as executor:
-            topic_prefix = str(run_manager.run_id) + ":"
+            # Namespace topics for each run
+            topic_prefix = str(run_manager.parent_run_id or run_manager.run_id)
             # Track inflight futures
             inflight: Set[Future] = set()
             # Track exceptions
             exceptions: List[Exception] = []
-
-            # Namespace topics for each run
-            def prefix_topic_name(topic_name: str) -> str:
-                return f"{topic_prefix}{topic_name}"
-
-            def send(topic_name: str, message: Any) -> None:
-                """Send a message to a topic. Injected into config."""
-                self.connection.send(prefix_topic_name(topic_name), message)
 
             def run_once(process: RunnableSubscriber[Any], value: Any) -> None:
                 """Run a process once."""
@@ -106,7 +99,7 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                             callbacks=run_manager.get_child(),
                             run_name=f"Topic: {process.topic.name}",
                         ),
-                        CONFIG_SEND_KEY: send,
+                        CONFIG_SEND_KEY: partial(self.connection.send, topic_prefix),
                         CONFIG_GET_KEY: get,
                     },
                 )
@@ -122,19 +115,18 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
             )
             for topic_name, processes in listeners_by_topic:
                 self.connection.listen(
-                    prefix_topic_name(topic_name),
+                    topic_prefix,
+                    topic_name,
                     [partial(run_once, process) for process in processes],
                 )
 
             # Send input to input processes
-            send(INPUT_TOPIC, input_value)
+            self.connection.send(topic_prefix, INPUT_TOPIC, input_value)
 
             try:
                 if inflight:
                     # Yield output until all processes are done
-                    for chunk in self.connection.iterate(
-                        prefix_topic_name(OUTPUT_TOPIC)
-                    ):
+                    for chunk in self.connection.iterate(topic_prefix, OUTPUT_TOPIC):
                         yield chunk
                 else:
                     self.connection.disconnect(topic_prefix)

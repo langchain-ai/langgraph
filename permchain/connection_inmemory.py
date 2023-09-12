@@ -1,11 +1,10 @@
-import threading
 import queue
+import threading
 from collections import defaultdict
+from datetime import datetime
 from typing import Any, Iterator
 
-q = queue.Queue()
-
-from permchain.connection import PubSubConnection, PubSubListener
+from permchain.connection import LogMessage, PubSubConnection, PubSubListener
 
 
 class IterableQueue(queue.SimpleQueue):
@@ -22,58 +21,90 @@ class IterableQueue(queue.SimpleQueue):
 
 
 class InMemoryPubSubConnection(PubSubConnection):
+    clear_on_disconnect: bool
+    logs: defaultdict[str, list[Any]]
     topics: defaultdict[str, IterableQueue]
     listeners: defaultdict[str, list[PubSubListener]]
     lock: threading.RLock
 
-    def __init__(self) -> None:
+    def __init__(self, clear_on_disconnect: bool = True) -> None:
+        self.clear_on_disconnect = clear_on_disconnect
+        self.logs = defaultdict(list)
         self.topics = defaultdict(IterableQueue)
         self.listeners = defaultdict(list)
         self.lock = threading.RLock()
 
-    def iterate(self, topic_name: str) -> Iterator[Any]:
+    def peek(self, prefix: str) -> Iterator[LogMessage]:
+        return iter(self.logs[prefix])
+
+    def iterate(self, prefix: str, topic_name: str) -> Iterator[Any]:
+        topic = self.full_topic_name(prefix, topic_name)
         with self.lock:
-            if self.listeners[topic_name]:
+            if self.listeners[topic]:
                 raise RuntimeError(
-                    f"Cannot iterate over topic {topic_name} while listeners are connected"
+                    f"Cannot iterate over topic {topic} while listeners are connected"
                 )
 
-        return iter(self.topics[topic_name])
+        return iter(self.topics[topic])
 
-    def listen(self, topic_name: str, listeners: list[PubSubListener]) -> None:
-        self.disconnect(topic_name)
+    def listen(
+        self, prefix: str, topic_name: str, listeners: list[PubSubListener]
+    ) -> None:
+        topic = self.full_topic_name(prefix, topic_name)
+        self.disconnect(topic)
 
         with self.lock:
-            self.listeners[topic_name].extend(listeners)
-            topic_queue = self.topics[topic_name]
+            # Add the listeners for future messages
+            self.listeners[topic].extend(listeners)
+
+            # Send any pending messages to the listeners
+            topic_queue = self.topics[topic]
             while not topic_queue.empty():
                 message = topic_queue.get()
-                for listener in self.listeners[topic_name]:
-                    listener(message)
+                if message is not topic_queue.done_sentinel:
+                    for listener in self.listeners[topic]:
+                        listener(message)
 
-    def send(self, topic_name: str, message: Any) -> None:
+    def send(self, prefix: str, topic_name: str, message: Any) -> None:
+        topic = self.full_topic_name(prefix, topic_name)
+
         with self.lock:
-            listeners = self.listeners[topic_name]
+            # Add the message to the log
+            self.logs[prefix].append(
+                LogMessage(
+                    message=message,
+                    topic_name=topic_name,
+                    started_at=datetime.now().isoformat(),
+                )
+            )
+            listeners = self.listeners[topic]
             if listeners:
+                # Send the message to listeners if any are connected
                 for listener in listeners:
                     listener(message)
             else:
-                self.topics[topic_name].put(message)
+                # Otherwise add the message to the topic queue for later
+                self.topics[topic].put(message)
 
-    def disconnect(self, prefix: str) -> None:
+    def disconnect(self, prefix_or_topic: str) -> None:
         with self.lock:
+            if self.clear_on_disconnect:
+                if prefix_or_topic in self.logs:
+                    del self.logs[prefix_or_topic]
+
             to_delete = []
             for topic, queue in self.topics.items():
-                if topic.startswith(prefix):
+                if topic.startswith(prefix_or_topic):
                     queue.close()
-                    to_delete.append(topic)
+                    if self.clear_on_disconnect:
+                        to_delete.append(topic)
             # can't delete while iterating
             for topic in to_delete:
                 del self.topics[topic]
 
             to_delete = []
             for topic in self.listeners:
-                if topic.startswith(prefix):
+                if topic.startswith(prefix_or_topic):
                     to_delete.append(topic)
             # can't delete while iterating
             for topic in to_delete:
