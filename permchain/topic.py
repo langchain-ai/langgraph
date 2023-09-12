@@ -40,15 +40,27 @@ class Topic(Serializable, Generic[T], ABC):
         super().__init__(name=name)
 
     def subscribe(self) -> RunnableSubscriber[T]:
+        if self.name == OUTPUT_TOPIC:
+            raise ValueError("Cannot subscribe to output topic")
+
         return RunnableSubscriber(topic=self)
 
     def current(self) -> RunnableCurrentValue[T]:
+        if self.name == OUTPUT_TOPIC:
+            raise ValueError("Cannot subscribe to output topic")
+
         return RunnableCurrentValue(topic=self)
 
     def publish(self) -> RunnablePublisher[T]:
+        if self.name == INPUT_TOPIC:
+            raise ValueError("Cannot publish to input topic")
+
         return RunnablePublisher(topic=self)
 
     def publish_each(self) -> Runnable[T, T]:
+        if self.name == INPUT_TOPIC:
+            raise ValueError("Cannot publish to input topic")
+
         return RunnablePublisherEach(topic=self)
 
     @classmethod

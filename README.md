@@ -24,11 +24,12 @@ Check `tests` and `examples` for more examples.
 ## Near-term Roadmap
 
 - [x] Add initial retry support (pending changes in `langchain`)
+- [x] Implement OUT as regular topic
+- [x] Implement IN as regular topic
 - [ ] Detect cycles (aka. infinite loops) and throw an error
   - [ ] Allow user to catch that error (by subcribing to an error topic?)
 - [ ] Replace Queue data structure with a Log data structure (this will enable checking the status of the readers, etc.)
   - [ ] eg. https://anyio.readthedocs.io/en/3.x/streams.html
-  - [ ] Implement IN and OUT topics as regular topics
 - [ ] Enable resuming PubSub from the "middle" of the computation
 - [ ] Add "human in the loop" pattern
 - [ ] Add "wait until topic X is done" pattern

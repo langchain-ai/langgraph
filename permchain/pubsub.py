@@ -1,22 +1,10 @@
 from __future__ import annotations
 
-import queue
-import threading
+from itertools import groupby
 from abc import ABC
 from concurrent.futures import CancelledError, Future
 from functools import partial
-from itertools import filterfalse
-from typing import (
-    Any,
-    Callable,
-    Iterator,
-    List,
-    Optional,
-    Sequence,
-    Set,
-    Tuple,
-    TypeVar,
-)
+from typing import Any, Iterator, List, Optional, Sequence, Set, TypeVar
 
 from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.load.serializable import Serializable
@@ -31,29 +19,6 @@ from permchain.topic import INPUT_TOPIC, OUTPUT_TOPIC, RunnableSubscriber
 T = TypeVar("T")
 T_in = TypeVar("T_in")
 T_out = TypeVar("T_out")
-
-
-def partition(
-    pred: Callable[[T], bool], seq: Sequence[T]
-) -> Tuple[Sequence[T], Sequence[T]]:
-    """Partition entries into true entries and false entries.
-
-    partition(is_even, range(10)) --> 0 2 4 6 8  and  1 3 5 7 9
-    """
-    return list(filter(pred, seq)), list(filterfalse(pred, seq))
-
-
-class IterableQueue(queue.SimpleQueue):
-    done_sentinel = object()
-
-    def get(self, block: bool = True, timeout: float | None = None) -> Any:
-        return super().get(block=block, timeout=timeout)
-
-    def __iter__(self) -> Iterator[Any]:
-        return iter(self.get, self.done_sentinel)
-
-    def close(self) -> None:
-        self.put(self.done_sentinel)
 
 
 class PubSub(Serializable, Runnable[Any, Any], ABC):
@@ -76,14 +41,6 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
     ) -> Iterator[Any]:
-        input_processes, listener_processes = partition(
-            lambda r: r.topic.name == INPUT_TOPIC, self.processes
-        )
-
-        if not input_processes:
-            # TODO raise exception?
-            return
-
         # Consume input iterator into a single value
         input_value = None
         for chunk in input:
@@ -93,23 +50,19 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                 input_value += chunk
 
         with get_executor_for_config(config) as executor:
+            topic_prefix = str(run_manager.run_id) + ":"
             # Track inflight futures
             inflight: Set[Future] = set()
             # Track exceptions
             exceptions: List[Exception] = []
-            # Track output
-            output = IterableQueue()
 
             # Namespace topics for each run
             def prefix_topic_name(topic_name: str) -> str:
-                return f"{run_manager.run_id}/{topic_name}"
+                return f"{topic_prefix}{topic_name}"
 
             def send(topic_name: str, message: Any) -> None:
                 """Send a message to a topic. Injected into config."""
-                if topic_name == OUTPUT_TOPIC:
-                    output.put(message)
-                else:
-                    self.connection.send(prefix_topic_name(topic_name), message)
+                self.connection.send(prefix_topic_name(topic_name), message)
 
             def run_once(process: RunnableSubscriber[Any], value: Any) -> None:
                 """Run a process once."""
@@ -131,9 +84,7 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                     # - all processes are done, or
                     # - an exception occurred
                     if not inflight or exc is not None:
-                        # TODO remove timer once the condition includes
-                        # checking for messages not yet read from the topics
-                        threading.Timer(0.1, output.close).start()
+                        self.connection.disconnect(topic_prefix)
 
                 def get(topic_name: str) -> Any:
                     if topic_name == INPUT_TOPIC:
@@ -165,24 +116,29 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                 fut.add_done_callback(cleanup_run)
 
             # Listen on all subscribed topics
-            for process in listener_processes:
+            listeners_by_topic = groupby(
+                sorted(self.processes, key=lambda p: p.topic.name),
+                lambda p: p.topic.name,
+            )
+            for topic_name, processes in listeners_by_topic:
                 self.connection.listen(
-                    prefix_topic_name(process.topic.name), partial(run_once, process)
+                    prefix_topic_name(topic_name),
+                    [partial(run_once, process) for process in processes],
                 )
 
-            # Send input to each input process
-            for process in input_processes:
-                run_once(process, input_value)
+            # Send input to input processes
+            send(INPUT_TOPIC, input_value)
 
             try:
-                # Yield output until all processes are done
-                for chunk in output:
-                    yield chunk
+                if inflight:
+                    # Yield output until all processes are done
+                    for chunk in self.connection.iterate(
+                        prefix_topic_name(OUTPUT_TOPIC)
+                    ):
+                        yield chunk
+                else:
+                    self.connection.disconnect(topic_prefix)
             finally:
-                # Disconnect from all topics
-                for topic_name in set(p.topic.name for p in listener_processes):
-                    self.connection.disconnect(prefix_topic_name(topic_name))
-
                 # Cancel all inflight futures
                 while inflight:
                     inflight.pop().cancel()

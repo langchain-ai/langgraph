@@ -1,11 +1,15 @@
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, Callable
+from typing import Any, Callable, Iterator
 
 PubSubListener = Callable[[Any], None]
 
 
 class PubSubConnection(ABC):
+    @abstractmethod
+    def iterate(self, topic_name: str) -> Iterator[Any]:
+        ...
+
     @abstractmethod
     def listen(self, topic_name: str, listener: PubSubListener) -> None:
         ...
