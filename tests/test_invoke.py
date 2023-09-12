@@ -105,7 +105,7 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture):
     topic_one = Topic("one")
     # Topic.publish() is passthrough so we can publish to multiple topics in sequence
     chain_one = (
-        Topic.IN.subscribe() | add_one | topic_one.publish() | Topic.OUT.publish()
+        Topic.IN.subscribe() | add_one | Topic.OUT.publish() | topic_one.publish()
     )
     chain_two = topic_one.subscribe() | add_one | Topic.OUT.publish()
 

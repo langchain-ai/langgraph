@@ -64,11 +64,11 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
     class Config:
         arbitrary_types_allowed = True
 
-    # def with_retry(self, retry: BaseRetrying) -> Runnable[Any, Any]:
-    #     return self.__class__(
-    #         processes=[p.with_retry(retry) for p in self.processes],
-    #         connection=self.connection,
-    #     )
+    def with_retry(self, **kwargs: Any) -> Runnable[Any, Any]:
+        return self.__class__(
+            processes=[p.with_retry(**kwargs) for p in self.processes],
+            connection=self.connection,
+        )
 
     def _transform(
         self,
@@ -153,7 +153,7 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                         **patch_config(
                             config,
                             callbacks=run_manager.get_child(),
-                            # run_name=f"Topic: {process.topic.name}",
+                            run_name=f"Topic: {process.topic.name}",
                         ),
                         CONFIG_SEND_KEY: send,
                         CONFIG_GET_KEY: get,

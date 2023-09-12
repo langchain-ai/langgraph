@@ -23,7 +23,7 @@ Check `tests` and `examples` for more examples.
 
 ## Near-term Roadmap
 
-- [ ] Add initial retry support (pending changes in `langchain`)
+- [x] Add initial retry support (pending changes in `langchain`)
 - [ ] Detect cycles (aka. infinite loops) and throw an error
   - [ ] Allow user to catch that error (by subcribing to an error topic?)
 - [ ] Replace Queue data structure with a Log data structure (this will enable checking the status of the readers, etc.)
