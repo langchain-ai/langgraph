@@ -28,7 +28,7 @@ Check `tests` and `examples` for more examples.
 - [x] Implement IN as regular topic
 - [x] Add Connection.peek() to monitor past messages from all topics
 - [x] Enable resuming PubSub from the "middle" of the computation
-- [ ] Add test for .peek()
+- [x] Add test for .peek()
 - [ ] Move tracking of inflight processes/messages to Connection
   - [ ] Use this to build retry mechanism, where any inflight messages are moved back to the respective topics when restarting
 - [ ] Detect cycles (aka. infinite loops) and throw an error

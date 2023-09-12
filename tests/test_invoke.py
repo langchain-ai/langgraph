@@ -68,10 +68,50 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture):
     # Then invoke both pubsubs, as a group
     # The second picks up where the first left off
     with trace_as_chain_group("PubSubGroup") as cm:
+        # invoke() step 1
         assert pubsub_one.invoke(2, {"callbacks": cm}) == []
+
+        # listeners are still cleared, even though state is preserved
+        assert conn.listeners == {}
+        # The log contains all messages published to all topics, in order
+        assert [{**m, "started_at": None} for m in conn.peek(cm.parent_run_id)] == [
+            {"message": 2, "topic_name": "__in__", "started_at": None},
+            {"message": 3, "topic_name": "one", "started_at": None},
+        ]
+        # IN, OUT, one
+        assert len(conn.topics) == 3
+        topic_one_full_name = conn.full_topic_name(cm.parent_run_id, topic_one.name)
+        # the actual message publishd by chain_one, and a sentinel "end" value
+        assert conn.topics[topic_one_full_name].qsize() == 2
+
+        # invoke() step 2
+        # this picks up where the first left off, and produces same result as
+        # `test_invoke_two_processes_in_out`
         assert pubsub_two.invoke(None, {"callbacks": cm}) == [4]
-    # After invoke returns the listeners were cleaned up
-    assert conn.listeners == {}
+
+        # listeners are still cleared, even though state is preserved
+        assert conn.listeners == {}
+        # The log contains all messages published to all topics, in order
+        assert [{**m, "started_at": None} for m in conn.peek(cm.parent_run_id)] == [
+            {"message": 2, "topic_name": "__in__", "started_at": None},
+            {"message": 3, "topic_name": "one", "started_at": None},
+            {"message": None, "topic_name": "__in__", "started_at": None},
+            {"message": 4, "topic_name": "__out__", "started_at": None},
+        ]
+        # IN, OUT, one
+        assert len(conn.topics) == 3
+
+        for topic_name, queue in conn.topics.items():
+            if topic_name.endswith("IN"):
+                # Contains two sentinel "end" values, and None
+                # passed in as input to chain_two, which doesn't subscribe to it
+                assert queue.qsize() == 3
+            if topic_name.endswith("OUT"):
+                # Empty because this was consumed by invoke()
+                assert queue.qsize() == 0
+            if topic_name.endswith("one"):
+                # Contains sentinel "end" value
+                assert queue.qsize() == 1
 
 
 def test_invoke_many_processes_in_out(mocker: MockerFixture):

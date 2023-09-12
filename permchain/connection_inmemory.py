@@ -35,7 +35,7 @@ class InMemoryPubSubConnection(PubSubConnection):
         self.lock = threading.RLock()
 
     def peek(self, prefix: str) -> Iterator[LogMessage]:
-        return iter(self.logs[prefix])
+        return iter(self.logs[str(prefix)])
 
     def iterate(self, prefix: str, topic_name: str) -> Iterator[Any]:
         topic = self.full_topic_name(prefix, topic_name)
@@ -70,7 +70,7 @@ class InMemoryPubSubConnection(PubSubConnection):
 
         with self.lock:
             # Add the message to the log
-            self.logs[prefix].append(
+            self.logs[str(prefix)].append(
                 LogMessage(
                     message=message,
                     topic_name=topic_name,
