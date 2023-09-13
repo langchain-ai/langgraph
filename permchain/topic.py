@@ -21,6 +21,7 @@ from langchain.schema.runnable import (
     RunnableSequence,
 )
 from langchain.schema.runnable.base import Other, coerce_to_runnable
+from langchain.schema.runnable.config import RunnableConfig
 
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
 
@@ -44,6 +45,12 @@ class Topic(Serializable, Generic[T], ABC):
             raise ValueError("Cannot subscribe to output topic")
 
         return RunnableSubscriber(topic=self)
+
+    def reduce(self) -> RunnableReducer[T]:
+        if self.name == OUTPUT_TOPIC:
+            raise ValueError("Cannot reduce on output topic")
+
+        return RunnableReducer(topic=self)
 
     def current(self) -> RunnableCurrentValue[T]:
         if self.name == OUTPUT_TOPIC:
@@ -96,6 +103,33 @@ class RunnableSubscriber(RunnableBinding[T, Any]):
             return RunnableSubscriber(topic=self.topic, bound=coerce_to_runnable(other))
         else:
             return RunnableSubscriber(topic=self.topic, bound=self.bound | other)
+
+    def __ror__(
+        self,
+        other: Runnable[Other, Any]
+        | Callable[[Any], Other]
+        | Mapping[str, Runnable[Other, Any] | Callable[[Other], Any]],
+    ) -> RunnableSequence[Other, Any]:
+        raise NotImplementedError()
+
+
+class RunnableReducer(RunnableBinding[list[T], Any]):
+    topic: Topic[T]
+
+    bound: Runnable[list[T], Any] = Field(default_factory=RunnablePassthrough)
+
+    kwargs: Mapping[str, Any] = Field(default_factory=dict)
+
+    def __or__(
+        self,
+        other: Runnable[Any, Other]
+        | Callable[[Any], Other]
+        | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
+    ) -> RunnableSequence[list[T], Other]:
+        if isinstance(self.bound, RunnablePassthrough):
+            return RunnableReducer(topic=self.topic, bound=coerce_to_runnable(other))
+        else:
+            return RunnableReducer(topic=self.topic, bound=self.bound | other)
 
     def __ror__(
         self,

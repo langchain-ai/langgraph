@@ -17,7 +17,7 @@ class PubSubConnection(ABC):
         return f"{prefix}:{topic_name}"
 
     @abstractmethod
-    def iterate(self, prefix: str, topic_name: str) -> Iterator[Any]:
+    def iterate(self, prefix: str, topic_name: str, wait: bool) -> Iterator[Any]:
         """Iterate over all currently queued messages for a topic, consuming them."""
         ...
 
@@ -56,4 +56,6 @@ class PubSubConnection(ABC):
 
     @abstractmethod
     def peek(self, prefix: str) -> Iterator[LogMessage]:
+        """Iterate over all previously published messages for all topics,
+        without consuming them."""
         ...

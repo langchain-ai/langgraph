@@ -37,13 +37,19 @@ class InMemoryPubSubConnection(PubSubConnection):
     def peek(self, prefix: str) -> Iterator[LogMessage]:
         return iter(self.logs[str(prefix)])
 
-    def iterate(self, prefix: str, topic_name: str) -> Iterator[Any]:
+    def iterate(self, prefix: str, topic_name: str, wait: bool) -> Iterator[Any]:
         topic = self.full_topic_name(prefix, topic_name)
+
+        # This connection doesn't support iterating over topics with listeners connected
         with self.lock:
             if self.listeners[topic]:
                 raise RuntimeError(
                     f"Cannot iterate over topic {topic} while listeners are connected"
                 )
+
+        # If wait is False, add sentinel to queue to ensure the iterator terminates
+        if not wait:
+            self.topics[topic].close()
 
         return iter(self.topics[topic])
 

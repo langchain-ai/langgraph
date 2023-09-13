@@ -169,6 +169,75 @@ def test_invoke_two_processes_two_in_two_out(mocker: MockerFixture):
     assert conn.listeners == {}
 
 
+def test_invoke_two_processes_two_in_reduce_two_out(mocker: MockerFixture):
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
+    topic_one = Topic("one")
+    topic_two = Topic("two")
+    chain_one = Topic.IN.subscribe() | add_one | topic_one.publish()
+    chain_two = topic_one.subscribe() | add_one | topic_two.publish()
+    chain_three = Topic.IN.subscribe() | add_one | topic_two.publish()
+    chain_four = topic_two.reduce() | add_10_each | Topic.OUT.publish()
+
+    # Chains can be invoked directly for testing
+    assert chain_one.invoke(2) == 3
+    assert chain_four.invoke([2, 3]) == [12, 13]
+
+    conn = InMemoryPubSubConnection()
+    pubsub = PubSub((chain_one, chain_two, chain_three, chain_four), connection=conn)
+
+    # Using in-memory conn internals to make assertions about pubsub
+    # If we start with 0 listeners
+    assert conn.listeners == {}
+
+    # Then invoke pubsub
+    # We get a single array result as chain_four waits for all publishers to finish
+    # before operating on all elements published to topic_two as an array
+    assert pubsub.invoke(2) == [[13, 14]]
+
+    # After invoke returns the listeners were cleaned up
+    assert conn.listeners == {}
+
+
+def test_invoke_reduce_then_subscribe(mocker: MockerFixture):
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
+
+    topic_one = Topic("one")
+    topic_two = Topic("two")
+
+    chain_one = Topic.IN.subscribe() | add_10_each | topic_one.publish_each()
+    chain_two = topic_one.reduce() | sum | topic_two.publish()
+    chain_three = topic_two.subscribe() | add_one | Topic.OUT.publish()
+
+    # Chains can be invoked directly for testing
+    assert chain_two.invoke([2, 3]) == 5
+    assert chain_three.invoke(5) == 6
+
+    state_id = uuid4()
+    conn = InMemoryPubSubConnection(clear_on_disconnect=False)
+    pubsub = PubSub((chain_one, chain_two, chain_three), connection=conn)
+
+    # Using in-memory conn internals to make assertions about pubsub
+    # If we start with 0 listeners
+    assert conn.listeners == {}
+
+    # Then invoke pubsub
+    # We get a single array result as chain_four waits for all publishers to finish
+    # before operating on all elements published to topic_two as an array
+    assert pubsub.invoke([2, 3], {"state_id": state_id}) == [26]
+    assert [{**m, "started_at": None} for m in conn.peek(state_id)] == [
+        {"message": [2, 3], "topic_name": "__in__", "started_at": None},
+        {"message": 12, "topic_name": "one", "started_at": None},
+        {"message": 13, "topic_name": "one", "started_at": None},
+        {"message": 25, "topic_name": "two", "started_at": None},
+        {"message": 26, "topic_name": "__out__", "started_at": None},
+    ]
+
+    # After invoke returns the listeners were cleaned up
+    assert conn.listeners == {}
+
+
 def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture):
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     topic_one = Topic("one")

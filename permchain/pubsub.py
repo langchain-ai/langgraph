@@ -7,27 +7,41 @@ from itertools import groupby
 from typing import Any, Iterator, List, Optional, Sequence, Set, TypeVar
 
 from langchain.callbacks.manager import CallbackManagerForChainRun
-from langchain.load.serializable import Serializable
 from langchain.schema.runnable import Runnable, RunnableConfig, patch_config
 from langchain.schema.runnable.base import Runnable
 from langchain.schema.runnable.config import get_executor_for_config
 
 from permchain.connection import PubSubConnection
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
-from permchain.topic import INPUT_TOPIC, OUTPUT_TOPIC, RunnableSubscriber
+from permchain.topic import (
+    INPUT_TOPIC,
+    OUTPUT_TOPIC,
+    RunnableReducer,
+    RunnableSubscriber,
+)
 
 T = TypeVar("T")
 T_in = TypeVar("T_in")
 T_out = TypeVar("T_out")
 
 
-class PubSub(Serializable, Runnable[Any, Any], ABC):
-    processes: Sequence[RunnableSubscriber[Any]]
+class PubSub(Runnable[Any, Any], ABC):
+    processes: Sequence[RunnableSubscriber[Any] | RunnableReducer[Any]]
 
     connection: PubSubConnection
 
+    def __init__(
+        self,
+        processes: Sequence[RunnableSubscriber[Any] | RunnableReducer[Any]],
+        connection: PubSubConnection,
+    ) -> None:
+        super().__init__()
+        self.processes = processes
+        self.connection = connection
+
     class Config:
         arbitrary_types_allowed = True
+        revalidate_instances = False
 
     def with_retry(self, **kwargs: Any) -> Runnable[Any, Any]:
         return self.__class__(
@@ -41,6 +55,16 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
     ) -> Iterator[Any]:
+        subscribers: list[RunnableSubscriber[Any]] = []
+        reducers: list[RunnableReducer[Any]] = []
+        for process in self.processes:
+            if isinstance(process, RunnableReducer):
+                reducers.append(process)
+            elif isinstance(process, RunnableSubscriber):
+                subscribers.append(process)
+            else:
+                raise ValueError(f"Unknown process type: {process}")
+
         # Consume input iterator into a single value
         input_value = None
         for chunk in input:
@@ -56,6 +80,25 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
             inflight: Set[Future] = set()
             # Track exceptions
             exceptions: List[Exception] = []
+
+            def on_idle():
+                if reducers:
+                    reducers_by_topic = groupby(
+                        sorted(reducers, key=lambda p: p.topic.name),
+                        lambda p: p.topic.name,
+                    )
+                    for topic_name, processes in reducers_by_topic:
+                        messages = list(
+                            self.connection.iterate(
+                                topic_prefix, topic_name, wait=False
+                            )
+                        )
+                        if messages:
+                            for process in processes:
+                                run_once(process, messages)
+
+                if not inflight:
+                    self.connection.disconnect(topic_prefix)
 
             def run_once(process: RunnableSubscriber[Any], value: Any) -> None:
                 """Run a process once."""
@@ -77,7 +120,7 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                     # - all processes are done, or
                     # - an exception occurred
                     if not inflight or exc is not None:
-                        self.connection.disconnect(topic_prefix)
+                        on_idle()
 
                 def get(topic_name: str) -> Any:
                     if topic_name == INPUT_TOPIC:
@@ -110,7 +153,7 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
 
             # Listen on all subscribed topics
             processes_by_topic = groupby(
-                sorted(self.processes, key=lambda p: p.topic.name),
+                sorted(subscribers, key=lambda p: p.topic.name),
                 lambda p: p.topic.name,
             )
             for topic_name, processes in processes_by_topic:
@@ -128,10 +171,12 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
                     # Yield output until all processes are done
                     # This blocks the current thread, all other work needs to go
                     # through the executor
-                    for chunk in self.connection.iterate(topic_prefix, OUTPUT_TOPIC):
+                    for chunk in self.connection.iterate(
+                        topic_prefix, OUTPUT_TOPIC, wait=True
+                    ):
                         yield chunk
                 else:
-                    self.connection.disconnect(topic_prefix)
+                    on_idle()
             finally:
                 # Cancel all inflight futures
                 while inflight:
@@ -156,6 +201,3 @@ class PubSub(Serializable, Runnable[Any, Any], ABC):
         for chunk in self.stream(input, config):
             collected.append(chunk)
         return collected
-
-
-PubSub.update_forward_refs()
