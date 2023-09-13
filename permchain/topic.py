@@ -46,9 +46,9 @@ class Topic(Serializable, Generic[T], ABC):
 
         return RunnableSubscriber(topic=self)
 
-    def reduce(self) -> RunnableReducer[T]:
+    def join(self) -> RunnableReducer[T]:
         if self.name == OUTPUT_TOPIC:
-            raise ValueError("Cannot reduce on output topic")
+            raise ValueError("Cannot join on output topic")
 
         return RunnableReducer(topic=self)
 

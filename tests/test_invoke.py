@@ -169,7 +169,7 @@ def test_invoke_two_processes_two_in_two_out(mocker: MockerFixture):
     assert conn.listeners == {}
 
 
-def test_invoke_two_processes_two_in_reduce_two_out(mocker: MockerFixture):
+def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture):
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
     topic_one = Topic("one")
@@ -177,7 +177,7 @@ def test_invoke_two_processes_two_in_reduce_two_out(mocker: MockerFixture):
     chain_one = Topic.IN.subscribe() | add_one | topic_one.publish()
     chain_two = topic_one.subscribe() | add_one | topic_two.publish()
     chain_three = Topic.IN.subscribe() | add_one | topic_two.publish()
-    chain_four = topic_two.reduce() | add_10_each | Topic.OUT.publish()
+    chain_four = topic_two.join() | add_10_each | Topic.OUT.publish()
 
     # Chains can be invoked directly for testing
     assert chain_one.invoke(2) == 3
@@ -199,7 +199,7 @@ def test_invoke_two_processes_two_in_reduce_two_out(mocker: MockerFixture):
     assert conn.listeners == {}
 
 
-def test_invoke_reduce_then_subscribe(mocker: MockerFixture):
+def test_invoke_join_then_subscribe(mocker: MockerFixture):
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
@@ -207,7 +207,7 @@ def test_invoke_reduce_then_subscribe(mocker: MockerFixture):
     topic_two = Topic("two")
 
     chain_one = Topic.IN.subscribe() | add_10_each | topic_one.publish_each()
-    chain_two = topic_one.reduce() | sum | topic_two.publish()
+    chain_two = topic_one.join() | sum | topic_two.publish()
     chain_three = topic_two.subscribe() | add_one | Topic.OUT.publish()
 
     # Chains can be invoked directly for testing

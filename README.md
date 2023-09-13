@@ -29,7 +29,7 @@ Check `tests` and `examples` for more examples.
 - [x] Add Connection.peek() to monitor past messages from all topics
 - [x] Enable resuming PubSub from the "middle" of the computation
 - [x] Add test for .peek()
-- [x] Add "wait until topic X is done" pattern, aka. `Topic.reduce()`
+- [x] Add "wait until topic X is done" pattern, aka. `Topic.join()`
 - [ ] Move tracking of inflight processes/messages to Connection
   - [ ] Use this to build retry mechanism, where any inflight messages are moved back to the respective topics when restarting
   - [ ] But this would require being able to replay a message for a single listener only, which maybe requires a larger redesign of PubSub<>Connection contract than what I wanted to do here
