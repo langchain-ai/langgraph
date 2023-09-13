@@ -171,7 +171,7 @@ def test_invoke_two_processes_two_in_two_out(mocker: MockerFixture):
 
 def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture):
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
+    add_10_each = mocker.Mock(side_effect=lambda x: sorted(y + 10 for y in x))
     topic_one = Topic("one")
     topic_two = Topic("two")
     chain_one = Topic.IN.subscribe() | add_one | topic_one.publish()
