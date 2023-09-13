@@ -77,7 +77,7 @@ class PubSub(Runnable[Any, Any], ABC):
             # Track exceptions
             exceptions: List[Exception] = []
 
-            def on_idle():
+            def on_idle() -> None:
                 """Called when all subscribed topics are empty.
                 It first runs any topic reducers. Then, if all subscribed topics
                 still empty, it closes the computation.
@@ -117,7 +117,9 @@ class PubSub(Runnable[Any, Any], ABC):
                 if not inflight or exc is not None:
                     on_idle()
 
-            def run_once(process: RunnableSubscriber[Any], value: Any) -> None:
+            def run_once(
+                process: RunnableSubscriber[Any] | RunnableReducer[Any], value: Any
+            ) -> None:
                 """Run a process once."""
 
                 def get(topic_name: str) -> Any:
