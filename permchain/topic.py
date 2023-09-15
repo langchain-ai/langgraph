@@ -158,6 +158,7 @@ class RunnablePublisherEach(RunnablePublisher[Sequence[T]]):
     ) -> Sequence[T]:
         for item in input:
             super().invoke(item, config)
+        return input
 
 
 class RunnableCurrentValue(Serializable, Runnable[Any, T]):
