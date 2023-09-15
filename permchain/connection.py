@@ -12,9 +12,9 @@ class LogMessage(TypedDict):
 
 
 class PubSubConnection(ABC):
-    def full_topic_name(self, prefix: str, topic_name: str) -> str:
+    def full_topic_name(self, prefix: str, *parts: str) -> str:
         """Return the full topic name for a given prefix and topic name."""
-        return f"{prefix}:{topic_name}"
+        return ":".join(map(str, [prefix, *parts]))
 
     @abstractmethod
     def iterate(self, prefix: str, topic_name: str, wait: bool) -> Iterator[Any]:
