@@ -51,6 +51,7 @@ class PubSub(Runnable[Any, Any], ABC):
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
     ) -> Iterator[Any]:
+        # Split processes into subscribers and reducers, and group by topic
         subscribers: defaultdict[str, list[RunnableSubscriber[Any]]] = defaultdict(list)
         reducers: defaultdict[str, list[RunnableReducer[Any]]] = defaultdict(list)
         for process in self.processes:
