@@ -4,10 +4,11 @@ from typing import Any, Callable, Iterator, TypedDict
 
 
 class PubSubMessage(TypedDict):
-    topic: str
     value: Any
+    topic: str
+    namespace: str
     published_at: str
-    correlation_id: str
+    correlation_ids: list[str]
 
 
 PubSubListener = Callable[[PubSubMessage], None]
@@ -47,12 +48,16 @@ class PubSubConnection(ABC):
         )
 
     @abstractmethod
-    def send(self, prefix: str, topic: str, value: Any) -> None:
+    def send(
+        self, prefix: str, topic: str, value: Any, correlation_ids: list[str]
+    ) -> None:
         ...
 
-    async def asend(self, prefix: str, topic: str, value: Any) -> None:
+    async def asend(
+        self, prefix: str, topic: str, value: Any, correlation_ids: list[str]
+    ) -> None:
         return await asyncio.get_event_loop().run_in_executor(
-            None, self.send, prefix, topic, value
+            None, self.send, correlation_ids, prefix, topic, value
         )
 
     @abstractmethod
