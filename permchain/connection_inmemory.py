@@ -4,7 +4,7 @@ from collections import defaultdict
 from datetime import datetime
 from typing import Any, Iterator
 
-from permchain.connection import LogMessage, PubSubConnection, PubSubListener
+from permchain.connection import PubSubConnection, PubSubListener, PubSubLog
 
 
 class IterableQueue(queue.SimpleQueue):
@@ -22,23 +22,23 @@ class IterableQueue(queue.SimpleQueue):
 
 class InMemoryPubSubConnection(PubSubConnection):
     clear_on_disconnect: bool
-    logs: defaultdict[str, list[Any]]
+    logs: defaultdict[str, IterableQueue]
     topics: defaultdict[str, IterableQueue]
     listeners: defaultdict[str, list[PubSubListener]]
     lock: threading.RLock
 
     def __init__(self, clear_on_disconnect: bool = True) -> None:
         self.clear_on_disconnect = clear_on_disconnect
-        self.logs = defaultdict(list)
+        self.logs = defaultdict(IterableQueue)
         self.topics = defaultdict(IterableQueue)
         self.listeners = defaultdict(list)
         self.lock = threading.RLock()
 
-    def peek(self, prefix: str) -> Iterator[LogMessage]:
+    def observe(self, prefix: str) -> Iterator[PubSubLog]:
         return iter(self.logs[str(prefix)])
 
-    def iterate(self, prefix: str, topic_name: str, wait: bool) -> Iterator[Any]:
-        topic = self.full_topic_name(prefix, topic_name)
+    def iterate(self, prefix: str, topic: str, *, wait: bool) -> Iterator[Any]:
+        topic = self.full_name(prefix, topic)
 
         # This connection doesn't support iterating over topics with listeners connected
         with self.lock:
@@ -53,56 +53,55 @@ class InMemoryPubSubConnection(PubSubConnection):
 
         return iter(self.topics[topic])
 
-    def listen(
-        self, prefix: str, topic_name: str, listeners: list[PubSubListener]
-    ) -> None:
-        topic = self.full_topic_name(prefix, topic_name)
-        self.disconnect(topic)
+    def listen(self, prefix: str, topic: str, listeners: list[PubSubListener]) -> None:
+        full_name = self.full_name(prefix, topic)
+        self.disconnect(full_name)
 
         with self.lock:
             # Add the listeners for future messages
-            self.listeners[topic].extend(listeners)
+            self.listeners[full_name].extend(listeners)
 
             # Send any pending messages to the listeners
-            topic_queue = self.topics[topic]
+            topic_queue = self.topics[full_name]
             while not topic_queue.empty():
                 message = topic_queue.get()
                 if message is not topic_queue.done_sentinel:
-                    for listener in self.listeners[topic]:
+                    for listener in self.listeners[full_name]:
                         listener(message)
 
-    def send(self, prefix: str, topic_name: str, message: Any) -> None:
-        topic = self.full_topic_name(prefix, topic_name)
+    def send(self, prefix: str, topic: str, message: Any) -> None:
+        full_name = self.full_name(prefix, topic)
 
-        with self.lock:
-            # Add the message to the log
-            self.logs[str(prefix)].append(
-                LogMessage(
-                    value=message,
-                    topic=topic_name,
-                    correlation_id=str(prefix),
-                    published_at=datetime.now().isoformat(),
-                )
+        # Add the message to the log
+        self.logs[str(prefix)].put(
+            PubSubLog(
+                value=message,
+                topic=topic,
+                correlation_id=str(prefix),
+                published_at=datetime.now().isoformat(),
             )
-            listeners = self.listeners[topic]
+        )
+        with self.lock:
+            listeners = self.listeners[full_name]
             if listeners:
                 # Send the message to listeners if any are connected
                 for listener in listeners:
                     listener(message)
             else:
                 # Otherwise add the message to the topic queue for later
-                self.topics[topic].put(message)
+                self.topics[full_name].put(message)
 
-    def disconnect(self, prefix_or_topic: str) -> None:
+    def disconnect(self, name: str) -> None:
         with self.lock:
-            if self.clear_on_disconnect:
-                if prefix_or_topic in self.logs:
-                    del self.logs[prefix_or_topic]
+            if name in self.logs:
+                self.logs[name].close()
+                if self.clear_on_disconnect:
+                    del self.logs[name]
 
             to_delete = []
-            for topic, queue in self.topics.items():
-                if topic.startswith(prefix_or_topic):
-                    queue.close()
+            for topic, q in self.topics.items():
+                if topic.startswith(name):
+                    q.close()
                     if self.clear_on_disconnect:
                         to_delete.append(topic)
             # can't delete while iterating
@@ -111,7 +110,7 @@ class InMemoryPubSubConnection(PubSubConnection):
 
             to_delete = []
             for topic in self.listeners:
-                if topic.startswith(prefix_or_topic):
+                if topic.startswith(name):
                     to_delete.append(topic)
             # can't delete while iterating
             for topic in to_delete:
