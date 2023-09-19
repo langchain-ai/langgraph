@@ -10,7 +10,7 @@ from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.schema.runnable import Runnable, RunnableConfig, patch_config
 from langchain.schema.runnable.config import get_executor_for_config
 
-from permchain.connection import PubSubConnection, PubSubLog
+from permchain.connection import PubSubConnection, PubSubMessage
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
 from permchain.topic import (
     INPUT_TOPIC,
@@ -126,9 +126,15 @@ class PubSub(Runnable[Any, Any], ABC):
                     on_idle()
 
             def run_once(
-                process: RunnableSubscriber[Any] | RunnableReducer[Any], value: Any
+                process: RunnableSubscriber[Any] | RunnableReducer[Any],
+                messages: PubSubMessage | list[PubSubMessage],
             ) -> None:
                 """Run a process once."""
+                value = (
+                    [m["value"] for m in messages]
+                    if isinstance(messages, list)
+                    else messages["value"]
+                )
 
                 def get(topic_name: str) -> Any:
                     if topic_name == INPUT_TOPIC:
@@ -201,7 +207,7 @@ class PubSub(Runnable[Any, Any], ABC):
         input: Any,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Iterator[PubSubLog]:
+    ) -> Iterator[PubSubMessage]:
         yield from self._transform_stream_with_config(
             iter([input]), self._transform, config, **kwargs
         )

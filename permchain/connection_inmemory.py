@@ -2,18 +2,25 @@ import queue
 import threading
 from collections import defaultdict
 from datetime import datetime
-from typing import Any, Iterator
+from typing import Any, Iterator, cast
 
-from permchain.connection import PubSubConnection, PubSubListener, PubSubLog
+from permchain.connection import PubSubConnection, PubSubListener, PubSubMessage
 
 
 class IterableQueue(queue.SimpleQueue):
     done_sentinel = object()
 
-    def get(self, block: bool = True, timeout: float | None = None) -> Any:
+    def put(
+        self, item: PubSubMessage, block: bool = True, timeout: float | None = None
+    ) -> None:
+        return super().put(item, block, timeout)
+
+    def get(
+        self, block: bool = True, timeout: float | None = None
+    ) -> PubSubMessage | object:
         return super().get(block=block, timeout=timeout)
 
-    def __iter__(self) -> Iterator[Any]:
+    def __iter__(self) -> Iterator[PubSubMessage]:
         return iter(self.get, self.done_sentinel)
 
     def close(self) -> None:
@@ -34,10 +41,12 @@ class InMemoryPubSubConnection(PubSubConnection):
         self.listeners = defaultdict(list)
         self.lock = threading.RLock()
 
-    def observe(self, prefix: str) -> Iterator[PubSubLog]:
+    def observe(self, prefix: str) -> Iterator[PubSubMessage]:
         return iter(self.logs[str(prefix)])
 
-    def iterate(self, prefix: str, topic: str, *, wait: bool) -> Iterator[Any]:
+    def iterate(
+        self, prefix: str, topic: str, *, wait: bool
+    ) -> Iterator[PubSubMessage]:
         topic = self.full_name(prefix, topic)
 
         # This connection doesn't support iterating over topics with listeners connected
@@ -67,20 +76,19 @@ class InMemoryPubSubConnection(PubSubConnection):
                 message = topic_queue.get()
                 if message is not topic_queue.done_sentinel:
                     for listener in self.listeners[full_name]:
-                        listener(message)
+                        listener(cast(PubSubMessage, message))
 
-    def send(self, prefix: str, topic: str, message: Any) -> None:
+    def send(self, prefix: str, topic: str, value: Any) -> None:
         full_name = self.full_name(prefix, topic)
+        message = PubSubMessage(
+            value=value,
+            topic=topic,
+            correlation_id=str(prefix),
+            published_at=datetime.now().isoformat(),
+        )
 
         # Add the message to the log
-        self.logs[str(prefix)].put(
-            PubSubLog(
-                value=message,
-                topic=topic,
-                correlation_id=str(prefix),
-                published_at=datetime.now().isoformat(),
-            )
-        )
+        self.logs[str(prefix)].put(message)
         with self.lock:
             listeners = self.listeners[full_name]
             if listeners:

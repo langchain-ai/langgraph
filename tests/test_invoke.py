@@ -4,15 +4,15 @@ from uuid import uuid4
 import pytest
 from pytest_mock import MockerFixture
 
-from permchain.connection import PubSubLog
+from permchain.connection import PubSubMessage
 from permchain.connection_inmemory import InMemoryPubSubConnection
 from permchain.pubsub import PubSub
 from permchain.topic import RunnableSubscriber, Topic
 
 
 def clean_log(
-    logs: Iterator[PubSubLog], correlation_id: bool | None = None
-) -> list[PubSubLog]:
+    logs: Iterator[PubSubMessage], correlation_id: bool | None = None
+) -> list[PubSubMessage]:
     if correlation_id is False:
         return [{**m, "published_at": None, "correlation_id": None} for m in logs]
     else:
