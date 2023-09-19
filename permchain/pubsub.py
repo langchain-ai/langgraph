@@ -72,7 +72,7 @@ class PubSub(Runnable[Any, Any], ABC):
 
         with get_executor_for_config(config) as executor:
             # Namespace topics for each run, default to run_id, ie. isolated
-            topic_prefix = str(config.get("state_id") or run_manager.run_id)
+            topic_prefix = str(config.get("correlation_id") or run_manager.run_id)
             # Track inflight futures
             inflight: Set[Future] = set()
             # Track exceptions
@@ -142,6 +142,11 @@ class PubSub(Runnable[Any, Any], ABC):
                             config,
                             callbacks=run_manager.get_child(),
                             run_name=f"Topic: {process.topic.name}",
+                        ),
+                        "correlation_id": self.connection.full_topic_name(
+                            topic_prefix,
+                            process.topic.name,
+                            self.processes.index(process),
                         ),
                         CONFIG_SEND_KEY: partial(self.connection.send, topic_prefix),
                         CONFIG_GET_KEY: get,
