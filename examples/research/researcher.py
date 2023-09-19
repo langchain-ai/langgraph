@@ -2,10 +2,9 @@ from operator import itemgetter
 
 import requests
 from fastapi import FastAPI
-from langchain.chat_models import ChatAnthropic, ChatOpenAI
+from langchain.chat_models import ChatOpenAI
 from langchain.output_parsers.openai_functions import JsonKeyOutputFunctionsParser
-from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
-from langchain.runnables.openai_functions import OpenAIFunctionsRouter
+from langchain.prompts import ChatPromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 
 from permchain.connection_inmemory import InMemoryPubSubConnection

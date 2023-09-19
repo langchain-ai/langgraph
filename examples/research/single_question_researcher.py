@@ -1,11 +1,9 @@
-from operator import itemgetter
 from typing import List
 
 import requests
 from fastapi import FastAPI
 from langchain.chat_models import ChatAnthropic, ChatOpenAI
-from langchain.prompts import ChatPromptTemplate, SystemMessagePromptTemplate
-from langchain.runnables.openai_functions import OpenAIFunctionsRouter
+from langchain.prompts import ChatPromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 from pydantic import BaseModel
 

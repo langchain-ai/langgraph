@@ -42,6 +42,7 @@ openai = "^0.27.8"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]
+ignore = [ "E501" ]
 
 [tool.mypy]
 ignore_missing_imports = "True"

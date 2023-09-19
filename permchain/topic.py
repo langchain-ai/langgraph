@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-from abc import ABC
 from typing import (
     Any,
     Callable,
@@ -21,20 +20,17 @@ from langchain.schema.runnable import (
     RunnableSequence,
 )
 from langchain.schema.runnable.base import Other, coerce_to_runnable
-from langchain.schema.runnable.config import RunnableConfig
 
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
 
 T = TypeVar("T")
-T_in = TypeVar("T_in")
-T_out = TypeVar("T_out")
 
 
 INPUT_TOPIC = "__in__"
 OUTPUT_TOPIC = "__out__"
 
 
-class Topic(Serializable, Generic[T], ABC):
+class Topic(Serializable, Generic[T]):
     name: str
 
     def __init__(self, name: str):
@@ -64,7 +60,7 @@ class Topic(Serializable, Generic[T], ABC):
 
         return RunnablePublisher(topic=self)
 
-    def publish_each(self) -> Runnable[T, T]:
+    def publish_each(self) -> RunnablePublisherEach[T]:
         if self.name == INPUT_TOPIC:
             raise ValueError("Cannot publish to input topic")
 
@@ -72,13 +68,13 @@ class Topic(Serializable, Generic[T], ABC):
 
     @classmethod
     @property
-    def IN(cls) -> Topic[T_in]:
-        return cls[T_in](INPUT_TOPIC)
+    def IN(cls) -> Topic:
+        return cls(INPUT_TOPIC)
 
     @classmethod
     @property
-    def OUT(cls) -> Topic[T_out]:
-        return cls[T_out](OUTPUT_TOPIC)
+    def OUT(cls) -> Topic:
+        return cls(OUTPUT_TOPIC)
 
 
 class RunnableConfigForPubSub(RunnableConfig):
@@ -98,7 +94,7 @@ class RunnableSubscriber(RunnableBinding[T, Any]):
         other: Runnable[Any, Other]
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
-    ) -> RunnableSequence[T, Other]:
+    ) -> RunnableSubscriber[T, Other]:
         if isinstance(self.bound, RunnablePassthrough):
             return RunnableSubscriber(topic=self.topic, bound=coerce_to_runnable(other))
         else:
@@ -109,7 +105,7 @@ class RunnableSubscriber(RunnableBinding[T, Any]):
         other: Runnable[Other, Any]
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Other, Any] | Callable[[Other], Any]],
-    ) -> RunnableSequence[Other, Any]:
+    ) -> RunnableSubscriber[Other, Any]:
         raise NotImplementedError()
 
 
