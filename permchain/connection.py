@@ -6,9 +6,10 @@ PubSubListener = Callable[[Any], None]
 
 
 class LogMessage(TypedDict):
-    message: Any
-    topic_name: str
-    started_at: str
+    topic: str
+    value: Any
+    published_at: str
+    correlation_id: str
 
 
 class PubSubConnection(ABC):

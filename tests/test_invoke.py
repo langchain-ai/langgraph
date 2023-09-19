@@ -76,9 +76,19 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture):
     # listeners are still cleared, even though state is preserved
     assert conn.listeners == {}
     # The log contains all messages published to all topics, in order
-    assert [{**m, "started_at": None} for m in conn.peek(correlation_id)] == [
-        {"message": 2, "topic_name": "__in__", "started_at": None},
-        {"message": 3, "topic_name": "one", "started_at": None},
+    assert [{**m, "published_at": None} for m in conn.peek(correlation_id)] == [
+        {
+            "value": 2,
+            "topic": "__in__",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 3,
+            "topic": "one",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
     ]
     # IN, OUT, one
     assert len(conn.topics) == 3
@@ -94,11 +104,31 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture):
     # listeners are still cleared, even though state is preserved
     assert conn.listeners == {}
     # The log contains all messages published to all topics, in order
-    assert [{**m, "started_at": None} for m in conn.peek(correlation_id)] == [
-        {"message": 2, "topic_name": "__in__", "started_at": None},
-        {"message": 3, "topic_name": "one", "started_at": None},
-        {"message": None, "topic_name": "__in__", "started_at": None},
-        {"message": 4, "topic_name": "__out__", "started_at": None},
+    assert [{**m, "published_at": None} for m in conn.peek(correlation_id)] == [
+        {
+            "value": 2,
+            "topic": "__in__",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 3,
+            "topic": "one",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": None,
+            "topic": "__in__",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 4,
+            "topic": "__out__",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
     ]
     # IN, OUT, one
     assert len(conn.topics) == 3
@@ -226,12 +256,37 @@ def test_invoke_join_then_subscribe(mocker: MockerFixture):
     # We get a single array result as chain_four waits for all publishers to finish
     # before operating on all elements published to topic_two as an array
     assert pubsub.invoke([2, 3], {"correlation_id": correlation_id}) == [26]
-    assert [{**m, "started_at": None} for m in conn.peek(correlation_id)] == [
-        {"message": [2, 3], "topic_name": "__in__", "started_at": None},
-        {"message": 12, "topic_name": "one", "started_at": None},
-        {"message": 13, "topic_name": "one", "started_at": None},
-        {"message": 25, "topic_name": "two", "started_at": None},
-        {"message": 26, "topic_name": "__out__", "started_at": None},
+    assert [{**m, "published_at": None} for m in conn.peek(correlation_id)] == [
+        {
+            "value": [2, 3],
+            "topic": "__in__",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 12,
+            "topic": "one",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 13,
+            "topic": "one",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 25,
+            "topic": "two",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 26,
+            "topic": "__out__",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
     ]
 
     # After invoke returns the listeners were cleaned up

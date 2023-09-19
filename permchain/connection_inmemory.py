@@ -78,9 +78,10 @@ class InMemoryPubSubConnection(PubSubConnection):
             # Add the message to the log
             self.logs[str(prefix)].append(
                 LogMessage(
-                    message=message,
-                    topic_name=topic_name,
-                    started_at=datetime.now().isoformat(),
+                    value=message,
+                    topic=topic_name,
+                    correlation_id=str(prefix),
+                    published_at=datetime.now().isoformat(),
                 )
             )
             listeners = self.listeners[topic]
