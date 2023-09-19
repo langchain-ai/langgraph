@@ -24,20 +24,28 @@ T = TypeVar("T")
 T_in = TypeVar("T_in")
 T_out = TypeVar("T_out")
 
+Process = RunnableSubscriber[T_in] | RunnableReducer[T_in]
+
 
 class PubSub(Runnable[Any, Any], ABC):
-    processes: Sequence[RunnableSubscriber[Any] | RunnableReducer[Any]]
+    processes: Sequence[Process]
 
     connection: PubSubConnection
 
     def __init__(
         self,
-        processes: Sequence[RunnableSubscriber[Any] | RunnableReducer[Any]],
+        *procs: Process | Sequence[Process],
+        processes: Sequence[Process] = (),
         connection: PubSubConnection,
     ) -> None:
         super().__init__()
-        self.processes = processes
         self.connection = connection
+        self.processes = list(processes)
+        for proc in procs:
+            if isinstance(proc, Sequence):
+                self.processes.extend(proc)
+            else:
+                self.processes.append(proc)
 
     def with_retry(self, **kwargs: Any) -> Runnable[Any, Any]:
         return self.__class__(

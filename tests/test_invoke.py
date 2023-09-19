@@ -16,7 +16,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture):
     assert chain.invoke(2) == 3
 
     conn = InMemoryPubSubConnection()
-    pubsub = PubSub(processes=(chain,), connection=conn)
+    pubsub = PubSub(chain, connection=conn)
 
     # Using in-memory conn internals to make assertions about pubsub
     # If we start with 0 listeners
@@ -38,7 +38,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture):
     assert chain_two.invoke(2) == 3
 
     conn = InMemoryPubSubConnection()
-    pubsub = PubSub(processes=(chain_one, chain_two), connection=conn)
+    pubsub = PubSub(chain_one, chain_two, connection=conn)
 
     # Using in-memory conn internals to make assertions about pubsub
     # If we start with 0 listeners
@@ -60,8 +60,8 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture):
     assert chain_two.invoke(2) == 3
 
     conn = InMemoryPubSubConnection(clear_on_disconnect=False)
-    pubsub_one = PubSub(processes=(chain_one,), connection=conn)
-    pubsub_two = PubSub(processes=(chain_two,), connection=conn)
+    pubsub_one = PubSub(chain_one, connection=conn)
+    pubsub_two = PubSub(chain_two, connection=conn)
 
     # Using in-memory conn internals to make assertions about pubsub
     # If we start with 0 listeners
