@@ -1,14 +1,26 @@
 import asyncio
 from abc import ABC, abstractmethod
 from typing import Any, Callable, Iterator, TypedDict
+from typing_extensions import TypeGuard
 
 
 class PubSubMessage(TypedDict):
     value: Any
     topic: str
-    namespace: str
     published_at: str
     correlation_id: str
+    correlation_value: Any
+
+
+def is_pubsub_message(obj: Any) -> TypeGuard[PubSubMessage]:
+    return (
+        isinstance(obj, dict)
+        and "value" in obj
+        and "topic" in obj
+        and "published_at" in obj
+        and "correlation_id" in obj
+        and "correlation_value" in obj
+    )
 
 
 PubSubListener = Callable[[PubSubMessage], None]
@@ -48,15 +60,11 @@ class PubSubConnection(ABC):
         )
 
     @abstractmethod
-    def send(self, prefix: str, topic: str, value: Any, correlation_id: str) -> None:
+    def send(self, message: PubSubMessage) -> None:
         ...
 
-    async def asend(
-        self, prefix: str, topic: str, value: Any, correlation_id: str
-    ) -> None:
-        return await asyncio.get_event_loop().run_in_executor(
-            None, self.send, correlation_id, prefix, topic, value
-        )
+    async def asend(self, message: PubSubMessage) -> None:
+        return await asyncio.get_event_loop().run_in_executor(None, self.send, message)
 
     @abstractmethod
     def disconnect(self, name: str) -> None:

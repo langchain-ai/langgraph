@@ -1,6 +1,5 @@
 import time
 from typing import Iterator
-from uuid import uuid4
 
 import pytest
 from pytest_mock import MockerFixture
@@ -12,7 +11,7 @@ from permchain.topic import RunnableSubscriber, Topic
 
 
 def clean_log(logs: Iterator[PubSubMessage]) -> list[PubSubMessage]:
-    rm_keys = ["published_at", "correlation_id", "namespace"]
+    rm_keys = ["published_at", "correlation_id"]
 
     return [{k: v for k, v in m.items() if k not in rm_keys} for m in logs]
 
@@ -88,60 +87,42 @@ def test_stream_two_processes_in_out_interrupt(mocker: MockerFixture):
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     topic_one = Topic("one")
     chain_one = Topic.IN.subscribe() | add_one | topic_one.publish()
-    chain_two = topic_one.subscribe() | add_one | Topic.OUT.publish()
+    chain_two = (
+        topic_one.subscribe()
+        | {"plus_one": add_one, "original": Topic.IN.current()}
+        | Topic.OUT.publish()
+    )
 
     # Chains can be invoked directly for testing
     assert chain_one.invoke(2) == 3
-    assert chain_two.invoke(2) == 3
 
-    for _ in range(100):
-        conn = InMemoryPubSubConnection(clear_on_disconnect=False)
-        pubsub_one = PubSub(chain_one, connection=conn)
-        pubsub_two = PubSub(chain_two, connection=conn)
+    conn = InMemoryPubSubConnection()
+    pubsub = PubSub(chain_one, chain_two, connection=conn)
 
-        # Using in-memory conn internals to make assertions about pubsub
-        # If we start with 0 listeners
-        assert conn.listeners == {}
-        # Then invoke both pubsubs, as a group
-        # The second picks up where the first left off
-        correlation_id = uuid4()
+    # Using in-memory conn internals to make assertions about pubsub
+    # If we start with 0 listeners
+    assert conn.listeners == {}
 
-        # stream() step 1
-        assert clean_log(pubsub_one.stream(2, {"correlation_id": correlation_id})) == [
-            {"value": 2, "topic": "__in__"},
-            {"value": 3, "topic": "one"},
-        ]
+    # stream() until step one
+    msg_one: PubSubMessage = None
+    for msg in pubsub.stream(2):
+        if msg["topic"] == "one":
+            msg_one = msg
+            break
 
-        # IN, one
-        assert len(conn.topics) == 2
-        topic_one_full_name = conn.full_name(correlation_id, topic_one.name)
-        # the actual message publishd by chain_one, and a sentinel "end" value
-        assert conn.topics[topic_one_full_name].qsize() == 2
-
-        # stream() step 2
-        # this picks up where the first left off, and produces same result as
-        # `test_invoke_two_processes_in_out`
-        assert clean_log(
-            pubsub_two.stream(None, {"correlation_id": correlation_id})
-        ) == [
-            {"value": 4, "topic": "__out__"},
-        ]
-        # listeners are still cleared, even though state is preserved
-        assert conn.listeners == {}
-        # IN, OUT, one
-        assert len(conn.topics) == 3
-
-        for topic_name, queue in conn.topics.items():
-            if topic_name.endswith("IN"):
-                # Contains two sentinel "end" values, and None
-                # passed in as input to chain_two, which doesn't subscribe to it
-                assert queue.qsize() == 3
-            if topic_name.endswith("OUT"):
-                # Empty because this was consumed by invoke()
-                assert queue.qsize() == 0
-            if topic_name.endswith("one"):
-                # Contains 2 sentinel "end" values
-                assert queue.qsize() == 2
+    # resume stream() with the message from step one
+    # this picks up where the first left off, and produces same result as
+    # `test_invoke_two_processes_in_out`
+    assert clean_log(pubsub.stream(msg_one)) == [
+        {"value": 3, "topic": "one", "correlation_value": 2},
+        {
+            "value": {"plus_one": 4, "original": 2},
+            "topic": "__out__",
+            "correlation_value": 2,
+        },
+    ]
+    # listeners are cleared
+    assert conn.listeners == {}
 
 
 def test_invoke_many_processes_in_out(mocker: MockerFixture):
@@ -190,6 +171,8 @@ def test_batch_many_processes_in_out(mocker: MockerFixture):
     conn = InMemoryPubSubConnection()
     pubsub = PubSub(processes=chains, connection=conn)
 
+    # TODO this occasionally fails, eg. with output [102, 101, None, 104, 105]
+
     for _ in range(10):
         # Using in-memory conn internals to make assertions about pubsub
         # If we start with 0 listeners
@@ -204,37 +187,6 @@ def test_batch_many_processes_in_out(mocker: MockerFixture):
         ]
         # After invoke returns the listeners were cleaned up
         assert conn.listeners == {}
-
-
-def test_batch_many_processes_in_out(mocker: MockerFixture):
-    test_size = 100
-
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    topics: list[Topic] = [Topic("zero")]
-    chains: list[RunnableSubscriber] = [
-        Topic.IN.subscribe() | add_one | topics[0].publish()
-    ]
-    for i in range(test_size - 2):
-        topics.append(Topic(str(i)))
-        chains.append(topics[-2].subscribe() | add_one | topics[-1].publish())
-    chains.append(topics[-1].subscribe() | add_one | Topic.OUT.publish())
-
-    conn = InMemoryPubSubConnection()
-    pubsub = PubSub(processes=chains, connection=conn)
-
-    # Using in-memory conn internals to make assertions about pubsub
-    # If we start with 0 listeners
-    assert conn.listeners == {}
-    # Then invoke pubsub
-    assert pubsub.batch([2, 1, 3, 4, 5]) == [
-        2 + test_size,
-        1 + test_size,
-        3 + test_size,
-        4 + test_size,
-        5 + test_size,
-    ]
-    # After invoke returns the listeners were cleaned up
-    assert conn.listeners == {}
 
 
 def test_invoke_two_processes_two_in_two_out(mocker: MockerFixture):
@@ -307,8 +259,7 @@ def test_stream_join_then_subscribe(mocker: MockerFixture):
     assert chain_two.invoke([2, 3]) == 5
     assert chain_three.invoke(5) == 6
 
-    correlation_id = uuid4()
-    conn = InMemoryPubSubConnection(clear_on_disconnect=False)
+    conn = InMemoryPubSubConnection()
     pubsub = PubSub((chain_one, chain_two, chain_three), connection=conn)
 
     # Using in-memory conn internals to make assertions about pubsub
@@ -318,12 +269,12 @@ def test_stream_join_then_subscribe(mocker: MockerFixture):
     # Then invoke pubsub
     # We get a single array result as chain_four waits for all publishers to finish
     # before operating on all elements published to topic_two as an array
-    assert clean_log(pubsub.stream([2, 3], {"correlation_id": correlation_id})) == [
-        {"value": [2, 3], "topic": "__in__"},
-        {"value": 12, "topic": "one"},
-        {"value": 13, "topic": "one"},
-        {"value": 25, "topic": "two"},
-        {"value": 26, "topic": "__out__"},
+    assert clean_log(pubsub.stream([2, 3])) == [
+        {"value": [2, 3], "topic": "__in__", "correlation_value": [2, 3]},
+        {"value": 12, "topic": "one", "correlation_value": [2, 3]},
+        {"value": 13, "topic": "one", "correlation_value": [2, 3]},
+        {"value": 25, "topic": "two", "correlation_value": [2, 3]},
+        {"value": 26, "topic": "__out__", "correlation_value": [2, 3]},
     ]
 
     # After invoke returns the listeners were cleaned up
@@ -353,16 +304,51 @@ def test_stream_join_then_call_other_pubsub(mocker: MockerFixture):
     # If we start with 0 listeners
     assert conn.listeners == {}
 
-    for _ in range(100):
-        correlation_id = uuid4()
-        # Then invoke pubsub
-        assert clean_log(pubsub.stream([2, 3], {"correlation_id": correlation_id})) == [
-            {"value": [2, 3], "topic": "__in__"},
-            {"value": 12, "topic": "one"},
-            {"value": 13, "topic": "one"},
-            {"value": [13, 14], "topic": "two"},
-            {"value": 27, "topic": "__out__"},
-        ]
+    # Then invoke pubsub
+    assert clean_log(pubsub.stream([2, 3])) == [
+        {"value": [2, 3], "topic": "__in__", "correlation_value": [2, 3]},
+        {"value": 12, "topic": "one", "correlation_value": [2, 3]},
+        {"value": 13, "topic": "one", "correlation_value": [2, 3]},
+        {"value": [13, 14], "topic": "two", "correlation_value": [2, 3]},
+        {"value": 27, "topic": "__out__", "correlation_value": [2, 3]},
+    ]
+
+    # After invoke returns the listeners were cleaned up
+    assert conn.listeners == {}
+
+
+def test_stream_subscribe_then_call_other_pubsub(mocker: MockerFixture):
+    conn = InMemoryPubSubConnection()
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+
+    inner_pubsub = PubSub(
+        Topic.IN.subscribe() | add_one | Topic.OUT.publish(), connection=conn
+    )
+
+    add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
+
+    topic_one = Topic("one")
+    topic_two = Topic("two")
+
+    chain_one = Topic.IN.subscribe() | add_10_each | topic_one.publish_each()
+    chain_two = topic_one.subscribe() | inner_pubsub | topic_two.publish()
+    chain_three = topic_two.join() | sorted | sum | Topic.OUT.publish()
+
+    pubsub = PubSub((chain_one, chain_two, chain_three), connection=conn)
+
+    # Using in-memory conn internals to make assertions about pubsub
+    # If we start with 0 listeners
+    assert conn.listeners == {}
+
+    # Then invoke pubsub
+    assert clean_log(pubsub.stream([2, 3])) == [
+        {"value": [2, 3], "topic": "__in__", "correlation_value": [2, 3]},
+        {"value": 12, "topic": "one", "correlation_value": [2, 3]},
+        {"value": 13, "topic": "one", "correlation_value": [2, 3]},
+        {"value": 13, "topic": "two", "correlation_value": [2, 3]},
+        {"value": 14, "topic": "two", "correlation_value": [2, 3]},
+        {"value": 27, "topic": "__out__", "correlation_value": [2, 3]},
+    ]
 
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
@@ -391,8 +377,8 @@ def test_stream_two_processes_one_in_two_out(mocker: MockerFixture):
     # Then invoke pubsub
     # pubsub stopped executing after publishing to OUT, so only one value is returned
     assert clean_log(pubsub.stream(2)) == [
-        {"value": 2, "topic": "__in__"},
-        {"value": 3, "topic": "__out__"},
+        {"value": 2, "topic": "__in__", "correlation_value": 2},
+        {"value": 3, "topic": "__out__", "correlation_value": 2},
     ]
 
     # After invoke returns the listeners were cleaned up

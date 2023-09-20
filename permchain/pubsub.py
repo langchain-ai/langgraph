@@ -4,17 +4,18 @@ import threading
 from abc import ABC
 from collections import defaultdict
 from concurrent.futures import CancelledError, Future
+from datetime import datetime
 from functools import partial
-from itertools import groupby
-from operator import itemgetter
-from typing import Any, Iterator, List, Optional, Sequence, Set, TypeVar, Union
-from uuid import uuid4
+from typing import Any, Iterator, List, Optional, Sequence, Set, TypeVar
 
 from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.schema.runnable import Runnable, RunnableConfig, patch_config
-from langchain.schema.runnable.config import RunnableConfig, get_executor_for_config
+from langchain.schema.runnable.config import (
+    RunnableConfig,
+    get_executor_for_config,
+)
 
-from permchain.connection import PubSubConnection, PubSubMessage
+from permchain.connection import PubSubConnection, PubSubMessage, is_pubsub_message
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
 from permchain.topic import (
     INPUT_TOPIC,
@@ -30,7 +31,7 @@ T_out = TypeVar("T_out")
 Process = RunnableSubscriber[T_in] | RunnableReducer[T_in]
 
 
-class PubSub(Runnable[Any, Any], ABC):
+class PubSub(Runnable[PubSubMessage | Any, PubSubMessage | Any], ABC):
     processes: Sequence[Process]
 
     connection: PubSubConnection
@@ -62,12 +63,10 @@ class PubSub(Runnable[Any, Any], ABC):
 
     def _transform(
         self,
-        input: Iterator[Any],
+        input: Iterator[PubSubMessage | Any],
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
-        *,
-        input_correlation_ids: list[str] | None = None,
-    ) -> Iterator[Any]:
+    ) -> Iterator[PubSubMessage]:
         # Split processes into subscribers and reducers, and group by topic
         subscribers: defaultdict[str, list[RunnableSubscriber[Any]]] = defaultdict(list)
         reducers: defaultdict[str, list[RunnableReducer[Any]]] = defaultdict(list)
@@ -79,25 +78,53 @@ class PubSub(Runnable[Any, Any], ABC):
             else:
                 raise ValueError(f"Unknown process type: {process}")
 
-        # Track correlation_ids for inputs and outputs
-        # This is used to determine when all expected output has been received
-        correlation_ids_seen_input = set()
-        correlation_ids_seen_output = set()
+        # _transform expects an iterator with a single value,
+        # as it is called only by stream()
+        input_value = list(input)
+        assert len(input_value) == 1
+        input_value = input_value[0]
+
+        # If input is a pubsub message, use its correlation_id,
+        # otherwise use run_id (which is unique for each run)
+        correlation_id = (
+            input_value["correlation_id"]
+            if is_pubsub_message(input_value)
+            else str(run_manager.run_id)
+        )
+        correlation_value = (
+            input_value["correlation_value"]
+            if is_pubsub_message(input_value)
+            else input_value
+        )
+
+        def send(topic: str, value: Any):
+            return self.connection.send(
+                PubSubMessage(
+                    value=value,
+                    topic=topic,
+                    published_at=datetime.now().isoformat(),
+                    correlation_id=correlation_id,
+                    correlation_value=correlation_value,
+                )
+            )
+
+        # Check if this correlation_id is currently inflight. If so, raise an error,
+        # as that would make the output iterator produce incorrect results.
+        with self.lock:
+            if correlation_id in self.inflight_namespaces:
+                raise RuntimeError(
+                    f"Cannot run {self} in namespace {correlation_id} "
+                    "because it is currently in use"
+                )
+            self.inflight_namespaces.add(correlation_id)
+
+        # Send input to input topic
+        if is_pubsub_message(input_value):
+            send(input_value["topic"], input_value["value"])
+        else:
+            send(INPUT_TOPIC, input_value)
 
         with get_executor_for_config(config) as executor:
-            # Namespace topics for each run, default to run_id, ie. isolated
-            topic_prefix = str(config.get("correlation_id") or run_manager.run_id)
-
-            # Check if this correlation_id is currently inflight. If so, raise an error,
-            # as that would make the output iterator produce incorrect results.
-            with self.lock:
-                if topic_prefix in self.inflight_namespaces:
-                    raise RuntimeError(
-                        f"Cannot run {self} in namespace {topic_prefix} "
-                        "because it is currently in use"
-                    )
-                self.inflight_namespaces.add(topic_prefix)
-
             # Track inflight futures
             inflight: Set[Future] = set()
             # Track exceptions
@@ -111,23 +138,18 @@ class PubSub(Runnable[Any, Any], ABC):
                 if reducers:
                     for topic_name, processes in reducers.items():
                         # Collect all pending messages for each topic
-                        messages = sorted(
+                        messages = list(
                             self.connection.iterate(
-                                topic_prefix, topic_name, wait=False
-                            ),
-                            key=itemgetter("correlation_id"),
+                                correlation_id, topic_name, wait=False
+                            )
                         )
                         # Run each reducer once with the collected messages
                         if messages:
-                            for _, group in groupby(
-                                messages, key=itemgetter("correlation_id")
-                            ):
-                                group_mat = list(group)
-                                for process in processes:
-                                    run_once(process, group_mat)
+                            for process in processes:
+                                run_once(process, messages)
 
                 if not inflight:
-                    self.connection.disconnect(topic_prefix)
+                    self.connection.disconnect(correlation_id)
 
             def check_if_idle(fut: Future) -> None:
                 """Cleanup after a process runs."""
@@ -158,16 +180,10 @@ class PubSub(Runnable[Any, Any], ABC):
                     if isinstance(messages, list)
                     else messages["value"]
                 )
-                correlation_id = (
-                    messages[0]["correlation_id"]
-                    if isinstance(messages, list)
-                    else messages["correlation_id"]
-                )
-                correlation_ids_seen_input.add(correlation_id)
 
                 def get(topic_name: str) -> Any:
                     if topic_name == INPUT_TOPIC:
-                        return input_value
+                        return correlation_value
                     elif topic_name == process.topic.name:
                         return value
                     else:
@@ -186,25 +202,8 @@ class PubSub(Runnable[Any, Any], ABC):
                                 callbacks=run_manager.get_child(),
                                 run_name=f"Topic: {process.topic.name}",
                             ),
-                            CONFIG_SEND_KEY: partial(
-                                self.connection.send,
-                                topic_prefix,
-                                correlation_id=correlation_id,
-                            ),
+                            CONFIG_SEND_KEY: send,
                             CONFIG_GET_KEY: get,
-                            # TODO below doesn't work for batch calls nested inside
-                            # another pubsub, eg. test_invoke_join_then_call_other_pubsub
-                            # as all messages in each batch would share same correlation_id
-                            # TODO this creates an issue if the batch endpoint is
-                            # used as-is from superclass, since all the invoke
-                            # calls in a single batch share the same correlation_id,
-                            # and thus produce wrong results
-                            # "correlation_id": None,
-                            "correlation_id": self.connection.full_name(
-                                topic_prefix,
-                                process.topic.name,
-                                str(self.processes.index(process)),
-                            ),
                         },
                     )
 
@@ -220,26 +219,9 @@ class PubSub(Runnable[Any, Any], ABC):
             # Listen on all subscribed topics
             for topic_name, processes in subscribers.items():
                 self.connection.listen(
-                    topic_prefix,
+                    correlation_id,
                     topic_name,
                     [partial(run_once, process) for process in processes],
-                )
-
-            # Send each input value to input processes
-            # Assign each input value a unique correlation_id, which can be used
-            # to link derived messages back to the input value(s) that caused them
-            input_correlation_ids = (
-                input_correlation_ids.copy()
-                if input_correlation_ids is not None
-                else None
-            )
-            for input_value in input:
-                if input_correlation_ids is None:
-                    correlation_id = str(uuid4())
-                else:
-                    correlation_id = input_correlation_ids.pop(0)
-                self.connection.send(
-                    topic_prefix, INPUT_TOPIC, input_value, correlation_id
                 )
 
             try:
@@ -247,18 +229,12 @@ class PubSub(Runnable[Any, Any], ABC):
                     # Yield output until all processes are done
                     # This blocks the current thread, all other work needs to go
                     # through the executor
-                    for chunk in self.connection.observe(topic_prefix):
+                    for chunk in self.connection.observe(correlation_id):
                         yield chunk
                         if chunk["topic"] == OUTPUT_TOPIC:
-                            correlation_ids_seen_output.add(chunk["correlation_id"])
-                            if (
-                                correlation_ids_seen_output
-                                == correlation_ids_seen_input
-                            ):
-                                # All expected output has been received,
-                                # close the computation
-                                self.connection.disconnect(topic_prefix)
-                                break
+                            # All expected output has been received, close
+                            self.connection.disconnect(correlation_id)
+                            break
                 else:
                     on_idle()
             finally:
@@ -268,7 +244,7 @@ class PubSub(Runnable[Any, Any], ABC):
 
                 # Remove namespace from inflight set
                 with self.lock:
-                    self.inflight_namespaces.remove(topic_prefix)
+                    self.inflight_namespaces.remove(correlation_id)
 
                 # Raise exceptions if any
                 if exceptions:
@@ -291,37 +267,3 @@ class PubSub(Runnable[Any, Any], ABC):
         for chunk in self.stream(input, config):
             if chunk["topic"] == OUTPUT_TOPIC:
                 return chunk["value"]
-
-    def batch(
-        self,
-        inputs: List[Any],
-        config: RunnableConfig | List[RunnableConfig] | None = None,
-        *,
-        return_exceptions: bool = False,
-        **kwargs: Any | None,
-    ) -> List[Any]:
-        if return_exceptions:
-            raise NotImplementedError("return_exceptions is not supported")
-        if isinstance(config, list):
-            raise NotImplementedError("config as list is not supported")
-
-        # Assign a unique id to each input value, which can be used to link
-        # output messages back to the input value that caused them
-        input_correlation_ids = [str(uuid4()) for _ in inputs]
-        outputs_by_corr_id: dict[str, Any] = {}
-
-        for chunk in self._transform_stream_with_config(
-            iter(inputs),
-            partial(self._transform, input_correlation_ids=input_correlation_ids),
-            config,
-            **kwargs,
-        ):
-            if chunk["topic"] == OUTPUT_TOPIC:
-                outputs_by_corr_id[chunk["correlation_id"]] = chunk["value"]
-
-        # Outputs are returned in the order
-        # of the inputs sent in, and will map 1-1 to the inputs.
-        return [
-            outputs_by_corr_id.get(correlation_id)
-            for correlation_id in input_correlation_ids
-        ]

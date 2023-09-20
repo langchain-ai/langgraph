@@ -1,8 +1,7 @@
 import queue
 import threading
 from collections import defaultdict
-from datetime import datetime
-from typing import Any, Iterator, cast
+from typing import Iterator, cast
 
 from permchain.connection import PubSubConnection, PubSubListener, PubSubMessage
 
@@ -28,14 +27,12 @@ class IterableQueue(queue.SimpleQueue):
 
 
 class InMemoryPubSubConnection(PubSubConnection):
-    clear_on_disconnect: bool
     logs: defaultdict[str, IterableQueue]
     topics: defaultdict[str, IterableQueue]
     listeners: defaultdict[str, list[PubSubListener]]
     lock: threading.RLock
 
-    def __init__(self, clear_on_disconnect: bool = True) -> None:
-        self.clear_on_disconnect = clear_on_disconnect
+    def __init__(self) -> None:
         self.logs = defaultdict(IterableQueue)
         self.topics = defaultdict(IterableQueue)
         self.listeners = defaultdict(list)
@@ -64,7 +61,6 @@ class InMemoryPubSubConnection(PubSubConnection):
 
     def listen(self, prefix: str, topic: str, listeners: list[PubSubListener]) -> None:
         full_name = self.full_name(prefix, topic)
-        self.disconnect(full_name)
 
         with self.lock:
             # Add the listeners for future messages
@@ -78,18 +74,11 @@ class InMemoryPubSubConnection(PubSubConnection):
                     for listener in self.listeners[full_name]:
                         listener(cast(PubSubMessage, message))
 
-    def send(self, prefix: str, topic: str, value: Any, correlation_id: str) -> None:
-        full_name = self.full_name(prefix, topic)
-        message = PubSubMessage(
-            value=value,
-            topic=topic,
-            namespace=prefix,
-            correlation_id=correlation_id,
-            published_at=datetime.now().isoformat(),
-        )
+    def send(self, message: PubSubMessage) -> None:
+        full_name = self.full_name(message["correlation_id"], message["topic"])
 
         # Add the message to the log
-        self.logs[str(prefix)].put(message)
+        self.logs[message["correlation_id"]].put(message)
         with self.lock:
             listeners = self.listeners[full_name]
             if listeners:
@@ -104,23 +93,21 @@ class InMemoryPubSubConnection(PubSubConnection):
         with self.lock:
             if name in self.logs:
                 self.logs[name].close()
-                if self.clear_on_disconnect:
-                    del self.logs[name]
+                del self.logs[name]
 
             to_delete = []
             for topic, q in self.topics.items():
                 if topic.startswith(name):
                     q.close()
-                    if self.clear_on_disconnect:
-                        to_delete.append(topic)
-            # can't delete while iterating
+                    # can't delete while iterating
+                    to_delete.append(topic)
             for topic in to_delete:
                 del self.topics[topic]
 
             to_delete = []
             for topic in self.listeners:
                 if topic.startswith(name):
+                    # can't delete while iterating
                     to_delete.append(topic)
-            # can't delete while iterating
             for topic in to_delete:
                 del self.listeners[topic]
