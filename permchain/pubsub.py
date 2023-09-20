@@ -5,6 +5,8 @@ from abc import ABC
 from collections import defaultdict
 from concurrent.futures import CancelledError, Future
 from functools import partial
+from itertools import groupby
+from operator import itemgetter
 from typing import Any, Iterator, List, Optional, Sequence, Set, TypeVar, Union
 from uuid import uuid4
 
@@ -109,15 +111,20 @@ class PubSub(Runnable[Any, Any], ABC):
                 if reducers:
                     for topic_name, processes in reducers.items():
                         # Collect all pending messages for each topic
-                        messages = list(
+                        messages = sorted(
                             self.connection.iterate(
                                 topic_prefix, topic_name, wait=False
-                            )
+                            ),
+                            key=itemgetter("correlation_id"),
                         )
                         # Run each reducer once with the collected messages
                         if messages:
-                            for process in processes:
-                                run_once(process, messages)
+                            for _, group in groupby(
+                                messages, key=itemgetter("correlation_id")
+                            ):
+                                group_mat = list(group)
+                                for process in processes:
+                                    run_once(process, group_mat)
 
                 if not inflight:
                     self.connection.disconnect(topic_prefix)
@@ -151,14 +158,12 @@ class PubSub(Runnable[Any, Any], ABC):
                     if isinstance(messages, list)
                     else messages["value"]
                 )
-                correlation_ids = list(
-                    set(
-                        [cid for m in messages for cid in m["correlation_ids"]]
-                        if isinstance(messages, list)
-                        else messages["correlation_ids"]
-                    )
+                correlation_id = (
+                    messages[0]["correlation_id"]
+                    if isinstance(messages, list)
+                    else messages["correlation_id"]
                 )
-                correlation_ids_seen_input.update(correlation_ids)
+                correlation_ids_seen_input.add(correlation_id)
 
                 def get(topic_name: str) -> Any:
                     if topic_name == INPUT_TOPIC:
@@ -184,17 +189,22 @@ class PubSub(Runnable[Any, Any], ABC):
                             CONFIG_SEND_KEY: partial(
                                 self.connection.send,
                                 topic_prefix,
-                                correlation_ids=correlation_ids,
+                                correlation_id=correlation_id,
                             ),
                             CONFIG_GET_KEY: get,
                             # TODO below doesn't work for batch calls nested inside
                             # another pubsub, eg. test_invoke_join_then_call_other_pubsub
                             # as all messages in each batch would share same correlation_id
-                            # "correlation_id": self.connection.full_name(
-                            #     topic_prefix,
-                            #     process.topic.name,
-                            #     str(self.processes.index(process)),
-                            # ),
+                            # TODO this creates an issue if the batch endpoint is
+                            # used as-is from superclass, since all the invoke
+                            # calls in a single batch share the same correlation_id,
+                            # and thus produce wrong results
+                            # "correlation_id": None,
+                            "correlation_id": self.connection.full_name(
+                                topic_prefix,
+                                process.topic.name,
+                                str(self.processes.index(process)),
+                            ),
                         },
                     )
 
@@ -229,7 +239,7 @@ class PubSub(Runnable[Any, Any], ABC):
                 else:
                     correlation_id = input_correlation_ids.pop(0)
                 self.connection.send(
-                    topic_prefix, INPUT_TOPIC, input_value, [correlation_id]
+                    topic_prefix, INPUT_TOPIC, input_value, correlation_id
                 )
 
             try:
@@ -240,7 +250,7 @@ class PubSub(Runnable[Any, Any], ABC):
                     for chunk in self.connection.observe(topic_prefix):
                         yield chunk
                         if chunk["topic"] == OUTPUT_TOPIC:
-                            correlation_ids_seen_output.update(chunk["correlation_ids"])
+                            correlation_ids_seen_output.add(chunk["correlation_id"])
                             if (
                                 correlation_ids_seen_output
                                 == correlation_ids_seen_input
@@ -271,7 +281,10 @@ class PubSub(Runnable[Any, Any], ABC):
         **kwargs: Optional[Any],
     ) -> Iterator[PubSubMessage]:
         yield from self._transform_stream_with_config(
-            iter([input]), self._transform, config, **kwargs
+            iter([input]) if input is not None else (),
+            self._transform,
+            config,
+            **kwargs,
         )
 
     def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
@@ -292,9 +305,11 @@ class PubSub(Runnable[Any, Any], ABC):
         if isinstance(config, list):
             raise NotImplementedError("config as list is not supported")
 
+        # Assign a unique id to each input value, which can be used to link
+        # output messages back to the input value that caused them
         input_correlation_ids = [str(uuid4()) for _ in inputs]
-        sorted_outputs = []
-        unsorted_outputs = []
+        outputs_by_corr_id: dict[str, Any] = {}
+
         for chunk in self._transform_stream_with_config(
             iter(inputs),
             partial(self._transform, input_correlation_ids=input_correlation_ids),
@@ -302,19 +317,11 @@ class PubSub(Runnable[Any, Any], ABC):
             **kwargs,
         ):
             if chunk["topic"] == OUTPUT_TOPIC:
-                if len(chunk["correlation_ids"]) == 1:
-                    # outputs that are derived from a single input value
-                    # are sorted by the order of the input value
-                    idx = input_correlation_ids.index(chunk["correlation_ids"][0])
-                    sorted_outputs.append((idx, chunk["value"]))
-                else:
-                    # outputs that are not derived from a single input value
-                    # are appended to the end of the list
-                    unsorted_outputs.append(chunk["value"])
+                outputs_by_corr_id[chunk["correlation_id"]] = chunk["value"]
 
-        # In the case where no join() is used outputs are returned in the order
+        # Outputs are returned in the order
         # of the inputs sent in, and will map 1-1 to the inputs.
-        # In the case where join() is used outputs are returned in the order they
-        # were emitted, and may not map 1-1 to the inputs.
-        sorted_outputs.sort(key=lambda x: x[0])
-        return [x[1] for x in sorted_outputs] + unsorted_outputs
+        return [
+            outputs_by_corr_id.get(correlation_id)
+            for correlation_id in input_correlation_ids
+        ]

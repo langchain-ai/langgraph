@@ -78,15 +78,13 @@ class InMemoryPubSubConnection(PubSubConnection):
                     for listener in self.listeners[full_name]:
                         listener(cast(PubSubMessage, message))
 
-    def send(
-        self, prefix: str, topic: str, value: Any, correlation_ids: list[str]
-    ) -> None:
+    def send(self, prefix: str, topic: str, value: Any, correlation_id: str) -> None:
         full_name = self.full_name(prefix, topic)
         message = PubSubMessage(
             value=value,
             topic=topic,
             namespace=prefix,
-            correlation_ids=correlation_ids,
+            correlation_id=correlation_id,
             published_at=datetime.now().isoformat(),
         )
 

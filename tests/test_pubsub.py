@@ -12,7 +12,7 @@ from permchain.topic import RunnableSubscriber, Topic
 
 
 def clean_log(logs: Iterator[PubSubMessage]) -> list[PubSubMessage]:
-    rm_keys = ["published_at", "correlation_ids", "namespace"]
+    rm_keys = ["published_at", "correlation_id", "namespace"]
 
     return [{k: v for k, v in m.items() if k not in rm_keys} for m in logs]
 
@@ -94,52 +94,54 @@ def test_stream_two_processes_in_out_interrupt(mocker: MockerFixture):
     assert chain_one.invoke(2) == 3
     assert chain_two.invoke(2) == 3
 
-    conn = InMemoryPubSubConnection(clear_on_disconnect=False)
-    pubsub_one = PubSub(chain_one, connection=conn)
-    pubsub_two = PubSub(chain_two, connection=conn)
+    for _ in range(100):
+        conn = InMemoryPubSubConnection(clear_on_disconnect=False)
+        pubsub_one = PubSub(chain_one, connection=conn)
+        pubsub_two = PubSub(chain_two, connection=conn)
 
-    # Using in-memory conn internals to make assertions about pubsub
-    # If we start with 0 listeners
-    assert conn.listeners == {}
-    # Then invoke both pubsubs, as a group
-    # The second picks up where the first left off
-    correlation_id = uuid4()
+        # Using in-memory conn internals to make assertions about pubsub
+        # If we start with 0 listeners
+        assert conn.listeners == {}
+        # Then invoke both pubsubs, as a group
+        # The second picks up where the first left off
+        correlation_id = uuid4()
 
-    # stream() step 1
-    assert clean_log(pubsub_one.stream(2, {"correlation_id": correlation_id})) == [
-        {"value": 2, "topic": "__in__"},
-        {"value": 3, "topic": "one"},
-    ]
+        # stream() step 1
+        assert clean_log(pubsub_one.stream(2, {"correlation_id": correlation_id})) == [
+            {"value": 2, "topic": "__in__"},
+            {"value": 3, "topic": "one"},
+        ]
 
-    # IN, one
-    assert len(conn.topics) == 2
-    topic_one_full_name = conn.full_name(correlation_id, topic_one.name)
-    # the actual message publishd by chain_one, and a sentinel "end" value
-    assert conn.topics[topic_one_full_name].qsize() == 2
+        # IN, one
+        assert len(conn.topics) == 2
+        topic_one_full_name = conn.full_name(correlation_id, topic_one.name)
+        # the actual message publishd by chain_one, and a sentinel "end" value
+        assert conn.topics[topic_one_full_name].qsize() == 2
 
-    # stream() step 2
-    # this picks up where the first left off, and produces same result as
-    # `test_invoke_two_processes_in_out`
-    assert clean_log(pubsub_two.stream(None, {"correlation_id": correlation_id})) == [
-        {"value": None, "topic": "__in__"},
-        {"value": 4, "topic": "__out__"},
-    ]
-    # listeners are still cleared, even though state is preserved
-    assert conn.listeners == {}
-    # IN, OUT, one
-    assert len(conn.topics) == 3
+        # stream() step 2
+        # this picks up where the first left off, and produces same result as
+        # `test_invoke_two_processes_in_out`
+        assert clean_log(
+            pubsub_two.stream(None, {"correlation_id": correlation_id})
+        ) == [
+            {"value": 4, "topic": "__out__"},
+        ]
+        # listeners are still cleared, even though state is preserved
+        assert conn.listeners == {}
+        # IN, OUT, one
+        assert len(conn.topics) == 3
 
-    for topic_name, queue in conn.topics.items():
-        if topic_name.endswith("IN"):
-            # Contains two sentinel "end" values, and None
-            # passed in as input to chain_two, which doesn't subscribe to it
-            assert queue.qsize() == 3
-        if topic_name.endswith("OUT"):
-            # Empty because this was consumed by invoke()
-            assert queue.qsize() == 0
-        if topic_name.endswith("one"):
-            # Contains 2 sentinel "end" values
-            assert queue.qsize() == 2
+        for topic_name, queue in conn.topics.items():
+            if topic_name.endswith("IN"):
+                # Contains two sentinel "end" values, and None
+                # passed in as input to chain_two, which doesn't subscribe to it
+                assert queue.qsize() == 3
+            if topic_name.endswith("OUT"):
+                # Empty because this was consumed by invoke()
+                assert queue.qsize() == 0
+            if topic_name.endswith("one"):
+                # Contains 2 sentinel "end" values
+                assert queue.qsize() == 2
 
 
 def test_invoke_many_processes_in_out(mocker: MockerFixture):
@@ -329,7 +331,7 @@ def test_stream_join_then_subscribe(mocker: MockerFixture):
 
 
 def test_stream_join_then_call_other_pubsub(mocker: MockerFixture):
-    conn = InMemoryPubSubConnection(clear_on_disconnect=False)
+    conn = InMemoryPubSubConnection()
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     inner_pubsub = PubSub(
@@ -351,9 +353,10 @@ def test_stream_join_then_call_other_pubsub(mocker: MockerFixture):
     # If we start with 0 listeners
     assert conn.listeners == {}
 
-    # Then invoke pubsub
-    for _ in range(20):
-        assert clean_log(pubsub.stream([2, 3])) == [
+    for _ in range(100):
+        correlation_id = uuid4()
+        # Then invoke pubsub
+        assert clean_log(pubsub.stream([2, 3], {"correlation_id": correlation_id})) == [
             {"value": [2, 3], "topic": "__in__"},
             {"value": 12, "topic": "one"},
             {"value": 13, "topic": "one"},

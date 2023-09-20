@@ -8,7 +8,7 @@ class PubSubMessage(TypedDict):
     topic: str
     namespace: str
     published_at: str
-    correlation_ids: list[str]
+    correlation_id: str
 
 
 PubSubListener = Callable[[PubSubMessage], None]
@@ -48,16 +48,14 @@ class PubSubConnection(ABC):
         )
 
     @abstractmethod
-    def send(
-        self, prefix: str, topic: str, value: Any, correlation_ids: list[str]
-    ) -> None:
+    def send(self, prefix: str, topic: str, value: Any, correlation_id: str) -> None:
         ...
 
     async def asend(
-        self, prefix: str, topic: str, value: Any, correlation_ids: list[str]
+        self, prefix: str, topic: str, value: Any, correlation_id: str
     ) -> None:
         return await asyncio.get_event_loop().run_in_executor(
-            None, self.send, correlation_ids, prefix, topic, value
+            None, self.send, correlation_id, prefix, topic, value
         )
 
     @abstractmethod
