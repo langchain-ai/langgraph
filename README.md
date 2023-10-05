@@ -14,9 +14,9 @@ chain_one = Topic.IN.subscribe() | (lambda x: x + 'b') | topic_one.publish()
 chain_two = topic_one.subscribe() | (lambda x: x + 'c') | Topic.OUT.publish()
 
 conn = InMemoryPubSubConnection()
-pubsub = PubSub(processes=(chain_one, chain_two), connection=conn)
+pubsub = PubSub(chain_one, chain_two, connection=conn)
 
-assert pubsub.invoke('a') == ['abc']
+assert pubsub.invoke('a') == 'abc'
 ```
 
 Check `tests` and `examples` for more examples.
