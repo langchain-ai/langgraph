@@ -163,31 +163,39 @@ class PubSub(Runnable[Any, Any], ABC):
                         )
 
                 # Run process once in executor
-                fut = executor.submit(
-                    process.invoke,
-                    value,
-                    config={
-                        **patch_config(
-                            config,
-                            callbacks=run_manager.get_child(),
-                            run_name=f"Topic: {process.topic.name}",
-                        ),
-                        CONFIG_SEND_KEY: partial(self.connection.send, topic_prefix),
-                        CONFIG_GET_KEY: get,
-                        # TODO below doesn't work for batch calls nested inside
-                        # another pubsub, eg. test_invoke_join_then_call_other_pubsub
-                        # as all messages in each batch would share same correlation_id
-                        # "correlation_id": self.connection.full_name(
-                        #     topic_prefix,
-                        #     process.topic.name,
-                        #     str(self.processes.index(process)),
-                        # ),
-                    },
-                )
+                try:
+                    fut = executor.submit(
+                        process.invoke,
+                        value,
+                        config={
+                            **patch_config(
+                                config,
+                                callbacks=run_manager.get_child(),
+                                run_name=f"Topic: {process.topic.name}",
+                            ),
+                            CONFIG_SEND_KEY: partial(
+                                self.connection.send, topic_prefix
+                            ),
+                            CONFIG_GET_KEY: get,
+                            # TODO below doesn't work for batch calls nested inside
+                            # another pubsub, eg. test_invoke_join_then_call_other_pubsub
+                            # as all messages in each batch would share same correlation_id
+                            # "correlation_id": self.connection.full_name(
+                            #     topic_prefix,
+                            #     process.topic.name,
+                            #     str(self.processes.index(process)),
+                            # ),
+                        },
+                    )
 
-                # Add callback to cleanup
-                inflight.add(fut)
-                fut.add_done_callback(check_if_idle)
+                    # Add callback to cleanup
+                    inflight.add(fut)
+                    fut.add_done_callback(check_if_idle)
+                except RuntimeError:
+                    # If executor is now closed, just ignore this process
+                    # This could happen eg. if an OUT message was published durin
+                    # execution of run_once
+                    pass
 
             # Listen on all subscribed topics
             for topic_name, processes in subscribers.items():
