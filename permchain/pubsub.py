@@ -216,6 +216,7 @@ class PubSub(Runnable[Any, Any], ABC):
                     for chunk in self.connection.observe(topic_prefix):
                         yield chunk
                         if chunk["topic"] == OUTPUT_TOPIC:
+                            # All expected output has been received, close
                             self.connection.disconnect(topic_prefix)
                             break
                 else:
@@ -224,6 +225,10 @@ class PubSub(Runnable[Any, Any], ABC):
                 # Cancel all inflight futures
                 while inflight:
                     inflight.pop().cancel()
+
+                # Remove namespace from inflight set
+                with self.lock:
+                    self.inflight_namespaces.remove(topic_prefix)
 
                 # Raise exceptions if any
                 if exceptions:
