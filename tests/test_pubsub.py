@@ -82,7 +82,6 @@ def test_batch_two_processes_in_out(mocker: MockerFixture):
     assert conn.listeners == {}
 
 
-@pytest.mark.skip("TODO")
 def test_stream_two_processes_in_out_interrupt(mocker: MockerFixture):
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     topic_one = Topic("one")
@@ -145,7 +144,7 @@ def test_invoke_many_processes_in_out(mocker: MockerFixture):
     conn = InMemoryPubSubConnection()
     pubsub = PubSub(processes=chains, connection=conn)
 
-    for _ in range(10):
+    for _ in range(100):
         # Using in-memory conn internals to make assertions about pubsub
         # If we start with 0 listeners
         assert conn.listeners == {}
@@ -238,7 +237,8 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture):
     # Then invoke pubsub
     # We get a single array result as chain_four waits for all publishers to finish
     # before operating on all elements published to topic_two as an array
-    assert pubsub.invoke(2) == [13, 14]
+    for _ in range(100):
+        assert pubsub.invoke(2) == [13, 14]
 
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
@@ -269,13 +269,14 @@ def test_stream_join_then_subscribe(mocker: MockerFixture):
     # Then invoke pubsub
     # We get a single array result as chain_four waits for all publishers to finish
     # before operating on all elements published to topic_two as an array
-    assert clean_log(pubsub.stream([2, 3])) == [
-        {"value": [2, 3], "topic": "__in__", "correlation_value": [2, 3]},
-        {"value": 12, "topic": "one", "correlation_value": [2, 3]},
-        {"value": 13, "topic": "one", "correlation_value": [2, 3]},
-        {"value": 25, "topic": "two", "correlation_value": [2, 3]},
-        {"value": 26, "topic": "__out__", "correlation_value": [2, 3]},
-    ]
+    for _ in range(10):
+        assert clean_log(pubsub.stream([2, 3])) == [
+            {"value": [2, 3], "topic": "__in__", "correlation_value": [2, 3]},
+            {"value": 12, "topic": "one", "correlation_value": [2, 3]},
+            {"value": 13, "topic": "one", "correlation_value": [2, 3]},
+            {"value": 25, "topic": "two", "correlation_value": [2, 3]},
+            {"value": 26, "topic": "__out__", "correlation_value": [2, 3]},
+        ]
 
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
@@ -305,13 +306,14 @@ def test_stream_join_then_call_other_pubsub(mocker: MockerFixture):
     assert conn.listeners == {}
 
     # Then invoke pubsub
-    assert clean_log(pubsub.stream([2, 3])) == [
-        {"value": [2, 3], "topic": "__in__", "correlation_value": [2, 3]},
-        {"value": 12, "topic": "one", "correlation_value": [2, 3]},
-        {"value": 13, "topic": "one", "correlation_value": [2, 3]},
-        {"value": [13, 14], "topic": "two", "correlation_value": [2, 3]},
-        {"value": 27, "topic": "__out__", "correlation_value": [2, 3]},
-    ]
+    for _ in range(10):
+        assert clean_log(pubsub.stream([2, 3])) == [
+            {"value": [2, 3], "topic": "__in__", "correlation_value": [2, 3]},
+            {"value": 12, "topic": "one", "correlation_value": [2, 3]},
+            {"value": 13, "topic": "one", "correlation_value": [2, 3]},
+            {"value": [13, 14], "topic": "two", "correlation_value": [2, 3]},
+            {"value": 27, "topic": "__out__", "correlation_value": [2, 3]},
+        ]
 
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
