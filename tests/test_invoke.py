@@ -1,11 +1,22 @@
+from typing import Iterator
 from uuid import uuid4
 
 import pytest
 from pytest_mock import MockerFixture
 
+from permchain.connection import PubSubMessage
 from permchain.connection_inmemory import InMemoryPubSubConnection
 from permchain.pubsub import PubSub
 from permchain.topic import RunnableSubscriber, Topic
+
+
+def clean_log(
+    logs: Iterator[PubSubMessage], correlation_id: bool | None = None
+) -> list[PubSubMessage]:
+    if correlation_id is False:
+        return [{**m, "published_at": None, "correlation_id": None} for m in logs]
+    else:
+        return [{**m, "published_at": None} for m in logs]
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture):
@@ -22,7 +33,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture):
     # If we start with 0 listeners
     assert conn.listeners == {}
     # Then invoke pubsub
-    assert pubsub.invoke(2) == [3]
+    assert pubsub.invoke(2) == 3
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
 
@@ -44,7 +55,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture):
     # If we start with 0 listeners
     assert conn.listeners == {}
     # Then invoke pubsub
-    assert pubsub.invoke(2) == [4]
+    assert pubsub.invoke(2) == 4
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
 
@@ -71,12 +82,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture):
     correlation_id = uuid4()
 
     # invoke() step 1
-    assert pubsub_one.invoke(2, {"correlation_id": correlation_id}) == []
-
-    # listeners are still cleared, even though state is preserved
-    assert conn.listeners == {}
-    # The log contains all messages published to all topics, in order
-    assert [{**m, "published_at": None} for m in conn.peek(correlation_id)] == [
+    assert clean_log(pubsub_one.stream(2, {"correlation_id": correlation_id})) == [
         {
             "value": 2,
             "topic": "__in__",
@@ -90,33 +96,17 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture):
             "published_at": None,
         },
     ]
-    # IN, OUT, one
-    assert len(conn.topics) == 3
-    topic_one_full_name = conn.full_topic_name(correlation_id, topic_one.name)
+
+    # IN, one
+    assert len(conn.topics) == 2
+    topic_one_full_name = conn.full_name(correlation_id, topic_one.name)
     # the actual message publishd by chain_one, and a sentinel "end" value
     assert conn.topics[topic_one_full_name].qsize() == 2
 
     # invoke() step 2
     # this picks up where the first left off, and produces same result as
     # `test_invoke_two_processes_in_out`
-    assert pubsub_two.invoke(None, {"correlation_id": correlation_id}) == [4]
-
-    # listeners are still cleared, even though state is preserved
-    assert conn.listeners == {}
-    # The log contains all messages published to all topics, in order
-    assert [{**m, "published_at": None} for m in conn.peek(correlation_id)] == [
-        {
-            "value": 2,
-            "topic": "__in__",
-            "correlation_id": str(correlation_id),
-            "published_at": None,
-        },
-        {
-            "value": 3,
-            "topic": "one",
-            "correlation_id": str(correlation_id),
-            "published_at": None,
-        },
+    assert clean_log(pubsub_two.stream(None, {"correlation_id": correlation_id})) == [
         {
             "value": None,
             "topic": "__in__",
@@ -130,6 +120,8 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture):
             "published_at": None,
         },
     ]
+    # listeners are still cleared, even though state is preserved
+    assert conn.listeners == {}
     # IN, OUT, one
     assert len(conn.topics) == 3
 
@@ -142,8 +134,8 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture):
             # Empty because this was consumed by invoke()
             assert queue.qsize() == 0
         if topic_name.endswith("one"):
-            # Contains sentinel "end" value
-            assert queue.qsize() == 1
+            # Contains 2 sentinel "end" values
+            assert queue.qsize() == 2
 
 
 def test_invoke_many_processes_in_out(mocker: MockerFixture):
@@ -170,7 +162,7 @@ def test_invoke_many_processes_in_out(mocker: MockerFixture):
     # If we start with 0 listeners
     assert conn.listeners == {}
     # Then invoke pubsub
-    assert pubsub.invoke(2) == [2 + test_size]
+    assert pubsub.invoke(2) == 2 + test_size
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
 
@@ -192,8 +184,9 @@ def test_invoke_two_processes_two_in_two_out(mocker: MockerFixture):
     assert conn.listeners == {}
 
     # Then invoke pubsub
-    # We get two equal results as the two chains do the same thing
-    assert pubsub.invoke(2) == [3, 3]
+    # We get only one of the two return values, as computation is closed
+    # as soon as we publish to OUT for the first time
+    assert pubsub.invoke(2) == 3
 
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
@@ -223,7 +216,7 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture):
     # Then invoke pubsub
     # We get a single array result as chain_four waits for all publishers to finish
     # before operating on all elements published to topic_two as an array
-    assert pubsub.invoke(2) == [[13, 14]]
+    assert pubsub.invoke(2) == [13, 14]
 
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
@@ -255,8 +248,7 @@ def test_invoke_join_then_subscribe(mocker: MockerFixture):
     # Then invoke pubsub
     # We get a single array result as chain_four waits for all publishers to finish
     # before operating on all elements published to topic_two as an array
-    assert pubsub.invoke([2, 3], {"correlation_id": correlation_id}) == [26]
-    assert [{**m, "published_at": None} for m in conn.peek(correlation_id)] == [
+    assert clean_log(pubsub.stream([2, 3], {"correlation_id": correlation_id})) == [
         {
             "value": [2, 3],
             "topic": "__in__",
@@ -293,7 +285,6 @@ def test_invoke_join_then_subscribe(mocker: MockerFixture):
     assert conn.listeners == {}
 
 
-@pytest.mark.skip("TODO")
 def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture):
     conn = InMemoryPubSubConnection(clear_on_disconnect=False)
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
@@ -308,8 +299,8 @@ def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture):
     topic_two = Topic("two")
 
     chain_one = Topic.IN.subscribe() | add_10_each | topic_one.publish_each()
-    chain_two = topic_one.join() | inner_pubsub.map() | topic_two.publish()
-    chain_three = topic_two.subscribe() | Topic.OUT.publish()
+    chain_two = topic_one.join() | inner_pubsub.map() | sorted | topic_two.publish()
+    chain_three = topic_two.subscribe() | sum | Topic.OUT.publish()
 
     correlation_id = uuid4()
     pubsub = PubSub((chain_one, chain_two, chain_three), connection=conn)
@@ -319,21 +310,37 @@ def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture):
     assert conn.listeners == {}
 
     # Then invoke pubsub
-    # We get a single array result as chain_four waits for all publishers to finish
-    # before operating on all elements published to topic_two as an array
-    # assert pubsub.invoke([2, 3], {"correlation_id": correlation_id}) == [[13, 14]]
-    pubsub.invoke([2, 3], {"correlation_id": correlation_id})
-    assert [{**m, "started_at": None} for m in conn.peek(correlation_id)] == [
-        {"message": [2, 3], "topic_name": "__in__", "started_at": None},
-        {"message": 12, "topic_name": "one", "started_at": None},
-        {"message": 13, "topic_name": "one", "started_at": None},
-        {"message": 25, "topic_name": "two", "started_at": None},
-        {"message": 26, "topic_name": "__out__", "started_at": None},
-        {"message": [2, 3], "started_at": None, "topic_name": "__in__"},
-        {"message": 12, "started_at": None, "topic_name": "one"},
-        {"message": 13, "started_at": None, "topic_name": "one"},
-        {"message": 25, "started_at": None, "topic_name": "two"},
-        {"message": 26, "started_at": None, "topic_name": "__out__"},
+    assert clean_log(pubsub.stream([2, 3], {"correlation_id": correlation_id})) == [
+        {
+            "value": [2, 3],
+            "topic": "__in__",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 12,
+            "topic": "one",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 13,
+            "topic": "one",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": [13, 14],
+            "topic": "two",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
+        {
+            "value": 27,
+            "topic": "__out__",
+            "correlation_id": str(correlation_id),
+            "published_at": None,
+        },
     ]
 
     # After invoke returns the listeners were cleaned up
@@ -361,9 +368,21 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture):
     assert conn.listeners == {}
 
     # Then invoke pubsub
-    # pubsub didn't stop executing after getting the first return value
-    # the values arrive in the order they are produced
-    assert pubsub.invoke(2) == [3, 4]
+    # pubsub stopped executing after publishing to OUT, so only one value is returned
+    assert clean_log(pubsub.stream(2), correlation_id=False) == [
+        {
+            "value": 2,
+            "topic": "__in__",
+            "correlation_id": None,
+            "published_at": None,
+        },
+        {
+            "value": 3,
+            "topic": "__out__",
+            "correlation_id": None,
+            "published_at": None,
+        },
+    ]
 
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
@@ -389,7 +408,7 @@ def test_invoke_two_processes_no_out(mocker: MockerFixture):
     # Then invoke pubsub
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to OUT topic
-    assert pubsub.invoke(2) == []
+    assert pubsub.invoke(2) is None
 
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
@@ -414,14 +433,14 @@ def test_invoke_two_processes_no_in(mocker: MockerFixture):
 
     # Then invoke pubsub
     # It returns without any output as there is nothing to run
-    assert pubsub.invoke(2) == []
+    assert pubsub.invoke(2) is None
 
     # After invoke returns the listeners were cleaned up
     assert conn.listeners == {}
 
 
 @pytest.mark.skip("TODO")
-def test_invoke_two_processes_simple_cycle(mocker: MockerFixture):
+def test_invoke_two_processes_simple_cycle(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     topic_one = Topic("one")
     chain_one = Topic.IN.subscribe() | add_one | topic_one.publish()

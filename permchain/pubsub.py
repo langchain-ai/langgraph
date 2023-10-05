@@ -8,10 +8,9 @@ from typing import Any, Iterator, List, Optional, Sequence, Set, TypeVar
 
 from langchain.callbacks.manager import CallbackManagerForChainRun
 from langchain.schema.runnable import Runnable, RunnableConfig, patch_config
-from langchain.schema.runnable.base import Runnable
 from langchain.schema.runnable.config import get_executor_for_config
 
-from permchain.connection import PubSubConnection
+from permchain.connection import PubSubConnection, PubSubMessage
 from permchain.constants import CONFIG_GET_KEY, CONFIG_SEND_KEY
 from permchain.topic import (
     INPUT_TOPIC,
@@ -84,7 +83,7 @@ class PubSub(Runnable[Any, Any], ABC):
             # Track inflight futures
             inflight: Set[Future] = set()
             # Track exceptions
-            exceptions: List[Exception] = []
+            exceptions: List[BaseException] = []
 
             def on_idle() -> None:
                 """Called when all subscribed topics are empty.
@@ -127,9 +126,15 @@ class PubSub(Runnable[Any, Any], ABC):
                     on_idle()
 
             def run_once(
-                process: RunnableSubscriber[Any] | RunnableReducer[Any], value: Any
+                process: RunnableSubscriber[Any] | RunnableReducer[Any],
+                messages: PubSubMessage | list[PubSubMessage],
             ) -> None:
                 """Run a process once."""
+                value = (
+                    [m["value"] for m in messages]
+                    if isinstance(messages, list)
+                    else messages["value"]
+                )
 
                 def get(topic_name: str) -> Any:
                     if topic_name == INPUT_TOPIC:
@@ -151,10 +156,10 @@ class PubSub(Runnable[Any, Any], ABC):
                             callbacks=run_manager.get_child(),
                             run_name=f"Topic: {process.topic.name}",
                         ),
-                        "correlation_id": self.connection.full_topic_name(
+                        "correlation_id": self.connection.full_name(
                             topic_prefix,
                             process.topic.name,
-                            self.processes.index(process),
+                            str(self.processes.index(process)),
                         ),
                         CONFIG_SEND_KEY: partial(self.connection.send, topic_prefix),
                         CONFIG_GET_KEY: get,
@@ -181,10 +186,11 @@ class PubSub(Runnable[Any, Any], ABC):
                     # Yield output until all processes are done
                     # This blocks the current thread, all other work needs to go
                     # through the executor
-                    for chunk in self.connection.iterate(
-                        topic_prefix, OUTPUT_TOPIC, wait=True
-                    ):
+                    for chunk in self.connection.observe(topic_prefix):
                         yield chunk
+                        if chunk["topic"] == OUTPUT_TOPIC:
+                            self.connection.disconnect(topic_prefix)
+                            break
                 else:
                     on_idle()
             finally:
@@ -201,13 +207,12 @@ class PubSub(Runnable[Any, Any], ABC):
         input: Any,
         config: Optional[RunnableConfig] = None,
         **kwargs: Optional[Any],
-    ) -> Iterator[Any]:
+    ) -> Iterator[PubSubMessage]:
         yield from self._transform_stream_with_config(
             iter([input]), self._transform, config, **kwargs
         )
 
     def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
-        collected = []
         for chunk in self.stream(input, config):
-            collected.append(chunk)
-        return collected
+            if chunk["topic"] == OUTPUT_TOPIC:
+                return chunk["value"]
