@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import threading
 from abc import ABC
 from collections import defaultdict
 from concurrent.futures import CancelledError, Future
@@ -38,6 +39,10 @@ class PubSub(Runnable[Any, Any], ABC):
         connection: PubSubConnection,
     ) -> None:
         super().__init__()
+
+        self.lock = threading.Lock()
+        self.inflight_namespaces = set()
+
         self.connection = connection
         self.processes = list(processes)
         for proc in procs:
@@ -80,6 +85,17 @@ class PubSub(Runnable[Any, Any], ABC):
         with get_executor_for_config(config) as executor:
             # Namespace topics for each run, default to run_id, ie. isolated
             topic_prefix = str(config.get("correlation_id") or run_manager.run_id)
+
+            # Check if this correlation_id is currently inflight. If so, raise an error,
+            # as that would make the output iterator produce incorrect results.
+            with self.lock:
+                if topic_prefix in self.inflight_namespaces:
+                    raise RuntimeError(
+                        f"Cannot run {self} in namespace {topic_prefix} "
+                        "because it is currently in use"
+                    )
+                self.inflight_namespaces.add(topic_prefix)
+
             # Track inflight futures
             inflight: Set[Future] = set()
             # Track exceptions
@@ -156,13 +172,16 @@ class PubSub(Runnable[Any, Any], ABC):
                             callbacks=run_manager.get_child(),
                             run_name=f"Topic: {process.topic.name}",
                         ),
-                        "correlation_id": self.connection.full_name(
-                            topic_prefix,
-                            process.topic.name,
-                            str(self.processes.index(process)),
-                        ),
                         CONFIG_SEND_KEY: partial(self.connection.send, topic_prefix),
                         CONFIG_GET_KEY: get,
+                        # TODO below doesn't work for batch calls nested inside
+                        # another pubsub, eg. test_invoke_join_then_call_other_pubsub
+                        # as all messages in each batch would share same correlation_id
+                        # "correlation_id": self.connection.full_name(
+                        #     topic_prefix,
+                        #     process.topic.name,
+                        #     str(self.processes.index(process)),
+                        # ),
                     },
                 )
 
