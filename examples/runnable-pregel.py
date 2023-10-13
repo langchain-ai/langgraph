@@ -72,7 +72,7 @@ editor_chain = (
     | JsonOutputFunctionsParser(args_only=False)
 )
 
-# state
+# channels
 
 question = channels.LastValue[str]("question")
 
