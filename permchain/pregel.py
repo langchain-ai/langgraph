@@ -275,7 +275,7 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
 
     @classmethod
     def subscribe_to_each(cls, inbox: Inbox) -> PregelBatch:
-        """Runs process.batch() on the current contents of the inbox."""
+        """Runs process.batch() with the content of inbox each time it is updated."""
         return PregelBatch(channel=inbox)
 
     @classmethod
@@ -285,6 +285,7 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
         *,
         max_steps: Optional[int] = None,
     ) -> PregelSink:
+        """Writes to channels the result of the lambda, or None to skip writing."""
         return PregelSink(
             channels=(
                 [(channels, RunnablePassthrough())]

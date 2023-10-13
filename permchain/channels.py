@@ -42,6 +42,15 @@ class Channel(Generic[Value, Update], ABC):
 
 
 class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
+    """Stores the result of applying a binary operator to the current value and each new value.
+
+    ```python
+    import operator
+
+    total = BinaryOperatorAggregate[int]("total", operator.add)
+    ```
+    """
+
     def __init__(self, name: str, operator: Callable[[Value, Value], Value]):
         super().__init__(name)
         self.operator = operator
@@ -71,6 +80,8 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
 
 
 class LastValue(Generic[Value], Channel[Value, Value]):
+    """Stores the last value received."""
+
     def _empty(self, checkpoint: Optional[str] = None) -> Self:
         empty = self.__class__(self.name)
         if checkpoint is not None:
@@ -94,6 +105,8 @@ class LastValue(Generic[Value], Channel[Value, Value]):
 
 
 class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
+    """Stores all values received, resets in each step."""
+
     def _empty(self, checkpoint: Optional[str] = None) -> Self:
         empty = self.__class__(self.name)
         if checkpoint is not None:
@@ -114,6 +127,8 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
 
 
 class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
+    """Stores all unique values received."""
+
     set: set[Value]
 
     def _empty(self, checkpoint: Optional[str] = None) -> Self:

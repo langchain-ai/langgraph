@@ -1,3 +1,4 @@
+import operator
 from permchain import Pregel, channels
 
 value = channels.LastValue[str]("value")
