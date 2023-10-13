@@ -1,6 +1,8 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Callable, FrozenSet, Generic, Optional, Self, Sequence, TypeVar
+from typing import Callable, FrozenSet, Generic, Optional, Sequence, TypeVar
+
+from typing_extensions import Self
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
