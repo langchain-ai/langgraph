@@ -214,9 +214,7 @@ class PregelSink(RunnableLambda):
 
         write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
 
-        values = [
-            (chan, await r.ainvoke(input, config)) for chan, r in self.channels.items()
-        ]
+        values = [(chan, await r.ainvoke(input, config)) for chan, r in self.channels]
 
         write([(chan, val) for chan, val in values if val is not None])
 
@@ -405,10 +403,6 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
                 if not next_tasks:
                     break
 
-        # TODO clean up inflight futures if stream() is interrupted ?
-        # Test this first
-        # If this is needed implement with a weakset of futures and try/finally
-
     async def _atransform(
         self,
         input: AsyncIterator[Input],
@@ -439,7 +433,7 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
             # execute tasks, and wait for one to fail or all to finish
             # each task is independent from all other concurrent tasks
             done, inflight = await asyncio.wait(
-                (
+                [
                     asyncio.create_task(
                         proc.ainvoke(
                             input,
@@ -456,7 +450,7 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
                         )
                     )
                     for proc, input in next_tasks
-                ),
+                ],
                 return_when=asyncio.FIRST_EXCEPTION,
                 timeout=self.step_timeout,
             )
@@ -538,7 +532,7 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> AsyncIterator[Output]:
-        async for chunk in self._transform_stream_with_config(
+        async for chunk in self._atransform_stream_with_config(
             input, self._atransform, config, **kwargs
         ):
             yield chunk

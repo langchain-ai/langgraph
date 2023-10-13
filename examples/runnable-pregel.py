@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import asyncio
+
 from langchain.chat_models.openai import ChatOpenAI
 from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain.prompts import SystemMessagePromptTemplate
@@ -110,6 +112,15 @@ draft_revise_loop = Pregel(
 
 # run
 
-for draft in draft_revise_loop.stream("What food do turtles eat?"):
-    print('Draft: "' + draft + '"')
-    print("---")
+# for draft in draft_revise_loop.stream("What food do turtles eat?"):
+#     print('Draft: "' + draft + '"')
+#     print("---")
+
+
+async def main():
+    async for draft in draft_revise_loop.astream("What food do turtles eat?"):
+        print('Draft: "' + draft + '"')
+        print("---")
+
+
+asyncio.run(main())
