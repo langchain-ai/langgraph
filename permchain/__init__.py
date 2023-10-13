@@ -1,9 +1,4 @@
-from permchain.connection_inmemory import InMemoryPubSubConnection
-from permchain.pubsub import PubSub
-from permchain.topic import Topic
+import permchain.channels as channels
+from permchain.pregel import Pregel
 
-__all__ = [
-    "PubSub",
-    "Topic",
-    "InMemoryPubSubConnection",
-]
+__all__ = ["channels", "Pregel"]

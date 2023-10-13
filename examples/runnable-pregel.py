@@ -5,9 +5,7 @@ from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 
-from permchain.channels import LastValue
-from permchain.pregel import Pregel
-
+from permchain import Pregel, channels
 
 # prompts
 
@@ -76,29 +74,30 @@ editor_chain = (
 
 # state
 
-question = LastValue[str]()
+question = channels.LastValue[str]("question")
 
-draft = LastValue[str]()
+draft = channels.LastValue[str]("draft")
 
-notes = LastValue[str]()
+notes = channels.LastValue[str]("notes")
 
 # application
 
-drafter_node = Pregel.read(question=question) | drafter_chain | Pregel.write(draft)
-
-reviser_node = (
-    Pregel.read(question=question, notes=notes, draft=draft)
-    | reviser_chain
-    | Pregel.write(draft)
+drafter_node = (
+    Pregel.subscribe_to(question=question) | drafter_chain | Pregel.send_to(draft)
 )
 
-
 editor_node = (
-    Pregel.read(draft=draft)
+    Pregel.subscribe_to(draft=draft)
     | editor_chain
-    | Pregel.write(
+    | Pregel.send_to(
         {notes: lambda x: x["arguments"]["notes"] if x["name"] == "revise" else None}
     )
+)
+
+reviser_node = (
+    Pregel.subscribe_to(notes=notes).join(question=question, draft=draft)
+    | reviser_chain
+    | Pregel.send_to(draft)
 )
 
 draft_revise_loop = Pregel(
@@ -109,4 +108,6 @@ draft_revise_loop = Pregel(
 
 # run
 
-article = draft_revise_loop.invoke("What food do turtles eat?")
+for draft in draft_revise_loop.stream("What food do turtles eat?"):
+    print('Draft: "' + draft + '"')
+    print("---")
