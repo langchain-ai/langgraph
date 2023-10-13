@@ -237,8 +237,7 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
 
     def __init__(
         self,
-        processes: Sequence[PregelInvoke | PregelBatch],
-        *,
+        *processes: PregelInvoke | PregelBatch,
         input: Channel[Input, Any],
         output: Channel[Output, Any],
         step_timeout: Optional[float] = None,

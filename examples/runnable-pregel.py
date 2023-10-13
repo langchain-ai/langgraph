@@ -101,7 +101,9 @@ reviser_node = (
 )
 
 draft_revise_loop = Pregel(
-    (drafter_node, reviser_node, editor_node),
+    drafter_node,
+    reviser_node,
+    editor_node,
     input=question,
     output=draft,
 )
