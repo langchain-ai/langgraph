@@ -588,7 +588,3 @@ def _apply_writes_and_prepare_next_tasks(
                 tasks.append((proc, val))
 
     return tasks
-
-
-# TODO do we want api to subscribe to all channels?
-# Do we want api to send input to multiple channels in invoke()
