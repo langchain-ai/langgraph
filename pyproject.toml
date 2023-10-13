@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/permchain"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain = ">=0.0.300"
+langchain = "^0.0.313"
 
 
 [tool.poetry.group.test.dependencies]
@@ -29,7 +29,7 @@ ruff = "^0.0.249"
 black = {extras = ["jupyter"], version = "^23.7.0"}
 
 [tool.poetry.group.typing.dependencies]
-mypy = "^0.991"
+mypy = "^1.6.0"
 
 [tool.poetry.group.dev]
 optional = true
