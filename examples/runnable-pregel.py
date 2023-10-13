@@ -74,53 +74,61 @@ editor_chain = (
     | JsonOutputFunctionsParser(args_only=False)
 )
 
-# channels
-
-question = channels.LastValue[str]("question")
-
-draft = channels.LastValue[str]("draft")
-
-notes = channels.LastValue[str]("notes")
-
 # application
 
-drafter_node = (
-    Pregel.subscribe_to(question=question) | drafter_chain | Pregel.send_to(draft)
+drafter = (
+    # subscribe to question channel as a dict with a single key, "question"
+    Pregel.subscribe_to(["question"])
+    | drafter_chain
+    | Pregel.send_to("draft")
 )
 
-editor_node = (
-    Pregel.subscribe_to(draft=draft)
+editor = (
+    # subscribe to draft channel as a dict with a single key, "draft"
+    Pregel.subscribe_to(["draft"])
     | editor_chain
     | Pregel.send_to(
-        {notes: lambda x: x["arguments"]["notes"] if x["name"] == "revise" else None}
+        # send to "notes" channel if the editor does not accept the draft
+        notes=lambda x: x["arguments"]["notes"]
+        if x["name"] == "revise"
+        else None
     )
 )
 
-reviser_node = (
-    Pregel.subscribe_to(notes=notes).join(question=question, draft=draft)
+reviser = (
+    # subscribe to new values of "notes" channel,
+    # and join them with the current values of "question" and "draft"
+    Pregel.subscribe_to(["notes"]).join("question", "draft")
     | reviser_chain
-    | Pregel.send_to(draft)
+    | Pregel.send_to("draft")
 )
 
 draft_revise_loop = Pregel(
-    drafter_node,
-    reviser_node,
-    editor_node,
-    input=question,
-    output=draft,
+    [drafter, reviser, editor],
+    channels={
+        "question": channels.LastValue[str](),
+        "draft": channels.LastValue[str](),
+        "notes": channels.LastValue[str](),
+    },
+    # output will be a dict with keys "draft" and "notes"
+    output=["draft", "notes"],
+    # input can be a dict with any of the channels as keys
+    input=None,
 )
 
 # run
 
-# for draft in draft_revise_loop.stream("What food do turtles eat?"):
-#     print('Draft: "' + draft + '"')
-#     print("---")
+for draft in draft_revise_loop.stream({"question": "What food do turtles eat?"}):
+    print(draft)
+    print("---")
 
 
 async def main():
-    async for draft in draft_revise_loop.astream("What food do turtles eat?"):
-        print('Draft: "' + draft + '"')
+    async for draft in draft_revise_loop.astream(
+        {"question": "What food do turtles eat?"}
+    ):
+        print(draft)
         print("---")
 
 
-asyncio.run(main())
+# asyncio.run(main())

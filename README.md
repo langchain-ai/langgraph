@@ -9,26 +9,32 @@
 ```python
 from permchain import Pregel, channels
 
-value = channels.LastValue[str]("value")
-
 grow_value = (
-    Pregel.subscribe_to(value)
+    Pregel.subscribe_to("value")
     | (lambda x: x + x)
-    | Pregel.send_to({value: lambda x: x if len(x) < 10 else None})
+    | Pregel.send_to(value=lambda x: x if len(x) < 10 else None)
 )
 
-pubsub = Pregel(grow_value, input=value, output=value)
+pubsub = Pregel(
+    grow_value,
+    channels={"value": channels.LastValue[str]()},
+    input="value",
+    output="value",
+)
 
 assert pubsub.invoke("a") == "aaaaaaaa"
+
 ```
 
 Check `examples` for more examples.
 
 ## Near-term Roadmap
 
-- [ ] Iterate on API
-  - [ ] do we want api to receive output from multiple channels in invoke()
-  - [ ] do we want api to send input to multiple channels in invoke()
+- [x] Iterate on API
+  - [x] do we want api to receive output from multiple channels in invoke()
+  - [x] do we want api to send input to multiple channels in invoke()
+  - [ ] Finish updating tests to new API
+- [ ] Implement input_schema and output_schema in Pregel
 - [ ] Implement checkpointing
   - [ ] Save checkpoints at end of each step
   - [ ] Load checkpoint at start of invocation

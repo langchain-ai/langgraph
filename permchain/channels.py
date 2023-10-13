@@ -2,7 +2,7 @@ import json
 from abc import ABC, abstractmethod
 from typing import Callable, FrozenSet, Generic, Optional, Sequence, TypeVar
 
-from typing_extensions import Self
+from typing_extensions import Self, get_args
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
@@ -17,14 +17,20 @@ class InvalidUpdateError(Exception):
 
 
 class Channel(Generic[Value, Update], ABC):
-    def __init__(self, name: str) -> None:
-        self.name = name
+    # TODO: add type hints for ValueType and UpdateType
+    # @property
+    # def ValueType(self) -> type[Value]:
+    #     """The type of the value stored in the channel."""
+    #     type_args = get_args(self.__class__.__orig_bases__[-1])  # type: ignore[attr-defined]
+    #     if type_args and len(type_args) == 2:
+    #         return type_args[0]
 
-    def __repr__(self) -> str:
-        return f"{self.__class__.__name__}({self.name})"
-
-    def __str__(self) -> str:
-        return self.name
+    # @property
+    # def UpdateType(self) -> type[Update]:
+    #     """The type of the update received by the channel."""
+    #     type_args = get_args(self.__class__.__orig_bases__[-1])  # type: ignore[attr-defined]
+    #     if type_args and len(type_args) == 2:
+    #         return type_args[1]
 
     @abstractmethod
     def _empty(self, checkpoint: Optional[str] = None) -> Self:
@@ -53,12 +59,12 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
     ```
     """
 
-    def __init__(self, name: str, operator: Callable[[Value, Value], Value]):
-        super().__init__(name)
+    def __init__(self, operator: Callable[[Value, Value], Value]):
+        super().__init__()
         self.operator = operator
 
     def _empty(self, checkpoint: Optional[str] = None) -> Self:
-        empty = self.__class__(self.name, self.operator)
+        empty = self.__class__(self.operator)
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
         return empty
@@ -85,7 +91,7 @@ class LastValue(Generic[Value], Channel[Value, Value]):
     """Stores the last value received."""
 
     def _empty(self, checkpoint: Optional[str] = None) -> Self:
-        empty = self.__class__(self.name)
+        empty = self.__class__()
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
         return empty
@@ -110,7 +116,7 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
     """Stores all values received, resets in each step."""
 
     def _empty(self, checkpoint: Optional[str] = None) -> Self:
-        empty = self.__class__(self.name)
+        empty = self.__class__()
         if checkpoint is not None:
             empty.queue = tuple(json.loads(checkpoint))
         return empty
@@ -134,7 +140,7 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
     set: set[Value]
 
     def _empty(self, checkpoint: Optional[str] = None) -> Self:
-        empty = self.__class__(self.name)
+        empty = self.__class__()
         if checkpoint is not None:
             empty.set = set(json.loads(checkpoint))
         return empty

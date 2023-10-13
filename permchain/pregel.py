@@ -13,6 +13,7 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
+    cast,
     overload,
 )
 
@@ -50,11 +51,11 @@ CONFIG_KEY_STEP = "__pregel_step"
 CONFIG_KEY_SEND = "__pregel_send"
 CONFIG_KEY_READ = "__pregel_read"
 
-TYPE_SEND = Callable[[Sequence[tuple[Channel, Any]]], None]
+TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
 
 
 class PregelRead(RunnableLambda):
-    channel: Channel
+    channel: str
 
     @property
     def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
@@ -68,13 +69,13 @@ class PregelRead(RunnableLambda):
             ),
         ]
 
-    def __init__(self, channel: Channel) -> None:
+    def __init__(self, channel: str) -> None:
         super().__init__(func=self._read, afunc=self._aread)  # type: ignore[arg-type]
         self.channel = channel
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
         try:
-            read: Callable[[Channel], Any] = config["configurable"][CONFIG_KEY_READ]
+            read: Callable[[str], Any] = config["configurable"][CONFIG_KEY_READ]
         except KeyError:
             raise RuntimeError(
                 f"Runnable {self} is not configured with a read function"
@@ -84,7 +85,7 @@ class PregelRead(RunnableLambda):
 
     async def _aread(self, _: Any, config: RunnableConfig) -> Any:
         try:
-            read: Callable[[Channel], Any] = config["configurable"][CONFIG_KEY_READ]
+            read: Callable[[str], Any] = config["configurable"][CONFIG_KEY_READ]
         except KeyError:
             raise RuntimeError(
                 f"Runnable {self} is not configured with a read function"
@@ -94,15 +95,15 @@ class PregelRead(RunnableLambda):
 
 
 class PregelInvoke(RunnableBinding):
-    channels: Mapping[None, Channel] | Mapping[str, Channel]
+    channels: Mapping[None, str] | Mapping[str, str]
 
     bound: Runnable[Any, Any] = Field(default_factory=RunnablePassthrough)
 
     kwargs: Mapping[str, Any] = Field(default_factory=dict)
 
-    def join(self, **channels: Channel) -> PregelInvoke:
+    def join(self, *channels: str) -> PregelInvoke:
         joiner = RunnablePassthrough.assign(
-            **{k: PregelRead(chan) for k, chan in channels.items()}
+            **{chan: PregelRead(chan) for chan in channels}
         )
         if isinstance(self.bound, RunnablePassthrough):
             return PregelInvoke(channels=self.channels, bound=joiner)
@@ -130,7 +131,7 @@ class PregelInvoke(RunnableBinding):
 
 
 class PregelBatch(RunnableEach):
-    channel: Inbox
+    channel: str
 
     bound: Runnable[Any, Any] = Field(default_factory=RunnablePassthrough)
 
@@ -155,7 +156,7 @@ class PregelBatch(RunnableEach):
 
 
 class PregelSink(RunnableLambda):
-    channels: Sequence[tuple[Channel, Runnable]]
+    channels: Sequence[tuple[str, Runnable]]
     """
     Mapping of write channels to Runnables that return the value to be written,
     or None to skip writing.
@@ -166,7 +167,7 @@ class PregelSink(RunnableLambda):
     def __init__(
         self,
         *,
-        channels: Sequence[tuple[Channel, Runnable]],
+        channels: Sequence[tuple[str, Runnable]],
         max_steps: Optional[int] = None,
     ):
         super().__init__(func=self._write, afunc=self._awrite)
@@ -221,12 +222,14 @@ class PregelSink(RunnableLambda):
         return input
 
 
-class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
-    input: Channel[Any, Input]
+class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]):
+    channels: Mapping[str, Channel]
 
-    output: Channel[Output, Any]
+    chains: Sequence[PregelInvoke | PregelBatch]
 
-    processes: Sequence[PregelInvoke | PregelBatch]
+    output: str | Sequence[str]
+
+    input: str | None
 
     step_timeout: Optional[float] = None
 
@@ -235,42 +238,34 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
 
     def __init__(
         self,
-        *processes: PregelInvoke | PregelBatch,
-        input: Channel[Input, Any],
-        output: Channel[Output, Any],
+        *chains: Sequence[PregelInvoke | PregelBatch] | PregelInvoke | PregelBatch,
+        channels: Mapping[str, Channel],
+        output: str | Sequence[str],
+        input: str | None = None,
         step_timeout: Optional[float] = None,
-        **kwargs: Any,
-    ):
+    ) -> None:
+        chains_flat: list[PregelInvoke | PregelBatch] = []
+        for chain in chains:
+            if isinstance(chain, (list, tuple)):
+                chains_flat.extend(chain)
+            else:
+                chains_flat.append(chain)
         super().__init__(
-            processes=processes,
-            input=input,
+            chains=chains_flat,
+            channels=channels,
             output=output,
+            input=input,
             step_timeout=step_timeout,
-            **kwargs,
         )
 
-    @overload
     @classmethod
-    def subscribe_to(cls, __channel: Channel) -> PregelInvoke:
-        ...
-
-    @overload
-    @classmethod
-    def subscribe_to(
-        cls, __channel: Mapping[str, Channel] | None = None, **kwargs: Channel
-    ) -> PregelInvoke:
-        ...
-
-    @classmethod
-    def subscribe_to(
-        cls, __channel: Channel | Mapping[str, Channel] | None = None, **kwargs: Channel
-    ) -> PregelInvoke:
-        """Runs process.invoke() each time channels are updated."""
-        __channel = __channel or {}
-        return (
-            PregelInvoke(channels={None: __channel})
-            if isinstance(__channel, Channel)
-            else PregelInvoke(channels={**__channel, **kwargs})
+    def subscribe_to(cls, channels: str | Sequence[str]) -> PregelInvoke:
+        """Runs process.invoke() each time channels are updated,
+        with a dict of the channel values as input."""
+        return PregelInvoke(
+            channels={None: channels}
+            if isinstance(channels, str)
+            else {chan: chan for chan in channels}
         )
 
     @classmethod
@@ -281,54 +276,34 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
     @classmethod
     def send_to(
         cls,
-        channels: Channel | Mapping[Channel, RunnableLike],
-        *,
-        max_steps: Optional[int] = None,
+        *channels: str,
+        _max_steps: Optional[int] = None,
+        **kwargs: RunnableLike,
     ) -> PregelSink:
         """Writes to channels the result of the lambda, or None to skip writing."""
         return PregelSink(
             channels=(
-                [(channels, RunnablePassthrough())]
-                if isinstance(channels, Channel)
-                else [(k, coerce_to_runnable(v)) for k, v in channels.items()]
+                [(c, RunnablePassthrough()) for c in channels]
+                + [(k, coerce_to_runnable(v)) for k, v in kwargs.items()]
             ),
-            max_steps=max_steps,
+            max_steps=_max_steps,
         )
-
-    def _prepare_channels(self) -> Mapping[Channel, Channel]:
-        channels: dict[Channel, Channel] = {self.output: self.output._empty()}
-        for proc in self.processes:
-            if isinstance(proc, PregelInvoke):
-                for chan in proc.channels.values():
-                    if chan not in channels:
-                        channels[chan] = chan._empty()
-            elif isinstance(proc, PregelBatch):
-                if proc.channel not in channels:
-                    channels[proc.channel] = proc.channel._empty()
-            else:
-                raise TypeError(
-                    f"Received process {proc}, expected instance of PregelInvoke or PregelBatch"
-                )
-
-        if not channels:
-            raise ValueError("Found 0 channels for Pregel run")
-
-        if self.input not in channels:
-            raise ValueError("Input channel not being read from")
-
-        return channels
 
     def _transform(
         self,
-        input: Iterator[Input],
+        input: Iterator[dict[str, Any] | Any],
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
     ) -> Iterator[Output]:
-        processes = tuple(self.processes)
+        processes = tuple(self.chains)
         # TODO this is where we'd restore from checkpoint
-        channels = self._prepare_channels()
+        channels = {k: v._empty() for k, v in self.channels.items()}
         next_tasks = _apply_writes_and_prepare_next_tasks(
-            processes, channels, deque((self.input, chunk) for chunk in input)
+            processes,
+            channels,
+            deque((self.input, chunk) for chunk in input)
+            if self.input is not None
+            else deque((k, v) for chunk in input for k, v in chunk.items()),
         )
 
         def read(chan: Channel) -> Any:
@@ -406,14 +381,18 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
 
     async def _atransform(
         self,
-        input: AsyncIterator[Input],
+        input: AsyncIterator[dict[str, Any] | Any],
         run_manager: AsyncCallbackManagerForChainRun,
         config: RunnableConfig,
     ) -> AsyncIterator[Output]:
-        processes = tuple(self.processes)
-        channels = self._prepare_channels()
+        processes = tuple(self.chains)
+        channels = {k: v._empty() for k, v in self.channels.items()}
         next_tasks = _apply_writes_and_prepare_next_tasks(
-            processes, channels, [(self.input, chunk) async for chunk in input]
+            processes,
+            channels,
+            deque((self.input, chunk) async for chunk in input)
+            if self.input is not None
+            else deque((k, v) async for chunk in input for k, v in chunk.items()),
         )
 
         def read(chan: Channel) -> Any:
@@ -480,15 +459,22 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
             )
 
             # if any write to output channel in this step, yield current value
-            if any(chan is self.output for chan, _ in pending_writes):
-                yield channels[self.output]._get()
+            if isinstance(self.output, str):
+                if any(chan is self.output for chan, _ in pending_writes):
+                    yield channels[self.output]._get()
+            else:
+                if updated := {c for c, _ in pending_writes if c in self.output}:
+                    yield {chan: channels[chan]._get() for chan in updated}
 
             # if no more tasks, we're done
             if not next_tasks:
                 break
 
     def invoke(
-        self, input: Input, config: RunnableConfig | None = None, **kwargs: Any
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
     ) -> Output:
         latest: Output | None = None
         for chunk in self.stream(input, config, **kwargs):
@@ -496,13 +482,16 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
         return latest
 
     def stream(
-        self, input: Input, config: RunnableConfig | None = None, **kwargs: Any
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
     ) -> Iterator[Output]:
         return self.transform(iter([input]), config, **kwargs)
 
     def transform(
         self,
-        input: Iterator[Input],
+        input: Iterator[dict[str, Any] | Any],
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Iterator[Output]:
@@ -511,7 +500,10 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
         )
 
     async def ainvoke(
-        self, input: Input, config: RunnableConfig | None = None, **kwargs: Any
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
     ) -> Output:
         latest: Output | None = None
         async for chunk in self.astream(input, config, **kwargs):
@@ -519,7 +511,10 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
         return latest
 
     async def astream(
-        self, input: Input, config: RunnableConfig | None = None, **kwargs: Any
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
     ) -> AsyncIterator[Output]:
         async def input_stream() -> AsyncIterator[Input]:
             yield input
@@ -529,7 +524,7 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
 
     async def atransform(
         self,
-        input: AsyncIterator[Input],
+        input: AsyncIterator[dict[str, Any] | Any],
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> AsyncIterator[Output]:
@@ -541,10 +536,10 @@ class Pregel(Generic[Input, Output], RunnableSerializable[Input, Output]):
 
 def _apply_writes_and_prepare_next_tasks(
     processes: Sequence[PregelInvoke | PregelBatch],
-    channels: Mapping[Channel, Channel],
-    pending_writes: Sequence[tuple[Channel, Any]],
+    channels: Mapping[str, Channel],
+    pending_writes: Sequence[tuple[str, Any]],
 ) -> list[tuple[Runnable, Any]]:
-    pending_writes_by_channel: dict[Channel, list[Any]] = defaultdict(list)
+    pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
     for chan, val in pending_writes:
         pending_writes_by_channel[chan].append(val)
