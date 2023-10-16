@@ -101,7 +101,7 @@ class PregelInvoke(RunnableBinding):
 
     kwargs: Mapping[str, Any] = Field(default_factory=dict)
 
-    def join(self, *channels: str) -> PregelInvoke:
+    def join(self, channels: Sequence[str]) -> PregelInvoke:
         joiner = RunnablePassthrough.assign(
             **{chan: PregelRead(chan) for chan in channels}
         )

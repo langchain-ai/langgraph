@@ -98,7 +98,7 @@ editor = (
 reviser = (
     # subscribe to new values of "notes" channel,
     # and join them with the current values of "question" and "draft"
-    Pregel.subscribe_to(["notes"]).join("question", "draft")
+    Pregel.subscribe_to(["notes"]).join(["question", "draft"])
     | reviser_chain
     | Pregel.send_to("draft")
 )
