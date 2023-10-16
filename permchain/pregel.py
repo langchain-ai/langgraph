@@ -250,6 +250,9 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
                 chains_flat.extend(chain)
             else:
                 chains_flat.append(chain)
+
+        validate_chains_channels(chains_flat, channels, input, output)
+
         super().__init__(
             chains=chains_flat,
             channels=channels,
@@ -584,3 +587,32 @@ def _apply_writes_and_prepare_next_tasks(
                 tasks.append((proc, val))
 
     return tasks
+
+
+def validate_chains_channels(
+    chains: Sequence[PregelInvoke | PregelBatch],
+    channels: Mapping[str, Channel],
+    input: str | None,
+    output: str | Sequence[str],
+) -> None:
+    subscribed_channels = set()
+    for chain in chains:
+        if isinstance(chain, PregelInvoke):
+            subscribed_channels.update(chain.channels.values())
+        elif isinstance(chain, PregelBatch):
+            subscribed_channels.add(chain.channel)
+        else:
+            raise TypeError(
+                f"Invalid chain type {type(chain)}, expected Pregel.subscribe_to() or Pregel.subscribe_to_each()"
+            )
+
+    if input is not None and input not in subscribed_channels:
+        raise ValueError(f"Input channel {input} is not subscribed to by any chain")
+
+    for chan in subscribed_channels:
+        if chan not in channels:
+            raise ValueError(f"Channel {chan} is subscribed to, but not initialized")
+
+    if isinstance(output, str):
+        if output not in channels:
+            raise ValueError(f"Output channel {output} is not initialized")
