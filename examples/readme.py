@@ -6,11 +6,11 @@ grow_value = (
     | Pregel.send_to(value=lambda x: x if len(x) < 10 else None)
 )
 
-pubsub = Pregel(
+app = Pregel(
     grow_value,
     channels={"value": channels.LastValue[str]()},
     input="value",
     output="value",
 )
 
-assert pubsub.invoke("a") == "aaaaaaaa"
+assert app.invoke("a") == "aaaaaaaa"
