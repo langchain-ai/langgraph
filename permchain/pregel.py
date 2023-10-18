@@ -4,17 +4,18 @@ import asyncio
 import concurrent.futures
 import logging
 from collections import defaultdict, deque
+from contextlib import asynccontextmanager, contextmanager
 from typing import (
     Any,
+    AsyncGenerator,
     AsyncIterator,
     Callable,
-    Generic,
+    Generator,
     Iterator,
     Mapping,
     Optional,
     Sequence,
     cast,
-    overload,
 )
 
 from langchain.callbacks.manager import (
@@ -40,9 +41,9 @@ from langchain.schema.runnable.config import (
     get_executor_for_config,
     patch_config,
 )
-from langchain.schema.runnable.utils import ConfigurableFieldSpec, Input, Output
+from langchain.schema.runnable.utils import ConfigurableFieldSpec
 
-from permchain.channels import Channel, EmptyChannelError, Inbox
+from permchain.channels import Channel, EmptyChannelError
 
 logger = logging.getLogger(__name__)
 
@@ -101,6 +102,23 @@ class PregelInvoke(RunnableBinding):
 
     kwargs: Mapping[str, Any] = Field(default_factory=dict)
 
+    def __init__(
+        self,
+        channels: Mapping[None, str] | Mapping[str, str],
+        *,
+        bound: Optional[Runnable[Any, Any]] = None,
+        kwargs: Optional[Mapping[str, Any]] = None,
+        config: Optional[RunnableConfig] = None,
+        **other_kwargs: Any,
+    ) -> None:
+        super().__init__(
+            channels=channels,
+            bound=bound or RunnablePassthrough(),
+            kwargs=kwargs or {},
+            config=config,
+            **other_kwargs,
+        )
+
     def join(self, channels: Sequence[str]) -> PregelInvoke:
         joiner = RunnablePassthrough.assign(
             **{chan: PregelRead(chan) for chan in channels}
@@ -115,7 +133,7 @@ class PregelInvoke(RunnableBinding):
         other: Runnable[Any, Other]
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
-    ) -> Runnable:
+    ) -> PregelInvoke:
         if isinstance(self.bound, RunnablePassthrough):
             return PregelInvoke(channels=self.channels, bound=coerce_to_runnable(other))
         else:
@@ -140,7 +158,7 @@ class PregelBatch(RunnableEach):
         other: Runnable[Any, Other]
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
-    ) -> Runnable:
+    ) -> PregelBatch:
         if isinstance(self.bound, RunnablePassthrough):
             return PregelBatch(channel=self.channel, bound=coerce_to_runnable(other))
         else:
@@ -222,7 +240,31 @@ class PregelSink(RunnableLambda):
         return input
 
 
-class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]):
+@contextmanager
+def ChannelsManager(
+    channels: Mapping[str, Channel]
+) -> Generator[Mapping[str, Channel], None, None]:
+    empty = {k: v.__enter__() for k, v in channels.items()}
+    try:
+        yield empty
+    finally:
+        for v in empty.values():
+            v.__exit__(None, None, None)
+
+
+@asynccontextmanager
+async def AsyncChannelsManager(
+    channels: Mapping[str, Channel]
+) -> AsyncGenerator[Mapping[str, Channel], None]:
+    empty = {k: await v.__aenter__() for k, v in channels.items()}
+    try:
+        yield empty
+    finally:
+        for v in empty.values():
+            await v.__aexit__(None, None, None)
+
+
+class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     channels: Mapping[str, Channel]
 
     chains: Sequence[PregelInvoke | PregelBatch]
@@ -249,7 +291,7 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
             if isinstance(chain, (list, tuple)):
                 chains_flat.extend(chain)
             else:
-                chains_flat.append(chain)
+                chains_flat.append(cast(PregelInvoke | PregelBatch, chain))
 
         validate_chains_channels(chains_flat, channels, input, output)
 
@@ -272,7 +314,7 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
         )
 
     @classmethod
-    def subscribe_to_each(cls, inbox: Inbox) -> PregelBatch:
+    def subscribe_to_each(cls, inbox: str) -> PregelBatch:
         """Runs process.batch() with the content of inbox each time it is updated."""
         return PregelBatch(channel=inbox)
 
@@ -297,25 +339,26 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
         input: Iterator[dict[str, Any] | Any],
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
-    ) -> Iterator[Output]:
+    ) -> Iterator[dict[str, Any] | Any]:
         processes = tuple(self.chains)
         # TODO this is where we'd restore from checkpoint
-        channels = {k: v._empty() for k, v in self.channels.items()}
-        next_tasks = _apply_writes_and_prepare_next_tasks(
-            processes,
-            channels,
-            deque((self.input, chunk) for chunk in input)
-            if self.input is not None
-            else deque((k, v) for chunk in input for k, v in chunk.items()),
-        )
+        with ChannelsManager(self.channels) as channels, get_executor_for_config(
+            config
+        ) as executor:
+            next_tasks = _apply_writes_and_prepare_next_tasks(
+                processes,
+                channels,
+                deque((self.input, chunk) for chunk in input)
+                if self.input is not None
+                else deque((k, v) for chunk in input for k, v in chunk.items()),
+            )
 
-        def read(chan: Channel) -> Any:
-            try:
-                return channels[chan]._get()
-            except EmptyChannelError:
-                return None
+            def read(chan: str) -> Any:
+                try:
+                    return channels[chan]._get()
+                except EmptyChannelError:
+                    return None
 
-        with get_executor_for_config(config) as executor:
             # Similarly to Bulk Synchronous Parallel / Pregel model
             # computation proceeds in steps, while there are channel updates
             # channel updates from step N are only visible in step N+1
@@ -323,7 +366,7 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
             # with channel updates applied only at the transition between steps
             for step in range(config["recursion_limit"]):
                 # collect all writes to channels, without applying them yet
-                pending_writes = deque[tuple[Channel, Any]]()
+                pending_writes = deque[tuple[str, Any]]()
 
                 # execute tasks, and wait for one to fail or all to finish
                 # each task is independent from all other concurrent tasks
@@ -373,8 +416,12 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
                 )
 
                 # if any write to output channel in this step, yield current value
-                if any(chan is self.output for chan, _ in pending_writes):
-                    yield channels[self.output]._get()
+                if isinstance(self.output, str):
+                    if any(chan is self.output for chan, _ in pending_writes):
+                        yield channels[self.output]._get()
+                else:
+                    if updated := {c for c, _ in pending_writes if c in self.output}:
+                        yield {chan: channels[chan]._get() for chan in updated}
 
                 # TODO this is where we'd save checkpoint
 
@@ -387,99 +434,102 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
         input: AsyncIterator[dict[str, Any] | Any],
         run_manager: AsyncCallbackManagerForChainRun,
         config: RunnableConfig,
-    ) -> AsyncIterator[Output]:
+    ) -> AsyncIterator[dict[str, Any] | Any]:
         processes = tuple(self.chains)
-        channels = {k: v._empty() for k, v in self.channels.items()}
-        next_tasks = _apply_writes_and_prepare_next_tasks(
-            processes,
-            channels,
-            deque((self.input, chunk) async for chunk in input)
-            if self.input is not None
-            else deque((k, v) async for chunk in input for k, v in chunk.items()),
-        )
-
-        def read(chan: Channel) -> Any:
-            try:
-                return channels[chan]._get()
-            except EmptyChannelError:
-                return None
-
-        # Similarly to Bulk Synchronous Parallel / Pregel model
-        # computation proceeds in steps, while there are channel updates
-        # channel updates from step N are only visible in step N+1,
-        # channels are guaranteed to be immutable for the duration of the step,
-        # channel updates being applied only at the transition between steps
-        for step in range(config["recursion_limit"]):
-            # collect all writes to channels, without applying them yet
-            pending_writes = deque[tuple[Channel, Any]]()
-
-            # execute tasks, and wait for one to fail or all to finish
-            # each task is independent from all other concurrent tasks
-            done, inflight = await asyncio.wait(
-                [
-                    asyncio.create_task(
-                        proc.ainvoke(
-                            input,
-                            patch_config(
-                                config,
-                                callbacks=run_manager.get_child(f"pregel:step:{step}"),
-                                configurable={
-                                    # deque.extend is thread-safe
-                                    CONFIG_KEY_SEND: pending_writes.extend,
-                                    CONFIG_KEY_READ: read,
-                                    CONFIG_KEY_STEP: step,
-                                },
-                            ),
-                        )
-                    )
-                    for proc, input in next_tasks
-                ],
-                return_when=asyncio.FIRST_EXCEPTION,
-                timeout=self.step_timeout,
-            )
-
-            while done:
-                # if any task failed
-                if exc := done.pop().exception():
-                    # cancel all pending tasks
-                    while inflight:
-                        inflight.pop().cancel()
-                    # raise the exception
-                    raise exc
-                    # TODO this is where retry of an entire step would happen
-
-            if inflight:
-                # if we got here means we timed out
-                while inflight:
-                    # cancel all pending tasks
-                    inflight.pop().cancel()
-                # raise timeout error
-                raise TimeoutError(f"Timed out at step {step}")
-
-            # apply writes to channels, decide on next step
+        # TODO this is where we'd restore from checkpoint
+        async with AsyncChannelsManager(self.channels) as channels:
             next_tasks = _apply_writes_and_prepare_next_tasks(
-                processes, channels, pending_writes
+                processes,
+                channels,
+                deque([(self.input, chunk) async for chunk in input])
+                if self.input is not None
+                else deque([(k, v) async for chunk in input for k, v in chunk.items()]),
             )
 
-            # if any write to output channel in this step, yield current value
-            if isinstance(self.output, str):
-                if any(chan is self.output for chan, _ in pending_writes):
-                    yield channels[self.output]._get()
-            else:
-                if updated := {c for c, _ in pending_writes if c in self.output}:
-                    yield {chan: channels[chan]._get() for chan in updated}
+            def read(chan: str) -> Any:
+                try:
+                    return channels[chan]._get()
+                except EmptyChannelError:
+                    return None
 
-            # if no more tasks, we're done
-            if not next_tasks:
-                break
+            # Similarly to Bulk Synchronous Parallel / Pregel model
+            # computation proceeds in steps, while there are channel updates
+            # channel updates from step N are only visible in step N+1,
+            # channels are guaranteed to be immutable for the duration of the step,
+            # channel updates being applied only at the transition between steps
+            for step in range(config["recursion_limit"]):
+                # collect all writes to channels, without applying them yet
+                pending_writes = deque[tuple[str, Any]]()
+
+                # execute tasks, and wait for one to fail or all to finish
+                # each task is independent from all other concurrent tasks
+                done, inflight = await asyncio.wait(
+                    [
+                        asyncio.create_task(
+                            proc.ainvoke(
+                                input,
+                                patch_config(
+                                    config,
+                                    callbacks=run_manager.get_child(
+                                        f"pregel:step:{step}"
+                                    ),
+                                    configurable={
+                                        # deque.extend is thread-safe
+                                        CONFIG_KEY_SEND: pending_writes.extend,
+                                        CONFIG_KEY_READ: read,
+                                        CONFIG_KEY_STEP: step,
+                                    },
+                                ),
+                            )
+                        )
+                        for proc, input in next_tasks
+                    ],
+                    return_when=asyncio.FIRST_EXCEPTION,
+                    timeout=self.step_timeout,
+                )
+
+                while done:
+                    # if any task failed
+                    if exc := done.pop().exception():
+                        # cancel all pending tasks
+                        while inflight:
+                            inflight.pop().cancel()
+                        # raise the exception
+                        raise exc
+                        # TODO this is where retry of an entire step would happen
+
+                if inflight:
+                    # if we got here means we timed out
+                    while inflight:
+                        # cancel all pending tasks
+                        inflight.pop().cancel()
+                    # raise timeout error
+                    raise TimeoutError(f"Timed out at step {step}")
+
+                # apply writes to channels, decide on next step
+                next_tasks = _apply_writes_and_prepare_next_tasks(
+                    processes, channels, pending_writes
+                )
+
+                # if any write to output channel in this step, yield current value
+                if isinstance(self.output, str):
+                    if any(chan is self.output for chan, _ in pending_writes):
+                        yield channels[self.output]._get()
+                else:
+                    if updated := {c for c, _ in pending_writes if c in self.output}:
+                        yield {chan: channels[chan]._get() for chan in updated}
+
+                # if no more tasks, we're done
+                if not next_tasks:
+                    break
 
     def invoke(
         self,
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         **kwargs: Any,
-    ) -> Output:
-        latest: Output | None = None
+    ) -> dict[str, Any] | Any:
+        latest: dict[str, Any] | Any = None
         for chunk in self.stream(input, config, **kwargs):
             latest = chunk
         return latest
@@ -489,7 +539,7 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         **kwargs: Any,
-    ) -> Iterator[Output]:
+    ) -> Iterator[dict[str, Any] | Any]:
         return self.transform(iter([input]), config, **kwargs)
 
     def transform(
@@ -497,7 +547,7 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
         input: Iterator[dict[str, Any] | Any],
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
-    ) -> Iterator[Output]:
+    ) -> Iterator[dict[str, Any] | Any]:
         return self._transform_stream_with_config(
             input, self._transform, config, **kwargs
         )
@@ -507,8 +557,8 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         **kwargs: Any,
-    ) -> Output:
-        latest: Output | None = None
+    ) -> dict[str, Any] | Any:
+        latest: dict[str, Any] | Any = None
         async for chunk in self.astream(input, config, **kwargs):
             latest = chunk
         return latest
@@ -518,8 +568,8 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
         **kwargs: Any,
-    ) -> AsyncIterator[Output]:
-        async def input_stream() -> AsyncIterator[Input]:
+    ) -> AsyncIterator[dict[str, Any] | Any]:
+        async def input_stream() -> AsyncIterator[dict[str, Any] | Any]:
             yield input
 
         async for chunk in self.atransform(input_stream(), config, **kwargs):
@@ -530,7 +580,7 @@ class Pregel(Generic[Output], RunnableSerializable[dict[str, Any] | Any, Output]
         input: AsyncIterator[dict[str, Any] | Any],
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
-    ) -> AsyncIterator[Output]:
+    ) -> AsyncIterator[dict[str, Any] | Any]:
         async for chunk in self._atransform_stream_with_config(
             input, self._atransform, config, **kwargs
         ):
@@ -547,7 +597,7 @@ def _apply_writes_and_prepare_next_tasks(
     for chan, val in pending_writes:
         pending_writes_by_channel[chan].append(val)
 
-    updated_channels: set[Channel] = set()
+    updated_channels: set[str] = set()
     # Apply writes to channels
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
@@ -595,7 +645,7 @@ def validate_chains_channels(
     input: str | None,
     output: str | Sequence[str],
 ) -> None:
-    subscribed_channels = set()
+    subscribed_channels = set[str]()
     for chain in chains:
         if isinstance(chain, PregelInvoke):
             subscribed_channels.update(chain.channels.values())

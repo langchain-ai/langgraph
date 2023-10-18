@@ -1,5 +1,4 @@
-import time
-from concurrent.futures import ThreadPoolExecutor
+import asyncio
 
 import pytest
 from langchain.schema.runnable import RunnablePassthrough
@@ -9,7 +8,7 @@ from permchain import Pregel, channels
 from permchain.pregel import PregelInvoke
 
 
-def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
+async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
 
@@ -23,16 +22,15 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         output="output",
     )
 
-    # Then invoke pubsub
-    assert app.invoke(2) == 3
+    assert await app.ainvoke(2) == 3
 
 
-def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
+async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
     chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.send_to("output")
 
-    pubsub = Pregel(
+    app = Pregel(
         [chain_one, chain_two],
         channels={
             "input": channels.LastValue[int](),
@@ -43,13 +41,12 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
         output="output",
     )
 
-    # Then invoke pubsub
-    assert pubsub.invoke(2) == 4
+    assert await app.ainvoke(2) == 4
 
 
-def test_batch_two_processes_in_out() -> None:
-    def add_one_with_delay(inp: int) -> int:
-        time.sleep(inp / 10)
+async def test_batch_two_processes_in_out() -> None:
+    async def add_one_with_delay(inp: int) -> int:
+        await asyncio.sleep(inp / 10)
         return inp + 1
 
     chain_one = (
@@ -59,7 +56,7 @@ def test_batch_two_processes_in_out() -> None:
         Pregel.subscribe_to("one") | add_one_with_delay | Pregel.send_to("output")
     )
 
-    pubsub = Pregel(
+    app = Pregel(
         chain_one,
         chain_two,
         channels={
@@ -71,11 +68,10 @@ def test_batch_two_processes_in_out() -> None:
         output="output",
     )
 
-    # Then invoke pubsub
-    assert pubsub.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
+    assert await app.abatch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
 
 
-def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
+async def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
     test_size = 100
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
@@ -96,16 +92,17 @@ def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
 
     app = Pregel(*chains, channels=chans, input="input", output="output")
 
+    # No state is left over from previous invocations
     for _ in range(10):
-        assert app.invoke(2, {"recursion_limit": test_size}) == 2 + test_size
+        assert await app.ainvoke(2, {"recursion_limit": test_size}) == 2 + test_size
 
-    with ThreadPoolExecutor() as executor:
-        assert [
-            *executor.map(app.invoke, [2] * 10, [{"recursion_limit": test_size}] * 10)
-        ] == [2 + test_size] * 10
+    # Concurrent invocations do not interfere with each other
+    assert await asyncio.gather(
+        *(app.ainvoke(2, {"recursion_limit": test_size}) for _ in range(10))
+    ) == [2 + test_size for _ in range(10)]
 
 
-def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
+async def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
     test_size = 100
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
@@ -126,9 +123,10 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
 
     app = Pregel(*chains, channels=chans, input="input", output="output")
 
+    # No state is left over from previous invocations
     for _ in range(10):
         # Then invoke pubsub
-        assert app.batch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) == [
+        assert await app.abatch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) == [
             2 + test_size,
             1 + test_size,
             3 + test_size,
@@ -136,17 +134,21 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
             5 + test_size,
         ]
 
-    with ThreadPoolExecutor() as executor:
-        assert [
-            *executor.map(
-                app.batch, [[2, 1, 3, 4, 5]] * 10, [{"recursion_limit": test_size}] * 10
-            )
-        ] == [
-            [2 + test_size, 1 + test_size, 3 + test_size, 4 + test_size, 5 + test_size]
-        ] * 10
+    # Concurrent invocations do not interfere with each other
+    assert await asyncio.gather(
+        *(
+            app.abatch([2, 1, 3, 4, 5], {"recursion_limit": test_size})
+            for _ in range(10)
+        )
+    ) == [
+        [2 + test_size, 1 + test_size, 3 + test_size, 4 + test_size, 5 + test_size]
+        for _ in range(10)
+    ]
 
 
-def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> None:
+async def test_invoke_two_processes_two_in_two_out_invalid(
+    mocker: MockerFixture,
+) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
@@ -165,10 +167,10 @@ def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> N
 
     with pytest.raises(channels.InvalidUpdateError):
         # LastValue channels can only be updated once per iteration
-        app.invoke(2)
+        await app.ainvoke(2)
 
 
-def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> None:
+async def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
@@ -186,10 +188,10 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
     )
 
     # An Inbox channel accumulates updates into a sequence
-    assert app.invoke(2) == (3, 3)
+    assert await app.ainvoke(2) == (3, 3)
 
 
-def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:
+async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: sorted(y + 10 for y in x))
 
@@ -214,13 +216,14 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
     # We get a single array result as chain_four waits for all publishers to finish
     # before operating on all elements published to topic_two as an array
     for _ in range(100):
-        assert app.invoke(2) == [13, 13]
+        assert await app.ainvoke(2) == [13, 13]
 
-    with ThreadPoolExecutor() as executor:
-        assert [*executor.map(app.invoke, [2] * 100)] == [[13, 13]] * 100
+    assert await asyncio.gather(*(app.ainvoke(2) for _ in range(100))) == [
+        [13, 13] for _ in range(100)
+    ]
 
 
-def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None:
+async def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
@@ -261,13 +264,14 @@ def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None:
 
     # Then invoke pubsub
     for _ in range(10):
-        assert app.invoke([2, 3]) == 27
+        assert await app.ainvoke([2, 3]) == 27
 
-    with ThreadPoolExecutor() as executor:
-        assert [*executor.map(app.invoke, [[2, 3]] * 10)] == [27] * 10
+    assert await asyncio.gather(*(app.ainvoke([2, 3]) for _ in range(10))) == [
+        27 for _ in range(10)
+    ]
 
 
-def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
+async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     chain_one = (
@@ -290,10 +294,10 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     )
 
     # Then invoke pubsub
-    assert [c for c in app.stream(2)] == [3, 4]
+    assert [c async for c in app.astream(2)] == [3, 4]
 
 
-def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
+async def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("between")
     chain_two = Pregel.subscribe_to("between") | add_one
@@ -313,24 +317,4 @@ def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     # Then invoke pubsub
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to OUT topic
-    assert app.invoke(2) is None
-
-
-def test_invoke_two_processes_no_in(mocker: MockerFixture) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-
-    chain_one = Pregel.subscribe_to("between") | add_one | Pregel.send_to("output")
-    chain_two = Pregel.subscribe_to("between") | add_one
-
-    with pytest.raises(ValueError):
-        Pregel(
-            chain_one,
-            chain_two,
-            channels={
-                "input": channels.LastValue[int](),
-                "output": channels.LastValue[int](),
-                "between": channels.LastValue[int](),
-            },
-            input="input",
-            output="output",
-        )
+    assert await app.ainvoke(2) is None

@@ -1,7 +1,5 @@
 from __future__ import annotations
 
-import asyncio
-
 from langchain.chat_models.openai import ChatOpenAI
 from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain.prompts import SystemMessagePromptTemplate
@@ -130,5 +128,7 @@ async def main():
         print(draft)
         print("---")
 
+
+# import asyncio
 
 # asyncio.run(main())

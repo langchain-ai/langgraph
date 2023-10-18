@@ -35,6 +35,8 @@ Check `examples` for more examples.
   - [x] do we want api to send input to multiple channels in invoke()
   - [x] Finish updating tests to new API
 - [ ] Implement input_schema and output_schema in Pregel
+- [ ] More tests
+  - [ ] Test different input and output types (str, str sequence, None)
 - [ ] Implement checkpointing
   - [ ] Save checkpoints at end of each step
   - [ ] Load checkpoint at start of invocation

@@ -1,8 +1,16 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Callable, FrozenSet, Generic, Optional, Sequence, TypeVar
+from types import TracebackType
+from typing import (
+    Callable,
+    FrozenSet,
+    Generic,
+    Optional,
+    Sequence,
+    TypeVar,
+)
 
-from typing_extensions import Self, get_args
+from typing_extensions import Self  # , get_args
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
@@ -33,8 +41,28 @@ class Channel(Generic[Value, Update], ABC):
     #         return type_args[1]
 
     @abstractmethod
-    def _empty(self, checkpoint: Optional[str] = None) -> Self:
+    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
         ...
+
+    @abstractmethod
+    def __exit__(
+        self,
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None,
+    ) -> bool | None:
+        ...
+
+    async def __aenter__(self, checkpoint: Optional[str] = None) -> Self:
+        return self.__enter__(checkpoint)
+
+    async def __aexit__(
+        self,
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None,
+    ) -> None:
+        self.__exit__(__exc_type, __exc_value, __traceback)
 
     @abstractmethod
     def _update(self, values: Sequence[Update]) -> None:
@@ -63,11 +91,22 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
         super().__init__()
         self.operator = operator
 
-    def _empty(self, checkpoint: Optional[str] = None) -> Self:
+    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
         empty = self.__class__(self.operator)
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
         return empty
+
+    def __exit__(
+        self,
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None,
+    ) -> None:
+        try:
+            del self.value
+        except AttributeError:
+            pass
 
     def _update(self, values: Sequence[Value]) -> None:
         if not hasattr(self, "value"):
@@ -90,11 +129,22 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
 class LastValue(Generic[Value], Channel[Value, Value]):
     """Stores the last value received."""
 
-    def _empty(self, checkpoint: Optional[str] = None) -> Self:
+    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
         empty = self.__class__()
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
         return empty
+
+    def __exit__(
+        self,
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None,
+    ) -> None:
+        try:
+            del self.value
+        except AttributeError:
+            pass
 
     def _update(self, values: Sequence[Value]) -> None:
         if len(values) != 1:
@@ -115,11 +165,22 @@ class LastValue(Generic[Value], Channel[Value, Value]):
 class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
     """Stores all values received, resets in each step."""
 
-    def _empty(self, checkpoint: Optional[str] = None) -> Self:
+    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
         empty = self.__class__()
         if checkpoint is not None:
             empty.queue = tuple(json.loads(checkpoint))
         return empty
+
+    def __exit__(
+        self,
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None,
+    ) -> None:
+        try:
+            del self.queue
+        except AttributeError:
+            pass
 
     def _update(self, values: Sequence[Value]) -> None:
         self.queue = tuple(values)
@@ -139,11 +200,22 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
 
     set: set[Value]
 
-    def _empty(self, checkpoint: Optional[str] = None) -> Self:
+    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
         empty = self.__class__()
         if checkpoint is not None:
             empty.set = set(json.loads(checkpoint))
         return empty
+
+    def __exit__(
+        self,
+        __exc_type: type[BaseException] | None,
+        __exc_value: BaseException | None,
+        __traceback: TracebackType | None,
+    ) -> None:
+        try:
+            del self.set
+        except AttributeError:
+            pass
 
     def _update(self, values: Sequence[Value]) -> None:
         if not hasattr(self, "set"):
