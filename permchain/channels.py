@@ -2,6 +2,7 @@ import json
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
+    Any,
     AsyncContextManager,
     AsyncGenerator,
     Callable,
@@ -10,8 +11,11 @@ from typing import (
     Generic,
     Optional,
     Sequence,
+    Tuple,
     Type,
     TypeVar,
+    Union,
+    cast,
 )
 from typing import ContextManager as ContextManagerType
 
@@ -32,12 +36,12 @@ class InvalidUpdateError(Exception):
 class Channel(Generic[Value, Update], ABC):
     @property
     @abstractmethod
-    def ValueType(self) -> Type[Value]:
+    def ValueType(self) -> Any:
         """The type of the value stored in the channel."""
 
     @property
     @abstractmethod
-    def UpdateType(self) -> Type[Update]:
+    def UpdateType(self) -> Any:
         """The type of the update received by the channel."""
 
     @contextmanager
@@ -166,7 +170,7 @@ class LastValue(Generic[Value], Channel[Value, Value]):
         return json.dumps(self.value)
 
 
-class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
+class Inbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Value]]):
     """Stores all values received, resets in each step."""
 
     def __init__(self, typ: Type[Value]) -> None:
@@ -178,9 +182,9 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
         return Sequence[self.typ]  # type: ignore[name-defined]
 
     @property
-    def UpdateType(self) -> Type[Value]:
+    def UpdateType(self) -> Any:
         """The type of the update received by the channel."""
-        return self.typ
+        return Union[self.typ, Sequence[self.typ]]  # type: ignore[name-defined]
 
     @contextmanager
     def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
@@ -195,8 +199,60 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
             except AttributeError:
                 pass
 
-    def update(self, values: Sequence[Value]) -> None:
-        self.queue = tuple(values)
+    def update(self, values: Sequence[Value | Sequence[Value]]) -> None:
+        self.queue = tuple(
+            cast(Value, v)
+            for value in values
+            for v in ((value,) if isinstance(value, self.typ) else value)
+        )
+
+    def get(self) -> Sequence[Value]:
+        try:
+            return self.queue
+        except AttributeError:
+            raise EmptyChannelError()
+
+    def checkpoint(self) -> str:
+        return json.dumps(self.queue)
+
+
+class UniqueInbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Value]]):
+    """Stores all unique values received, resets in each step."""
+
+    def __init__(self, typ: Type[Value]) -> None:
+        self.typ = typ
+
+    @property
+    def ValueType(self) -> Type[Sequence[Value]]:
+        """The type of the value stored in the channel."""
+        return Sequence[self.typ]  # type: ignore[name-defined]
+
+    @property
+    def UpdateType(self) -> Any:
+        """The type of the update received by the channel."""
+        return Union[self.typ, Sequence[self.typ]]  # type: ignore[name-defined]
+
+    @contextmanager
+    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+        empty = self.__class__(self.typ)
+        if checkpoint is not None:
+            empty.queue = tuple(json.loads(checkpoint))
+        try:
+            yield empty
+        finally:
+            try:
+                del empty.queue
+            except AttributeError:
+                pass
+
+    def update(self, values: Sequence[Value | Sequence[Value]]) -> None:
+        self.queue = tuple(
+            set(
+                cast(Value, v)
+                for value in values
+                for v in ((value,) if isinstance(value, self.typ) else value)
+            )
+        )
 
     def get(self) -> Sequence[Value]:
         try:
@@ -213,6 +269,7 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
 
     def __init__(self, typ: Type[Value]) -> None:
         self.typ = typ
+        self.set = set[Value]()
 
     @property
     def ValueType(self) -> Type[FrozenSet[Value]]:
@@ -232,14 +289,9 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
         try:
             yield empty
         finally:
-            try:
-                del empty.set
-            except AttributeError:
-                pass
+            pass
 
     def update(self, values: Sequence[Value]) -> None:
-        if not hasattr(self, "set"):
-            self.set = set[Value]()
         self.set.update(values)
 
     def get(self) -> FrozenSet[Value]:
@@ -250,6 +302,46 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
 
     def checkpoint(self) -> str:
         return json.dumps(list(self.set))
+
+
+class Stream(Generic[Value], Channel[Tuple[Value], Value]):
+    """Stores all unique values received."""
+
+    def __init__(self, typ: Type[Value]) -> None:
+        self.typ = typ
+        self.set = list[Value]()
+
+    @property
+    def ValueType(self) -> Type[Tuple[Value]]:
+        """The type of the value stored in the channel."""
+        return Tuple[self.typ]  # type: ignore[name-defined]
+
+    @property
+    def UpdateType(self) -> Type[Value]:
+        """The type of the update received by the channel."""
+        return self.typ
+
+    @contextmanager
+    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+        empty = self.__class__(self.typ)
+        if checkpoint is not None:
+            empty.set = json.loads(checkpoint)
+        try:
+            yield empty
+        finally:
+            pass
+
+    def update(self, values: Sequence[Value]) -> None:
+        self.set.extend(values)
+
+    def get(self) -> Tuple[Value]:
+        try:
+            return tuple(self.set)
+        except AttributeError:
+            raise EmptyChannelError()
+
+    def checkpoint(self) -> str:
+        return json.dumps(self.set)
 
 
 AsyncValue = TypeVar("AsyncValue")

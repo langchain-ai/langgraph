@@ -1,6 +1,6 @@
 import operator
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncGenerator, FrozenSet, Generator, Sequence
+from typing import AsyncGenerator, FrozenSet, Generator, Sequence, Union
 
 import pytest
 from pytest_mock import MockerFixture
@@ -43,21 +43,21 @@ async def test_last_value_async() -> None:
 def test_inbox() -> None:
     with channels.Inbox(str).empty() as channel:
         assert channel.ValueType is Sequence[str]
-        assert channel.UpdateType is str
+        assert channel.UpdateType is Union[str, Sequence[str]]
 
         with pytest.raises(channels.EmptyChannelError):
             channel.get()
 
         channel.update(["a", "b"])
         assert channel.get() == ("a", "b")
-        channel.update(["c"])
-        assert channel.get() == ("c",)
+        channel.update([["c"], "d"])
+        assert channel.get() == ("c", "d")
 
 
 async def test_inbox_async() -> None:
     async with channels.Inbox(str).aempty() as channel:
         assert channel.ValueType is Sequence[str]
-        assert channel.UpdateType is str
+        assert channel.UpdateType is Union[str, Sequence[str]]
 
         with pytest.raises(channels.EmptyChannelError):
             channel.get()
@@ -65,7 +65,8 @@ async def test_inbox_async() -> None:
         channel.update(["a", "b"])
         assert channel.get() == ("a", "b")
         channel.update(["c"])
-        assert channel.get() == ("c",)
+        channel.update([["c"], "d"])
+        assert channel.get() == ("c", "d")
 
 
 def test_set() -> None:
@@ -73,9 +74,7 @@ def test_set() -> None:
         assert channel.ValueType is FrozenSet[str]
         assert channel.UpdateType is str
 
-        with pytest.raises(channels.EmptyChannelError):
-            channel.get()
-
+        assert channel.get() == frozenset()
         channel.update(["a", "b"])
         assert channel.get() == frozenset(("a", "b"))
         channel.update(["b", "c"])
@@ -87,9 +86,7 @@ async def test_set_async() -> None:
         assert channel.ValueType is FrozenSet[str]
         assert channel.UpdateType is str
 
-        with pytest.raises(channels.EmptyChannelError):
-            channel.get()
-
+        assert channel.get() == frozenset()
         channel.update(["a", "b"])
         assert channel.get() == frozenset(("a", "b"))
         channel.update(["b", "c"])
@@ -147,7 +144,7 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
         assert channel.get() == 5
 
         with pytest.raises(channels.InvalidUpdateError):
-            channel.update([5])
+            channel.update([5])  # type: ignore
 
     assert setup.call_count == 1
     assert cleanup.call_count == 1
@@ -183,7 +180,7 @@ async def test_ctx_manager_async(mocker: MockerFixture) -> None:
         assert channel.get() == 5
 
         with pytest.raises(channels.InvalidUpdateError):
-            channel.update([5])
+            channel.update([5])  # type: ignore
 
     assert setup.call_count == 1
     assert cleanup.call_count == 1

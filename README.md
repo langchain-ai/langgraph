@@ -37,6 +37,7 @@ Check `examples` for more examples.
 - [x] Implement input_schema and output_schema in Pregel
 - [ ] More tests
   - [ ] Test different input and output types (str, str sequence, None)
+  - [ ] Add tests for Stream, UniqueInbox
 - [ ] Implement checkpointing
   - [ ] Save checkpoints at end of each step
   - [ ] Load checkpoint at start of invocation
