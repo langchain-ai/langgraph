@@ -15,6 +15,7 @@ from typing import (
     Mapping,
     Optional,
     Sequence,
+    Type,
     cast,
 )
 
@@ -22,7 +23,7 @@ from langchain.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     CallbackManagerForChainRun,
 )
-from langchain.pydantic_v1 import Field
+from langchain.pydantic_v1 import BaseModel, Field, create_model
 from langchain.schema.runnable import (
     Runnable,
     RunnableBinding,
@@ -302,6 +303,39 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             input=input,
             step_timeout=step_timeout,
         )
+
+    @property
+    def InputType(self) -> Any:
+        if isinstance(self.input, str):
+            return self.channels[self.input].UpdateType
+
+    @property
+    def input_schema(self) -> Type[BaseModel]:
+        if isinstance(self.input, str):
+            return super().input_schema
+        else:
+            return create_model(  # type: ignore[call-overload]
+                "PregelInput",
+                **{
+                    k: (self.channels[k].UpdateType, None)
+                    for k in self.input or self.channels.keys()
+                },
+            )
+
+    @property
+    def OutputType(self) -> Any:
+        if isinstance(self.output, str):
+            return self.channels[self.output].ValueType
+
+    @property
+    def output_schema(self) -> Type[BaseModel]:
+        if isinstance(self.output, str):
+            return super().output_schema
+        else:
+            return create_model(  # type: ignore[call-overload]
+                "PregelOutput",
+                **{k: (self.channels[k].ValueType, None) for k in self.output},
+            )
 
     @classmethod
     def subscribe_to(cls, channels: str | Sequence[str]) -> PregelInvoke:

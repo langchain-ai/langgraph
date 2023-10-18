@@ -104,9 +104,9 @@ reviser = (
 draft_revise_loop = Pregel(
     [drafter, reviser, editor],
     channels={
-        "question": channels.LastValue[str](),
-        "draft": channels.LastValue[str](),
-        "notes": channels.LastValue[str](),
+        "question": channels.LastValue(str),
+        "draft": channels.LastValue(str),
+        "notes": channels.LastValue(str),
     },
     # output will be a dict with keys "draft" and "notes"
     output=["draft", "notes"],

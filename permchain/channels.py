@@ -7,10 +7,11 @@ from typing import (
     Generic,
     Optional,
     Sequence,
+    Type,
     TypeVar,
 )
 
-from typing_extensions import Self  # , get_args
+from typing_extensions import Self
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
@@ -25,24 +26,19 @@ class InvalidUpdateError(Exception):
 
 
 class Channel(Generic[Value, Update], ABC):
-    # TODO: add type hints for ValueType and UpdateType
-    # @property
-    # def ValueType(self) -> type[Value]:
-    #     """The type of the value stored in the channel."""
-    #     type_args = get_args(self.__class__.__orig_bases__[-1])  # type: ignore[attr-defined]
-    #     if type_args and len(type_args) == 2:
-    #         return type_args[0]
+    @property
+    @abstractmethod
+    def ValueType(self) -> type[Value]:
+        """The type of the value stored in the channel."""
 
-    # @property
-    # def UpdateType(self) -> type[Update]:
-    #     """The type of the update received by the channel."""
-    #     type_args = get_args(self.__class__.__orig_bases__[-1])  # type: ignore[attr-defined]
-    #     if type_args and len(type_args) == 2:
-    #         return type_args[1]
+    @property
+    @abstractmethod
+    def UpdateType(self) -> type[Update]:
+        """The type of the update received by the channel."""
 
     @abstractmethod
     def __enter__(self, checkpoint: Optional[str] = None) -> Self:
-        ...
+        """Return a new identical channel, optionally initialized from a checkpoint."""
 
     @abstractmethod
     def __exit__(
@@ -51,6 +47,7 @@ class Channel(Generic[Value, Update], ABC):
         __exc_value: BaseException | None,
         __traceback: TracebackType | None,
     ) -> bool | None:
+        """Clean up the channel, or deallocate resources as needed."""
         ...
 
     async def __aenter__(self, checkpoint: Optional[str] = None) -> Self:
@@ -83,16 +80,26 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
     ```python
     import operator
 
-    total = BinaryOperatorAggregate[int]("total", operator.add)
+    total = BinaryOperatorAggregate(int, operator.add)
     ```
     """
 
-    def __init__(self, operator: Callable[[Value, Value], Value]):
-        super().__init__()
+    def __init__(self, typ: Type[Value], operator: Callable[[Value, Value], Value]):
+        self.typ = typ
         self.operator = operator
 
+    @property
+    def ValueType(self) -> type[Value]:
+        """The type of the value stored in the channel."""
+        return self.typ
+
+    @property
+    def UpdateType(self) -> type[Value]:
+        """The type of the update received by the channel."""
+        return self.typ
+
     def __enter__(self, checkpoint: Optional[str] = None) -> Self:
-        empty = self.__class__(self.operator)
+        empty = self.__class__(self.typ, self.operator)
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
         return empty
@@ -129,8 +136,21 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
 class LastValue(Generic[Value], Channel[Value, Value]):
     """Stores the last value received."""
 
+    def __init__(self, typ: Type[Value]) -> None:
+        self.typ = typ
+
+    @property
+    def ValueType(self) -> type[Value]:
+        """The type of the value stored in the channel."""
+        return self.typ
+
+    @property
+    def UpdateType(self) -> type[Value]:
+        """The type of the update received by the channel."""
+        return self.typ
+
     def __enter__(self, checkpoint: Optional[str] = None) -> Self:
-        empty = self.__class__()
+        empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
         return empty
@@ -165,8 +185,21 @@ class LastValue(Generic[Value], Channel[Value, Value]):
 class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
     """Stores all values received, resets in each step."""
 
+    def __init__(self, typ: Type[Value]) -> None:
+        self.typ = typ
+
+    @property
+    def ValueType(self) -> type[Sequence[Value]]:
+        """The type of the value stored in the channel."""
+        return Sequence[self.typ]  # type: ignore[name-defined]
+
+    @property
+    def UpdateType(self) -> type[Value]:
+        """The type of the update received by the channel."""
+        return self.typ
+
     def __enter__(self, checkpoint: Optional[str] = None) -> Self:
-        empty = self.__class__()
+        empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.queue = tuple(json.loads(checkpoint))
         return empty
@@ -198,10 +231,21 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
 class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
     """Stores all unique values received."""
 
-    set: set[Value]
+    def __init__(self, typ: Type[Value]) -> None:
+        self.typ = typ
+
+    @property
+    def ValueType(self) -> type[FrozenSet[Value]]:
+        """The type of the value stored in the channel."""
+        return FrozenSet[self.typ]  # type: ignore[name-defined]
+
+    @property
+    def UpdateType(self) -> type[Value]:
+        """The type of the update received by the channel."""
+        return self.typ
 
     def __enter__(self, checkpoint: Optional[str] = None) -> Self:
-        empty = self.__class__()
+        empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.set = set(json.loads(checkpoint))
         return empty
@@ -219,7 +263,7 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
 
     def _update(self, values: Sequence[Value]) -> None:
         if not hasattr(self, "set"):
-            self.set = set()
+            self.set = set[Value]()
         self.set.update(values)
 
     def _get(self) -> FrozenSet[Value]:

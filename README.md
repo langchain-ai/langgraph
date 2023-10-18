@@ -17,7 +17,7 @@ grow_value = (
 
 app = Pregel(
     grow_value,
-    channels={"value": channels.LastValue[str]()},
+    channels={"value": channels.LastValue(str)},
     input="value",
     output="value",
 )
@@ -34,7 +34,7 @@ Check `examples` for more examples.
   - [x] do we want api to receive output from multiple channels in invoke()
   - [x] do we want api to send input to multiple channels in invoke()
   - [x] Finish updating tests to new API
-- [ ] Implement input_schema and output_schema in Pregel
+- [x] Implement input_schema and output_schema in Pregel
 - [ ] More tests
   - [ ] Test different input and output types (str, str sequence, None)
 - [ ] Implement checkpointing
