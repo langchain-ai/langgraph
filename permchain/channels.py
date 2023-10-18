@@ -42,27 +42,27 @@ class Channel(Generic[Value, Update], ABC):
 
     @contextmanager
     @abstractmethod
-    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         """Return a new identical channel, optionally initialized from a checkpoint."""
 
     @asynccontextmanager
-    async def _aempty(
+    async def aempty(
         self, checkpoint: Optional[str] = None
     ) -> AsyncGenerator[Self, None]:
         """Return a new identical channel, optionally initialized from a checkpoint."""
-        with self._empty(checkpoint) as value:
+        with self.empty(checkpoint) as value:
             yield value
 
     @abstractmethod
-    def _update(self, values: Sequence[Update]) -> None:
+    def update(self, values: Sequence[Update]) -> None:
         ...
 
     @abstractmethod
-    def _get(self) -> Value:
+    def get(self) -> Value:
         ...
 
     @abstractmethod
-    def _checkpoint(self) -> str | None:
+    def checkpoint(self) -> str | None:
         ...
 
 
@@ -91,7 +91,7 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
         return self.typ
 
     @contextmanager
-    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ, self.operator)
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
@@ -103,7 +103,7 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
             except AttributeError:
                 pass
 
-    def _update(self, values: Sequence[Value]) -> None:
+    def update(self, values: Sequence[Value]) -> None:
         if not hasattr(self, "value"):
             self.value = values[0]
             values = values[1:]
@@ -111,13 +111,13 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
         for value in values:
             self.value = self.operator(self.value, value)
 
-    def _get(self) -> Value:
+    def get(self) -> Value:
         try:
             return self.value
         except AttributeError:
             raise EmptyChannelError()
 
-    def _checkpoint(self) -> str:
+    def checkpoint(self) -> str:
         return json.dumps(self.value)
 
 
@@ -138,7 +138,7 @@ class LastValue(Generic[Value], Channel[Value, Value]):
         return self.typ
 
     @contextmanager
-    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
@@ -150,19 +150,19 @@ class LastValue(Generic[Value], Channel[Value, Value]):
             except AttributeError:
                 pass
 
-    def _update(self, values: Sequence[Value]) -> None:
+    def update(self, values: Sequence[Value]) -> None:
         if len(values) != 1:
             raise InvalidUpdateError()
 
         self.value = values[-1]
 
-    def _get(self) -> Value:
+    def get(self) -> Value:
         try:
             return self.value
         except AttributeError:
             raise EmptyChannelError()
 
-    def _checkpoint(self) -> str:
+    def checkpoint(self) -> str:
         return json.dumps(self.value)
 
 
@@ -183,7 +183,7 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
         return self.typ
 
     @contextmanager
-    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.queue = tuple(json.loads(checkpoint))
@@ -195,16 +195,16 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
             except AttributeError:
                 pass
 
-    def _update(self, values: Sequence[Value]) -> None:
+    def update(self, values: Sequence[Value]) -> None:
         self.queue = tuple(values)
 
-    def _get(self) -> Sequence[Value]:
+    def get(self) -> Sequence[Value]:
         try:
             return self.queue
         except AttributeError:
             raise EmptyChannelError()
 
-    def _checkpoint(self) -> str:
+    def checkpoint(self) -> str:
         return json.dumps(self.queue)
 
 
@@ -225,7 +225,7 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
         return self.typ
 
     @contextmanager
-    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.set = set(json.loads(checkpoint))
@@ -237,18 +237,18 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
             except AttributeError:
                 pass
 
-    def _update(self, values: Sequence[Value]) -> None:
+    def update(self, values: Sequence[Value]) -> None:
         if not hasattr(self, "set"):
             self.set = set[Value]()
         self.set.update(values)
 
-    def _get(self) -> FrozenSet[Value]:
+    def get(self) -> FrozenSet[Value]:
         try:
             return frozenset(self.set)
         except AttributeError:
             raise EmptyChannelError()
 
-    def _checkpoint(self) -> str:
+    def checkpoint(self) -> str:
         return json.dumps(list(self.set))
 
 
@@ -282,7 +282,7 @@ class ContextManager(Generic[Value], Channel[Value, None]):
         raise InvalidUpdateError()
 
     @contextmanager
-    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         if self.ctx is None:
             raise ValueError("Cannot enter sync context manager.")
 
@@ -296,7 +296,7 @@ class ContextManager(Generic[Value], Channel[Value, None]):
             ctx.__exit__(None, None, None)
 
     @asynccontextmanager
-    async def _aempty(
+    async def aempty(
         self, checkpoint: Optional[str] = None
     ) -> AsyncGenerator[Self, None]:
         if self.actx is not None:
@@ -309,17 +309,17 @@ class ContextManager(Generic[Value], Channel[Value, None]):
             finally:
                 await actx.__aexit__(None, None, None)
         else:
-            with self._empty() as empty:
+            with self.empty() as empty:
                 yield empty
 
-    def _update(self, values: Sequence[None]) -> None:
+    def update(self, values: Sequence[None]) -> None:
         raise InvalidUpdateError()
 
-    def _get(self) -> Value:
+    def get(self) -> Value:
         try:
             return self.value
         except AttributeError:
             raise EmptyChannelError()
 
-    def _checkpoint(self) -> None:
+    def checkpoint(self) -> None:
         return None

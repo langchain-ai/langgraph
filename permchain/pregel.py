@@ -245,7 +245,7 @@ class PregelSink(RunnableLambda):
 def ChannelsManager(
     channels: Mapping[str, Channel]
 ) -> Generator[Mapping[str, Channel], None, None]:
-    empty = {k: v._empty() for k, v in channels.items()}
+    empty = {k: v.empty() for k, v in channels.items()}
     try:
         yield {k: v.__enter__() for k, v in empty.items()}
     finally:
@@ -257,7 +257,7 @@ def ChannelsManager(
 async def AsyncChannelsManager(
     channels: Mapping[str, Channel]
 ) -> AsyncGenerator[Mapping[str, Channel], None]:
-    empty = {k: v._aempty() for k, v in channels.items()}
+    empty = {k: v.aempty() for k, v in channels.items()}
     try:
         yield {k: await v.__aenter__() for k, v in empty.items()}
     finally:
@@ -389,7 +389,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
             def read(chan: str) -> Any:
                 try:
-                    return channels[chan]._get()
+                    return channels[chan].get()
                 except EmptyChannelError:
                     return None
 
@@ -452,10 +452,10 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 # if any write to output channel in this step, yield current value
                 if isinstance(self.output, str):
                     if any(chan is self.output for chan, _ in pending_writes):
-                        yield channels[self.output]._get()
+                        yield channels[self.output].get()
                 else:
                     if updated := {c for c, _ in pending_writes if c in self.output}:
-                        yield {chan: channels[chan]._get() for chan in updated}
+                        yield {chan: channels[chan].get() for chan in updated}
 
                 # TODO this is where we'd save checkpoint
 
@@ -482,7 +482,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
             def read(chan: str) -> Any:
                 try:
-                    return channels[chan]._get()
+                    return channels[chan].get()
                 except EmptyChannelError:
                     return None
 
@@ -548,10 +548,10 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 # if any write to output channel in this step, yield current value
                 if isinstance(self.output, str):
                     if any(chan is self.output for chan, _ in pending_writes):
-                        yield channels[self.output]._get()
+                        yield channels[self.output].get()
                 else:
                     if updated := {c for c, _ in pending_writes if c in self.output}:
-                        yield {chan: channels[chan]._get() for chan in updated}
+                        yield {chan: channels[chan].get() for chan in updated}
 
                 # if no more tasks, we're done
                 if not next_tasks:
@@ -635,7 +635,7 @@ def _apply_writes_and_prepare_next_tasks(
     # Apply writes to channels
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
-            channels[chan]._update(vals)
+            channels[chan].update(vals)
             updated_channels.add(chan)
         else:
             logger.warning(f"Skipping write for channel {chan} which has no readers")
@@ -649,9 +649,7 @@ def _apply_writes_and_prepare_next_tasks(
             if any(chan in updated_channels for chan in proc.channels.values()):
                 # If all channels read by this process have been initialized
                 try:
-                    val = {
-                        k: channels[chan]._get() for k, chan in proc.channels.items()
-                    }
+                    val = {k: channels[chan].get() for k, chan in proc.channels.items()}
                 except EmptyChannelError:
                     continue
 
@@ -666,7 +664,7 @@ def _apply_writes_and_prepare_next_tasks(
             if proc.channel in updated_channels:
                 # Here we don't catch EmptyChannelError because the channel
                 # must be intialized if the previous `if` condition is true
-                val = channels[proc.channel]._get()
+                val = channels[proc.channel].get()
 
                 tasks.append((proc, val))
 
