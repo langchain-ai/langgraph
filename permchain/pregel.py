@@ -120,15 +120,6 @@ class PregelInvoke(RunnableBinding):
             **other_kwargs,
         )
 
-    def join(self, channels: Sequence[str]) -> PregelInvoke:
-        joiner = RunnablePassthrough.assign(
-            **{chan: PregelRead(chan) for chan in channels}
-        )
-        if isinstance(self.bound, RunnablePassthrough):
-            return PregelInvoke(channels=self.channels, bound=joiner)
-        else:
-            return PregelInvoke(channels=self.channels, bound=self.bound | joiner)
-
     def __or__(
         self,
         other: Runnable[Any, Other]
@@ -152,7 +143,26 @@ class PregelInvoke(RunnableBinding):
 class PregelBatch(RunnableEach):
     channel: str
 
+    key: Optional[str]
+
     bound: Runnable[Any, Any] = Field(default_factory=RunnablePassthrough)
+
+    def join(self, channels: Sequence[str]) -> PregelBatch:
+        if self.key is None:
+            raise ValueError(
+                "Cannot join() additional channels without a key."
+                " Pass a key arg to Pregel.subscribe_to_each()."
+            )
+
+        joiner = RunnablePassthrough.assign(
+            **{chan: PregelRead(chan) for chan in channels}
+        )
+        if isinstance(self.bound, RunnablePassthrough):
+            return PregelBatch(channel=self.channel, key=self.key, bound=joiner)
+        else:
+            return PregelBatch(
+                channel=self.channel, key=self.key, bound=self.bound | joiner
+            )
 
     def __or__(
         self,
@@ -161,9 +171,13 @@ class PregelBatch(RunnableEach):
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
     ) -> PregelBatch:
         if isinstance(self.bound, RunnablePassthrough):
-            return PregelBatch(channel=self.channel, bound=coerce_to_runnable(other))
+            return PregelBatch(
+                channel=self.channel, key=self.key, bound=coerce_to_runnable(other)
+            )
         else:
-            return PregelBatch(channel=self.channel, bound=self.bound | other)
+            return PregelBatch(
+                channel=self.channel, key=self.key, bound=self.bound | other
+            )
 
     def __ror__(
         self,
@@ -348,9 +362,9 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         )
 
     @classmethod
-    def subscribe_to_each(cls, inbox: str) -> PregelBatch:
+    def subscribe_to_each(cls, inbox: str, key: Optional[str] = None) -> PregelBatch:
         """Runs process.batch() with the content of inbox each time it is updated."""
-        return PregelBatch(channel=inbox)
+        return PregelBatch(channel=inbox, key=key)
 
     @classmethod
     def send_to(
@@ -665,6 +679,8 @@ def _apply_writes_and_prepare_next_tasks(
                 # Here we don't catch EmptyChannelError because the channel
                 # must be intialized if the previous `if` condition is true
                 val = channels[proc.channel].get()
+                if proc.key is not None:
+                    val = [{proc.key: v} for v in val]
 
                 tasks.append((proc, val))
 
