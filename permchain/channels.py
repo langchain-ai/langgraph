@@ -1,15 +1,19 @@
 import json
 from abc import ABC, abstractmethod
-from types import TracebackType
+from contextlib import asynccontextmanager, contextmanager
 from typing import (
+    AsyncContextManager,
+    AsyncGenerator,
     Callable,
     FrozenSet,
+    Generator,
     Generic,
     Optional,
     Sequence,
     Type,
     TypeVar,
 )
+from typing import ContextManager as ContextManagerType
 
 from typing_extensions import Self
 
@@ -28,38 +32,26 @@ class InvalidUpdateError(Exception):
 class Channel(Generic[Value, Update], ABC):
     @property
     @abstractmethod
-    def ValueType(self) -> type[Value]:
+    def ValueType(self) -> Type[Value]:
         """The type of the value stored in the channel."""
 
     @property
     @abstractmethod
-    def UpdateType(self) -> type[Update]:
+    def UpdateType(self) -> Type[Update]:
         """The type of the update received by the channel."""
 
+    @contextmanager
     @abstractmethod
-    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
+    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         """Return a new identical channel, optionally initialized from a checkpoint."""
 
-    @abstractmethod
-    def __exit__(
-        self,
-        __exc_type: type[BaseException] | None,
-        __exc_value: BaseException | None,
-        __traceback: TracebackType | None,
-    ) -> bool | None:
-        """Clean up the channel, or deallocate resources as needed."""
-        ...
-
-    async def __aenter__(self, checkpoint: Optional[str] = None) -> Self:
-        return self.__enter__(checkpoint)
-
-    async def __aexit__(
-        self,
-        __exc_type: type[BaseException] | None,
-        __exc_value: BaseException | None,
-        __traceback: TracebackType | None,
-    ) -> None:
-        self.__exit__(__exc_type, __exc_value, __traceback)
+    @asynccontextmanager
+    async def _aempty(
+        self, checkpoint: Optional[str] = None
+    ) -> AsyncGenerator[Self, None]:
+        """Return a new identical channel, optionally initialized from a checkpoint."""
+        with self._empty(checkpoint) as value:
+            yield value
 
     @abstractmethod
     def _update(self, values: Sequence[Update]) -> None:
@@ -70,7 +62,7 @@ class Channel(Generic[Value, Update], ABC):
         ...
 
     @abstractmethod
-    def _checkpoint(self) -> str:
+    def _checkpoint(self) -> str | None:
         ...
 
 
@@ -89,31 +81,27 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
         self.operator = operator
 
     @property
-    def ValueType(self) -> type[Value]:
+    def ValueType(self) -> Type[Value]:
         """The type of the value stored in the channel."""
         return self.typ
 
     @property
-    def UpdateType(self) -> type[Value]:
+    def UpdateType(self) -> Type[Value]:
         """The type of the update received by the channel."""
         return self.typ
 
-    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
+    @contextmanager
+    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ, self.operator)
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
-        return empty
-
-    def __exit__(
-        self,
-        __exc_type: type[BaseException] | None,
-        __exc_value: BaseException | None,
-        __traceback: TracebackType | None,
-    ) -> None:
         try:
-            del self.value
-        except AttributeError:
-            pass
+            yield empty
+        finally:
+            try:
+                del empty.value
+            except AttributeError:
+                pass
 
     def _update(self, values: Sequence[Value]) -> None:
         if not hasattr(self, "value"):
@@ -140,31 +128,27 @@ class LastValue(Generic[Value], Channel[Value, Value]):
         self.typ = typ
 
     @property
-    def ValueType(self) -> type[Value]:
+    def ValueType(self) -> Type[Value]:
         """The type of the value stored in the channel."""
         return self.typ
 
     @property
-    def UpdateType(self) -> type[Value]:
+    def UpdateType(self) -> Type[Value]:
         """The type of the update received by the channel."""
         return self.typ
 
-    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
+    @contextmanager
+    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.value = json.loads(checkpoint)
-        return empty
-
-    def __exit__(
-        self,
-        __exc_type: type[BaseException] | None,
-        __exc_value: BaseException | None,
-        __traceback: TracebackType | None,
-    ) -> None:
         try:
-            del self.value
-        except AttributeError:
-            pass
+            yield empty
+        finally:
+            try:
+                del empty.value
+            except AttributeError:
+                pass
 
     def _update(self, values: Sequence[Value]) -> None:
         if len(values) != 1:
@@ -189,31 +173,27 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value]):
         self.typ = typ
 
     @property
-    def ValueType(self) -> type[Sequence[Value]]:
+    def ValueType(self) -> Type[Sequence[Value]]:
         """The type of the value stored in the channel."""
         return Sequence[self.typ]  # type: ignore[name-defined]
 
     @property
-    def UpdateType(self) -> type[Value]:
+    def UpdateType(self) -> Type[Value]:
         """The type of the update received by the channel."""
         return self.typ
 
-    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
+    @contextmanager
+    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.queue = tuple(json.loads(checkpoint))
-        return empty
-
-    def __exit__(
-        self,
-        __exc_type: type[BaseException] | None,
-        __exc_value: BaseException | None,
-        __traceback: TracebackType | None,
-    ) -> None:
         try:
-            del self.queue
-        except AttributeError:
-            pass
+            yield empty
+        finally:
+            try:
+                del empty.queue
+            except AttributeError:
+                pass
 
     def _update(self, values: Sequence[Value]) -> None:
         self.queue = tuple(values)
@@ -235,31 +215,27 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
         self.typ = typ
 
     @property
-    def ValueType(self) -> type[FrozenSet[Value]]:
+    def ValueType(self) -> Type[FrozenSet[Value]]:
         """The type of the value stored in the channel."""
         return FrozenSet[self.typ]  # type: ignore[name-defined]
 
     @property
-    def UpdateType(self) -> type[Value]:
+    def UpdateType(self) -> Type[Value]:
         """The type of the update received by the channel."""
         return self.typ
 
-    def __enter__(self, checkpoint: Optional[str] = None) -> Self:
+    @contextmanager
+    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.set = set(json.loads(checkpoint))
-        return empty
-
-    def __exit__(
-        self,
-        __exc_type: type[BaseException] | None,
-        __exc_value: BaseException | None,
-        __traceback: TracebackType | None,
-    ) -> None:
         try:
-            del self.set
-        except AttributeError:
-            pass
+            yield empty
+        finally:
+            try:
+                del empty.set
+            except AttributeError:
+                pass
 
     def _update(self, values: Sequence[Value]) -> None:
         if not hasattr(self, "set"):
@@ -274,3 +250,76 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
 
     def _checkpoint(self) -> str:
         return json.dumps(list(self.set))
+
+
+AsyncValue = TypeVar("AsyncValue")
+
+
+class ContextManager(Generic[Value], Channel[Value, None]):
+    value: Value
+
+    def __init__(
+        self,
+        typ: Type[Value],
+        ctx: Optional[Callable[[], ContextManagerType[Value]]] = None,
+        actx: Optional[Callable[[], AsyncContextManager[Value]]] = None,
+    ) -> None:
+        if ctx is None and actx is None:
+            raise ValueError("Must provide either sync or async context manager.")
+
+        self.typ = typ
+        self.ctx = ctx
+        self.actx = actx
+
+    @property
+    def ValueType(self) -> Type[Value]:
+        """The type of the value stored in the channel."""
+        return self.typ
+
+    @property
+    def UpdateType(self) -> Type[None]:
+        """The type of the update received by the channel."""
+        raise InvalidUpdateError()
+
+    @contextmanager
+    def _empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+        if self.ctx is None:
+            raise ValueError("Cannot enter sync context manager.")
+
+        empty = self.__class__(self.typ, ctx=self.ctx, actx=self.actx)
+        # ContextManager doesn't have a checkpoint
+        ctx = self.ctx()
+        empty.value = ctx.__enter__()
+        try:
+            yield empty
+        finally:
+            ctx.__exit__(None, None, None)
+
+    @asynccontextmanager
+    async def _aempty(
+        self, checkpoint: Optional[str] = None
+    ) -> AsyncGenerator[Self, None]:
+        if self.actx is not None:
+            empty = self.__class__(self.typ, ctx=self.ctx, actx=self.actx)
+            # ContextManager doesn't have a checkpoint
+            actx = self.actx()
+            empty.value = await actx.__aenter__()
+            try:
+                yield empty
+            finally:
+                await actx.__aexit__(None, None, None)
+        else:
+            with self._empty() as empty:
+                yield empty
+
+    def _update(self, values: Sequence[None]) -> None:
+        raise InvalidUpdateError()
+
+    def _get(self) -> Value:
+        try:
+            return self.value
+        except AttributeError:
+            raise EmptyChannelError()
+
+    def _checkpoint(self) -> None:
+        return None

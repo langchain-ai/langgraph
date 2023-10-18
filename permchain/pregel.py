@@ -245,9 +245,9 @@ class PregelSink(RunnableLambda):
 def ChannelsManager(
     channels: Mapping[str, Channel]
 ) -> Generator[Mapping[str, Channel], None, None]:
-    empty = {k: v.__enter__() for k, v in channels.items()}
+    empty = {k: v._empty() for k, v in channels.items()}
     try:
-        yield empty
+        yield {k: v.__enter__() for k, v in empty.items()}
     finally:
         for v in empty.values():
             v.__exit__(None, None, None)
@@ -257,9 +257,9 @@ def ChannelsManager(
 async def AsyncChannelsManager(
     channels: Mapping[str, Channel]
 ) -> AsyncGenerator[Mapping[str, Channel], None]:
-    empty = {k: await v.__aenter__() for k, v in channels.items()}
+    empty = {k: v._aempty() for k, v in channels.items()}
     try:
-        yield empty
+        yield {k: await v.__aenter__() for k, v in empty.items()}
     finally:
         for v in empty.values():
             await v.__aexit__(None, None, None)
