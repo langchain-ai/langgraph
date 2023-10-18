@@ -58,13 +58,9 @@ def recursive_web_loader(
     extractor = extractor or (lambda x: x)
     metadata_extractor = metadata_extractor or _metadata_extractor
     chain = (
-        Pregel.subscribe_to_each("next_urls")
-        | {
-            "url": RunnablePassthrough(),
-            "visited": PregelRead("visited"),
-            "client": PregelRead("client"),
-            "base_url": PregelRead("url"),
-        }
+        Pregel.subscribe_to_each("next_urls", key="url").join(
+            ["visited", "client", "base_url"]
+        )
         | RunnablePassthrough.assign(body=RunnableLambda(load_url, load_url_async))
         | Pregel.send_to(
             visited=lambda x: x["url"],
@@ -83,10 +79,10 @@ def recursive_web_loader(
         )
     )
     return Pregel(
-        Pregel.subscribe_to("url") | Pregel.send_to("next_urls"),
+        Pregel.subscribe_to("base_url") | Pregel.send_to("next_urls"),
         chain,
         channels={
-            "url": channels.LastValue(str),
+            "base_url": channels.LastValue(str),
             "next_urls": channels.UniqueInbox(str),
             "documents": channels.Stream(Document),
             "visited": channels.Set(str),
@@ -94,7 +90,7 @@ def recursive_web_loader(
                 httpx.Client | httpx.AsyncClient, httpx.Client, httpx.AsyncClient
             ),
         },
-        input="url",
+        input="base_url",
         output="visited",
     )
 

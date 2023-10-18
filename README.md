@@ -38,6 +38,7 @@ Check `examples` for more examples.
 - [ ] More tests
   - [ ] Test different input and output types (str, str sequence, None)
   - [ ] Add tests for Stream, UniqueInbox
+  - [ ] Add tests for subscribe_to_each().join()
 - [ ] Implement checkpointing
   - [ ] Save checkpoints at end of each step
   - [ ] Load checkpoint at start of invocation
