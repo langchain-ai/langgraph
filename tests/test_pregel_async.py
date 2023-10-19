@@ -1,4 +1,6 @@
 import asyncio
+from contextlib import asynccontextmanager, contextmanager
+from typing import Any, AsyncGenerator, AsyncIterator, Generator
 
 import pytest
 from langchain.schema.runnable import RunnablePassthrough
@@ -25,6 +27,56 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert await app.ainvoke(2) == 3
 
 
+async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
+
+    app = Pregel(
+        (chain,),
+        channels={
+            "input": channels.LastValue(int),
+            "output": channels.LastValue(int),
+        },
+        input="input",
+        output=["output"],
+    )
+
+    assert app.input_schema.schema() == {"title": "PregelInput", "type": "integer"}
+    assert app.output_schema.schema() == {
+        "title": "PregelOutput",
+        "type": "object",
+        "properties": {"output": {"title": "Output", "type": "integer"}},
+    }
+    assert await app.ainvoke(2) == {"output": 3}
+
+
+async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
+
+    app = Pregel(
+        (chain,),
+        channels={
+            "input": channels.LastValue(int),
+            "output": channels.LastValue(int),
+        },
+        input=["input"],
+        output=["output"],
+    )
+
+    assert app.input_schema.schema() == {
+        "title": "PregelInput",
+        "type": "object",
+        "properties": {"input": {"title": "Input", "type": "integer"}},
+    }
+    assert app.output_schema.schema() == {
+        "title": "PregelOutput",
+        "type": "object",
+        "properties": {"output": {"title": "Output", "type": "integer"}},
+    }
+    assert await app.ainvoke({"input": 2}) == {"output": 3}
+
+
 async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
@@ -42,6 +94,26 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     )
 
     assert await app.ainvoke(2) == 4
+
+
+async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
+    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.send_to("output")
+
+    pubsub = Pregel(
+        [chain_one, chain_two],
+        channels={
+            "input": channels.LastValue(int),
+            "output": channels.LastValue(int),
+            "inbox": channels.Inbox(int),
+        },
+        input=["input", "inbox"],
+        output="output",
+    )
+
+    # [12 + 1, 2 + 1 + 1]
+    assert [c async for c in pubsub.astream({"input": 2, "inbox": 12})] == [13, 4]
 
 
 async def test_batch_two_processes_in_out() -> None:
@@ -318,3 +390,68 @@ async def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to OUT topic
     assert await app.ainvoke(2) is None
+
+
+async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
+    setup_sync = mocker.Mock()
+    cleanup_sync = mocker.Mock()
+    setup_async = mocker.Mock()
+    cleanup_async = mocker.Mock()
+
+    @contextmanager
+    def an_int() -> Generator[int, None, None]:
+        setup_sync()
+        try:
+            yield 5
+        finally:
+            cleanup_sync()
+
+    @asynccontextmanager
+    async def an_int_async() -> AsyncGenerator[int, None]:
+        setup_async()
+        try:
+            yield 5
+        finally:
+            cleanup_async()
+
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
+    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.send_to("output")
+
+    app = Pregel(
+        [chain_one, chain_two],
+        channels={
+            "input": channels.LastValue(int),
+            "output": channels.LastValue(int),
+            "inbox": channels.Inbox(int),
+            "ctx": channels.ContextManager(an_int, an_int_async, typ=int),
+        },
+        input="input",
+        output=["inbox", "output"],
+    )
+
+    async def aenumerate(aiter: AsyncIterator[Any]) -> AsyncIterator[tuple[int, Any]]:
+        i = 0
+        async for chunk in aiter:
+            yield i, chunk
+            i += 1
+
+    assert setup_sync.call_count == 0
+    assert cleanup_sync.call_count == 0
+    assert setup_async.call_count == 0
+    assert cleanup_async.call_count == 0
+    async for i, chunk in aenumerate(app.astream(2)):
+        assert setup_sync.call_count == 0, "Sync context manager should not be used"
+        assert cleanup_sync.call_count == 0, "Sync context manager should not be used"
+        assert setup_async.call_count == 1, "Expected setup to be called once"
+        assert cleanup_async.call_count == 0, "Expected cleanup to not be called yet"
+        if i == 0:
+            assert chunk == {"inbox": (3,)}
+        elif i == 1:
+            assert chunk == {"output": 4}
+        else:
+            assert False, "Expected only two chunks"
+    assert setup_sync.call_count == 0
+    assert cleanup_sync.call_count == 0
+    assert setup_async.call_count == 1, "Expected setup to be called once"
+    assert cleanup_async.call_count == 1, "Expected cleanup to be called once"

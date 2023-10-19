@@ -288,7 +288,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     output: str | Sequence[str]
 
-    input: str | None
+    input: str | Sequence[str]
 
     step_timeout: Optional[float] = None
 
@@ -300,7 +300,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         *chains: Sequence[PregelInvoke | PregelBatch] | PregelInvoke | PregelBatch,
         channels: Mapping[str, Channel],
         output: str | Sequence[str],
-        input: str | None = None,
+        input: str | Sequence[str],
         step_timeout: Optional[float] = None,
     ) -> None:
         chains_flat: list[PregelInvoke | PregelBatch] = []
@@ -402,8 +402,13 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 processes,
                 channels,
                 deque((self.input, chunk) for chunk in input)
-                if self.input is not None
-                else deque((k, v) for chunk in input for k, v in chunk.items()),
+                if isinstance(self.input, str)
+                else deque(
+                    (k, v)
+                    for chunk in input
+                    for k, v in chunk.items()
+                    if k in self.input
+                ),
             )
 
             def read(chan: str) -> Any:
@@ -495,8 +500,15 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 processes,
                 channels,
                 deque([(self.input, chunk) async for chunk in input])
-                if self.input is not None
-                else deque([(k, v) async for chunk in input for k, v in chunk.items()]),
+                if isinstance(self.input, str)
+                else deque(
+                    [
+                        (k, v)
+                        async for chunk in input
+                        for k, v in chunk.items()
+                        if k in self.input
+                    ]
+                ),
             )
 
             def read(chan: str) -> Any:
@@ -695,7 +707,7 @@ def _apply_writes_and_prepare_next_tasks(
 def validate_chains_channels(
     chains: Sequence[PregelInvoke | PregelBatch],
     channels: Mapping[str, Channel],
-    input: str | None,
+    input: str | Sequence[str],
     output: str | Sequence[str],
 ) -> None:
     subscribed_channels = set[str]()
@@ -709,13 +721,24 @@ def validate_chains_channels(
                 f"Invalid chain type {type(chain)}, expected Pregel.subscribe_to() or Pregel.subscribe_to_each()"
             )
 
-    if input is not None and input not in subscribed_channels:
-        raise ValueError(f"Input channel {input} is not subscribed to by any chain")
-
     for chan in subscribed_channels:
         if chan not in channels:
             raise ValueError(f"Channel {chan} is subscribed to, but not initialized")
 
+    if isinstance(input, str):
+        if input not in subscribed_channels:
+            raise ValueError(f"Input channel {input} is not subscribed to by any chain")
+    else:
+        for chan in input:
+            if chan not in subscribed_channels:
+                raise ValueError(
+                    f"Input channel {chan} is not subscribed to by any chain"
+                )
+
     if isinstance(output, str):
         if output not in channels:
             raise ValueError(f"Output channel {output} is not initialized")
+    else:
+        for chan in output:
+            if chan not in channels:
+                raise ValueError(f"Output channel {chan} is not initialized")

@@ -36,8 +36,8 @@ Check `examples` for more examples.
   - [x] Finish updating tests to new API
 - [x] Implement input_schema and output_schema in Pregel
 - [ ] More tests
-  - [ ] Test different input and output types (str, str sequence, None)
-  - [ ] Add tests for Stream, UniqueInbox
+  - [x] Test different input and output types (str, str sequence)
+  - [x] Add tests for Stream, UniqueInbox
   - [ ] Add tests for subscribe_to_each().join()
 - [ ] Implement checkpointing
   - [ ] Save checkpoints at end of each step

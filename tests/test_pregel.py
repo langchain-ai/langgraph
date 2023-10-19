@@ -1,5 +1,7 @@
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import contextmanager
+from typing import Generator
 
 import pytest
 from langchain.schema.runnable import RunnablePassthrough
@@ -51,12 +53,39 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     assert app.invoke(2) == {"output": 3}
 
 
+def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
+
+    app = Pregel(
+        (chain,),
+        channels={
+            "input": channels.LastValue(int),
+            "output": channels.LastValue(int),
+        },
+        input=["input"],
+        output=["output"],
+    )
+
+    assert app.input_schema.schema() == {
+        "title": "PregelInput",
+        "type": "object",
+        "properties": {"input": {"title": "Input", "type": "integer"}},
+    }
+    assert app.output_schema.schema() == {
+        "title": "PregelOutput",
+        "type": "object",
+        "properties": {"output": {"title": "Output", "type": "integer"}},
+    }
+    assert app.invoke({"input": 2}) == {"output": 3}
+
+
 def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
     chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.send_to("output")
 
-    pubsub = Pregel(
+    app = Pregel(
         [chain_one, chain_two],
         channels={
             "input": channels.LastValue(int),
@@ -67,8 +96,26 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
         output="output",
     )
 
-    # Then invoke pubsub
-    assert pubsub.invoke(2) == 4
+    assert app.invoke(2) == 4
+
+
+def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
+    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.send_to("output")
+
+    app = Pregel(
+        [chain_one, chain_two],
+        channels={
+            "input": channels.LastValue(int),
+            "output": channels.LastValue(int),
+            "inbox": channels.Inbox(int),
+        },
+        input=["input", "inbox"],
+        output="output",
+    )
+
+    assert [*app.stream({"input": 2, "inbox": 12})] == [13, 4]  # [12 + 1, 2 + 1 + 1]
 
 
 def test_batch_two_processes_in_out() -> None:
@@ -83,7 +130,7 @@ def test_batch_two_processes_in_out() -> None:
         Pregel.subscribe_to("one") | add_one_with_delay | Pregel.send_to("output")
     )
 
-    pubsub = Pregel(
+    app = Pregel(
         chain_one,
         chain_two,
         channels={
@@ -95,8 +142,7 @@ def test_batch_two_processes_in_out() -> None:
         output="output",
     )
 
-    # Then invoke pubsub
-    assert pubsub.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
+    assert app.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
 
 
 def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
@@ -151,7 +197,6 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
     app = Pregel(*chains, channels=chans, input="input", output="output")
 
     for _ in range(10):
-        # Then invoke pubsub
         assert app.batch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) == [
             2 + test_size,
             1 + test_size,
@@ -244,7 +289,7 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
         assert [*executor.map(app.invoke, [2] * 100)] == [[13, 13]] * 100
 
 
-def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None:
+def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
@@ -283,7 +328,6 @@ def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None:
         output="output",
     )
 
-    # Then invoke pubsub
     for _ in range(10):
         assert app.invoke([2, 3]) == 27
 
@@ -313,7 +357,6 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
         output="output",
     )
 
-    # Then invoke pubsub
     assert [c for c in app.stream(2)] == [3, 4]
 
 
@@ -334,7 +377,6 @@ def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
         output="output",
     )
 
-    # Then invoke pubsub
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to OUT topic
     assert app.invoke(2) is None
@@ -358,3 +400,45 @@ def test_invoke_two_processes_no_in(mocker: MockerFixture) -> None:
             input="input",
             output="output",
         )
+
+
+def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
+    setup = mocker.Mock()
+    cleanup = mocker.Mock()
+
+    @contextmanager
+    def an_int() -> Generator[int, None, None]:
+        setup()
+        try:
+            yield 5
+        finally:
+            cleanup()
+
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
+    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.send_to("output")
+
+    app = Pregel(
+        [chain_one, chain_two],
+        channels={
+            "input": channels.LastValue(int),
+            "output": channels.LastValue(int),
+            "inbox": channels.Inbox(int),
+            "ctx": channels.ContextManager(an_int, typ=int),
+        },
+        input="input",
+        output=["inbox", "output"],
+    )
+
+    assert setup.call_count == 0
+    assert cleanup.call_count == 0
+    for i, chunk in enumerate(app.stream(2)):
+        assert setup.call_count == 1, "Expected setup to be called once"
+        assert cleanup.call_count == 0, "Expected cleanup to not be called yet"
+        if i == 0:
+            assert chunk == {"inbox": (3,)}
+        elif i == 1:
+            assert chunk == {"output": 4}
+        else:
+            assert False, "Expected only two chunks"
+    assert cleanup.call_count == 1, "Expected cleanup to be called once"
