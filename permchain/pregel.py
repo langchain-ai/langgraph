@@ -44,7 +44,7 @@ from langchain.schema.runnable.config import (
 )
 from langchain.schema.runnable.utils import ConfigurableFieldSpec
 
-from permchain.channels import Channel, EmptyChannelError
+from permchain.channels.base import Channel, EmptyChannelError
 
 logger = logging.getLogger(__name__)
 
