@@ -11,7 +11,6 @@ from typing import (
     Generic,
     Optional,
     Sequence,
-    Tuple,
     Type,
     TypeVar,
     Union,
@@ -203,7 +202,11 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Value]]):
         self.queue = tuple(
             cast(Value, v)
             for value in values
-            for v in ((value,) if isinstance(value, self.typ) else value)
+            for v in (
+                (value,)
+                if isinstance(value, self.typ)
+                else cast(Sequence[Value], value)
+            )
         )
 
     def get(self) -> Sequence[Value]:
@@ -250,7 +253,11 @@ class UniqueInbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Valu
             set(
                 cast(Value, v)
                 for value in values
-                for v in ((value,) if isinstance(value, self.typ) else value)
+                for v in (
+                    (value,)
+                    if isinstance(value, self.typ)
+                    else cast(Sequence[Value], value)
+                )
             )
         )
 
@@ -304,7 +311,7 @@ class Set(Generic[Value], Channel[FrozenSet[Value], Value]):
         return json.dumps(list(self.set))
 
 
-class Stream(Generic[Value], Channel[Tuple[Value], Value]):
+class Stream(Generic[Value], Channel[Sequence[Value], Value]):
     """Stores all unique values received."""
 
     def __init__(self, typ: Type[Value]) -> None:
@@ -312,9 +319,9 @@ class Stream(Generic[Value], Channel[Tuple[Value], Value]):
         self.set = list[Value]()
 
     @property
-    def ValueType(self) -> Type[Tuple[Value]]:
+    def ValueType(self) -> Any:
         """The type of the value stored in the channel."""
-        return Tuple[self.typ]  # type: ignore[name-defined]
+        return Sequence[self.typ]  # type: ignore[name-defined]
 
     @property
     def UpdateType(self) -> Type[Value]:
@@ -334,7 +341,7 @@ class Stream(Generic[Value], Channel[Tuple[Value], Value]):
     def update(self, values: Sequence[Value]) -> None:
         self.set.extend(values)
 
-    def get(self) -> Tuple[Value]:
+    def get(self) -> Sequence[Value]:
         try:
             return tuple(self.set)
         except AttributeError:
@@ -344,17 +351,14 @@ class Stream(Generic[Value], Channel[Tuple[Value], Value]):
         return json.dumps(self.set)
 
 
-AsyncValue = TypeVar("AsyncValue")
-
-
 class ContextManager(Generic[Value], Channel[Value, None]):
     value: Value
 
     def __init__(
         self,
-        typ: Type[Value],
         ctx: Optional[Callable[[], ContextManagerType[Value]]] = None,
         actx: Optional[Callable[[], AsyncContextManager[Value]]] = None,
+        typ: Optional[Type[Value]] = None,
     ) -> None:
         if ctx is None and actx is None:
             raise ValueError("Must provide either sync or async context manager.")
@@ -364,9 +368,14 @@ class ContextManager(Generic[Value], Channel[Value, None]):
         self.actx = actx
 
     @property
-    def ValueType(self) -> Type[Value]:
+    def ValueType(self) -> Any:
         """The type of the value stored in the channel."""
-        return self.typ
+        return (
+            self.typ
+            or (self.ctx if hasattr(self.ctx, "__enter__") else None)
+            or (self.actx if hasattr(self.actx, "__aenter__") else None)
+            or None
+        )
 
     @property
     def UpdateType(self) -> Type[None]:
@@ -378,7 +387,7 @@ class ContextManager(Generic[Value], Channel[Value, None]):
         if self.ctx is None:
             raise ValueError("Cannot enter sync context manager.")
 
-        empty = self.__class__(self.typ, ctx=self.ctx, actx=self.actx)
+        empty = self.__class__(ctx=self.ctx, actx=self.actx, typ=self.typ)
         # ContextManager doesn't have a checkpoint
         ctx = self.ctx()
         empty.value = ctx.__enter__()
@@ -392,7 +401,7 @@ class ContextManager(Generic[Value], Channel[Value, None]):
         self, checkpoint: Optional[str] = None
     ) -> AsyncGenerator[Self, None]:
         if self.actx is not None:
-            empty = self.__class__(self.typ, ctx=self.ctx, actx=self.actx)
+            empty = self.__class__(ctx=self.ctx, actx=self.actx, typ=self.typ)
             # ContextManager doesn't have a checkpoint
             actx = self.actx()
             empty.value = await actx.__aenter__()

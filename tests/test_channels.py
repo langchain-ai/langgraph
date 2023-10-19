@@ -2,6 +2,7 @@ import operator
 from contextlib import asynccontextmanager, contextmanager
 from typing import AsyncGenerator, FrozenSet, Generator, Sequence, Union
 
+import httpx
 import pytest
 from pytest_mock import MockerFixture
 
@@ -133,7 +134,7 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    with channels.ContextManager(int, an_int).empty() as channel:
+    with channels.ContextManager(an_int, None, int).empty() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 
@@ -148,6 +149,18 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
 
     assert setup.call_count == 1
     assert cleanup.call_count == 1
+
+
+def test_ctx_manager_ctx(mocker: MockerFixture) -> None:
+    with channels.ContextManager(httpx.Client).empty() as channel:
+        assert channel.ValueType is httpx.Client
+        with pytest.raises(channels.InvalidUpdateError):
+            assert channel.UpdateType is None
+
+        assert isinstance(channel.get(), httpx.Client)
+
+        with pytest.raises(channels.InvalidUpdateError):
+            channel.update([5])  # type: ignore
 
 
 async def test_ctx_manager_async(mocker: MockerFixture) -> None:
@@ -169,7 +182,7 @@ async def test_ctx_manager_async(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    async with channels.ContextManager(int, an_int_sync, an_int).aempty() as channel:
+    async with channels.ContextManager(an_int_sync, an_int, int).aempty() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 

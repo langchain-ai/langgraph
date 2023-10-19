@@ -6,7 +6,6 @@ from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 from langchain.utils.html import extract_sub_links
 
 from permchain import Pregel, channels
-from permchain.pregel import PregelRead
 
 # Load url with sync httpx client
 
@@ -107,9 +106,7 @@ def recursive_web_loader(
             "next_urls": channels.UniqueInbox(str),
             "documents": channels.Stream(Document),
             "visited": channels.Set(str),
-            "client": channels.ContextManager(
-                httpx.Client | httpx.AsyncClient, httpx.Client, httpx.AsyncClient
-            ),
+            "client": channels.ContextManager(httpx.Client, httpx.AsyncClient),
         },
         # this will accept a string as input
         input="base_url",

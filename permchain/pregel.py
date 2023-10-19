@@ -129,6 +129,7 @@ class PregelInvoke(RunnableBinding):
         if isinstance(self.bound, RunnablePassthrough):
             return PregelInvoke(channels=self.channels, bound=coerce_to_runnable(other))
         else:
+            # delegate to __or__ in self.bound
             return PregelInvoke(channels=self.channels, bound=self.bound | other)
 
     def __ror__(
@@ -164,7 +165,7 @@ class PregelBatch(RunnableEach):
                 channel=self.channel, key=self.key, bound=self.bound | joiner
             )
 
-    def __or__(
+    def __or__(  # type: ignore[override]
         self,
         other: Runnable[Any, Other]
         | Callable[[Any], Other]
@@ -175,6 +176,7 @@ class PregelBatch(RunnableEach):
                 channel=self.channel, key=self.key, bound=coerce_to_runnable(other)
             )
         else:
+            # delegate to __or__ in self.bound
             return PregelBatch(
                 channel=self.channel, key=self.key, bound=self.bound | other
             )
@@ -203,7 +205,7 @@ class PregelSink(RunnableLambda):
         channels: Sequence[tuple[str, Runnable]],
         max_steps: Optional[int] = None,
     ):
-        super().__init__(func=self._write, afunc=self._awrite)
+        super().__init__(func=self._write, afunc=self._awrite)  # type: ignore[arg-type]
         self.channels = channels
         self.max_steps = max_steps
 
@@ -356,9 +358,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
         return PregelInvoke(
-            channels={None: channels}
-            if isinstance(channels, str)
-            else {chan: chan for chan in channels}
+            channels=cast(
+                Mapping[None, str] | Mapping[str, str],
+                {None: channels}
+                if isinstance(channels, str)
+                else {chan: chan for chan in channels},
+            )
         )
 
     @classmethod
