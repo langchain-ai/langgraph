@@ -10,6 +10,8 @@ from langchain.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     CallbackManagerForChainRun,
 )
+from langchain.globals import get_debug
+from langchain.utils.input import get_bolded_text, get_colored_text
 from langchain.pydantic_v1 import BaseModel, create_model
 from langchain.schema.runnable import (
     Runnable,
@@ -48,6 +50,8 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     step_timeout: Optional[float] = None
 
+    debug: bool
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -58,6 +62,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         output: str | Sequence[str],
         input: str | Sequence[str],
         step_timeout: Optional[float] = None,
+        debug: Optional[bool] = None,
     ) -> None:
         chains_flat: list[PregelInvoke | PregelBatch] = []
         for chain in chains:
@@ -74,6 +79,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             output=output,
             input=input,
             step_timeout=step_timeout,
+            debug=debug if debug is not None else get_debug(),
         )
 
     @property
@@ -181,6 +187,18 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             # channels are guaranteed to be immutable for the duration of the step,
             # with channel updates applied only at the transition between steps
             for step in range(config["recursion_limit"]):
+                if self.debug:
+                    from pprint import pformat
+
+                    n_tasks = len(next_tasks)
+                    print(
+                        f"{get_colored_text('[pregel/step]', color='blue')} "
+                        + get_bolded_text(
+                            f"Starting step {step} with {n_tasks} task{'s' if n_tasks > 1 else ''}. Current values:\n"
+                        )
+                        + pformat({k: read(k) for k in channels})
+                    )
+
                 # collect all writes to channels, without applying them yet
                 pending_writes = deque[tuple[str, Any]]()
 
@@ -281,6 +299,18 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             # channels are guaranteed to be immutable for the duration of the step,
             # channel updates being applied only at the transition between steps
             for step in range(config["recursion_limit"]):
+                if self.debug:
+                    from pprint import pformat
+
+                    n_tasks = len(next_tasks)
+                    print(
+                        f"{get_colored_text('[pregel/step]', color='blue')} "
+                        + get_bolded_text(
+                            f"Starting step {step} with {n_tasks} task{'s' if n_tasks > 1 else ''}. Current values:\n"
+                        )
+                        + pformat({k: read(k) for k in channels})
+                    )
+
                 # collect all writes to channels, without applying them yet
                 pending_writes = deque[tuple[str, Any]]()
 

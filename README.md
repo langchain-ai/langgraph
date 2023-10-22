@@ -39,7 +39,7 @@ Check `examples` for more examples.
   - [x] Test different input and output types (str, str sequence)
   - [x] Add tests for Stream, UniqueInbox
   - [ ] Add tests for subscribe_to_each().join()
-- [ ] Add optional debug logging
+- [x] Add optional debug logging
 - [ ] Implement checkpointing
   - [ ] Save checkpoints at end of each step
   - [ ] Load checkpoint at start of invocation

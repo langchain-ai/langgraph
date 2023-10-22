@@ -110,8 +110,10 @@ draft_revise_loop = Pregel(
     },
     # output will be a dict with keys "draft" and "notes"
     output=["draft", "notes"],
-    # input can be a dict with any of the channels as keys
-    input=None,
+    # input will be a dict with a single key, "question"
+    input=["question"],
+    # debug logging
+    debug=True,
 )
 
 # run
