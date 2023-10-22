@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/permchain"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain = ">=0.0.300"
+langchain = ">=0.0.313"
 
 
 [tool.poetry.group.test.dependencies]
@@ -29,7 +29,7 @@ ruff = "^0.0.249"
 black = {extras = ["jupyter"], version = "^23.7.0"}
 
 [tool.poetry.group.typing.dependencies]
-mypy = "^0.991"
+mypy = "^1.6.0"
 
 [tool.poetry.group.dev]
 optional = true
@@ -57,6 +57,7 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
+asyncio_mode = "auto"
 # --strict-markers will raise errors on unknown marks.
 # https://docs.pytest.org/en/7.1.x/how-to/mark.html#raising-errors-on-unknown-marks
 #
@@ -66,6 +67,6 @@ build-backend = "poetry.core.masonry.api"
 #
 # https://github.com/tophat/syrupy
 # --snapshot-warn-unused    Prints a warning on unused snapshots rather than fail the test suite.
-addopts = "--full-trace --strict-markers --strict-config --durations=5 --snapshot-warn-unused"
+addopts = "-x --full-trace --strict-markers --strict-config --durations=5 --snapshot-warn-unused"
 # Registering custom markers.
 # https://docs.pytest.org/en/7.1.x/example/markers.html#registering-markers

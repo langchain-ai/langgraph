@@ -7,36 +7,47 @@
 ## Usage
 
 ```python
-from permchain import InMemoryPubSubConnection, PubSub, Topic
+from permchain import Pregel, channels
 
-topic_one = Topic("one")
-chain_one = Topic.IN.subscribe() | (lambda x: x + 'b') | topic_one.publish()
-chain_two = topic_one.subscribe() | (lambda x: x + 'c') | Topic.OUT.publish()
+grow_value = (
+    Pregel.subscribe_to("value")
+    | (lambda x: x + x)
+    | Pregel.send_to(value=lambda x: x if len(x) < 10 else None)
+)
 
-conn = InMemoryPubSubConnection()
-pubsub = PubSub(chain_one, chain_two, connection=conn)
+app = Pregel(
+    grow_value,
+    channels={"value": channels.LastValue(str)},
+    input="value",
+    output="value",
+)
 
-assert pubsub.invoke('a') == 'abc'
+assert app.invoke("a") == "aaaaaaaa"
+
 ```
 
-Check `tests` and `examples` for more examples.
+Check `examples` for more examples.
 
 ## Near-term Roadmap
 
-- [x] Add initial retry support (pending changes in `langchain`)
-- [x] Implement OUT as regular topic
-- [x] Implement IN as regular topic
-- [x] Add Connection.peek() to monitor past messages from all topics
-- [x] Enable resuming PubSub from the "middle" of the computation
-- [x] Add test for .peek()
-- [x] Add "wait until topic X is done" pattern, aka. `Topic.join()`
-- [ ] Move tracking of inflight processes/messages to Connection
-  - [ ] Use this to build retry mechanism, where any inflight messages are moved back to the respective topics when restarting
-  - [ ] But this would require being able to replay a message for a single listener only, which maybe requires a larger redesign of PubSub<>Connection contract than what I wanted to do here
-- [ ] Detect cycles (aka. infinite loops) and throw an error
-  - [ ] Allow user to catch that error (by subcribing to an error topic?)
-- [ ] Add example for "human in the loop" pattern, one of the two below
-  - [ ] Example with one permchain, which runs until it produces either 1. request for input or 2. output. The consumer code then gets the needed info, and restarts the permchain with answer, and same state id
-  - [ ] Allow interrupting execution by breaking out of the iterator returned by .stream()
-    - [ ] Build example showing a simple "human in the loop" pattern using this, ie. if a certain message asking for input is published the consumer of the iterator breaks out, does something and then restarts it
-- [ ] Add Redis-backed Connection implementation
+- [x] Iterate on API
+  - [x] do we want api to receive output from multiple channels in invoke()
+  - [x] do we want api to send input to multiple channels in invoke()
+  - [x] Finish updating tests to new API
+- [x] Implement input_schema and output_schema in Pregel
+- [ ] More tests
+  - [x] Test different input and output types (str, str sequence)
+  - [x] Add tests for Stream, UniqueInbox
+  - [ ] Add tests for subscribe_to_each().join()
+- [ ] Implement checkpointing
+  - [ ] Save checkpoints at end of each step
+  - [ ] Load checkpoint at start of invocation
+  - [ ] API to specify storage backend and save key
+- [ ] Add more examples
+  - [ ] human in the loop
+  - [ ] combine documents
+  - [ ] agent executor
+  - [ ] run over dataset
+- [ ] Fault tolerance
+  - [ ] Retry individual processes in a step
+  - [ ] Retry entire step?
