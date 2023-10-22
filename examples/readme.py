@@ -7,7 +7,7 @@ grow_value = (
 )
 
 app = Pregel(
-    grow_value,
+    chains={"grow_value": grow_value},
     channels={"value": channels.LastValue(str)},
     input="value",
     output="value",

@@ -66,7 +66,7 @@ def recursive_web_loader(
     extractor = extractor or (lambda x: x)
     metadata_extractor = metadata_extractor or _metadata_extractor
     # the main chain that gets executed recursively
-    chain = (
+    visitor = (
         # while there are urls in next_urls
         # run the chain below for each url in next_urls
         # adding the current values of visited set, base_url and httpx client
@@ -96,10 +96,12 @@ def recursive_web_loader(
         )
     )
     return Pregel(
-        # use the base_url as the first url to visit
-        Pregel.subscribe_to("base_url") | Pregel.send_to("next_urls"),
-        # add the main chain
-        chain,
+        chains={
+            # use the base_url as the first url to visit
+            "input": Pregel.subscribe_to("base_url") | Pregel.send_to("next_urls"),
+            # add the main chain
+            "visitor": visitor,
+        },
         # define the channels
         channels={
             "base_url": channels.LastValue(str),

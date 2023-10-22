@@ -5,13 +5,13 @@ from permchain.pregel.read import PregelBatch, PregelInvoke
 
 
 def validate_chains_channels(
-    chains: Sequence[PregelInvoke | PregelBatch],
+    chains: Mapping[str, PregelInvoke | PregelBatch],
     channels: Mapping[str, Channel],
     input: str | Sequence[str],
     output: str | Sequence[str],
 ) -> None:
     subscribed_channels = set[str]()
-    for chain in chains:
+    for chain in chains.values():
         if isinstance(chain, PregelInvoke):
             subscribed_channels.update(chain.channels.values())
         elif isinstance(chain, PregelBatch):

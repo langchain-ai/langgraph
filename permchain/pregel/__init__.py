@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import enum
 import logging
 from collections import defaultdict, deque
 from typing import Any, AsyncIterator, Iterator, Mapping, Optional, Sequence, Type, cast
@@ -23,7 +24,6 @@ from langchain.schema.runnable.config import (
     get_executor_for_config,
     patch_config,
 )
-from langchain.utils.input import get_bolded_text, get_colored_text
 
 from permchain.channels.base import (
     AsyncChannelsManager,
@@ -31,7 +31,14 @@ from permchain.channels.base import (
     ChannelsManager,
     EmptyChannelError,
 )
-from permchain.pregel.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND, CONFIG_KEY_STEP
+from permchain.channels.last_value import LastValue
+from permchain.pregel.constants import (
+    CHAINS_MAIN,
+    CONFIG_KEY_READ,
+    CONFIG_KEY_SEND,
+    CONFIG_KEY_STEP,
+)
+from permchain.pregel.debug import print_step_start
 from permchain.pregel.read import PregelBatch, PregelInvoke
 from permchain.pregel.validate import validate_chains_channels
 from permchain.pregel.write import PregelSink
@@ -39,10 +46,24 @@ from permchain.pregel.write import PregelSink
 logger = logging.getLogger(__name__)
 
 
+# Before Python 3.11 native StrEnum is not available
+class StrEnum(str, enum.Enum):
+    """A string enum."""
+
+    pass
+
+
+class PregelIO(StrEnum):
+    """Pregel IO channels."""
+
+    IN = "__pregel_input"
+    OUT = "__pregel_output"
+
+
 class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     channels: Mapping[str, Channel]
 
-    chains: Sequence[PregelInvoke | PregelBatch]
+    chains: Mapping[str, PregelInvoke | PregelBatch]
 
     output: str | Sequence[str]
 
@@ -57,24 +78,40 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     def __init__(
         self,
-        *chains: Sequence[PregelInvoke | PregelBatch] | PregelInvoke | PregelBatch,
+        main: Optional[Runnable] = None,
+        *,
+        chains: Mapping[str, PregelInvoke | PregelBatch],
         channels: Mapping[str, Channel],
-        output: str | Sequence[str],
-        input: str | Sequence[str],
+        output: str | Sequence[str] = PregelIO.OUT,
+        input: str | Sequence[str] = PregelIO.IN,
         step_timeout: Optional[float] = None,
         debug: Optional[bool] = None,
     ) -> None:
-        chains_flat: list[PregelInvoke | PregelBatch] = []
-        for chain in chains:
-            if isinstance(chain, (list, tuple)):
-                chains_flat.extend(chain)
-            else:
-                chains_flat.append(cast(PregelInvoke | PregelBatch, chain))
+        chains = {**chains}
+        channels = {**channels}
 
-        validate_chains_channels(chains_flat, channels, input, output)
+        if main is not None:
+            chains[CHAINS_MAIN] = (
+                Pregel.subscribe_to(PregelIO.IN) | main | Pregel.send_to(PregelIO.OUT)
+            )
+        elif output is PregelIO.OUT:
+            raise ValueError(
+                f"When no main runnable is provided, output must be one or more of the channels in {channels.keys()}"
+            )
+
+        if input is PregelIO.IN:
+            channels[PregelIO.IN] = LastValue(
+                main.input_schema if main is not None else Any  # type: ignore[arg-type]
+            )
+        if output is PregelIO.OUT:
+            channels[PregelIO.OUT] = LastValue(
+                main.output_schema if main is not None else Any  # type: ignore[arg-type]
+            )
+
+        validate_chains_channels(chains, channels, input, output)
 
         super().__init__(
-            chains=chains_flat,
+            chains=chains,
             channels=channels,
             output=output,
             input=input,
@@ -157,7 +194,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
     ) -> Iterator[dict[str, Any] | Any]:
-        processes = tuple(self.chains)
+        processes = {**self.chains}
         # TODO this is where we'd restore from checkpoint
         with ChannelsManager(self.channels) as channels, get_executor_for_config(
             config
@@ -188,16 +225,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             # with channel updates applied only at the transition between steps
             for step in range(config["recursion_limit"]):
                 if self.debug:
-                    from pprint import pformat
-
-                    n_tasks = len(next_tasks)
-                    print(
-                        f"{get_colored_text('[pregel/step]', color='blue')} "
-                        + get_bolded_text(
-                            f"Starting step {step} with {n_tasks} task{'s' if n_tasks > 1 else ''}. Current values:\n"
-                        )
-                        + pformat({k: read(k) for k in channels})
-                    )
+                    print_step_start(step, next_tasks)
 
                 # collect all writes to channels, without applying them yet
                 pending_writes = deque[tuple[str, Any]]()
@@ -220,7 +248,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                                 },
                             ),
                         )
-                        for proc, input in next_tasks
+                        for proc, input, _ in next_tasks
                     ),
                     return_when=concurrent.futures.FIRST_EXCEPTION,
                     timeout=self.step_timeout,
@@ -251,7 +279,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
                 # if any write to output channel in this step, yield current value
                 if isinstance(self.output, str):
-                    if any(chan is self.output for chan, _ in pending_writes):
+                    if any(chan == self.output for chan, _ in pending_writes):
                         yield channels[self.output].get()
                 else:
                     if updated := {c for c, _ in pending_writes if c in self.output}:
@@ -269,7 +297,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         run_manager: AsyncCallbackManagerForChainRun,
         config: RunnableConfig,
     ) -> AsyncIterator[dict[str, Any] | Any]:
-        processes = tuple(self.chains)
+        processes = {**self.chains}
         # TODO this is where we'd restore from checkpoint
         async with AsyncChannelsManager(self.channels) as channels:
             next_tasks = _apply_writes_and_prepare_next_tasks(
@@ -300,16 +328,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             # channel updates being applied only at the transition between steps
             for step in range(config["recursion_limit"]):
                 if self.debug:
-                    from pprint import pformat
-
-                    n_tasks = len(next_tasks)
-                    print(
-                        f"{get_colored_text('[pregel/step]', color='blue')} "
-                        + get_bolded_text(
-                            f"Starting step {step} with {n_tasks} task{'s' if n_tasks > 1 else ''}. Current values:\n"
-                        )
-                        + pformat({k: read(k) for k in channels})
-                    )
+                    print_step_start(step, next_tasks)
 
                 # collect all writes to channels, without applying them yet
                 pending_writes = deque[tuple[str, Any]]()
@@ -335,7 +354,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                                 ),
                             )
                         )
-                        for proc, input in next_tasks
+                        for proc, input, _ in next_tasks
                     ],
                     return_when=asyncio.FIRST_EXCEPTION,
                     timeout=self.step_timeout,
@@ -366,7 +385,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
                 # if any write to output channel in this step, yield current value
                 if isinstance(self.output, str):
-                    if any(chan is self.output for chan, _ in pending_writes):
+                    if any(chan == self.output for chan, _ in pending_writes):
                         yield channels[self.output].get()
                 else:
                     if updated := {c for c, _ in pending_writes if c in self.output}:
@@ -441,10 +460,10 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
 
 def _apply_writes_and_prepare_next_tasks(
-    processes: Sequence[PregelInvoke | PregelBatch],
+    processes: Mapping[str, PregelInvoke | PregelBatch],
     channels: Mapping[str, Channel],
     pending_writes: Sequence[tuple[str, Any]],
-) -> list[tuple[Runnable, Any]]:
+) -> list[tuple[Runnable, Any, str]]:
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
     for chan, val in pending_writes:
@@ -456,13 +475,13 @@ def _apply_writes_and_prepare_next_tasks(
         if chan in channels:
             channels[chan].update(vals)
             updated_channels.add(chan)
-        else:
+        elif chan != PregelIO.OUT:
             logger.warning(f"Skipping write for channel {chan} which has no readers")
 
-    tasks: list[tuple[Runnable, Any]] = []
+    tasks: list[tuple[Runnable, Any, str]] = []
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
-    for proc in processes:
+    for name, proc in processes.items():
         if isinstance(proc, PregelInvoke):
             # If any of the channels read by this process were updated
             if any(chan in updated_channels for chan in proc.channels.values()):
@@ -475,9 +494,9 @@ def _apply_writes_and_prepare_next_tasks(
                 # Processes that subscribe to a single keyless channel get
                 # the value directly, instead of a dict
                 if list(proc.channels.keys()) == [None]:
-                    tasks.append((proc, val[None]))
+                    tasks.append((proc, val[None], name))
                 else:
-                    tasks.append((proc, val))
+                    tasks.append((proc, val, name))
         elif isinstance(proc, PregelBatch):
             # If the channel read by this process was updated
             if proc.channel in updated_channels:
@@ -487,6 +506,6 @@ def _apply_writes_and_prepare_next_tasks(
                 if proc.key is not None:
                     val = [{proc.key: v} for v in val]
 
-                tasks.append((proc, val))
+                tasks.append((proc, val, name))
 
     return tasks
