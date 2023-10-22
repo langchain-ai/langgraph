@@ -11,7 +11,6 @@ from langchain.callbacks.manager import (
     CallbackManagerForChainRun,
 )
 from langchain.globals import get_debug
-from langchain.utils.input import get_bolded_text, get_colored_text
 from langchain.pydantic_v1 import BaseModel, create_model
 from langchain.schema.runnable import (
     Runnable,
@@ -24,6 +23,7 @@ from langchain.schema.runnable.config import (
     get_executor_for_config,
     patch_config,
 )
+from langchain.utils.input import get_bolded_text, get_colored_text
 
 from permchain.channels.base import (
     AsyncChannelsManager,
