@@ -5,6 +5,7 @@ from typing import (
     AsyncGenerator,
     Generator,
     Generic,
+    Mapping,
     Optional,
     Sequence,
     TypeVar,
@@ -59,3 +60,27 @@ class Channel(Generic[Value, Update], ABC):
     @abstractmethod
     def checkpoint(self) -> str | None:
         ...
+
+
+@contextmanager
+def ChannelsManager(
+    channels: Mapping[str, Channel]
+) -> Generator[Mapping[str, Channel], None, None]:
+    empty = {k: v.empty() for k, v in channels.items()}
+    try:
+        yield {k: v.__enter__() for k, v in empty.items()}
+    finally:
+        for v in empty.values():
+            v.__exit__(None, None, None)
+
+
+@asynccontextmanager
+async def AsyncChannelsManager(
+    channels: Mapping[str, Channel]
+) -> AsyncGenerator[Mapping[str, Channel], None]:
+    empty = {k: v.aempty() for k, v in channels.items()}
+    try:
+        yield {k: await v.__aenter__() for k, v in empty.items()}
+    finally:
+        for v in empty.values():
+            await v.__aexit__(None, None, None)
