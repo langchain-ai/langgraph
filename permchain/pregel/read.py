@@ -82,6 +82,15 @@ class PregelInvoke(RunnableBinding):
             **other_kwargs,
         )
 
+    def join(self, channels: Sequence[str]) -> PregelInvoke:
+        joiner = RunnablePassthrough.assign(
+            **{chan: PregelRead(chan) for chan in channels}
+        )
+        if isinstance(self.bound, RunnablePassthrough):
+            return PregelInvoke(channels=self.channels, bound=joiner)
+        else:
+            return PregelInvoke(channels=self.channels, bound=self.bound | joiner)
+
     def __or__(
         self,
         other: Runnable[Any, Other]
