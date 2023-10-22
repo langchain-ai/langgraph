@@ -325,10 +325,11 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         if isinstance(self.input, str):
             return self.channels[self.input].UpdateType
 
-    @property
-    def input_schema(self) -> Type[BaseModel]:
+    def get_input_schema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> Type[BaseModel]:
         if isinstance(self.input, str):
-            return super().input_schema
+            return super().get_input_schema(config)
         else:
             return create_model(  # type: ignore[call-overload]
                 "PregelInput",
@@ -343,10 +344,11 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         if isinstance(self.output, str):
             return self.channels[self.output].ValueType
 
-    @property
-    def output_schema(self) -> Type[BaseModel]:
+    def get_output_schema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> Type[BaseModel]:
         if isinstance(self.output, str):
-            return super().output_schema
+            return super().get_output_schema(config)
         else:
             return create_model(  # type: ignore[call-overload]
                 "PregelOutput",
