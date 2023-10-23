@@ -7,7 +7,7 @@
 ## Usage
 
 ```python
-from permchain import Pregel, channels
+from permchain import Channels, Pregel
 
 grow_value = (
     Pregel.subscribe_to("value")
@@ -17,7 +17,7 @@ grow_value = (
 
 app = Pregel(
     chains={"grow_value": grow_value},
-    channels={"value": channels.LastValue(str)},
+    channels={"value": Channels.LastValue(str)},
     input="value",
     output="value",
 )
