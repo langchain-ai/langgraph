@@ -426,7 +426,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             "input": Channels.LastValue(int),
             "output": Channels.LastValue(int),
             "inbox": Channels.Inbox(int),
-            "ctx": Channels.ContextManager(an_int, typ=int),
+            "ctx": Channels.Context(an_int, typ=int),
         },
         input="input",
         output=["inbox", "output"],

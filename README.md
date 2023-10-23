@@ -28,7 +28,7 @@ Channels are used to communicate between chains. Each channel has a value type, 
 - `Channels.Archive`: stores a persistent sequence of values sent to the channel, useful for accumulating data over multiple steps
 - `Channels.UniqueArchive`: same as Archive, but deduplicates values sent to the channel
 - `Channels.BinaryOperatorAggregate`: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps. eg. `total = Channels.BinaryOperatorAggregate(int, operator.add)`
-- `Channels.ContextManager`: exposes the value of a context manager, managing its lifecycle. Useful for accessing external resources that require setup and/or teardown. eg. `client = Channels.ContextManager(httpx.Client)`
+- `Channels.Context`: exposes the value of a context manager, managing its lifecycle. Useful for accessing external resources that require setup and/or teardown. eg. `client = Channels.Context(httpx.Client)`
 
 ### Chains
 

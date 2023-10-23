@@ -135,7 +135,7 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    with Channels.ContextManager(an_int, None, int).empty() as channel:
+    with Channels.Context(an_int, None, int).empty() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 
@@ -153,7 +153,7 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
 
 
 def test_ctx_manager_ctx(mocker: MockerFixture) -> None:
-    with Channels.ContextManager(httpx.Client).empty() as channel:
+    with Channels.Context(httpx.Client).empty() as channel:
         assert channel.ValueType is httpx.Client
         with pytest.raises(InvalidUpdateError):
             assert channel.UpdateType is None
@@ -183,7 +183,7 @@ async def test_ctx_manager_async(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    async with Channels.ContextManager(an_int_sync, an_int, int).aempty() as channel:
+    async with Channels.Context(an_int_sync, an_int, int).aempty() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 

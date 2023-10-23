@@ -4,13 +4,13 @@ from typing import (
     AsyncContextManager,
     AsyncGenerator,
     Callable,
+    ContextManager,
     Generator,
     Generic,
     Optional,
     Sequence,
     Type,
 )
-from typing import ContextManager as ContextManagerType
 
 from typing_extensions import Self
 
@@ -22,7 +22,7 @@ from permchain.channels.base import (
 )
 
 
-class ContextManager(Generic[Value], BaseChannel[Value, None]):
+class Context(Generic[Value], BaseChannel[Value, None]):
     """Exposes the value of a context manager, for the duration of an invocation.
     Context manager is entered before the first step, and exited after the last step.
     Optionally, provide an equivalent async context manager, which will be used
@@ -31,7 +31,7 @@ class ContextManager(Generic[Value], BaseChannel[Value, None]):
     ```python
     import httpx
 
-    client = Channels.ContextManager(httpx.Client, httpx.AsyncClient)
+    client = Channels.Context(httpx.Client, httpx.AsyncClient)
     ```
     """
 
@@ -39,7 +39,7 @@ class ContextManager(Generic[Value], BaseChannel[Value, None]):
 
     def __init__(
         self,
-        ctx: Optional[Callable[[], ContextManagerType[Value]]] = None,
+        ctx: Optional[Callable[[], ContextManager[Value]]] = None,
         actx: Optional[Callable[[], AsyncContextManager[Value]]] = None,
         typ: Optional[Type[Value]] = None,
     ) -> None:

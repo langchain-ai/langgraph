@@ -88,7 +88,7 @@ def recursive_web_loader(
         "next_urls": Channels.UniqueInbox(str),
         "documents": Channels.Archive(Document),
         "visited": Channels.UniqueArchive(str),
-        "client": Channels.ContextManager(httpx_client, httpx_aclient),
+        "client": Channels.Context(httpx_client, httpx_aclient),
     }
     # the main chain that gets executed recursively
     visitor = (
