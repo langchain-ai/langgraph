@@ -1,4 +1,5 @@
-from typing import Callable, FrozenSet, Optional, TypedDict
+from contextlib import asynccontextmanager, contextmanager
+from typing import AsyncGenerator, Callable, FrozenSet, Generator, Optional, TypedDict
 
 import httpx
 from langchain.schema import Document
@@ -8,6 +9,14 @@ from langchain.utils.html import extract_sub_links
 from permchain import Pregel, channels
 
 # Load url with sync httpx client
+
+
+@contextmanager
+def httpx_client() -> Generator[httpx.Client, None, None]:
+    with httpx.HTTPTransport(retries=3) as transport, httpx.Client(
+        transport=transport
+    ) as client:
+        yield client
 
 
 class LoadUrlInput(TypedDict):
@@ -22,6 +31,14 @@ def load_url(input: LoadUrlInput) -> str:
 
 
 # Same as above but with async httpx client
+
+
+@asynccontextmanager
+async def httpx_aclient() -> AsyncGenerator[httpx.AsyncClient, None]:
+    async with httpx.AsyncHTTPTransport(retries=3) as transport, httpx.AsyncClient(
+        transport=transport
+    ) as client:
+        yield client
 
 
 class LoadUrlInputAsync(TypedDict):
@@ -66,7 +83,7 @@ def recursive_web_loader(
     extractor = extractor or (lambda x: x)
     metadata_extractor = metadata_extractor or _metadata_extractor
     # the main chain that gets executed recursively
-    chain = (
+    visitor = (
         # while there are urls in next_urls
         # run the chain below for each url in next_urls
         # adding the current values of visited set, base_url and httpx client
@@ -75,7 +92,7 @@ def recursive_web_loader(
         )
         # load the url (with sync and async implementations)
         | RunnablePassthrough.assign(body=RunnableLambda(load_url, load_url_async))
-        | Pregel.send_to(
+        | Pregel.write_to(
             # send this url to the visited set
             visited=lambda x: x["url"],
             # send a new document to the documents stream
@@ -92,31 +109,34 @@ def recursive_web_loader(
                 )
                 if url not in x["visited"] and url != x["url"]
             ],
-            _max_steps=max_depth,
         )
     )
     return Pregel(
-        # use the base_url as the first url to visit
-        Pregel.subscribe_to("base_url") | Pregel.send_to("next_urls"),
-        # add the main chain
-        chain,
+        chains={
+            # use the base_url as the first url to visit
+            "input": Pregel.subscribe_to("base_url") | Pregel.write_to("next_urls"),
+            # add the main chain
+            "visitor": visitor,
+        },
         # define the channels
         channels={
             "base_url": channels.LastValue(str),
             "next_urls": channels.UniqueInbox(str),
             "documents": channels.Stream(Document),
             "visited": channels.Set(str),
-            "client": channels.ContextManager(httpx.Client, httpx.AsyncClient),
+            "client": channels.ContextManager(httpx_client, httpx_aclient),
         },
         # this will accept a string as input
         input="base_url",
         # and return a dict with documents and visited set
         output=["documents", "visited"],
-    )
+        # debug logging
+        debug=True,
+    ).with_config({"recursion_limit": max_depth + 1})
 
 
 loader = recursive_web_loader(max_depth=3)
 
 documents = loader.invoke("https://docs.python.org/3.9/")
 
-print(documents)
+print(len(documents["documents"]))
