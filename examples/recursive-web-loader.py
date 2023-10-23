@@ -6,7 +6,7 @@ from langchain.schema import Document
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 from langchain.utils.html import extract_sub_links
 
-from permchain import Pregel, channels
+from permchain import Channels, Pregel
 
 # Load url with sync httpx client
 
@@ -82,6 +82,14 @@ def recursive_web_loader(
     # assign default extractors
     extractor = extractor or (lambda x: x)
     metadata_extractor = metadata_extractor or _metadata_extractor
+    # define the channels
+    channels = {
+        "base_url": Channels.LastValue(str),
+        "next_urls": Channels.UniqueInbox(str),
+        "documents": Channels.Stream(Document),
+        "visited": Channels.Set(str),
+        "client": Channels.ContextManager(httpx_client, httpx_aclient),
+    }
     # the main chain that gets executed recursively
     visitor = (
         # while there are urls in next_urls
@@ -112,19 +120,12 @@ def recursive_web_loader(
         )
     )
     return Pregel(
+        channels=channels,
         chains={
             # use the base_url as the first url to visit
             "input": Pregel.subscribe_to("base_url") | Pregel.write_to("next_urls"),
             # add the main chain
             "visitor": visitor,
-        },
-        # define the channels
-        channels={
-            "base_url": channels.LastValue(str),
-            "next_urls": channels.UniqueInbox(str),
-            "documents": channels.Stream(Document),
-            "visited": channels.Set(str),
-            "client": channels.ContextManager(httpx_client, httpx_aclient),
         },
         # this will accept a string as input
         input="base_url",

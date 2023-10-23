@@ -5,7 +5,7 @@ from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 
-from permchain import Pregel, channels
+from permchain import Channels, Pregel
 
 # prompts
 
@@ -74,6 +74,12 @@ reviser_chain = reviser_prompt | gpt3 | StrOutputParser()
 
 # application
 
+channels = {
+    "question": Channels.LastValue(str),
+    "draft": Channels.LastValue(str),
+    "notes": Channels.LastValue(str),
+}
+
 drafter = (
     # subscribe to question channel as a dict with a single key, "question"
     Pregel.subscribe_to(["question"])
@@ -102,11 +108,7 @@ reviser = (
 )
 
 draft_revise_loop = Pregel(
-    channels={
-        "question": channels.LastValue(str),
-        "draft": channels.LastValue(str),
-        "notes": channels.LastValue(str),
-    },
+    channels=channels,
     chains={
         "drafter": drafter,
         "editor": editor,

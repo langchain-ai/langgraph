@@ -7,7 +7,8 @@ import pytest
 from langchain.schema.runnable import RunnablePassthrough
 from pytest_mock import MockerFixture
 
-from permchain import Pregel, channels
+from permchain import Channels, Pregel
+from permchain.channels.base import InvalidUpdateError
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -19,8 +20,8 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
             "one": chain,
         },
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
         },
         input="input",
         output="output",
@@ -40,8 +41,8 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
             "one": chain,
         },
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
         },
         input="input",
         output=["output"],
@@ -65,8 +66,8 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
             "one": chain,
         },
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
         },
         input=["input"],
         output=["output"],
@@ -93,9 +94,9 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
-            "inbox": channels.Inbox(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
+            "inbox": Channels.Inbox(int),
         },
         input="input",
         output="output",
@@ -112,9 +113,9 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
-            "inbox": channels.Inbox(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
+            "inbox": Channels.Inbox(int),
         },
         input=["input", "inbox"],
         output="output",
@@ -138,9 +139,9 @@ def test_batch_two_processes_in_out() -> None:
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
-            "one": channels.LastValue(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
+            "one": Channels.LastValue(int),
         },
         input="input",
         output="output",
@@ -154,13 +155,13 @@ def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     chans = {
-        "input": channels.LastValue(int),
-        "output": channels.LastValue(int),
-        "-1": channels.LastValue(int),
+        "input": Channels.LastValue(int),
+        "output": Channels.LastValue(int),
+        "-1": Channels.LastValue(int),
     }
     chains = {"-1": Pregel.subscribe_to("input") | add_one | Pregel.write_to("-1")}
     for i in range(test_size - 2):
-        chans[str(i)] = channels.LastValue(int)
+        chans[str(i)] = Channels.LastValue(int)
         chains[str(i)] = (
             Pregel.subscribe_to(str(i - 1)) | add_one | Pregel.write_to(str(i))
         )
@@ -182,13 +183,13 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     chans = {
-        "input": channels.LastValue(int),
-        "output": channels.LastValue(int),
-        "-1": channels.LastValue(int),
+        "input": Channels.LastValue(int),
+        "output": Channels.LastValue(int),
+        "-1": Channels.LastValue(int),
     }
     chains = {"-1": Pregel.subscribe_to("input") | add_one | Pregel.write_to("-1")}
     for i in range(test_size - 2):
-        chans[str(i)] = channels.LastValue(int)
+        chans[str(i)] = Channels.LastValue(int)
         chains[str(i)] = (
             Pregel.subscribe_to(str(i - 1)) | add_one | Pregel.write_to(str(i))
         )
@@ -224,14 +225,14 @@ def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> N
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
         },
         input="input",
         output="output",
     )
 
-    with pytest.raises(channels.InvalidUpdateError):
+    with pytest.raises(InvalidUpdateError):
         # LastValue channels can only be updated once per iteration
         app.invoke(2)
 
@@ -245,8 +246,8 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.Inbox(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.Inbox(int),
         },
         input="input",
         output="output",
@@ -271,9 +272,9 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
             "chain_four": chain_four,
         },
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
-            "inbox": channels.Inbox(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
+            "inbox": Channels.Inbox(int),
         },
         input="input",
         output="output",
@@ -298,8 +299,8 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
             "one": Pregel.subscribe_to("input") | add_one | Pregel.write_to("output")
         },
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
         },
         input="input",
         output="output",
@@ -323,10 +324,10 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
             "chain_three": chain_three,
         },
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
-            "inbox_one": channels.Inbox(int),
-            "outbox_one": channels.LastValue(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
+            "inbox_one": Channels.Inbox(int),
+            "outbox_one": Channels.LastValue(int),
         },
         input="input",
         output="output",
@@ -352,9 +353,9 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
-            "between": channels.LastValue(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
+            "between": Channels.LastValue(int),
         },
         input="input",
         output="output",
@@ -371,9 +372,9 @@ def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
-            "between": channels.LastValue(int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
+            "between": Channels.LastValue(int),
         },
         input="input",
         output="output",
@@ -394,9 +395,9 @@ def test_invoke_two_processes_no_in(mocker: MockerFixture) -> None:
         Pregel(
             chains={"chain_one": chain_one, "chain_two": chain_two},
             channels={
-                "input": channels.LastValue(int),
-                "output": channels.LastValue(int),
-                "between": channels.LastValue(int),
+                "input": Channels.LastValue(int),
+                "output": Channels.LastValue(int),
+                "between": Channels.LastValue(int),
             },
             input="input",
             output="output",
@@ -422,10 +423,10 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
         channels={
-            "input": channels.LastValue(int),
-            "output": channels.LastValue(int),
-            "inbox": channels.Inbox(int),
-            "ctx": channels.ContextManager(an_int, typ=int),
+            "input": Channels.LastValue(int),
+            "output": Channels.LastValue(int),
+            "inbox": Channels.Inbox(int),
+            "ctx": Channels.ContextManager(an_int, typ=int),
         },
         input="input",
         output=["inbox", "output"],

@@ -29,11 +29,10 @@ def validate_chains_channels(
         if input not in subscribed_channels:
             raise ValueError(f"Input channel {input} is not subscribed to by any chain")
     else:
-        for chan in input:
-            if chan not in subscribed_channels:
-                raise ValueError(
-                    f"Input channel {chan} is not subscribed to by any chain"
-                )
+        if all(chan not in subscribed_channels for chan in input):
+            raise ValueError(
+                f"None of the input channels {input} are subscribed to by any chain"
+            )
 
     if isinstance(output, str):
         if output not in channels:
