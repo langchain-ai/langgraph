@@ -13,7 +13,7 @@ from permchain.channels.base import (
 
 
 class LastValue(Generic[Value], Channel[Value, Value]):
-    """Stores the last value received."""
+    """Stores the last value received, can receive at most one value per step."""
 
     def __init__(self, typ: Type[Value]) -> None:
         self.typ = typ
@@ -54,4 +54,7 @@ class LastValue(Generic[Value], Channel[Value, Value]):
             raise EmptyChannelError()
 
     def checkpoint(self) -> str:
-        return json.dumps(self.value)
+        try:
+            return json.dumps(self.value)
+        except AttributeError:
+            raise EmptyChannelError()
