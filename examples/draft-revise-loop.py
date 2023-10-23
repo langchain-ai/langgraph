@@ -63,12 +63,7 @@ gpt4 = ChatOpenAI(model="gpt-4")
 
 # chains
 
-drafter_chain = (
-    {"question": RunnablePassthrough(input_type=str)}
-    | drafter_prompt
-    | gpt3
-    | StrOutputParser()
-)
+drafter_chain = drafter_prompt | gpt3 | StrOutputParser()
 
 editor_chain = (
     editor_prompt
