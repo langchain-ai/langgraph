@@ -11,7 +11,7 @@ from permchain import Pregel, channels
 
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
+    chain = Pregel.subscribe_to("input") | add_one | Pregel.write_to("output")
 
     app = Pregel(
         chains={
@@ -30,7 +30,7 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
 
 async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
+    chain = Pregel.subscribe_to("input") | add_one | Pregel.write_to("output")
 
     app = Pregel(
         chains={
@@ -55,7 +55,7 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
 
 async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
+    chain = Pregel.subscribe_to("input") | add_one | Pregel.write_to("output")
 
     app = Pregel(
         chains={
@@ -84,8 +84,8 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
 
 async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
-    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.send_to("output")
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.write_to("inbox")
+    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.write_to("output")
 
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
@@ -103,8 +103,8 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
 async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
-    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.send_to("output")
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.write_to("inbox")
+    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.write_to("output")
 
     pubsub = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
@@ -127,10 +127,10 @@ async def test_batch_two_processes_in_out() -> None:
         return inp + 1
 
     chain_one = (
-        Pregel.subscribe_to("input") | add_one_with_delay | Pregel.send_to("one")
+        Pregel.subscribe_to("input") | add_one_with_delay | Pregel.write_to("one")
     )
     chain_two = (
-        Pregel.subscribe_to("one") | add_one_with_delay | Pregel.send_to("output")
+        Pregel.subscribe_to("one") | add_one_with_delay | Pregel.write_to("output")
     )
 
     app = Pregel(
@@ -156,13 +156,13 @@ async def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
         "output": channels.LastValue(int),
         "-1": channels.LastValue(int),
     }
-    chains = {"-1": Pregel.subscribe_to("input") | add_one | Pregel.send_to("-1")}
+    chains = {"-1": Pregel.subscribe_to("input") | add_one | Pregel.write_to("-1")}
     for i in range(test_size - 2):
         chans[str(i)] = channels.LastValue(int)
         chains[str(i)] = (
-            Pregel.subscribe_to(str(i - 1)) | add_one | Pregel.send_to(str(i))
+            Pregel.subscribe_to(str(i - 1)) | add_one | Pregel.write_to(str(i))
         )
-    chains["last"] = Pregel.subscribe_to(str(i)) | add_one | Pregel.send_to("output")
+    chains["last"] = Pregel.subscribe_to(str(i)) | add_one | Pregel.write_to("output")
 
     app = Pregel(chains=chains, channels=chans, input="input", output="output")
 
@@ -185,13 +185,13 @@ async def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
         "output": channels.LastValue(int),
         "-1": channels.LastValue(int),
     }
-    chains = {"-1": Pregel.subscribe_to("input") | add_one | Pregel.send_to("-1")}
+    chains = {"-1": Pregel.subscribe_to("input") | add_one | Pregel.write_to("-1")}
     for i in range(test_size - 2):
         chans[str(i)] = channels.LastValue(int)
         chains[str(i)] = (
-            Pregel.subscribe_to(str(i - 1)) | add_one | Pregel.send_to(str(i))
+            Pregel.subscribe_to(str(i - 1)) | add_one | Pregel.write_to(str(i))
         )
-    chains["last"] = Pregel.subscribe_to(str(i)) | add_one | Pregel.send_to("output")
+    chains["last"] = Pregel.subscribe_to(str(i)) | add_one | Pregel.write_to("output")
 
     app = Pregel(chains=chains, channels=chans, input="input", output="output")
 
@@ -223,8 +223,8 @@ async def test_invoke_two_processes_two_in_two_out_invalid(
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
-    chain_two = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.write_to("output")
+    chain_two = Pregel.subscribe_to("input") | add_one | Pregel.write_to("output")
 
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
@@ -244,8 +244,8 @@ async def test_invoke_two_processes_two_in_two_out_invalid(
 async def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
-    chain_two = Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.write_to("output")
+    chain_two = Pregel.subscribe_to("input") | add_one | Pregel.write_to("output")
 
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
@@ -265,9 +265,9 @@ async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: sorted(y + 10 for y in x))
 
-    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
-    chain_three = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
-    chain_four = Pregel.subscribe_to("inbox") | add_10_each | Pregel.send_to("output")
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.write_to("inbox")
+    chain_three = Pregel.subscribe_to("input") | add_one | Pregel.write_to("inbox")
+    chain_four = Pregel.subscribe_to("inbox") | add_10_each | Pregel.write_to("output")
 
     app = Pregel(
         chains={
@@ -301,7 +301,7 @@ async def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None
 
     inner_app = Pregel(
         chains={
-            "one": Pregel.subscribe_to("input") | add_one | Pregel.send_to("output")
+            "one": Pregel.subscribe_to("input") | add_one | Pregel.write_to("output")
         },
         channels={
             "input": channels.LastValue(int),
@@ -312,15 +312,15 @@ async def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None
     )
 
     chain_one = (
-        Pregel.subscribe_to("input") | add_10_each | Pregel.send_to("inbox_one").map()
+        Pregel.subscribe_to("input") | add_10_each | Pregel.write_to("inbox_one").map()
     )
     chain_two = (
         Pregel.subscribe_to("inbox_one")
         | inner_app.map()
         | sorted
-        | Pregel.send_to("outbox_one")
+        | Pregel.write_to("outbox_one")
     )
-    chain_three = Pregel.subscribe_to("outbox_one") | sum | Pregel.send_to("output")
+    chain_three = Pregel.subscribe_to("outbox_one") | sum | Pregel.write_to("output")
 
     app = Pregel(
         chains={
@@ -353,9 +353,9 @@ async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> Non
     chain_one = (
         Pregel.subscribe_to("input")
         | add_one
-        | Pregel.send_to(output=RunnablePassthrough(), between=RunnablePassthrough())
+        | Pregel.write_to(output=RunnablePassthrough(), between=RunnablePassthrough())
     )
-    chain_two = Pregel.subscribe_to("between") | add_one | Pregel.send_to("output")
+    chain_two = Pregel.subscribe_to("between") | add_one | Pregel.write_to("output")
 
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
@@ -374,7 +374,7 @@ async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> Non
 
 async def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("between")
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.write_to("between")
     chain_two = Pregel.subscribe_to("between") | add_one
 
     app = Pregel(
@@ -417,8 +417,8 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             cleanup_async()
 
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.send_to("inbox")
-    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.send_to("output")
+    chain_one = Pregel.subscribe_to("input") | add_one | Pregel.write_to("inbox")
+    chain_two = Pregel.subscribe_to_each("inbox") | add_one | Pregel.write_to("output")
 
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},

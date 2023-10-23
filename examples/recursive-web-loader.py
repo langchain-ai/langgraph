@@ -92,7 +92,7 @@ def recursive_web_loader(
         )
         # load the url (with sync and async implementations)
         | RunnablePassthrough.assign(body=RunnableLambda(load_url, load_url_async))
-        | Pregel.send_to(
+        | Pregel.write_to(
             # send this url to the visited set
             visited=lambda x: x["url"],
             # send a new document to the documents stream
@@ -114,7 +114,7 @@ def recursive_web_loader(
     return Pregel(
         chains={
             # use the base_url as the first url to visit
-            "input": Pregel.subscribe_to("base_url") | Pregel.send_to("next_urls"),
+            "input": Pregel.subscribe_to("base_url") | Pregel.write_to("next_urls"),
             # add the main chain
             "visitor": visitor,
         },

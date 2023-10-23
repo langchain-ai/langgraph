@@ -115,7 +115,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         return PregelBatch(channel=inbox, key=key)
 
     @classmethod
-    def send_to(
+    def write_to(
         cls,
         *channels: str,
         **kwargs: RunnableLike,

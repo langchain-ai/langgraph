@@ -84,14 +84,14 @@ drafter = (
     # subscribe to question channel as a dict with a single key, "question"
     Pregel.subscribe_to(["question"])
     | drafter_chain
-    | Pregel.send_to("draft")
+    | Pregel.write_to("draft")
 )
 
 editor = (
     # subscribe to draft channel as a dict with a single key, "draft"
     Pregel.subscribe_to(["draft"])
     | editor_chain
-    | Pregel.send_to(
+    | Pregel.write_to(
         # send to "notes" channel if the editor does not accept the draft
         notes=lambda x: x["arguments"]["notes"]
         if x["name"] == "revise"
@@ -104,7 +104,7 @@ reviser = (
     # and join them with the input value (question) and "draft"
     Pregel.subscribe_to(["notes"]).join(["question", "draft"])
     | reviser_chain
-    | Pregel.send_to("draft")
+    | Pregel.write_to("draft")
 )
 
 draft_revise_loop = Pregel(
