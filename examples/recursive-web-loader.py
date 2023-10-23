@@ -1,4 +1,5 @@
-from typing import Callable, FrozenSet, Optional, TypedDict
+from contextlib import asynccontextmanager, contextmanager
+from typing import AsyncGenerator, Callable, FrozenSet, Generator, Optional, TypedDict
 
 import httpx
 from langchain.schema import Document
@@ -8,6 +9,14 @@ from langchain.utils.html import extract_sub_links
 from permchain import Pregel, channels
 
 # Load url with sync httpx client
+
+
+@contextmanager
+def httpx_client() -> Generator[httpx.Client, None, None]:
+    with httpx.HTTPTransport(retries=3) as transport, httpx.Client(
+        transport=transport
+    ) as client:
+        yield client
 
 
 class LoadUrlInput(TypedDict):
@@ -22,6 +31,14 @@ def load_url(input: LoadUrlInput) -> str:
 
 
 # Same as above but with async httpx client
+
+
+@asynccontextmanager
+async def httpx_aclient() -> AsyncGenerator[httpx.AsyncClient, None]:
+    async with httpx.AsyncHTTPTransport(retries=3) as transport, httpx.AsyncClient(
+        transport=transport
+    ) as client:
+        yield client
 
 
 class LoadUrlInputAsync(TypedDict):
@@ -92,7 +109,6 @@ def recursive_web_loader(
                 )
                 if url not in x["visited"] and url != x["url"]
             ],
-            _max_steps=max_depth,
         )
     )
     return Pregel(
@@ -108,17 +124,19 @@ def recursive_web_loader(
             "next_urls": channels.UniqueInbox(str),
             "documents": channels.Stream(Document),
             "visited": channels.Set(str),
-            "client": channels.ContextManager(httpx.Client, httpx.AsyncClient),
+            "client": channels.ContextManager(httpx_client, httpx_aclient),
         },
         # this will accept a string as input
         input="base_url",
         # and return a dict with documents and visited set
         output=["documents", "visited"],
-    )
+        # debug logging
+        debug=True,
+    ).with_config({"recursion_limit": max_depth + 1})
 
 
 loader = recursive_web_loader(max_depth=3)
 
 documents = loader.invoke("https://docs.python.org/3.9/")
 
-print(documents)
+print(len(documents["documents"]))

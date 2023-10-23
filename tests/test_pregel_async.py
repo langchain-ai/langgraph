@@ -3,7 +3,7 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Any, AsyncGenerator, AsyncIterator, Generator
 
 import pytest
-from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
+from langchain.schema.runnable import RunnablePassthrough
 from pytest_mock import MockerFixture
 
 from permchain import Pregel, channels
@@ -25,18 +25,6 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         output="output",
     )
 
-    assert await app.ainvoke(2) == 3
-
-
-async def test_invoke_single_process_in_out_implicit(mocker: MockerFixture) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain = RunnableLambda(add_one)
-
-    app = Pregel(chain, channels={}, chains={})
-
-    # TODO add back when langchain is updated with with_types()
-    # assert app.input_schema.schema() == {"title": "PregelInput", "type": "integer"}
-    # assert app.output_schema.schema() == {"title": "PregelOutput", "type": "integer"}
     assert await app.ainvoke(2) == 3
 
 

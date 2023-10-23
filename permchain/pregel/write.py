@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, Sequence
 
 from langchain.schema.runnable import (
     Runnable,
@@ -9,7 +9,7 @@ from langchain.schema.runnable import (
 )
 from langchain.schema.runnable.utils import ConfigurableFieldSpec
 
-from permchain.pregel.constants import CONFIG_KEY_SEND, CONFIG_KEY_STEP
+from permchain.pregel.constants import CONFIG_KEY_SEND
 
 TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
 
@@ -22,28 +22,17 @@ class PregelSink(RunnableLambda):
     or None to skip writing.
     """
 
-    max_steps: Optional[int]
-
     def __init__(
         self,
         *,
         channels: Sequence[tuple[str, Runnable]],
-        max_steps: Optional[int] = None,
     ):
         super().__init__(func=self._write, afunc=self._awrite)  # type: ignore[arg-type]
         self.channels = channels
-        self.max_steps = max_steps
 
     @property
     def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
         return [
-            ConfigurableFieldSpec(
-                id=CONFIG_KEY_STEP,
-                name=CONFIG_KEY_STEP,
-                description=None,
-                default=None,
-                annotation=int,
-            ),
             ConfigurableFieldSpec(
                 id=CONFIG_KEY_SEND,
                 name=CONFIG_KEY_SEND,
@@ -54,11 +43,6 @@ class PregelSink(RunnableLambda):
         ]
 
     def _write(self, input: Any, config: RunnableConfig) -> None:
-        step: int = config["configurable"][CONFIG_KEY_STEP]
-
-        if self.max_steps is not None and step >= self.max_steps:
-            return
-
         write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
 
         values = [(chan, r.invoke(input, config)) for chan, r in self.channels]
@@ -68,11 +52,6 @@ class PregelSink(RunnableLambda):
         return input
 
     async def _awrite(self, input: Any, config: RunnableConfig) -> None:
-        step: int = config["configurable"][CONFIG_KEY_STEP]
-
-        if self.max_steps is not None and step >= self.max_steps:
-            return
-
         write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
 
         values = [(chan, await r.ainvoke(input, config)) for chan, r in self.channels]
