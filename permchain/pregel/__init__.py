@@ -3,7 +3,17 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
-from typing import Any, AsyncIterator, Iterator, Mapping, Optional, Sequence, Type, cast
+from typing import (
+    Any,
+    AsyncIterator,
+    Iterator,
+    Mapping,
+    Optional,
+    Sequence,
+    Type,
+    cast,
+    overload,
+)
 
 from langchain.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
@@ -96,14 +106,30 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 **{k: (self.channels[k].ValueType, None) for k in self.output},
             )
 
+    @overload
     @classmethod
-    def subscribe_to(cls, channels: str | Sequence[str]) -> PregelInvoke:
+    def subscribe_to(cls, channels: str, key: Optional[str] = None) -> PregelInvoke:
+        ...
+
+    @overload
+    @classmethod
+    def subscribe_to(cls, channels: Sequence[str], key: None = None) -> PregelInvoke:
+        ...
+
+    @classmethod
+    def subscribe_to(
+        cls, channels: str | Sequence[str], key: Optional[str] = None
+    ) -> PregelInvoke:
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
+        if not isinstance(channels, str) and key is not None:
+            raise ValueError(
+                "Can't specify a key when subscribing to multiple channels"
+            )
         return PregelInvoke(
             channels=cast(
                 Mapping[None, str] | Mapping[str, str],
-                {None: channels}
+                {key: channels}
                 if isinstance(channels, str)
                 else {chan: chan for chan in channels},
             )

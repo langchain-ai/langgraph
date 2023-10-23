@@ -6,17 +6,18 @@ import httpx
 import pytest
 from pytest_mock import MockerFixture
 
-import permchain.channels as channels
+import permchain.channels as Channels
+from permchain.channels.base import EmptyChannelError, InvalidUpdateError
 
 
 def test_last_value() -> None:
-    with channels.LastValue(int).empty() as channel:
+    with Channels.LastValue(int).empty() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
-        with pytest.raises(channels.EmptyChannelError):
+        with pytest.raises(EmptyChannelError):
             channel.get()
-        with pytest.raises(channels.InvalidUpdateError):
+        with pytest.raises(InvalidUpdateError):
             channel.update([5, 6])
 
         channel.update([3])
@@ -26,13 +27,13 @@ def test_last_value() -> None:
 
 
 async def test_last_value_async() -> None:
-    async with channels.LastValue(int).aempty() as channel:
+    async with Channels.LastValue(int).aempty() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
-        with pytest.raises(channels.EmptyChannelError):
+        with pytest.raises(EmptyChannelError):
             channel.get()
-        with pytest.raises(channels.InvalidUpdateError):
+        with pytest.raises(InvalidUpdateError):
             channel.update([5, 6])
 
         channel.update([3])
@@ -42,11 +43,11 @@ async def test_last_value_async() -> None:
 
 
 def test_inbox() -> None:
-    with channels.Inbox(str).empty() as channel:
+    with Channels.Inbox(str).empty() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, Sequence[str]]
 
-        with pytest.raises(channels.EmptyChannelError):
+        with pytest.raises(EmptyChannelError):
             channel.get()
 
         channel.update(["a", "b"])
@@ -56,11 +57,11 @@ def test_inbox() -> None:
 
 
 async def test_inbox_async() -> None:
-    async with channels.Inbox(str).aempty() as channel:
+    async with Channels.Inbox(str).aempty() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, Sequence[str]]
 
-        with pytest.raises(channels.EmptyChannelError):
+        with pytest.raises(EmptyChannelError):
             channel.get()
 
         channel.update(["a", "b"])
@@ -71,7 +72,7 @@ async def test_inbox_async() -> None:
 
 
 def test_set() -> None:
-    with channels.Set(str).empty() as channel:
+    with Channels.Set(str).empty() as channel:
         assert channel.ValueType is FrozenSet[str]
         assert channel.UpdateType is str
 
@@ -83,7 +84,7 @@ def test_set() -> None:
 
 
 async def test_set_async() -> None:
-    async with channels.Set(str).aempty() as channel:
+    async with Channels.Set(str).aempty() as channel:
         assert channel.ValueType is FrozenSet[str]
         assert channel.UpdateType is str
 
@@ -95,11 +96,11 @@ async def test_set_async() -> None:
 
 
 def test_binop() -> None:
-    with channels.BinaryOperatorAggregate(int, operator.add).empty() as channel:
+    with Channels.BinaryOperatorAggregate(int, operator.add).empty() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
-        with pytest.raises(channels.EmptyChannelError):
+        with pytest.raises(EmptyChannelError):
             channel.get()
 
         channel.update([1, 2, 3])
@@ -109,11 +110,11 @@ def test_binop() -> None:
 
 
 async def test_binop_async() -> None:
-    async with channels.BinaryOperatorAggregate(int, operator.add).aempty() as channel:
+    async with Channels.BinaryOperatorAggregate(int, operator.add).aempty() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
-        with pytest.raises(channels.EmptyChannelError):
+        with pytest.raises(EmptyChannelError):
             channel.get()
 
         channel.update([1, 2, 3])
@@ -134,17 +135,17 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    with channels.ContextManager(an_int, None, int).empty() as channel:
+    with Channels.ContextManager(an_int, None, int).empty() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 
         assert channel.ValueType is int
-        with pytest.raises(channels.InvalidUpdateError):
+        with pytest.raises(InvalidUpdateError):
             assert channel.UpdateType is None
 
         assert channel.get() == 5
 
-        with pytest.raises(channels.InvalidUpdateError):
+        with pytest.raises(InvalidUpdateError):
             channel.update([5])  # type: ignore
 
     assert setup.call_count == 1
@@ -152,14 +153,14 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
 
 
 def test_ctx_manager_ctx(mocker: MockerFixture) -> None:
-    with channels.ContextManager(httpx.Client).empty() as channel:
+    with Channels.ContextManager(httpx.Client).empty() as channel:
         assert channel.ValueType is httpx.Client
-        with pytest.raises(channels.InvalidUpdateError):
+        with pytest.raises(InvalidUpdateError):
             assert channel.UpdateType is None
 
         assert isinstance(channel.get(), httpx.Client)
 
-        with pytest.raises(channels.InvalidUpdateError):
+        with pytest.raises(InvalidUpdateError):
             channel.update([5])  # type: ignore
 
 
@@ -182,17 +183,17 @@ async def test_ctx_manager_async(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    async with channels.ContextManager(an_int_sync, an_int, int).aempty() as channel:
+    async with Channels.ContextManager(an_int_sync, an_int, int).aempty() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 
         assert channel.ValueType is int
-        with pytest.raises(channels.InvalidUpdateError):
+        with pytest.raises(InvalidUpdateError):
             assert channel.UpdateType is None
 
         assert channel.get() == 5
 
-        with pytest.raises(channels.InvalidUpdateError):
+        with pytest.raises(InvalidUpdateError):
             channel.update([5])  # type: ignore
 
     assert setup.call_count == 1
