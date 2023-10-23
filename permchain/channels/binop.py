@@ -59,4 +59,7 @@ class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
             raise EmptyChannelError()
 
     def checkpoint(self) -> str:
-        return json.dumps(self.value)
+        try:
+            return json.dumps(self.value)
+        except AttributeError:
+            raise EmptyChannelError()

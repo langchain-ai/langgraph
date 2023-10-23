@@ -72,7 +72,7 @@ async def test_inbox_async() -> None:
 
 
 def test_set() -> None:
-    with Channels.Set(str).empty() as channel:
+    with Channels.UniqueArchive(str).empty() as channel:
         assert channel.ValueType is FrozenSet[str]
         assert channel.UpdateType is str
 
@@ -84,7 +84,7 @@ def test_set() -> None:
 
 
 async def test_set_async() -> None:
-    async with Channels.Set(str).aempty() as channel:
+    async with Channels.UniqueArchive(str).aempty() as channel:
         assert channel.ValueType is FrozenSet[str]
         assert channel.UpdateType is str
 

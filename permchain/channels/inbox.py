@@ -1,17 +1,31 @@
 import json
 from contextlib import contextmanager
-from typing import Any, Generator, Generic, Optional, Sequence, Type, Union, cast
+from typing import (
+    Any,
+    FrozenSet,
+    Generator,
+    Generic,
+    Iterator,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+)
 
 from typing_extensions import Self
 
-from permchain.channels.base import (
-    Channel,
-    EmptyChannelError,
-    Value,
-)
+from permchain.channels.base import Channel, EmptyChannelError, Value
 
 
-class Inbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Value]]):
+def flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
+    for value in values:
+        if isinstance(value, list):
+            yield from value
+        else:
+            yield value
+
+
+class Inbox(Generic[Value], Channel[Sequence[Value], Value | list[Value]]):
     """Stores all values received, resets in each step."""
 
     def __init__(self, typ: Type[Value]) -> None:
@@ -40,16 +54,8 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Value]]):
             except AttributeError:
                 pass
 
-    def update(self, values: Sequence[Value | Sequence[Value]]) -> None:
-        self.queue = tuple(
-            cast(Value, v)
-            for value in values
-            for v in (
-                (value,)
-                if isinstance(value, self.typ)
-                else cast(Sequence[Value], value)
-            )
-        )
+    def update(self, values: Sequence[Value | list[Value]]) -> None:
+        self.queue = tuple(flatten(values))
 
     def get(self) -> Sequence[Value]:
         try:
@@ -58,19 +64,22 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Value]]):
             raise EmptyChannelError()
 
     def checkpoint(self) -> str:
-        return json.dumps(self.queue)
+        try:
+            return json.dumps(self.queue)
+        except AttributeError:
+            raise EmptyChannelError()
 
 
-class UniqueInbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Value]]):
+class UniqueInbox(Generic[Value], Channel[FrozenSet[Value], Value | list[Value]]):
     """Stores all unique values received, resets in each step."""
 
     def __init__(self, typ: Type[Value]) -> None:
         self.typ = typ
 
     @property
-    def ValueType(self) -> Type[Sequence[Value]]:
+    def ValueType(self) -> Type[FrozenSet[Value]]:
         """The type of the value stored in the channel."""
-        return Sequence[self.typ]  # type: ignore[name-defined]
+        return FrozenSet[self.typ]  # type: ignore[name-defined]
 
     @property
     def UpdateType(self) -> Any:
@@ -81,7 +90,7 @@ class UniqueInbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Valu
     def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
-            empty.queue = tuple(json.loads(checkpoint))
+            empty.queue = frozenset(json.loads(checkpoint))
         try:
             yield empty
         finally:
@@ -90,24 +99,17 @@ class UniqueInbox(Generic[Value], Channel[Sequence[Value], Value | Sequence[Valu
             except AttributeError:
                 pass
 
-    def update(self, values: Sequence[Value | Sequence[Value]]) -> None:
-        self.queue = tuple(
-            set(
-                cast(Value, v)
-                for value in values
-                for v in (
-                    (value,)
-                    if isinstance(value, self.typ)
-                    else cast(Sequence[Value], value)
-                )
-            )
-        )
+    def update(self, values: Sequence[Value | list[Value]]) -> None:
+        self.queue = frozenset(flatten(values))
 
-    def get(self) -> Sequence[Value]:
+    def get(self) -> FrozenSet[Value]:
         try:
             return self.queue
         except AttributeError:
             raise EmptyChannelError()
 
     def checkpoint(self) -> str:
-        return json.dumps(self.queue)
+        try:
+            return json.dumps(self.queue)
+        except AttributeError:
+            raise EmptyChannelError()

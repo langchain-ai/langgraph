@@ -23,6 +23,18 @@ from permchain.channels.base import (
 
 
 class ContextManager(Generic[Value], Channel[Value, None]):
+    """Exposes the value of a context manager, for the duration of an invocation.
+    Context manager is entered before the first step, and exited after the last step.
+    Optionally, provide an equivalent async context manager, which will be used
+    instead for async invocations.
+
+    ```python
+    import httpx
+
+    client = ContextManager(httpx.Client, httpx.AsyncClient)
+    ```
+    """
+
     value: Value
 
     def __init__(
