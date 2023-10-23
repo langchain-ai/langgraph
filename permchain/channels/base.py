@@ -30,7 +30,7 @@ class InvalidUpdateError(Exception):
     pass
 
 
-class Channel(Generic[Value, Update], ABC):
+class BaseChannel(Generic[Value, Update], ABC):
     @property
     @abstractmethod
     def ValueType(self) -> Any:
@@ -77,8 +77,8 @@ class Channel(Generic[Value, Update], ABC):
 
 @contextmanager
 def ChannelsManager(
-    channels: Mapping[str, Channel]
-) -> Generator[Mapping[str, Channel], None, None]:
+    channels: Mapping[str, BaseChannel]
+) -> Generator[Mapping[str, BaseChannel], None, None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     empty = {k: v.empty() for k, v in channels.items()}
     try:
@@ -90,8 +90,8 @@ def ChannelsManager(
 
 @asynccontextmanager
 async def AsyncChannelsManager(
-    channels: Mapping[str, Channel]
-) -> AsyncGenerator[Mapping[str, Channel], None]:
+    channels: Mapping[str, BaseChannel]
+) -> AsyncGenerator[Mapping[str, BaseChannel], None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     empty = {k: v.aempty() for k, v in channels.items()}
     try:

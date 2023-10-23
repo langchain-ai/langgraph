@@ -15,14 +15,14 @@ from typing import ContextManager as ContextManagerType
 from typing_extensions import Self
 
 from permchain.channels.base import (
-    Channel,
+    BaseChannel,
     EmptyChannelError,
     InvalidUpdateError,
     Value,
 )
 
 
-class ContextManager(Generic[Value], Channel[Value, None]):
+class ContextManager(Generic[Value], BaseChannel[Value, None]):
     """Exposes the value of a context manager, for the duration of an invocation.
     Context manager is entered before the first step, and exited after the last step.
     Optionally, provide an equivalent async context manager, which will be used
@@ -31,7 +31,7 @@ class ContextManager(Generic[Value], Channel[Value, None]):
     ```python
     import httpx
 
-    client = ContextManager(httpx.Client, httpx.AsyncClient)
+    client = Channels.ContextManager(httpx.Client, httpx.AsyncClient)
     ```
     """
 

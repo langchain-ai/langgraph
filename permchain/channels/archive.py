@@ -4,11 +4,11 @@ from typing import Any, FrozenSet, Generator, Generic, Optional, Sequence, Type
 
 from typing_extensions import Self
 
-from permchain.channels.base import Channel, EmptyChannelError, Value
+from permchain.channels.base import BaseChannel, EmptyChannelError, Value
 from permchain.channels.inbox import flatten
 
 
-class Archive(Generic[Value], Channel[Sequence[Value], Value | list[Value]]):
+class Archive(Generic[Value], BaseChannel[Sequence[Value], Value | list[Value]]):
     """Stores all unique values received, persists across steps."""
 
     def __init__(self, typ: Type[Value]) -> None:
@@ -51,7 +51,7 @@ class Archive(Generic[Value], Channel[Sequence[Value], Value | list[Value]]):
             raise EmptyChannelError()
 
 
-class UniqueArchive(Generic[Value], Channel[FrozenSet[Value], Value]):
+class UniqueArchive(Generic[Value], BaseChannel[FrozenSet[Value], Value]):
     """Stores all unique values received, persists across steps."""
 
     def __init__(self, typ: Type[Value]) -> None:

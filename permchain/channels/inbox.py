@@ -14,7 +14,7 @@ from typing import (
 
 from typing_extensions import Self
 
-from permchain.channels.base import Channel, EmptyChannelError, Value
+from permchain.channels.base import BaseChannel, EmptyChannelError, Value
 
 
 def flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
@@ -25,7 +25,7 @@ def flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
             yield value
 
 
-class Inbox(Generic[Value], Channel[Sequence[Value], Value | list[Value]]):
+class Inbox(Generic[Value], BaseChannel[Sequence[Value], Value | list[Value]]):
     """Stores all values received, resets in each step."""
 
     def __init__(self, typ: Type[Value]) -> None:
@@ -70,7 +70,7 @@ class Inbox(Generic[Value], Channel[Sequence[Value], Value | list[Value]]):
             raise EmptyChannelError()
 
 
-class UniqueInbox(Generic[Value], Channel[FrozenSet[Value], Value | list[Value]]):
+class UniqueInbox(Generic[Value], BaseChannel[FrozenSet[Value], Value | list[Value]]):
     """Stores all unique values received, resets in each step."""
 
     def __init__(self, typ: Type[Value]) -> None:

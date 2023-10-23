@@ -4,7 +4,7 @@ from typing import Any, Iterator, Mapping
 from langchain.schema.runnable import Runnable
 from langchain.utils.input import get_bolded_text, get_colored_text
 
-from permchain.channels.base import Channel, EmptyChannelError
+from permchain.channels.base import BaseChannel, EmptyChannelError
 
 
 def print_step_start(step: int, next_tasks: list[tuple[Runnable, Any, str]]) -> None:
@@ -18,7 +18,7 @@ def print_step_start(step: int, next_tasks: list[tuple[Runnable, Any, str]]) -> 
     )
 
 
-def print_checkpoint(step: int, channels: Mapping[str, Channel]) -> None:
+def print_checkpoint(step: int, channels: Mapping[str, BaseChannel]) -> None:
     print(
         f"{get_colored_text('[pregel/checkpoint]', color='blue')} "
         + get_bolded_text(f"Finishing step {step}. Channel values:\n")
@@ -26,7 +26,7 @@ def print_checkpoint(step: int, channels: Mapping[str, Channel]) -> None:
     )
 
 
-def _read_channels(channels: Mapping[str, Channel]) -> Iterator[tuple[str, Any]]:
+def _read_channels(channels: Mapping[str, BaseChannel]) -> Iterator[tuple[str, Any]]:
     for name, channel in channels.items():
         try:
             yield (name, channel.get())

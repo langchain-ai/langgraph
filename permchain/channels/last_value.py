@@ -5,14 +5,14 @@ from typing import Generator, Generic, Optional, Sequence, Type
 from typing_extensions import Self
 
 from permchain.channels.base import (
-    Channel,
+    BaseChannel,
     EmptyChannelError,
     InvalidUpdateError,
     Value,
 )
 
 
-class LastValue(Generic[Value], Channel[Value, Value]):
+class LastValue(Generic[Value], BaseChannel[Value, Value]):
     """Stores the last value received, can receive at most one value per step."""
 
     def __init__(self, typ: Type[Value]) -> None:

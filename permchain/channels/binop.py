@@ -4,16 +4,16 @@ from typing import Callable, Generator, Generic, Optional, Sequence, Type
 
 from typing_extensions import Self
 
-from permchain.channels.base import Channel, EmptyChannelError, Value
+from permchain.channels.base import BaseChannel, EmptyChannelError, Value
 
 
-class BinaryOperatorAggregate(Generic[Value], Channel[Value, Value]):
+class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value]):
     """Stores the result of applying a binary operator to the current value and each new value.
 
     ```python
     import operator
 
-    total = BinaryOperatorAggregate(int, operator.add)
+    total = Channels.BinaryOperatorAggregate(int, operator.add)
     ```
     """
 

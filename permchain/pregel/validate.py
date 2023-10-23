@@ -1,12 +1,12 @@
 from typing import Mapping, Sequence
 
-from permchain.channels.base import Channel
+from permchain.channels.base import BaseChannel
 from permchain.pregel.read import PregelBatch, PregelInvoke
 
 
 def validate_chains_channels(
     chains: Mapping[str, PregelInvoke | PregelBatch],
-    channels: Mapping[str, Channel],
+    channels: Mapping[str, BaseChannel],
     input: str | Sequence[str],
     output: str | Sequence[str],
 ) -> None:

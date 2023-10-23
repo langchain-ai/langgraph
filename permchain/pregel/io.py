@@ -1,6 +1,6 @@
 from typing import Any, Iterator, Mapping, Sequence
 
-from permchain.channels.base import Channel
+from permchain.channels.base import BaseChannel
 from permchain.pregel.log import logger
 
 
@@ -23,7 +23,7 @@ def map_input(
 def map_output(
     output_channels: str | Sequence[str],
     pending_writes: Sequence[tuple[str, Any]],
-    channels: Mapping[str, Channel],
+    channels: Mapping[str, BaseChannel],
 ) -> Iterator[dict[str, Any] | Any]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):

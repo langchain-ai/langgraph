@@ -13,7 +13,7 @@ from langchain.schema.runnable import (
 from langchain.schema.runnable.base import Other, RunnableEach, coerce_to_runnable
 from langchain.schema.runnable.utils import ConfigurableFieldSpec
 
-from permchain.channels.base import Channel
+from permchain.channels.base import BaseChannel
 from permchain.pregel.constants import CONFIG_KEY_READ
 
 
@@ -28,7 +28,7 @@ class PregelRead(RunnableLambda):
                 name=CONFIG_KEY_READ,
                 description=None,
                 default=None,
-                annotation=Callable[[Channel], Any],
+                annotation=Callable[[BaseChannel], Any],
             ),
         ]
 

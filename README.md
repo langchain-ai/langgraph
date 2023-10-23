@@ -4,7 +4,47 @@
 
 `pip install permchain`
 
-## Usage
+## Overview
+
+PermChain is an alpha-stage library for building stateful, multi-actor applications with LLMs. It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation. It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
+
+Some of the use cases are:
+
+- Recursive/iterative LLM chains
+- LLM chains with persistent state/memory
+- LLM agents
+- Multi-agent simulations
+- ...and more!
+
+## How it works
+
+### Channels
+
+Channels are used to communicate between chains. Each channel has a value type, an update type, and an update function – which takes a sequence of updates and modifies the stored value. Channels can be used to send data from one chain to another, or to send data from a chain to itself in a future step. PermChain provides a number of built-in channels:
+
+- `Channels.LastValue`: stores the last value sent to the channel, useful for input values, and single-value outputs
+- `Channels.Inbox`: stores an ephemeral sequence of values sent to the channel, useful for sending data from one chain to another
+- `Channels.UniqueInbox`: same as Inbox, but deduplicates values sent to the channel
+- `Channels.Archive`: stores a persistent sequence of values sent to the channel, useful for accumulating data over multiple steps
+- `Channels.UniqueArchive`: same as Archive, but deduplicates values sent to the channel
+- `Channels.BinaryOperatorAggregate`: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps. eg. `total = Channels.BinaryOperatorAggregate(int, operator.add)`
+- `Channels.ContextManager`: exposes the value of a context manager, managing its lifecycle. Useful for accessing external resources that require setup and/or teardown. eg. `client = Channels.ContextManager(httpx.Client)`
+
+### Chains
+
+Chains are LCEL Runnables which subscribe to one or more channels, and write to one or more channels. Any valid LCEL expression can be used as a chain. Chains can be combined into a Pregel application, which coordinates the execution of the chains across multiple steps.
+
+### Pregel
+
+Pregel combines multiple chains (or actors) into a single application. It coordinates the execution of the chains across multiple steps, following the Pregel/Bulk Synchronous Parallel model. Each step consists of three phases:
+
+- **Plan**: Determine which chains to execute in this step, ie. the chains that subscribe to channels updated in the previous step (or, in the first step, chains that subscribe to input channels)
+- **Execution**: Execute those chains in parallel, until all complete, or one fails, or a timeout is reached. Any channel updates are invisible to other chains until the next step.
+- **Update**: Update the channels with the values written by the chains in this step.
+
+Repeat until no chains are planned for execution, or a maximum number of steps is reached.
+
+## Example
 
 ```python
 from permchain import Channels, Pregel

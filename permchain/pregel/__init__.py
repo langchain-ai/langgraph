@@ -35,7 +35,7 @@ from langchain.schema.runnable.config import (
 
 from permchain.channels.base import (
     AsyncChannelsManager,
-    Channel,
+    BaseChannel,
     ChannelsManager,
     EmptyChannelError,
 )
@@ -49,7 +49,7 @@ from permchain.pregel.write import PregelSink
 
 
 class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
-    channels: Mapping[str, Channel]
+    channels: Mapping[str, BaseChannel]
 
     chains: Mapping[str, PregelInvoke | PregelBatch]
 
@@ -403,7 +403,7 @@ def _interrupt_or_proceed(
 
 def _apply_writes_and_prepare_next_tasks(
     processes: Mapping[str, PregelInvoke | PregelBatch],
-    channels: Mapping[str, Channel],
+    channels: Mapping[str, BaseChannel],
     pending_writes: Sequence[tuple[str, Any]],
 ) -> list[tuple[Runnable, Any, str]]:
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
