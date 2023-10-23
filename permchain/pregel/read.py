@@ -123,7 +123,7 @@ class PregelBatch(RunnableEach):
         if self.key is None:
             raise ValueError(
                 "Cannot join() additional channels without a key."
-                " Pass a key arg to Pregel.subscribe_to_each()."
+                " Pass a key arg to Channel.subscribe_to_each()."
             )
 
         joiner = RunnablePassthrough.assign(

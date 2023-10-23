@@ -1,5 +1,4 @@
-import permchain.channels as Channels
-from permchain.pregel import Pregel
+from permchain.pregel import Channel, Pregel
 from permchain.pregel.read import PregelRead
 
-__all__ = ["Channels", "Pregel", "PregelRead"]
+__all__ = ["Channel", "Pregel", "PregelRead"]

@@ -5,7 +5,8 @@ from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 
-from permchain import Channels, Pregel
+from permchain import Channel, Pregel
+from permchain.channels import LastValue
 
 # prompts
 
@@ -75,23 +76,23 @@ reviser_chain = reviser_prompt | gpt3 | StrOutputParser()
 # application
 
 channels = {
-    "question": Channels.LastValue(str),
-    "draft": Channels.LastValue(str),
-    "notes": Channels.LastValue(str),
+    "question": LastValue(str),
+    "draft": LastValue(str),
+    "notes": LastValue(str),
 }
 
 drafter = (
     # subscribe to question channel as a dict with a single key, "question"
-    Pregel.subscribe_to(["question"])
+    Channel.subscribe_to(["question"])
     | drafter_chain
-    | Pregel.write_to("draft")
+    | Channel.write_to("draft")
 )
 
 editor = (
     # subscribe to draft channel as a dict with a single key, "draft"
-    Pregel.subscribe_to(["draft"])
+    Channel.subscribe_to(["draft"])
     | editor_chain
-    | Pregel.write_to(
+    | Channel.write_to(
         # send to "notes" channel if the editor does not accept the draft
         notes=lambda x: x["arguments"]["notes"]
         if x["name"] == "revise"
@@ -102,9 +103,9 @@ editor = (
 reviser = (
     # subscribe to new values of "notes" channel,
     # and join them with the input value (question) and "draft"
-    Pregel.subscribe_to(["notes"]).join(["question", "draft"])
+    Channel.subscribe_to(["notes"]).join(["question", "draft"])
     | reviser_chain
-    | Pregel.write_to("draft")
+    | Channel.write_to("draft")
 )
 
 draft_revise_loop = Pregel(
