@@ -52,3 +52,7 @@ Check `examples` for more examples.
 - [ ] Fault tolerance
   - [ ] Retry individual processes in a step
   - [ ] Retry entire step?
+- [ ] Pregel.stream_log to contain additional keys specific to Pregel
+  - [ ] tasks: inputs of each chain in each step, keyed by {name}:{step}
+  - [ ] task_results: same as above but outputs
+  - [ ] channels: channel values at end of each step, keyed by {name}:{step}
