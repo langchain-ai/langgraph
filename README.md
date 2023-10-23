@@ -47,17 +47,18 @@ Repeat until no chains are planned for execution, or a maximum number of steps i
 ## Example
 
 ```python
-from permchain import Channels, Pregel
+from permchain import Channel, Pregel
+from permchain.channels import LastValue
 
 grow_value = (
-    Pregel.subscribe_to("value")
+    Channel.subscribe_to("value")
     | (lambda x: x + x)
-    | Pregel.write_to(value=lambda x: x if len(x) < 10 else None)
+    | Channel.write_to(value=lambda x: x if len(x) < 10 else None)
 )
 
 app = Pregel(
     chains={"grow_value": grow_value},
-    channels={"value": Channels.LastValue(str)},
+    channels={"value": LastValue(str)},
     input="value",
     output="value",
 )

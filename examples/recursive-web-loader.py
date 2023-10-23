@@ -6,7 +6,8 @@ from langchain.schema import Document
 from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 from langchain.utils.html import extract_sub_links
 
-from permchain import Channels, Pregel
+from permchain import Channel, Pregel
+from permchain.channels import Archive, Context, LastValue, UniqueArchive, UniqueInbox
 
 # Load url with sync httpx client
 
@@ -84,23 +85,23 @@ def recursive_web_loader(
     metadata_extractor = metadata_extractor or _metadata_extractor
     # define the channels
     channels = {
-        "base_url": Channels.LastValue(str),
-        "next_urls": Channels.UniqueInbox(str),
-        "documents": Channels.Archive(Document),
-        "visited": Channels.UniqueArchive(str),
-        "client": Channels.Context(httpx_client, httpx_aclient),
+        "base_url": LastValue(str),
+        "next_urls": UniqueInbox(str),
+        "documents": Archive(Document),
+        "visited": UniqueArchive(str),
+        "client": Context(httpx_client, httpx_aclient),
     }
     # the main chain that gets executed recursively
     visitor = (
         # while there are urls in next_urls
         # run the chain below for each url in next_urls
         # adding the current values of visited set, base_url and httpx client
-        Pregel.subscribe_to_each("next_urls", key="url").join(
+        Channel.subscribe_to_each("next_urls", key="url").join(
             ["visited", "client", "base_url"]
         )
         # load the url (with sync and async implementations)
         | RunnablePassthrough.assign(body=RunnableLambda(load_url, load_url_async))
-        | Pregel.write_to(
+        | Channel.write_to(
             # send this url to the visited set
             visited=lambda x: x["url"],
             # send a new document to the documents stream
@@ -123,7 +124,7 @@ def recursive_web_loader(
         channels=channels,
         chains={
             # use the base_url as the first url to visit
-            "input": Pregel.subscribe_to("base_url") | Pregel.write_to("next_urls"),
+            "input": Channel.subscribe_to("base_url") | Channel.write_to("next_urls"),
             # add the main chain
             "visitor": visitor,
         },

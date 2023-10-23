@@ -48,6 +48,56 @@ from permchain.pregel.validate import validate_chains_channels
 from permchain.pregel.write import PregelSink
 
 
+class Channel:
+    @overload
+    @classmethod
+    def subscribe_to(cls, channels: str, key: Optional[str] = None) -> PregelInvoke:
+        ...
+
+    @overload
+    @classmethod
+    def subscribe_to(cls, channels: Sequence[str], key: None = None) -> PregelInvoke:
+        ...
+
+    @classmethod
+    def subscribe_to(
+        cls, channels: str | Sequence[str], key: Optional[str] = None
+    ) -> PregelInvoke:
+        """Runs process.invoke() each time channels are updated,
+        with a dict of the channel values as input."""
+        if not isinstance(channels, str) and key is not None:
+            raise ValueError(
+                "Can't specify a key when subscribing to multiple channels"
+            )
+        return PregelInvoke(
+            channels=cast(
+                Mapping[None, str] | Mapping[str, str],
+                {key: channels}
+                if isinstance(channels, str)
+                else {chan: chan for chan in channels},
+            )
+        )
+
+    @classmethod
+    def subscribe_to_each(cls, inbox: str, key: Optional[str] = None) -> PregelBatch:
+        """Runs process.batch() with the content of inbox each time it is updated."""
+        return PregelBatch(channel=inbox, key=key)
+
+    @classmethod
+    def write_to(
+        cls,
+        *channels: str,
+        **kwargs: RunnableLike,
+    ) -> PregelSink:
+        """Writes to channels the result of the lambda, or None to skip writing."""
+        return PregelSink(
+            channels=(
+                [(c, RunnablePassthrough()) for c in channels]
+                + [(k, coerce_to_runnable(v)) for k, v in kwargs.items()]
+            )
+        )
+
+
 class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     channels: Mapping[str, BaseChannel]
 
@@ -105,54 +155,6 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 "PregelOutput",
                 **{k: (self.channels[k].ValueType, None) for k in self.output},
             )
-
-    @overload
-    @classmethod
-    def subscribe_to(cls, channels: str, key: Optional[str] = None) -> PregelInvoke:
-        ...
-
-    @overload
-    @classmethod
-    def subscribe_to(cls, channels: Sequence[str], key: None = None) -> PregelInvoke:
-        ...
-
-    @classmethod
-    def subscribe_to(
-        cls, channels: str | Sequence[str], key: Optional[str] = None
-    ) -> PregelInvoke:
-        """Runs process.invoke() each time channels are updated,
-        with a dict of the channel values as input."""
-        if not isinstance(channels, str) and key is not None:
-            raise ValueError(
-                "Can't specify a key when subscribing to multiple channels"
-            )
-        return PregelInvoke(
-            channels=cast(
-                Mapping[None, str] | Mapping[str, str],
-                {key: channels}
-                if isinstance(channels, str)
-                else {chan: chan for chan in channels},
-            )
-        )
-
-    @classmethod
-    def subscribe_to_each(cls, inbox: str, key: Optional[str] = None) -> PregelBatch:
-        """Runs process.batch() with the content of inbox each time it is updated."""
-        return PregelBatch(channel=inbox, key=key)
-
-    @classmethod
-    def write_to(
-        cls,
-        *channels: str,
-        **kwargs: RunnableLike,
-    ) -> PregelSink:
-        """Writes to channels the result of the lambda, or None to skip writing."""
-        return PregelSink(
-            channels=(
-                [(c, RunnablePassthrough()) for c in channels]
-                + [(k, coerce_to_runnable(v)) for k, v in kwargs.items()]
-            )
-        )
 
     def _transform(
         self,

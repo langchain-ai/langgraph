@@ -6,12 +6,16 @@ import httpx
 import pytest
 from pytest_mock import MockerFixture
 
-import permchain.channels as Channels
+from permchain.channels.archive import UniqueArchive
 from permchain.channels.base import EmptyChannelError, InvalidUpdateError
+from permchain.channels.binop import BinaryOperatorAggregate
+from permchain.channels.context import Context
+from permchain.channels.inbox import Inbox
+from permchain.channels.last_value import LastValue
 
 
 def test_last_value() -> None:
-    with Channels.LastValue(int).empty() as channel:
+    with LastValue(int).empty() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
@@ -27,7 +31,7 @@ def test_last_value() -> None:
 
 
 async def test_last_value_async() -> None:
-    async with Channels.LastValue(int).aempty() as channel:
+    async with LastValue(int).aempty() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
@@ -43,7 +47,7 @@ async def test_last_value_async() -> None:
 
 
 def test_inbox() -> None:
-    with Channels.Inbox(str).empty() as channel:
+    with Inbox(str).empty() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, Sequence[str]]
 
@@ -57,7 +61,7 @@ def test_inbox() -> None:
 
 
 async def test_inbox_async() -> None:
-    async with Channels.Inbox(str).aempty() as channel:
+    async with Inbox(str).aempty() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, Sequence[str]]
 
@@ -72,7 +76,7 @@ async def test_inbox_async() -> None:
 
 
 def test_set() -> None:
-    with Channels.UniqueArchive(str).empty() as channel:
+    with UniqueArchive(str).empty() as channel:
         assert channel.ValueType is FrozenSet[str]
         assert channel.UpdateType is str
 
@@ -84,7 +88,7 @@ def test_set() -> None:
 
 
 async def test_set_async() -> None:
-    async with Channels.UniqueArchive(str).aempty() as channel:
+    async with UniqueArchive(str).aempty() as channel:
         assert channel.ValueType is FrozenSet[str]
         assert channel.UpdateType is str
 
@@ -96,7 +100,7 @@ async def test_set_async() -> None:
 
 
 def test_binop() -> None:
-    with Channels.BinaryOperatorAggregate(int, operator.add).empty() as channel:
+    with BinaryOperatorAggregate(int, operator.add).empty() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
@@ -110,7 +114,7 @@ def test_binop() -> None:
 
 
 async def test_binop_async() -> None:
-    async with Channels.BinaryOperatorAggregate(int, operator.add).aempty() as channel:
+    async with BinaryOperatorAggregate(int, operator.add).aempty() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
@@ -135,7 +139,7 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    with Channels.Context(an_int, None, int).empty() as channel:
+    with Context(an_int, None, int).empty() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 
@@ -153,7 +157,7 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
 
 
 def test_ctx_manager_ctx(mocker: MockerFixture) -> None:
-    with Channels.Context(httpx.Client).empty() as channel:
+    with Context(httpx.Client).empty() as channel:
         assert channel.ValueType is httpx.Client
         with pytest.raises(InvalidUpdateError):
             assert channel.UpdateType is None
@@ -183,7 +187,7 @@ async def test_ctx_manager_async(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    async with Channels.Context(an_int_sync, an_int, int).aempty() as channel:
+    async with Context(an_int_sync, an_int, int).aempty() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 

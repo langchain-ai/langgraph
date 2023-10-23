@@ -18,7 +18,7 @@ def validate_chains_channels(
             subscribed_channels.add(chain.channel)
         else:
             raise TypeError(
-                f"Invalid chain type {type(chain)}, expected Pregel.subscribe_to() or Pregel.subscribe_to_each()"
+                f"Invalid chain type {type(chain)}, expected Channel.subscribe_to() or Channel.subscribe_to_each()"
             )
 
     for chan in subscribed_channels:
