@@ -22,13 +22,13 @@ Some of the use cases are:
 
 Channels are used to communicate between chains. Each channel has a value type, an update type, and an update function – which takes a sequence of updates and modifies the stored value. Channels can be used to send data from one chain to another, or to send data from a chain to itself in a future step. PermChain provides a number of built-in channels:
 
-- `Channels.LastValue`: stores the last value sent to the channel, useful for input values, and single-value outputs
-- `Channels.Inbox`: stores an ephemeral sequence of values sent to the channel, useful for sending data from one chain to another
-- `Channels.UniqueInbox`: same as Inbox, but deduplicates values sent to the channel
-- `Channels.Archive`: stores a persistent sequence of values sent to the channel, useful for accumulating data over multiple steps
-- `Channels.UniqueArchive`: same as Archive, but deduplicates values sent to the channel
-- `Channels.BinaryOperatorAggregate`: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps. eg. `total = Channels.BinaryOperatorAggregate(int, operator.add)`
-- `Channels.Context`: exposes the value of a context manager, managing its lifecycle. Useful for accessing external resources that require setup and/or teardown. eg. `client = Channels.Context(httpx.Client)`
+- `LastValue`: stores the last value sent to the channel, useful for input values, and single-value outputs
+- `Inbox`: stores an ephemeral sequence of values sent to the channel, useful for sending data from one chain to another
+- `UniqueInbox`: same as Inbox, but deduplicates values sent to the channel
+- `Archive`: stores a persistent sequence of values sent to the channel, useful for accumulating data over multiple steps
+- `UniqueArchive`: same as Archive, but deduplicates values sent to the channel
+- `BinaryOperatorAggregate`: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps. eg. `total = BinaryOperatorAggregate(int, operator.add)`
+- `Context`: exposes the value of a context manager, managing its lifecycle. Useful for accessing external resources that require setup and/or teardown. eg. `client = Context(httpx.Client)`
 
 ### Chains
 
