@@ -97,7 +97,8 @@ class Context(Generic[Value], BaseChannel[Value, None]):
                 yield empty
 
     def update(self, values: Sequence[None]) -> None:
-        raise InvalidUpdateError()
+        if values:
+            raise InvalidUpdateError()
 
     def get(self) -> Value:
         try:

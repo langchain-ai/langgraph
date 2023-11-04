@@ -1,17 +1,16 @@
 import operator
 from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncGenerator, FrozenSet, Generator, Sequence, Union
+from typing import AsyncGenerator, Generator, Sequence, Union
 
 import httpx
 import pytest
 from pytest_mock import MockerFixture
 
-from permchain.channels.archive import UniqueArchive
 from permchain.channels.base import EmptyChannelError, InvalidUpdateError
 from permchain.channels.binop import BinaryOperatorAggregate
 from permchain.channels.context import Context
-from permchain.channels.inbox import Inbox
 from permchain.channels.last_value import LastValue
+from permchain.channels.topic import Topic
 
 
 def test_last_value() -> None:
@@ -46,57 +45,108 @@ async def test_last_value_async() -> None:
         assert channel.get() == 4
 
 
-def test_inbox() -> None:
-    with Inbox(str).empty() as channel:
+def test_topic() -> None:
+    with Topic(str).empty() as channel:
         assert channel.ValueType is Sequence[str]
-        assert channel.UpdateType is Union[str, Sequence[str]]
-
-        with pytest.raises(EmptyChannelError):
-            channel.get()
+        assert channel.UpdateType is Union[str, list[str]]
 
         channel.update(["a", "b"])
-        assert channel.get() == ("a", "b")
-        channel.update([["c"], "d"])
-        assert channel.get() == ("c", "d")
+        assert channel.get() == ["a", "b"]
+        channel.update([["c", "d"], "d"])
+        assert channel.get() == ["c", "d", "d"]
+        channel.update([])
+        assert channel.get() == []
 
 
-async def test_inbox_async() -> None:
-    async with Inbox(str).aempty() as channel:
+async def test_topic_async() -> None:
+    async with Topic(str).aempty() as channel:
         assert channel.ValueType is Sequence[str]
-        assert channel.UpdateType is Union[str, Sequence[str]]
-
-        with pytest.raises(EmptyChannelError):
-            channel.get()
+        assert channel.UpdateType is Union[str, list[str]]
 
         channel.update(["a", "b"])
-        assert channel.get() == ("a", "b")
-        channel.update(["c"])
-        channel.update([["c"], "d"])
-        assert channel.get() == ("c", "d")
+        assert channel.get() == ["a", "b"]
+        channel.update(["b", ["c", "d"], "d"])
+        assert channel.get() == ["b", "c", "d", "d"]
+        channel.update([])
+        assert channel.get() == []
 
 
-def test_set() -> None:
-    with UniqueArchive(str).empty() as channel:
-        assert channel.ValueType is FrozenSet[str]
-        assert channel.UpdateType is str
+def test_topic_unique() -> None:
+    with Topic(str, unique=True).empty() as channel:
+        assert channel.ValueType is Sequence[str]
+        assert channel.UpdateType is Union[str, list[str]]
 
-        assert channel.get() == frozenset()
         channel.update(["a", "b"])
-        assert channel.get() == frozenset(("a", "b"))
-        channel.update(["b", "c"])
-        assert channel.get() == frozenset(("a", "b", "c"))
+        assert channel.get() == ["a", "b"]
+        channel.update(["b", ["c", "d"], "d"])
+        assert channel.get() == ["c", "d"], "de-dupes from current and previous steps"
+        channel.update([])
+        assert channel.get() == []
 
 
-async def test_set_async() -> None:
-    async with UniqueArchive(str).aempty() as channel:
-        assert channel.ValueType is FrozenSet[str]
-        assert channel.UpdateType is str
+async def test_topic_unique_async() -> None:
+    async with Topic(str, unique=True).aempty() as channel:
+        assert channel.ValueType is Sequence[str]
+        assert channel.UpdateType is Union[str, list[str]]
 
-        assert channel.get() == frozenset()
         channel.update(["a", "b"])
-        assert channel.get() == frozenset(("a", "b"))
-        channel.update(["b", "c"])
-        assert channel.get() == frozenset(("a", "b", "c"))
+        assert channel.get() == ["a", "b"]
+        channel.update(["b", ["c", "d"], "d"])
+        assert channel.get() == ["c", "d"], "de-dupes from current and previous steps"
+        channel.update([])
+        assert channel.get() == []
+
+
+def test_topic_accumulate() -> None:
+    with Topic(str, accumulate=True).empty() as channel:
+        assert channel.ValueType is Sequence[str]
+        assert channel.UpdateType is Union[str, list[str]]
+
+        channel.update(["a", "b"])
+        assert channel.get() == ["a", "b"]
+        channel.update(["b", ["c", "d"], "d"])
+        assert channel.get() == ["a", "b", "b", "c", "d", "d"]
+        channel.update([])
+        assert channel.get() == ["a", "b", "b", "c", "d", "d"]
+
+
+async def test_topic_accumulate_async() -> None:
+    async with Topic(str, accumulate=True).aempty() as channel:
+        assert channel.ValueType is Sequence[str]
+        assert channel.UpdateType is Union[str, list[str]]
+
+        channel.update(["a", "b"])
+        assert channel.get() == ["a", "b"]
+        channel.update(["b", ["c", "d"], "d"])
+        assert channel.get() == ["a", "b", "b", "c", "d", "d"]
+        channel.update([])
+        assert channel.get() == ["a", "b", "b", "c", "d", "d"]
+
+
+def test_topic_unique_accumulate() -> None:
+    with Topic(str, unique=True, accumulate=True).empty() as channel:
+        assert channel.ValueType is Sequence[str]
+        assert channel.UpdateType is Union[str, list[str]]
+
+        channel.update(["a", "b"])
+        assert channel.get() == ["a", "b"]
+        channel.update(["b", ["c", "d"], "d"])
+        assert channel.get() == ["a", "b", "c", "d"]
+        channel.update([])
+        assert channel.get() == ["a", "b", "c", "d"]
+
+
+async def test_topic_unique_accumulate_async() -> None:
+    async with Topic(str, unique=True, accumulate=True).aempty() as channel:
+        assert channel.ValueType is Sequence[str]
+        assert channel.UpdateType is Union[str, list[str]]
+
+        channel.update(["a", "b"])
+        assert channel.get() == ["a", "b"]
+        channel.update(["b", ["c", "d"], "d"])
+        assert channel.get() == ["a", "b", "c", "d"]
+        channel.update([])
+        assert channel.get() == ["a", "b", "c", "d"]
 
 
 def test_binop() -> None:

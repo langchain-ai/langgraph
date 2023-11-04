@@ -99,13 +99,13 @@ class Channel:
 
 
 class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
-    channels: Mapping[str, BaseChannel]
-
     chains: Mapping[str, ChannelInvoke | ChannelBatch]
 
-    output: str | Sequence[str]
+    channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
 
-    input: str | Sequence[str]
+    output: str | Sequence[str] = "output"
+
+    input: str | Sequence[str] = "input"
 
     step_timeout: Optional[float] = None
 
@@ -421,6 +421,10 @@ def _apply_writes_and_prepare_next_tasks(
             updated_channels.add(chan)
         else:
             logger.warning(f"Skipping write for channel {chan} which has no readers")
+    # Channels that weren't updated in this step are notified of a new step
+    for chan in channels:
+        if chan not in updated_channels:
+            channels[chan].update([])
 
     tasks: list[tuple[Runnable, Any, str]] = []
     # Check if any processes should be run in next step

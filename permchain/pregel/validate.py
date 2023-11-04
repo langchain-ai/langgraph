@@ -1,6 +1,7 @@
-from typing import Mapping, Sequence
+from typing import Any, Mapping, Sequence
 
 from permchain.channels.base import BaseChannel
+from permchain.channels.last_value import LastValue
 from permchain.pregel.read import ChannelBatch, ChannelInvoke
 
 
@@ -23,7 +24,7 @@ def validate_chains_channels(
 
     for chan in subscribed_channels:
         if chan not in channels:
-            raise ValueError(f"Channel {chan} is subscribed to, but not initialized")
+            channels[chan] = LastValue(Any)
 
     if isinstance(input, str):
         if input not in subscribed_channels:
@@ -36,8 +37,8 @@ def validate_chains_channels(
 
     if isinstance(output, str):
         if output not in channels:
-            raise ValueError(f"Output channel {output} is not initialized")
+            channels[output] = LastValue(Any)
     else:
         for chan in output:
             if chan not in channels:
-                raise ValueError(f"Output channel {chan} is not initialized")
+                channels[chan] = LastValue(Any)

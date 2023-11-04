@@ -45,6 +45,8 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value]):
                 pass
 
     def update(self, values: Sequence[Value]) -> None:
+        if not values:
+            return
         if not hasattr(self, "value"):
             self.value = values[0]
             values = values[1:]

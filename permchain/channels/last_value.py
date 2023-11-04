@@ -42,6 +42,8 @@ class LastValue(Generic[Value], BaseChannel[Value, Value]):
                 pass
 
     def update(self, values: Sequence[Value]) -> None:
+        if len(values) == 0:
+            return
         if len(values) != 1:
             raise InvalidUpdateError()
 

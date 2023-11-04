@@ -1,5 +1,4 @@
 from permchain import Channel, Pregel
-from permchain.channels import LastValue
 
 grow_value = (
     Channel.subscribe_to("value")
@@ -9,7 +8,6 @@ grow_value = (
 
 app = Pregel(
     chains={"grow_value": grow_value},
-    channels={"value": LastValue(str)},
     input="value",
     output="value",
 )
