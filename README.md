@@ -22,13 +22,15 @@ Some of the use cases are:
 
 Channels are used to communicate between chains. Each channel has a value type, an update type, and an update function – which takes a sequence of updates and modifies the stored value. Channels can be used to send data from one chain to another, or to send data from a chain to itself in a future step. PermChain provides a number of built-in channels:
 
-- `LastValue`: stores the last value sent to the channel, useful for input values, and single-value outputs
-- `Inbox`: stores an ephemeral sequence of values sent to the channel, useful for sending data from one chain to another
-- `UniqueInbox`: same as Inbox, but deduplicates values sent to the channel
-- `Archive`: stores a persistent sequence of values sent to the channel, useful for accumulating data over multiple steps
-- `UniqueArchive`: same as Archive, but deduplicates values sent to the channel
-- `BinaryOperatorAggregate`: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps. eg. `total = BinaryOperatorAggregate(int, operator.add)`
+#### Basic channels: LastValue and Topic
+
+- `LastValue`: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next
+- `Topic`: A configurable PubSub Topic, useful for sending multiple values between chains, or for accumulating output. Can be configured to deduplicate values, and/or to accummulate values over the course of multiple steps.
+
+#### Advanced channels: Context and BinaryOperatorAggregate
+
 - `Context`: exposes the value of a context manager, managing its lifecycle. Useful for accessing external resources that require setup and/or teardown. eg. `client = Context(httpx.Client)`
+- `BinaryOperatorAggregate`: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps. eg. `total = BinaryOperatorAggregate(int, operator.add)`
 
 ### Chains
 
@@ -48,7 +50,6 @@ Repeat until no chains are planned for execution, or a maximum number of steps i
 
 ```python
 from permchain import Channel, Pregel
-from permchain.channels import LastValue
 
 grow_value = (
     Channel.subscribe_to("value")
@@ -58,13 +59,11 @@ grow_value = (
 
 app = Pregel(
     chains={"grow_value": grow_value},
-    channels={"value": LastValue(str)},
     input="value",
     output="value",
 )
 
 assert app.invoke("a") == "aaaaaaaa"
-
 ```
 
 Check `examples` for more examples.

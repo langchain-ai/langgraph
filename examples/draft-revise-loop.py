@@ -75,12 +75,6 @@ reviser_chain = reviser_prompt | gpt3 | StrOutputParser()
 
 # application
 
-channels = {
-    "question": LastValue(str),
-    "draft": LastValue(str),
-    "notes": LastValue(str),
-}
-
 drafter = (
     # subscribe to question channel as a dict with a single key, "question"
     Channel.subscribe_to(["question"]) | drafter_chain | Channel.write_to("draft")
@@ -105,7 +99,6 @@ reviser = (
 )
 
 draft_revise_loop = Pregel(
-    channels=channels,
     chains={
         "drafter": drafter,
         "editor": editor,
@@ -113,27 +106,12 @@ draft_revise_loop = Pregel(
     },
     # input will be a dict with a single key, "question"
     input=["question"],
-    # output will be a dict with keys "draft" and "notes"
-    output=["draft", "notes"],
+    # output will be the value of "draft"
+    output="draft",
     # debug logging
     debug=True,
 )
 
 # run
 
-for draft in draft_revise_loop.stream({"question": "What food do turtles eat?"}):
-    print(draft)
-    print("---")
-
-
-async def main():
-    async for draft in draft_revise_loop.astream(
-        {"question": "What food do turtles eat?"}
-    ):
-        print(draft)
-        print("---")
-
-
-# import asyncio
-
-# asyncio.run(main())
+print(draft_revise_loop.invoke({"question": "What food do turtles eat?"}))

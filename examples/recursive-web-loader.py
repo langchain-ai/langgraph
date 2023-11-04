@@ -7,7 +7,8 @@ from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
 from langchain.utils.html import extract_sub_links
 
 from permchain import Channel, Pregel
-from permchain.channels import Archive, Context, LastValue, UniqueArchive, UniqueInbox
+from permchain.channels.context import Context
+from permchain.channels.topic import Topic
 
 # Load url with sync httpx client
 
@@ -85,39 +86,28 @@ def recursive_web_loader(
     metadata_extractor = metadata_extractor or _metadata_extractor
     # define the channels
     channels = {
-        "base_url": LastValue(str),
-        "next_urls": UniqueInbox(str),
-        "documents": Archive(Document),
-        "visited": UniqueArchive(str),
+        "next_urls": Topic(str, unique=True),
+        "documents": Topic(Document, accumulate=True),
         "client": Context(httpx_client, httpx_aclient),
     }
     # the main chain that gets executed recursively
+    # while there are urls in next_urls
     visitor = (
-        # while there are urls in next_urls
         # run the chain below for each url in next_urls
-        # adding the current values of visited set, base_url and httpx client
-        Channel.subscribe_to_each("next_urls", key="url").join(
-            ["visited", "client", "base_url"]
-        )
+        # adding the current values of base_url and httpx client
+        Channel.subscribe_to_each("next_urls", key="url").join(["client", "base_url"])
         # load the url (with sync and async implementations)
         | RunnablePassthrough.assign(body=RunnableLambda(load_url, load_url_async))
         | Channel.write_to(
-            # send this url to the visited set
-            visited=lambda x: x["url"],
             # send a new document to the documents stream
             documents=lambda x: Document(
                 page_content=extractor(x["body"]),
                 metadata=metadata_extractor(x["body"], x["url"]),
             ),
-            # send the next urls to the next_urls set
-            # only if not visited already
-            next_urls=lambda x: [
-                url
-                for url in extract_sub_links(
-                    x["body"], x["url"], base_url=x["base_url"]
-                )
-                if url not in x["visited"] and url != x["url"]
-            ],
+            # send the next urls to the next_urls topic
+            next_urls=lambda x: extract_sub_links(
+                x["body"], x["url"], base_url=x["base_url"]
+            ),
         )
     )
     return Pregel(
