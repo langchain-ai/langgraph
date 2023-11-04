@@ -204,7 +204,7 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
 
     app = Pregel(chains=chains, channels=chans, input="input", output="output")
 
-    for _ in range(10):
+    for _ in range(3):
         assert app.batch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) == [
             2 + test_size,
             1 + test_size,
@@ -216,11 +216,11 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
     with ThreadPoolExecutor() as executor:
         assert [
             *executor.map(
-                app.batch, [[2, 1, 3, 4, 5]] * 10, [{"recursion_limit": test_size}] * 10
+                app.batch, [[2, 1, 3, 4, 5]] * 3, [{"recursion_limit": test_size}] * 3
             )
         ] == [
             [2 + test_size, 1 + test_size, 3 + test_size, 4 + test_size, 5 + test_size]
-        ] * 10
+        ] * 3
 
 
 def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> None:

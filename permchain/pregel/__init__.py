@@ -43,33 +43,33 @@ from permchain.pregel.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
 from permchain.pregel.debug import print_checkpoint, print_step_start
 from permchain.pregel.io import map_input, map_output
 from permchain.pregel.log import logger
-from permchain.pregel.read import PregelBatch, PregelInvoke
+from permchain.pregel.read import ChannelBatch, ChannelInvoke
 from permchain.pregel.validate import validate_chains_channels
-from permchain.pregel.write import PregelSink
+from permchain.pregel.write import ChannelWrite
 
 
 class Channel:
     @overload
     @classmethod
-    def subscribe_to(cls, channels: str, key: Optional[str] = None) -> PregelInvoke:
+    def subscribe_to(cls, channels: str, key: Optional[str] = None) -> ChannelInvoke:
         ...
 
     @overload
     @classmethod
-    def subscribe_to(cls, channels: Sequence[str], key: None = None) -> PregelInvoke:
+    def subscribe_to(cls, channels: Sequence[str], key: None = None) -> ChannelInvoke:
         ...
 
     @classmethod
     def subscribe_to(
         cls, channels: str | Sequence[str], key: Optional[str] = None
-    ) -> PregelInvoke:
+    ) -> ChannelInvoke:
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
         if not isinstance(channels, str) and key is not None:
             raise ValueError(
                 "Can't specify a key when subscribing to multiple channels"
             )
-        return PregelInvoke(
+        return ChannelInvoke(
             channels=cast(
                 Mapping[None, str] | Mapping[str, str],
                 {key: channels}
@@ -79,18 +79,18 @@ class Channel:
         )
 
     @classmethod
-    def subscribe_to_each(cls, inbox: str, key: Optional[str] = None) -> PregelBatch:
+    def subscribe_to_each(cls, inbox: str, key: Optional[str] = None) -> ChannelBatch:
         """Runs process.batch() with the content of inbox each time it is updated."""
-        return PregelBatch(channel=inbox, key=key)
+        return ChannelBatch(channel=inbox, key=key)
 
     @classmethod
     def write_to(
         cls,
         *channels: str,
         **kwargs: RunnableLike,
-    ) -> PregelSink:
+    ) -> ChannelWrite:
         """Writes to channels the result of the lambda, or None to skip writing."""
-        return PregelSink(
+        return ChannelWrite(
             channels=(
                 [(c, RunnablePassthrough()) for c in channels]
                 + [(k, coerce_to_runnable(v)) for k, v in kwargs.items()]
@@ -101,7 +101,7 @@ class Channel:
 class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     channels: Mapping[str, BaseChannel]
 
-    chains: Mapping[str, PregelInvoke | PregelBatch]
+    chains: Mapping[str, ChannelInvoke | ChannelBatch]
 
     output: str | Sequence[str]
 
@@ -404,7 +404,7 @@ def _interrupt_or_proceed(
 
 
 def _apply_writes_and_prepare_next_tasks(
-    processes: Mapping[str, PregelInvoke | PregelBatch],
+    processes: Mapping[str, ChannelInvoke | ChannelBatch],
     channels: Mapping[str, BaseChannel],
     pending_writes: Sequence[tuple[str, Any]],
 ) -> list[tuple[Runnable, Any, str]]:
@@ -426,7 +426,7 @@ def _apply_writes_and_prepare_next_tasks(
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
-        if isinstance(proc, PregelInvoke):
+        if isinstance(proc, ChannelInvoke):
             # If any of the channels read by this process were updated
             if any(chan in updated_channels for chan in proc.channels.values()):
                 # If all channels read by this process have been initialized
@@ -441,7 +441,7 @@ def _apply_writes_and_prepare_next_tasks(
                     tasks.append((proc, val[None], name))
                 else:
                     tasks.append((proc, val, name))
-        elif isinstance(proc, PregelBatch):
+        elif isinstance(proc, ChannelBatch):
             # If the channel read by this process was updated
             if proc.channel in updated_channels:
                 # Here we don't catch EmptyChannelError because the channel

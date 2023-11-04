@@ -1,20 +1,20 @@
 from typing import Mapping, Sequence
 
 from permchain.channels.base import BaseChannel
-from permchain.pregel.read import PregelBatch, PregelInvoke
+from permchain.pregel.read import ChannelBatch, ChannelInvoke
 
 
 def validate_chains_channels(
-    chains: Mapping[str, PregelInvoke | PregelBatch],
+    chains: Mapping[str, ChannelInvoke | ChannelBatch],
     channels: Mapping[str, BaseChannel],
     input: str | Sequence[str],
     output: str | Sequence[str],
 ) -> None:
     subscribed_channels = set[str]()
     for chain in chains.values():
-        if isinstance(chain, PregelInvoke):
+        if isinstance(chain, ChannelInvoke):
             subscribed_channels.update(chain.channels.values())
-        elif isinstance(chain, PregelBatch):
+        elif isinstance(chain, ChannelBatch):
             subscribed_channels.add(chain.channel)
         else:
             raise TypeError(

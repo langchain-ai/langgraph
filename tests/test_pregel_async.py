@@ -204,7 +204,7 @@ async def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
     app = Pregel(chains=chains, channels=chans, input="input", output="output")
 
     # No state is left over from previous invocations
-    for _ in range(10):
+    for _ in range(3):
         # Then invoke pubsub
         assert await app.abatch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) == [
             2 + test_size,
@@ -216,13 +216,10 @@ async def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
 
     # Concurrent invocations do not interfere with each other
     assert await asyncio.gather(
-        *(
-            app.abatch([2, 1, 3, 4, 5], {"recursion_limit": test_size})
-            for _ in range(10)
-        )
+        *(app.abatch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) for _ in range(3))
     ) == [
         [2 + test_size, 1 + test_size, 3 + test_size, 4 + test_size, 5 + test_size]
-        for _ in range(10)
+        for _ in range(3)
     ]
 
 

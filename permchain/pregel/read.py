@@ -17,7 +17,7 @@ from permchain.channels.base import BaseChannel
 from permchain.pregel.constants import CONFIG_KEY_READ
 
 
-class PregelRead(RunnableLambda):
+class ChannelRead(RunnableLambda):
     channel: str
 
     @property
@@ -33,8 +33,7 @@ class PregelRead(RunnableLambda):
         ]
 
     def __init__(self, channel: str) -> None:
-        # TODO remove type ignore after updating langchain
-        super().__init__(func=self._read, afunc=self._aread)  # type: ignore[arg-type]
+        super().__init__(func=self._read, afunc=self._aread)
         self.channel = channel
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
@@ -58,7 +57,7 @@ class PregelRead(RunnableLambda):
         return read(self.channel)
 
 
-class PregelInvoke(RunnableBinding):
+class ChannelInvoke(RunnableBinding):
     channels: Mapping[None, str] | Mapping[str, str]
 
     bound: Runnable[Any, Any] = Field(default_factory=RunnablePassthrough)
@@ -82,26 +81,28 @@ class PregelInvoke(RunnableBinding):
             **other_kwargs,
         )
 
-    def join(self, channels: Sequence[str]) -> PregelInvoke:
+    def join(self, channels: Sequence[str]) -> ChannelInvoke:
         joiner = RunnablePassthrough.assign(
-            **{chan: PregelRead(chan) for chan in channels}
+            **{chan: ChannelRead(chan) for chan in channels}
         )
         if isinstance(self.bound, RunnablePassthrough):
-            return PregelInvoke(channels=self.channels, bound=joiner)
+            return ChannelInvoke(channels=self.channels, bound=joiner)
         else:
-            return PregelInvoke(channels=self.channels, bound=self.bound | joiner)
+            return ChannelInvoke(channels=self.channels, bound=self.bound | joiner)
 
     def __or__(
         self,
         other: Runnable[Any, Other]
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
-    ) -> PregelInvoke:
+    ) -> ChannelInvoke:
         if isinstance(self.bound, RunnablePassthrough):
-            return PregelInvoke(channels=self.channels, bound=coerce_to_runnable(other))
+            return ChannelInvoke(
+                channels=self.channels, bound=coerce_to_runnable(other)
+            )
         else:
             # delegate to __or__ in self.bound
-            return PregelInvoke(channels=self.channels, bound=self.bound | other)
+            return ChannelInvoke(channels=self.channels, bound=self.bound | other)
 
     def __ror__(
         self,
@@ -112,14 +113,14 @@ class PregelInvoke(RunnableBinding):
         raise NotImplementedError()
 
 
-class PregelBatch(RunnableEach):
+class ChannelBatch(RunnableEach):
     channel: str
 
     key: Optional[str]
 
     bound: Runnable[Any, Any] = Field(default_factory=RunnablePassthrough)
 
-    def join(self, channels: Sequence[str]) -> PregelBatch:
+    def join(self, channels: Sequence[str]) -> ChannelBatch:
         if self.key is None:
             raise ValueError(
                 "Cannot join() additional channels without a key."
@@ -127,12 +128,12 @@ class PregelBatch(RunnableEach):
             )
 
         joiner = RunnablePassthrough.assign(
-            **{chan: PregelRead(chan) for chan in channels}
+            **{chan: ChannelRead(chan) for chan in channels}
         )
         if isinstance(self.bound, RunnablePassthrough):
-            return PregelBatch(channel=self.channel, key=self.key, bound=joiner)
+            return ChannelBatch(channel=self.channel, key=self.key, bound=joiner)
         else:
-            return PregelBatch(
+            return ChannelBatch(
                 channel=self.channel, key=self.key, bound=self.bound | joiner
             )
 
@@ -141,14 +142,14 @@ class PregelBatch(RunnableEach):
         other: Runnable[Any, Other]
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
-    ) -> PregelBatch:
+    ) -> ChannelBatch:
         if isinstance(self.bound, RunnablePassthrough):
-            return PregelBatch(
+            return ChannelBatch(
                 channel=self.channel, key=self.key, bound=coerce_to_runnable(other)
             )
         else:
             # delegate to __or__ in self.bound
-            return PregelBatch(
+            return ChannelBatch(
                 channel=self.channel, key=self.key, bound=self.bound | other
             )
 

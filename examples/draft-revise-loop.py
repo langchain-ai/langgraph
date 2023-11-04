@@ -83,9 +83,7 @@ channels = {
 
 drafter = (
     # subscribe to question channel as a dict with a single key, "question"
-    Channel.subscribe_to(["question"])
-    | drafter_chain
-    | Channel.write_to("draft")
+    Channel.subscribe_to(["question"]) | drafter_chain | Channel.write_to("draft")
 )
 
 editor = (
@@ -94,9 +92,7 @@ editor = (
     | editor_chain
     | Channel.write_to(
         # send to "notes" channel if the editor does not accept the draft
-        notes=lambda x: x["arguments"]["notes"]
-        if x["name"] == "revise"
-        else None
+        notes=lambda x: x["arguments"]["notes"] if x["name"] == "revise" else None
     )
 )
 
