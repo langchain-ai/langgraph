@@ -25,8 +25,7 @@ syrupy = "^4.0.2"
 pytest-watch = "^4.2.0"
 
 [tool.poetry.group.lint.dependencies]
-ruff = "^0.0.249"
-black = {extras = ["jupyter"], version = "^23.7.0"}
+ruff = "^0.1.4"
 
 [tool.poetry.group.typing.dependencies]
 mypy = "^1.6.0"
