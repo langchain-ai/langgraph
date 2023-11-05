@@ -87,6 +87,7 @@ Check `examples` for more examples.
   - [ ] Load checkpoint at start of invocation
   - [ ] API to specify storage backend and save key
 - [ ] Add more examples
+  - [ ] multi agent simulation
   - [ ] human in the loop
   - [ ] combine documents
   - [ ] agent executor (add current v total iterations info to read/write steps to enable doing a final update at the end)
