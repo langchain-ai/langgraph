@@ -81,13 +81,14 @@ Check `examples` for more examples.
   - [ ] Add tests for subscribe_to_each().join()
 - [x] Add optional debug logging
 - [ ] Implement checkpointing
+  - [ ] Use langchain.load dumps loads functions
   - [ ] Save checkpoints at end of each step
   - [ ] Load checkpoint at start of invocation
   - [ ] API to specify storage backend and save key
 - [ ] Add more examples
   - [ ] human in the loop
   - [ ] combine documents
-  - [ ] agent executor
+  - [ ] agent executor (add current v total iterations info to read/write steps to enable doing a final update at the end)
   - [ ] run over dataset
 - [ ] Fault tolerance
   - [ ] Retry individual processes in a step
