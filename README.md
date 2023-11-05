@@ -80,6 +80,7 @@ Check `examples` for more examples.
   - [x] Add tests for Stream, UniqueInbox
   - [ ] Add tests for subscribe_to_each().join()
 - [x] Add optional debug logging
+- [ ] Add an optional Diff value for Channels that implements __add__, returned by update(), yielded by Pregel for output channels. Add replacing_keys set to AddableDict. use an addabledict for yielding values. channels that dont implement it get marked with replacing_keys
 - [ ] Implement checkpointing
   - [ ] Use langchain.load dumps loads functions
   - [ ] Save checkpoints at end of each step
