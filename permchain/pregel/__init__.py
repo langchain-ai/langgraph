@@ -194,7 +194,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 # execute tasks, and wait for one to fail or all to finish.
                 # each task is independent from all other concurrent tasks
                 done, inflight = concurrent.futures.wait(
-                    (
+                    [
                         executor.submit(
                             proc.invoke,
                             input,
@@ -209,7 +209,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                             ),
                         )
                         for proc, input, _ in next_tasks
-                    ),
+                    ],
                     return_when=concurrent.futures.FIRST_EXCEPTION,
                     timeout=self.step_timeout,
                 )
