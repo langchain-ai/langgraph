@@ -85,7 +85,7 @@ class ChannelInvoke(RunnableBinding):
         joiner = RunnablePassthrough.assign(
             **{chan: ChannelRead(chan) for chan in channels}
         )
-        if isinstance(self.bound, RunnablePassthrough):
+        if type(self.bound) is RunnablePassthrough:
             return ChannelInvoke(channels=self.channels, bound=joiner)
         else:
             return ChannelInvoke(channels=self.channels, bound=self.bound | joiner)
@@ -96,7 +96,7 @@ class ChannelInvoke(RunnableBinding):
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
     ) -> ChannelInvoke:
-        if isinstance(self.bound, RunnablePassthrough):
+        if type(self.bound) is RunnablePassthrough:
             return ChannelInvoke(
                 channels=self.channels, bound=coerce_to_runnable(other)
             )
