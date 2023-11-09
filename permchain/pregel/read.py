@@ -57,10 +57,13 @@ class ChannelRead(RunnableLambda):
         return read(self.channel)
 
 
+default_bound = RunnablePassthrough()
+
+
 class ChannelInvoke(RunnableBinding):
     channels: Mapping[None, str] | Mapping[str, str]
 
-    bound: Runnable[Any, Any] = Field(default_factory=RunnablePassthrough)
+    bound: Runnable[Any, Any] = Field(default=default_bound)
 
     kwargs: Mapping[str, Any] = Field(default_factory=dict)
 
@@ -75,7 +78,7 @@ class ChannelInvoke(RunnableBinding):
     ) -> None:
         super().__init__(
             channels=channels,
-            bound=bound or RunnablePassthrough(),
+            bound=bound or default_bound,
             kwargs=kwargs or {},
             config=config,
             **other_kwargs,
@@ -85,7 +88,7 @@ class ChannelInvoke(RunnableBinding):
         joiner = RunnablePassthrough.assign(
             **{chan: ChannelRead(chan) for chan in channels}
         )
-        if type(self.bound) is RunnablePassthrough:
+        if self.bound is default_bound:
             return ChannelInvoke(channels=self.channels, bound=joiner)
         else:
             return ChannelInvoke(channels=self.channels, bound=self.bound | joiner)
@@ -96,7 +99,7 @@ class ChannelInvoke(RunnableBinding):
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
     ) -> ChannelInvoke:
-        if type(self.bound) is RunnablePassthrough:
+        if self.bound is default_bound:
             return ChannelInvoke(
                 channels=self.channels, bound=coerce_to_runnable(other)
             )
@@ -118,7 +121,7 @@ class ChannelBatch(RunnableEach):
 
     key: Optional[str]
 
-    bound: Runnable[Any, Any] = Field(default_factory=RunnablePassthrough)
+    bound: Runnable[Any, Any] = Field(default=default_bound)
 
     def join(self, channels: Sequence[str]) -> ChannelBatch:
         if self.key is None:
@@ -130,7 +133,7 @@ class ChannelBatch(RunnableEach):
         joiner = RunnablePassthrough.assign(
             **{chan: ChannelRead(chan) for chan in channels}
         )
-        if isinstance(self.bound, RunnablePassthrough):
+        if self.bound is default_bound:
             return ChannelBatch(channel=self.channel, key=self.key, bound=joiner)
         else:
             return ChannelBatch(
@@ -143,7 +146,7 @@ class ChannelBatch(RunnableEach):
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
     ) -> ChannelBatch:
-        if isinstance(self.bound, RunnablePassthrough):
+        if self.bound is default_bound:
             return ChannelBatch(
                 channel=self.channel, key=self.key, bound=coerce_to_runnable(other)
             )
