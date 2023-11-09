@@ -44,15 +44,16 @@ class ChannelWrite(RunnablePassthrough):
         ]
 
     def _write(self, input: Any, config: RunnableConfig) -> None:
-        write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
-
         values = [(chan, r.invoke(input, config)) for chan, r in self.channels]
 
-        write([(chan, val) for chan, val in values if val is not None])
+        self.do_write(config, **dict(values))
 
     async def _awrite(self, input: Any, config: RunnableConfig) -> None:
-        write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
-
         values = [(chan, await r.ainvoke(input, config)) for chan, r in self.channels]
 
-        write([(chan, val) for chan, val in values if val is not None])
+        self.do_write(config, **dict(values))
+
+    @staticmethod
+    def do_write(config: RunnableConfig, **values: Any) -> None:
+        write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
+        write([(chan, val) for chan, val in values.items() if val is not None])
