@@ -80,6 +80,7 @@ def ChannelsManager(
     channels: Mapping[str, BaseChannel]
 ) -> Generator[Mapping[str, BaseChannel], None, None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
+    # TODO use https://docs.python.org/3/library/contextlib.html#contextlib.ExitStack
     empty = {k: v.empty() for k, v in channels.items()}
     try:
         yield {k: v.__enter__() for k, v in empty.items()}
