@@ -36,9 +36,9 @@ class BaseCheckpointAdapter(Serializable, ABC):
         ...
 
     async def aget(self, config: RunnableConfig) -> Mapping[str, Any] | None:
-        return asyncio.get_running_loop().run_in_executor(None, self.get, config)
+        return await asyncio.get_running_loop().run_in_executor(None, self.get, config)
 
     async def aput(self, config: RunnableConfig, checkpoint: Mapping[str, Any]) -> None:
-        return asyncio.get_running_loop().run_in_executor(
+        return await asyncio.get_running_loop().run_in_executor(
             None, self.put, config, checkpoint
         )

@@ -89,6 +89,9 @@ class ChannelInvoke(RunnableBindingBase):
         )
 
     def join(self, channels: Sequence[str]) -> ChannelInvoke:
+        assert isinstance(channels, list) or isinstance(
+            channels, tuple
+        ), "channels must be a list or tuple"
         joiner = RunnablePassthrough.assign(
             **{chan: ChannelRead(chan) for chan in channels}
         )
