@@ -273,17 +273,8 @@ def test_ctx_manager_ctx(mocker: MockerFixture) -> None:
         with pytest.raises(InvalidUpdateError):
             channel.update([5])  # type: ignore
 
-        checkpoint = channel.checkpoint()
-        assert checkpoint is None
-    with Context(httpx.Client).empty(checkpoint) as channel:
-        assert channel.ValueType is httpx.Client
-        with pytest.raises(InvalidUpdateError):
-            assert channel.UpdateType is None
-
-        assert isinstance(channel.get(), httpx.Client)
-
-        with pytest.raises(InvalidUpdateError):
-            channel.update([5])
+        with pytest.raises(EmptyChannelError):
+            channel.checkpoint()
 
 
 async def test_ctx_manager_async(mocker: MockerFixture) -> None:

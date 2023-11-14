@@ -42,8 +42,10 @@ from permchain.channels.base import (
     BaseChannel,
     ChannelsManager,
     EmptyChannelError,
+    create_checkpoint,
 )
-from permchain.pregel.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
+from permchain.checkpoint.base import BaseCheckpointAdapter, CheckpointAt
+from permchain.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
 from permchain.pregel.debug import print_checkpoint, print_step_start
 from permchain.pregel.io import map_input, map_output
 from permchain.pregel.log import logger
@@ -115,6 +117,8 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     debug: bool = Field(default_factory=get_debug)
 
+    checkpoint: Optional[BaseCheckpointAdapter] = None
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -128,7 +132,10 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     @property
     def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
         return get_unique_config_specs(
-            spec for chain in self.chains.values() for spec in chain.config_specs
+            [spec for chain in self.chains.values() for spec in chain.config_specs]
+            + self.checkpoint.config_specs
+            if self.checkpoint is not None
+            else []
         )
 
     @property
@@ -173,10 +180,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         config: RunnableConfig,
     ) -> Iterator[dict[str, Any] | Any]:
         processes = {**self.chains}
-        # TODO this is where we'd restore from checkpoint
-        with ChannelsManager(self.channels, None) as channels, get_executor_for_config(
-            config
-        ) as executor:
+        checkpoint = (
+            self.checkpoint.get(config) if self.checkpoint is not None else None
+        )
+        with ChannelsManager(
+            self.channels, checkpoint
+        ) as channels, get_executor_for_config(config) as executor:
             next_tasks = _apply_writes_and_prepare_next_tasks(
                 processes,
                 channels,
@@ -239,11 +248,25 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 for output in map_output(self.output, pending_writes, channels):
                     yield output
 
-                # TODO this is where we'd save checkpoint
+                # save end of step checkpoint
+                if (
+                    self.checkpoint is not None
+                    and self.checkpoint.at == CheckpointAt.END_OF_STEP
+                ):
+                    checkpoint = create_checkpoint(channels)
+                    self.checkpoint.put(config, checkpoint)
 
                 # if no more tasks, we're done
                 if not next_tasks:
                     break
+
+            # save end of run checkpoint
+            if (
+                self.checkpoint is not None
+                and self.checkpoint.at == CheckpointAt.END_OF_RUN
+            ):
+                checkpoint = create_checkpoint(channels)
+                self.checkpoint.put(config, checkpoint)
 
     async def _atransform(
         self,
@@ -252,8 +275,10 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         config: RunnableConfig,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         processes = {**self.chains}
-        # TODO this is where we'd restore from checkpoint
-        async with AsyncChannelsManager(self.channels, None) as channels:
+        checkpoint = (
+            await self.checkpoint.aget(config) if self.checkpoint is not None else None
+        )
+        async with AsyncChannelsManager(self.channels, checkpoint) as channels:
             next_tasks = _apply_writes_and_prepare_next_tasks(
                 processes,
                 channels,
@@ -319,11 +344,25 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 for output in map_output(self.output, pending_writes, channels):
                     yield output
 
-                # TODO this is where we'd save checkpoint
+                # save end of step checkpoint
+                if (
+                    self.checkpoint is not None
+                    and self.checkpoint.at == CheckpointAt.END_OF_STEP
+                ):
+                    checkpoint = create_checkpoint(channels)
+                    await self.checkpoint.aput(config, checkpoint)
 
                 # if no more tasks, we're done
                 if not next_tasks:
                     break
+
+            # save end of run checkpoint
+            if (
+                self.checkpoint is not None
+                and self.checkpoint.at == CheckpointAt.END_OF_RUN
+            ):
+                checkpoint = create_checkpoint(channels)
+                await self.checkpoint.aput(config, checkpoint)
 
     def invoke(
         self,

@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime
 from typing import (
     Any,
     AsyncGenerator,
@@ -12,6 +13,8 @@ from typing import (
 )
 
 from typing_extensions import Self
+
+from permchain.constants import CHECKPOINT_KEY_TS, CHECKPOINT_KEY_VERSION
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
@@ -72,10 +75,10 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
 
     @abstractmethod
     def checkpoint(self) -> Checkpoint | None:
-        """Return a string representation of the channel's current state,
-        or None if the channel doesn't support checkpoints.
+        """Return a string representation of the channel's current state.
 
-        Raises EmptyChannelError if the channel is empty (never updated yet)."""
+        Raises EmptyChannelError if the channel is empty (never updated yet),
+        or doesn't supportcheckpoints."""
 
 
 @contextmanager
@@ -111,5 +114,13 @@ async def AsyncChannelsManager(
 
 def create_checkpoint(channels: Mapping[str, BaseChannel]) -> Mapping[str, Any]:
     """Create a checkpoint for the given channels."""
-    checkpoint = {k: v.checkpoint() for k, v in channels.items()}
-    return {k: v for k, v in checkpoint.items() if v is not None}
+    checkpoint = {
+        CHECKPOINT_KEY_VERSION: 1,
+        CHECKPOINT_KEY_TS: datetime.utcnow().isoformat(),
+    }
+    for k, v in channels.items():
+        try:
+            checkpoint[k] = v.checkpoint()
+        except EmptyChannelError:
+            pass
+    return checkpoint

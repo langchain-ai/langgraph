@@ -107,4 +107,4 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
             raise EmptyChannelError()
 
     def checkpoint(self) -> None:
-        return None
+        raise EmptyChannelError()

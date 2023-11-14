@@ -18,7 +18,7 @@ from langchain.schema.runnable.base import (
 from langchain.schema.runnable.utils import ConfigurableFieldSpec
 
 from permchain.channels.base import BaseChannel
-from permchain.pregel.constants import CONFIG_KEY_READ
+from permchain.constants import CONFIG_KEY_READ
 
 
 class ChannelRead(RunnableLambda):
