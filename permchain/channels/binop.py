@@ -1,4 +1,3 @@
-import json
 from contextlib import contextmanager
 from typing import Callable, Generator, Generic, Optional, Sequence, Type
 
@@ -7,7 +6,7 @@ from typing_extensions import Self
 from permchain.channels.base import BaseChannel, EmptyChannelError, Value
 
 
-class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value]):
+class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the result of applying a binary operator to the current value and each new value.
 
     ```python
@@ -32,10 +31,10 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value]):
         return self.typ
 
     @contextmanager
-    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(self, checkpoint: Optional[Value] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ, self.operator)
         if checkpoint is not None:
-            empty.value = json.loads(checkpoint)
+            empty.value = checkpoint
         try:
             yield empty
         finally:
@@ -60,8 +59,8 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value]):
         except AttributeError:
             raise EmptyChannelError()
 
-    def checkpoint(self) -> str:
+    def checkpoint(self) -> Value:
         try:
-            return json.dumps(self.value)
+            return self.value
         except AttributeError:
             raise EmptyChannelError()

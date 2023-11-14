@@ -1,4 +1,3 @@
-import json
 from contextlib import contextmanager
 from typing import Generator, Generic, Optional, Sequence, Type
 
@@ -12,7 +11,7 @@ from permchain.channels.base import (
 )
 
 
-class LastValue(Generic[Value], BaseChannel[Value, Value]):
+class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, can receive at most one value per step."""
 
     def __init__(self, typ: Type[Value]) -> None:
@@ -29,10 +28,10 @@ class LastValue(Generic[Value], BaseChannel[Value, Value]):
         return self.typ
 
     @contextmanager
-    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(self, checkpoint: Optional[Value] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
-            empty.value = json.loads(checkpoint)
+            empty.value = checkpoint
         try:
             yield empty
         finally:
@@ -55,8 +54,8 @@ class LastValue(Generic[Value], BaseChannel[Value, Value]):
         except AttributeError:
             raise EmptyChannelError()
 
-    def checkpoint(self) -> str:
+    def checkpoint(self) -> Value:
         try:
-            return json.dumps(self.value)
+            return self.value
         except AttributeError:
             raise EmptyChannelError()

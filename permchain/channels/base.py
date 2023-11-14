@@ -15,6 +15,7 @@ from typing_extensions import Self
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
+Checkpoint = TypeVar("Checkpoint")
 
 
 class EmptyChannelError(Exception):
@@ -30,7 +31,7 @@ class InvalidUpdateError(Exception):
     pass
 
 
-class BaseChannel(Generic[Value, Update], ABC):
+class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
     @property
     @abstractmethod
     def ValueType(self) -> Any:
@@ -43,7 +44,9 @@ class BaseChannel(Generic[Value, Update], ABC):
 
     @contextmanager
     @abstractmethod
-    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(
+        self, checkpoint: Optional[Checkpoint] = None
+    ) -> Generator[Self, None, None]:
         """Return a new identical channel, optionally initialized from a checkpoint."""
 
     @asynccontextmanager
@@ -68,7 +71,7 @@ class BaseChannel(Generic[Value, Update], ABC):
         Raises EmptyChannelError if the channel is empty (never updated yet)."""
 
     @abstractmethod
-    def checkpoint(self) -> str | None:
+    def checkpoint(self) -> Checkpoint | None:
         """Return a string representation of the channel's current state,
         or None if the channel doesn't support checkpoints.
 

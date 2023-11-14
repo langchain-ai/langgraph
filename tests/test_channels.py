@@ -27,6 +27,9 @@ def test_last_value() -> None:
         assert channel.get() == 3
         channel.update([4])
         assert channel.get() == 4
+        checkpoint = channel.checkpoint()
+    with LastValue(int).empty(checkpoint) as channel:
+        assert channel.get() == 4
 
 
 async def test_last_value_async() -> None:
@@ -43,6 +46,9 @@ async def test_last_value_async() -> None:
         assert channel.get() == 3
         channel.update([4])
         assert channel.get() == 4
+        checkpoint = channel.checkpoint()
+    async with LastValue(int).aempty(checkpoint) as channel:
+        assert channel.get() == 4
 
 
 def test_topic() -> None:
@@ -56,6 +62,11 @@ def test_topic() -> None:
         assert channel.get() == ["c", "d", "d"]
         channel.update([])
         assert channel.get() == []
+        channel.update(["e"])
+        assert channel.get() == ["e"]
+        checkpoint = channel.checkpoint()
+    with Topic(str).empty(checkpoint) as channel:
+        assert channel.get() == ["e"]
 
 
 async def test_topic_async() -> None:
@@ -69,6 +80,11 @@ async def test_topic_async() -> None:
         assert channel.get() == ["b", "c", "d", "d"]
         channel.update([])
         assert channel.get() == []
+        channel.update(["e"])
+        assert channel.get() == ["e"]
+        checkpoint = channel.checkpoint()
+    async with Topic(str).aempty(checkpoint) as channel:
+        assert channel.get() == ["e"]
 
 
 def test_topic_unique() -> None:
@@ -82,6 +98,13 @@ def test_topic_unique() -> None:
         assert channel.get() == ["c", "d"], "de-dupes from current and previous steps"
         channel.update([])
         assert channel.get() == []
+        channel.update(["e"])
+        assert channel.get() == ["e"]
+        checkpoint = channel.checkpoint()
+    with Topic(str, unique=True).empty(checkpoint) as channel:
+        assert channel.get() == ["e"]
+        channel.update(["d", "f"])
+        assert channel.get() == ["f"], "de-dupes from checkpoint"
 
 
 async def test_topic_unique_async() -> None:
@@ -95,6 +118,13 @@ async def test_topic_unique_async() -> None:
         assert channel.get() == ["c", "d"], "de-dupes from current and previous steps"
         channel.update([])
         assert channel.get() == []
+        channel.update(["e"])
+        assert channel.get() == ["e"]
+        checkpoint = channel.checkpoint()
+    async with Topic(str, unique=True).aempty(checkpoint) as channel:
+        assert channel.get() == ["e"]
+        channel.update(["d", "f"])
+        assert channel.get() == ["f"], "de-dupes from checkpoint"
 
 
 def test_topic_accumulate() -> None:
@@ -108,6 +138,11 @@ def test_topic_accumulate() -> None:
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
         channel.update([])
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
+        checkpoint = channel.checkpoint()
+    with Topic(str, accumulate=True).empty(checkpoint) as channel:
+        assert channel.get() == ["a", "b", "b", "c", "d", "d"]
+        channel.update(["e"])
+        assert channel.get() == ["a", "b", "b", "c", "d", "d", "e"]
 
 
 async def test_topic_accumulate_async() -> None:
@@ -121,6 +156,11 @@ async def test_topic_accumulate_async() -> None:
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
         channel.update([])
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
+        checkpoint = channel.checkpoint()
+    async with Topic(str, accumulate=True).aempty(checkpoint) as channel:
+        assert channel.get() == ["a", "b", "b", "c", "d", "d"]
+        channel.update(["e"])
+        assert channel.get() == ["a", "b", "b", "c", "d", "d", "e"]
 
 
 def test_topic_unique_accumulate() -> None:
@@ -134,6 +174,11 @@ def test_topic_unique_accumulate() -> None:
         assert channel.get() == ["a", "b", "c", "d"]
         channel.update([])
         assert channel.get() == ["a", "b", "c", "d"]
+        checkpoint = channel.checkpoint()
+    with Topic(str, unique=True, accumulate=True).empty(checkpoint) as channel:
+        assert channel.get() == ["a", "b", "c", "d"]
+        channel.update(["d", "e"])
+        assert channel.get() == ["a", "b", "c", "d", "e"]
 
 
 async def test_topic_unique_accumulate_async() -> None:
@@ -147,6 +192,11 @@ async def test_topic_unique_accumulate_async() -> None:
         assert channel.get() == ["a", "b", "c", "d"]
         channel.update([])
         assert channel.get() == ["a", "b", "c", "d"]
+        checkpoint = channel.checkpoint()
+    async with Topic(str, unique=True, accumulate=True).aempty(checkpoint) as channel:
+        assert channel.get() == ["a", "b", "c", "d"]
+        channel.update(["d", "e"])
+        assert channel.get() == ["a", "b", "c", "d", "e"]
 
 
 def test_binop() -> None:
@@ -161,6 +211,9 @@ def test_binop() -> None:
         assert channel.get() == 6
         channel.update([4])
         assert channel.get() == 10
+        checkpoint = channel.checkpoint()
+    with BinaryOperatorAggregate(int, operator.add).empty(checkpoint) as channel:
+        assert channel.get() == 10
 
 
 async def test_binop_async() -> None:
@@ -174,6 +227,9 @@ async def test_binop_async() -> None:
         channel.update([1, 2, 3])
         assert channel.get() == 6
         channel.update([4])
+        assert channel.get() == 10
+        checkpoint = channel.checkpoint()
+    async with BinaryOperatorAggregate(int, operator.add).aempty(checkpoint) as channel:
         assert channel.get() == 10
 
 
@@ -216,6 +272,18 @@ def test_ctx_manager_ctx(mocker: MockerFixture) -> None:
 
         with pytest.raises(InvalidUpdateError):
             channel.update([5])  # type: ignore
+
+        checkpoint = channel.checkpoint()
+        assert checkpoint is None
+    with Context(httpx.Client).empty(checkpoint) as channel:
+        assert channel.ValueType is httpx.Client
+        with pytest.raises(InvalidUpdateError):
+            assert channel.UpdateType is None
+
+        assert isinstance(channel.get(), httpx.Client)
+
+        with pytest.raises(InvalidUpdateError):
+            channel.update([5])
 
 
 async def test_ctx_manager_async(mocker: MockerFixture) -> None:
