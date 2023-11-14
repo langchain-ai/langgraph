@@ -164,7 +164,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     ) -> Iterator[dict[str, Any] | Any]:
         processes = {**self.chains}
         # TODO this is where we'd restore from checkpoint
-        with ChannelsManager(self.channels) as channels, get_executor_for_config(
+        with ChannelsManager(self.channels, None) as channels, get_executor_for_config(
             config
         ) as executor:
             next_tasks = _apply_writes_and_prepare_next_tasks(
@@ -243,7 +243,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     ) -> AsyncIterator[dict[str, Any] | Any]:
         processes = {**self.chains}
         # TODO this is where we'd restore from checkpoint
-        async with AsyncChannelsManager(self.channels) as channels:
+        async with AsyncChannelsManager(self.channels, None) as channels:
             next_tasks = _apply_writes_and_prepare_next_tasks(
                 processes,
                 channels,
