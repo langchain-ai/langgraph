@@ -19,6 +19,10 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     def __init__(self, typ: Type[Value], operator: Callable[[Value, Value], Value]):
         self.typ = typ
         self.operator = operator
+        try:
+            self.value = typ()
+        except Exception:
+            pass
 
     @property
     def ValueType(self) -> Type[Value]:

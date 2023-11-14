@@ -204,8 +204,7 @@ def test_binop() -> None:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
-        with pytest.raises(EmptyChannelError):
-            channel.get()
+        assert channel.get() == 0
 
         channel.update([1, 2, 3])
         assert channel.get() == 6
@@ -221,8 +220,7 @@ async def test_binop_async() -> None:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
-        with pytest.raises(EmptyChannelError):
-            channel.get()
+        assert channel.get() == 0
 
         channel.update([1, 2, 3])
         assert channel.get() == 6
