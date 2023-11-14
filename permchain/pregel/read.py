@@ -5,12 +5,16 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from langchain.pydantic_v1 import Field
 from langchain.schema.runnable import (
     Runnable,
-    RunnableBinding,
     RunnableConfig,
     RunnableLambda,
     RunnablePassthrough,
 )
-from langchain.schema.runnable.base import Other, RunnableEach, coerce_to_runnable
+from langchain.schema.runnable.base import (
+    Other,
+    RunnableBindingBase,
+    RunnableEach,
+    coerce_to_runnable,
+)
 from langchain.schema.runnable.utils import ConfigurableFieldSpec
 
 from permchain.channels.base import BaseChannel
@@ -60,7 +64,7 @@ class ChannelRead(RunnableLambda):
 default_bound = RunnablePassthrough()
 
 
-class ChannelInvoke(RunnableBinding):
+class ChannelInvoke(RunnableBindingBase):
     channels: Mapping[None, str] | Mapping[str, str]
 
     bound: Runnable[Any, Any] = Field(default=default_bound)

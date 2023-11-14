@@ -32,6 +32,10 @@ from langchain.schema.runnable.config import (
     get_executor_for_config,
     patch_config,
 )
+from langchain.schema.runnable.utils import (
+    ConfigurableFieldSpec,
+    get_unique_config_specs,
+)
 
 from permchain.channels.base import (
     AsyncChannelsManager,
@@ -120,6 +124,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             values["chains"], values["channels"], values["input"], values["output"]
         )
         return values
+
+    @property
+    def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
+        return get_unique_config_specs(
+            spec for chain in self.chains.values() for spec in chain.config_specs
+        )
 
     @property
     def InputType(self) -> Any:
