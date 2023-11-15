@@ -51,6 +51,29 @@ async def test_invoke_single_process_in_out_implicit_channels(
     assert await app.ainvoke(2) == 3
 
 
+async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain = (
+        Channel.subscribe_to("input")
+        | add_one
+        | Channel.write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
+    )
+
+    app = Pregel(chains={"one": chain}, output=["output", "fixed", "output_plus_one"])
+
+    assert app.input_schema.schema() == {"title": "PregelInput"}
+    assert app.output_schema.schema() == {
+        "title": "PregelOutput",
+        "type": "object",
+        "properties": {
+            "output": {"title": "Output"},
+            "fixed": {"title": "Fixed"},
+            "output_plus_one": {"title": "Output Plus One"},
+        },
+    }
+    assert await app.ainvoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
+
+
 async def test_invoke_single_process_in_out_reserved_is_last(
     mocker: MockerFixture
 ) -> None:

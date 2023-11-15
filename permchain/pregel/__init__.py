@@ -6,11 +6,14 @@ from collections import defaultdict, deque
 from typing import (
     Any,
     AsyncIterator,
+    Awaitable,
+    Callable,
     Iterator,
     Mapping,
     Optional,
     Sequence,
     Type,
+    Union,
     cast,
     overload,
 )
@@ -26,7 +29,7 @@ from langchain.schema.runnable import (
     RunnablePassthrough,
     RunnableSerializable,
 )
-from langchain.schema.runnable.base import RunnableLike, coerce_to_runnable
+from langchain.schema.runnable.base import Input, Output, coerce_to_runnable
 from langchain.schema.runnable.config import (
     RunnableConfig,
     get_executor_for_config,
@@ -53,6 +56,19 @@ from permchain.pregel.read import ChannelBatch, ChannelInvoke
 from permchain.pregel.reserved import ReservedChannels
 from permchain.pregel.validate import validate_chains_channels
 from permchain.pregel.write import ChannelWrite
+
+WriteValue = Union[
+    Runnable[Input, Output],
+    Callable[[Input], Output],
+    Callable[[Input], Awaitable[Output]],
+    Any,
+]
+
+
+def _coerce_write_value(value: WriteValue) -> Runnable[Input, Output]:
+    if not isinstance(value, Runnable) and not callable(value):
+        return coerce_to_runnable(lambda _: value)
+    return coerce_to_runnable(value)
 
 
 class Channel:
@@ -94,13 +110,13 @@ class Channel:
     def write_to(
         cls,
         *channels: str,
-        **kwargs: RunnableLike,
+        **kwargs: WriteValue,
     ) -> ChannelWrite:
         """Writes to channels the result of the lambda, or None to skip writing."""
         return ChannelWrite(
             channels=(
                 [(c, RunnablePassthrough()) for c in channels]
-                + [(k, coerce_to_runnable(v)) for k, v in kwargs.items()]
+                + [(k, _coerce_write_value(v)) for k, v in kwargs.items()]
             )
         )
 
