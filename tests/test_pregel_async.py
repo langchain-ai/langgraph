@@ -14,6 +14,7 @@ from permchain.channels.context import Context
 from permchain.channels.last_value import LastValue
 from permchain.channels.topic import Topic
 from permchain.checkpoint.memory import MemoryCheckpoint
+from permchain.pregel.reserved import ReservedChannels
 
 
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -48,6 +49,51 @@ async def test_invoke_single_process_in_out_implicit_channels(
     assert app.input_schema.schema() == {"title": "PregelInput"}
     assert app.output_schema.schema() == {"title": "PregelOutput"}
     assert await app.ainvoke(2) == 3
+
+
+async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    chain = (
+        Channel.subscribe_to("input")
+        | add_one
+        | Channel.write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
+    )
+
+    app = Pregel(chains={"one": chain}, output=["output", "fixed", "output_plus_one"])
+
+    assert app.input_schema.schema() == {"title": "PregelInput"}
+    assert app.output_schema.schema() == {
+        "title": "PregelOutput",
+        "type": "object",
+        "properties": {
+            "output": {"title": "Output"},
+            "fixed": {"title": "Fixed"},
+            "output_plus_one": {"title": "Output Plus One"},
+        },
+    }
+    assert await app.ainvoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
+
+
+async def test_invoke_single_process_in_out_reserved_is_last(
+    mocker: MockerFixture
+) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: {**x, "input": x["input"] + 1})
+
+    chain = (
+        Channel.subscribe_to(["input"]).join([ReservedChannels.is_last_step])
+        | add_one
+        | Channel.write_to("output")
+    )
+
+    app = Pregel(chains={"one": chain})
+
+    assert app.input_schema.schema() == {"title": "PregelInput"}
+    assert app.output_schema.schema() == {"title": "PregelOutput"}
+    assert await app.ainvoke(2) == {"input": 3, "is_last_step": False}
+    assert await app.ainvoke(2, {"recursion_limit": 1}) == {
+        "input": 3,
+        "is_last_step": True,
+    }
 
 
 async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:

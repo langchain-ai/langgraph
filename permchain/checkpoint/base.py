@@ -1,5 +1,4 @@
 import asyncio
-import enum
 from abc import ABC, abstractmethod
 from typing import Any, Mapping, Sequence
 
@@ -7,12 +6,7 @@ from langchain.load.serializable import Serializable
 from langchain.schema.runnable import RunnableConfig
 from langchain.schema.runnable.utils import ConfigurableFieldSpec
 
-
-# Before Python 3.11 native StrEnum is not available
-class StrEnum(str, enum.Enum):
-    """A string enum."""
-
-    pass
+from permchain.utils import StrEnum
 
 
 class CheckpointAt(StrEnum):
