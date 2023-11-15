@@ -481,8 +481,6 @@ def _apply_writes_and_prepare_next_tasks(
         for_step + 1 == config["recursion_limit"]
     ]
 
-    print(for_step, config["recursion_limit"])
-
     updated_channels: set[str] = set()
     # Apply writes to channels
     for chan, vals in pending_writes_by_channel.items():
