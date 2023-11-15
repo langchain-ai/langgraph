@@ -1,4 +1,3 @@
-import json
 from contextlib import contextmanager
 from typing import Any, Generator, Generic, Iterator, Optional, Sequence, Type, Union
 
@@ -15,7 +14,10 @@ def flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
             yield value
 
 
-class Topic(Generic[Value], BaseChannel[Sequence[Value], Value | list[Value]]):
+class Topic(
+    Generic[Value],
+    BaseChannel[Sequence[Value], Value | list[Value], tuple[set[Value], list[Value]]],
+):
     """A configurable PubSub Topic.
 
     Args:
@@ -46,12 +48,13 @@ class Topic(Generic[Value], BaseChannel[Sequence[Value], Value | list[Value]]):
         return Union[self.typ, list[self.typ]]  # type: ignore[name-defined]
 
     @contextmanager
-    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(
+        self, checkpoint: Optional[tuple[set[Value], list[Value]]] = None
+    ) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ, self.unique, self.accumulate)
         if checkpoint is not None:
-            parsed = json.loads(checkpoint)
-            empty.seen = set(parsed["seen"])
-            empty.values = list(parsed["values"])
+            empty.seen = checkpoint[0]
+            empty.values = checkpoint[1]
         try:
             yield empty
         finally:
@@ -72,5 +75,5 @@ class Topic(Generic[Value], BaseChannel[Sequence[Value], Value | list[Value]]):
     def get(self) -> Sequence[Value]:
         return list(self.values)
 
-    def checkpoint(self) -> str:
-        return json.dumps({"seen": list(self.seen), "values": self.values})
+    def checkpoint(self) -> tuple[set[Value], list[Value]]:
+        return (self.seen, self.values)

@@ -22,7 +22,7 @@ from permchain.channels.base import (
 )
 
 
-class Context(Generic[Value], BaseChannel[Value, None]):
+class Context(Generic[Value], BaseChannel[Value, None, None]):
     """Exposes the value of a context manager, for the duration of an invocation.
     Context manager is entered before the first step, and exited after the last step.
     Optionally, provide an equivalent async context manager, which will be used
@@ -66,7 +66,7 @@ class Context(Generic[Value], BaseChannel[Value, None]):
         raise InvalidUpdateError()
 
     @contextmanager
-    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(self, checkpoint: None = None) -> Generator[Self, None, None]:
         if self.ctx is None:
             raise ValueError("Cannot enter sync context manager.")
 
@@ -107,4 +107,4 @@ class Context(Generic[Value], BaseChannel[Value, None]):
             raise EmptyChannelError()
 
     def checkpoint(self) -> None:
-        return None
+        raise EmptyChannelError()

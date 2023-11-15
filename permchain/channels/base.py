@@ -1,5 +1,6 @@
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
+from datetime import datetime
 from typing import (
     Any,
     AsyncGenerator,
@@ -13,8 +14,11 @@ from typing import (
 
 from typing_extensions import Self
 
+from permchain.constants import CHECKPOINT_KEY_TS, CHECKPOINT_KEY_VERSION
+
 Value = TypeVar("Value")
 Update = TypeVar("Update")
+Checkpoint = TypeVar("Checkpoint")
 
 
 class EmptyChannelError(Exception):
@@ -30,7 +34,7 @@ class InvalidUpdateError(Exception):
     pass
 
 
-class BaseChannel(Generic[Value, Update], ABC):
+class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
     @property
     @abstractmethod
     def ValueType(self) -> Any:
@@ -43,7 +47,9 @@ class BaseChannel(Generic[Value, Update], ABC):
 
     @contextmanager
     @abstractmethod
-    def empty(self, checkpoint: Optional[str] = None) -> Generator[Self, None, None]:
+    def empty(
+        self, checkpoint: Optional[Checkpoint] = None
+    ) -> Generator[Self, None, None]:
         """Return a new identical channel, optionally initialized from a checkpoint."""
 
     @asynccontextmanager
@@ -68,20 +74,22 @@ class BaseChannel(Generic[Value, Update], ABC):
         Raises EmptyChannelError if the channel is empty (never updated yet)."""
 
     @abstractmethod
-    def checkpoint(self) -> str | None:
-        """Return a string representation of the channel's current state,
-        or None if the channel doesn't support checkpoints.
+    def checkpoint(self) -> Checkpoint | None:
+        """Return a string representation of the channel's current state.
 
-        Raises EmptyChannelError if the channel is empty (never updated yet)."""
+        Raises EmptyChannelError if the channel is empty (never updated yet),
+        or doesn't supportcheckpoints."""
 
 
 @contextmanager
 def ChannelsManager(
-    channels: Mapping[str, BaseChannel]
+    channels: Mapping[str, BaseChannel],
+    checkpoint: Optional[Mapping[str, Any]],
 ) -> Generator[Mapping[str, BaseChannel], None, None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     # TODO use https://docs.python.org/3/library/contextlib.html#contextlib.ExitStack
-    empty = {k: v.empty() for k, v in channels.items()}
+    checkpoint = checkpoint or {}
+    empty = {k: v.empty(checkpoint.get(k)) for k, v in channels.items()}
     try:
         yield {k: v.__enter__() for k, v in empty.items()}
     finally:
@@ -91,12 +99,28 @@ def ChannelsManager(
 
 @asynccontextmanager
 async def AsyncChannelsManager(
-    channels: Mapping[str, BaseChannel]
+    channels: Mapping[str, BaseChannel],
+    checkpoint: Optional[Mapping[str, Any]],
 ) -> AsyncGenerator[Mapping[str, BaseChannel], None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
-    empty = {k: v.aempty() for k, v in channels.items()}
+    checkpoint = checkpoint or {}
+    empty = {k: v.aempty(checkpoint.get(k)) for k, v in channels.items()}
     try:
         yield {k: await v.__aenter__() for k, v in empty.items()}
     finally:
         for v in empty.values():
             await v.__aexit__(None, None, None)
+
+
+def create_checkpoint(channels: Mapping[str, BaseChannel]) -> Mapping[str, Any]:
+    """Create a checkpoint for the given channels."""
+    checkpoint = {
+        CHECKPOINT_KEY_VERSION: 1,
+        CHECKPOINT_KEY_TS: datetime.utcnow().isoformat(),
+    }
+    for k, v in channels.items():
+        try:
+            checkpoint[k] = v.checkpoint()
+        except EmptyChannelError:
+            pass
+    return checkpoint

@@ -1,3 +1,4 @@
+import operator
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
@@ -9,9 +10,11 @@ from pytest_mock import MockerFixture
 
 from permchain import Channel, Pregel
 from permchain.channels.base import InvalidUpdateError
+from permchain.channels.binop import BinaryOperatorAggregate
 from permchain.channels.context import Context
 from permchain.channels.last_value import LastValue
 from permchain.channels.topic import Topic
+from permchain.checkpoint.memory import MemoryCheckpoint
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -219,6 +222,44 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
 
     # An Inbox channel accumulates updates into a sequence
     assert app.invoke(2) == [3, 3]
+
+
+def test_invoke_checkpoint(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
+
+    def raise_if_above_10(input: int) -> int:
+        if input > 10:
+            raise ValueError("Input is too large")
+        return input
+
+    chain_one = (
+        Channel.subscribe_to(["input"]).join(["total"])
+        | add_one
+        | Channel.write_to("output", "total")
+        | raise_if_above_10
+    )
+
+    app = Pregel(
+        chains={"chain_one": chain_one},
+        channels={"total": BinaryOperatorAggregate(int, operator.add)},
+        checkpoint=MemoryCheckpoint(),
+    )
+
+    # total starts out as 0, so output is 0+2=2
+    assert app.invoke(2, {"configurable": {"thread_id": "1"}}) == 2
+    assert app.checkpoint.get({"configurable": {"thread_id": "1"}}).get("total") == 2
+    # total is now 2, so output is 2+3=5
+    assert app.invoke(3, {"configurable": {"thread_id": "1"}}) == 5
+    assert app.checkpoint.get({"configurable": {"thread_id": "1"}}).get("total") == 7
+    # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
+    with pytest.raises(ValueError):
+        app.invoke(4, {"configurable": {"thread_id": "1"}})
+    # checkpoint is not updated
+    assert app.checkpoint.get({"configurable": {"thread_id": "1"}}).get("total") == 7
+    # on a new thread, total starts out as 0, so output is 0+5=5
+    assert app.invoke(5, {"configurable": {"thread_id": "2"}}) == 5
+    assert app.checkpoint.get({"configurable": {"thread_id": "1"}}).get("total") == 7
+    assert app.checkpoint.get({"configurable": {"thread_id": "2"}}).get("total") == 5
 
 
 def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:

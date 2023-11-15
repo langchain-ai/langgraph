@@ -5,16 +5,20 @@ from typing import Any, Callable, Mapping, Optional, Sequence
 from langchain.pydantic_v1 import Field
 from langchain.schema.runnable import (
     Runnable,
-    RunnableBinding,
     RunnableConfig,
     RunnableLambda,
     RunnablePassthrough,
 )
-from langchain.schema.runnable.base import Other, RunnableEach, coerce_to_runnable
+from langchain.schema.runnable.base import (
+    Other,
+    RunnableBindingBase,
+    RunnableEach,
+    coerce_to_runnable,
+)
 from langchain.schema.runnable.utils import ConfigurableFieldSpec
 
 from permchain.channels.base import BaseChannel
-from permchain.pregel.constants import CONFIG_KEY_READ
+from permchain.constants import CONFIG_KEY_READ
 
 
 class ChannelRead(RunnableLambda):
@@ -60,7 +64,7 @@ class ChannelRead(RunnableLambda):
 default_bound = RunnablePassthrough()
 
 
-class ChannelInvoke(RunnableBinding):
+class ChannelInvoke(RunnableBindingBase):
     channels: Mapping[None, str] | Mapping[str, str]
 
     bound: Runnable[Any, Any] = Field(default=default_bound)
@@ -85,6 +89,9 @@ class ChannelInvoke(RunnableBinding):
         )
 
     def join(self, channels: Sequence[str]) -> ChannelInvoke:
+        assert isinstance(channels, list) or isinstance(
+            channels, tuple
+        ), "channels must be a list or tuple"
         joiner = RunnablePassthrough.assign(
             **{chan: ChannelRead(chan) for chan in channels}
         )
