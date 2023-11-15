@@ -50,6 +50,7 @@ from permchain.pregel.debug import print_checkpoint, print_step_start
 from permchain.pregel.io import map_input, map_output
 from permchain.pregel.log import logger
 from permchain.pregel.read import ChannelBatch, ChannelInvoke
+from permchain.pregel.reserved import ReservedChannels
 from permchain.pregel.validate import validate_chains_channels
 from permchain.pregel.write import ChannelWrite
 
@@ -179,6 +180,8 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
     ) -> Iterator[dict[str, Any] | Any]:
+        if config["recursion_limit"] < 1:
+            raise ValueError("recursion_limit must be at least 1")
         processes = {**self.chains}
         checkpoint = (
             self.checkpoint.get(config) if self.checkpoint is not None else None
@@ -190,6 +193,8 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 processes,
                 channels,
                 deque(w for c in input for w in map_input(self.input, c)),
+                config,
+                0,
             )
 
             def read(chan: str) -> Any:
@@ -237,8 +242,9 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 _interrupt_or_proceed(done, inflight, step)
 
                 # apply writes to channels, decide on next step
+
                 next_tasks = _apply_writes_and_prepare_next_tasks(
-                    processes, channels, pending_writes
+                    processes, channels, pending_writes, config, step + 1
                 )
 
                 if self.debug:
@@ -274,6 +280,8 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         run_manager: AsyncCallbackManagerForChainRun,
         config: RunnableConfig,
     ) -> AsyncIterator[dict[str, Any] | Any]:
+        if config["recursion_limit"] < 1:
+            raise ValueError("recursion_limit must be at least 1")
         processes = {**self.chains}
         checkpoint = (
             await self.checkpoint.aget(config) if self.checkpoint is not None else None
@@ -283,6 +291,8 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 processes,
                 channels,
                 deque([w async for c in input for w in map_input(self.input, c)]),
+                config,
+                0,
             )
 
             def read(chan: str) -> Any:
@@ -334,7 +344,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
                 # apply writes to channels, decide on next step
                 next_tasks = _apply_writes_and_prepare_next_tasks(
-                    processes, channels, pending_writes
+                    processes, channels, pending_writes, config, step + 1
                 )
 
                 if self.debug:
@@ -456,11 +466,22 @@ def _apply_writes_and_prepare_next_tasks(
     processes: Mapping[str, ChannelInvoke | ChannelBatch],
     channels: Mapping[str, BaseChannel],
     pending_writes: Sequence[tuple[str, Any]],
+    config: RunnableConfig,
+    for_step: int,
 ) -> list[tuple[Runnable, Any, str]]:
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
     for chan, val in pending_writes:
+        if chan in [c.value for c in ReservedChannels]:
+            raise ValueError(f"Can't write to reserved channel {chan}")
         pending_writes_by_channel[chan].append(val)
+
+    # Update reserved channels
+    pending_writes_by_channel[ReservedChannels.is_last_step] = [
+        for_step + 1 == config["recursion_limit"]
+    ]
+
+    print(for_step, config["recursion_limit"])
 
     updated_channels: set[str] = set()
     # Apply writes to channels

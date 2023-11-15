@@ -6,7 +6,6 @@ from langchain.prompts import SystemMessagePromptTemplate
 from langchain.schema.output_parser import StrOutputParser
 
 from permchain import Channel, Pregel
-from permchain.channels import LastValue
 
 # prompts
 
