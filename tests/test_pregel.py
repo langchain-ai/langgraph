@@ -101,15 +101,15 @@ def test_invoke_single_process_in_out_reserved_id_key() -> None:
     assert app.output_schema.schema() == {"title": "PregelOutput"}
     assert app.invoke(2) == {
         "input": 2,
-        "idempotency_key": "6e6ec8f84f6c02e24a58440f77e9de1ba4413287f1f0d7057cb86fc5756ced88",
+        "idempotency_key": "b85046bb798101e60bbe82d15e18fd530eadb2c0064114ec4fae1de68d57174b",
     }
     assert app.invoke(2) == {
         "input": 2,
-        "idempotency_key": "6e6ec8f84f6c02e24a58440f77e9de1ba4413287f1f0d7057cb86fc5756ced88",
+        "idempotency_key": "b85046bb798101e60bbe82d15e18fd530eadb2c0064114ec4fae1de68d57174b",
     }
     assert app.invoke(3) == {
         "input": 3,
-        "idempotency_key": "4d254a25824a081472e5eb3a8688f6b843bd8d04a9bcc5bf2525b227122dc8b4",
+        "idempotency_key": "5d45520557a38c1bb2e12b4e09161d5c095c38e92df5ea914e076177f117863c",
     }
 
 

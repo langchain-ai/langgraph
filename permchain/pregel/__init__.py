@@ -552,4 +552,4 @@ def _apply_writes_and_prepare_next_tasks(
 
                 tasks.append((proc, val, name))
 
-    return add_idempotency_keys(tasks, channels)
+    return add_idempotency_keys(tasks, channels, config)
