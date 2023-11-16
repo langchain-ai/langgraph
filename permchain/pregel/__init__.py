@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
+from functools import partial
 from typing import (
     Any,
     AsyncIterator,
@@ -50,6 +51,7 @@ from permchain.channels.base import (
 from permchain.checkpoint.base import BaseCheckpointAdapter, CheckpointAt
 from permchain.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
 from permchain.pregel.debug import print_checkpoint, print_step_start
+from permchain.pregel.idempotency import add_idempotency_keys
 from permchain.pregel.io import map_input, map_output
 from permchain.pregel.log import logger
 from permchain.pregel.read import ChannelBatch, ChannelInvoke
@@ -213,7 +215,9 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 0,
             )
 
-            def read(chan: str) -> Any:
+            def read(chan: str, *, idempotency_key: str) -> Any:
+                if chan == ReservedChannels.idempotency_key:
+                    return idempotency_key
                 try:
                     return channels[chan].get()
                 except EmptyChannelError:
@@ -240,15 +244,18 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                             input,
                             patch_config(
                                 config,
+                                run_name=name,
                                 callbacks=run_manager.get_child(f"pregel:step:{step}"),
                                 configurable={
                                     # deque.extend is thread-safe
                                     CONFIG_KEY_SEND: pending_writes.extend,
-                                    CONFIG_KEY_READ: read,
+                                    CONFIG_KEY_READ: partial(
+                                        read, idempotency_key=id_key
+                                    ),
                                 },
                             ),
                         )
-                        for proc, input, _ in next_tasks
+                        for proc, input, name, id_key in next_tasks
                     ],
                     return_when=concurrent.futures.FIRST_EXCEPTION,
                     timeout=self.step_timeout,
@@ -311,7 +318,9 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 0,
             )
 
-            def read(chan: str) -> Any:
+            def read(chan: str, *, idempotency_key: str) -> Any:
+                if chan == ReservedChannels.idempotency_key:
+                    return idempotency_key
                 try:
                     return channels[chan].get()
                 except EmptyChannelError:
@@ -338,18 +347,21 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                                 input,
                                 patch_config(
                                     config,
+                                    run_name=name,
                                     callbacks=run_manager.get_child(
                                         f"pregel:step:{step}"
                                     ),
                                     configurable={
                                         # deque.extend is thread-safe
                                         CONFIG_KEY_SEND: pending_writes.extend,
-                                        CONFIG_KEY_READ: read,
+                                        CONFIG_KEY_READ: partial(
+                                            read, idempotency_key=id_key
+                                        ),
                                     },
                                 ),
                             )
                         )
-                        for proc, input, _ in next_tasks
+                        for proc, input, name, id_key in next_tasks
                     ],
                     return_when=asyncio.FIRST_EXCEPTION,
                     timeout=self.step_timeout,
@@ -484,7 +496,7 @@ def _apply_writes_and_prepare_next_tasks(
     pending_writes: Sequence[tuple[str, Any]],
     config: RunnableConfig,
     for_step: int,
-) -> list[tuple[Runnable, Any, str]]:
+) -> list[tuple[Runnable, Any, str, str]]:
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
     for chan, val in pending_writes:
@@ -540,4 +552,4 @@ def _apply_writes_and_prepare_next_tasks(
 
                 tasks.append((proc, val, name))
 
-    return tasks
+    return add_idempotency_keys(tasks, channels)

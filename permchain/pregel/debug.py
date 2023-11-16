@@ -7,14 +7,16 @@ from langchain.utils.input import get_bolded_text, get_colored_text
 from permchain.channels.base import BaseChannel, EmptyChannelError
 
 
-def print_step_start(step: int, next_tasks: list[tuple[Runnable, Any, str]]) -> None:
+def print_step_start(
+    step: int, next_tasks: list[tuple[Runnable, Any, str, str]]
+) -> None:
     n_tasks = len(next_tasks)
     print(
         f"{get_colored_text('[pregel/step]', color='blue')} "
         + get_bolded_text(
             f"Starting step {step} with {n_tasks} task{'s' if n_tasks > 1 else ''}. Next tasks:\n"
         )
-        + "\n".join(f"- {name}({pformat(val)})" for _, val, name in next_tasks)
+        + "\n".join(f"- {name}({pformat(val)})" for _, val, name, _ in next_tasks)
     )
 
 

@@ -90,6 +90,29 @@ def test_invoke_single_process_in_out_reserved_is_last(mocker: MockerFixture) ->
     assert app.invoke(2, {"recursion_limit": 1}) == {"input": 3, "is_last_step": True}
 
 
+def test_invoke_single_process_in_out_reserved_id_key() -> None:
+    chain = Channel.subscribe_to(["input"]).join(
+        [ReservedChannels.idempotency_key]
+    ) | Channel.write_to("output")
+
+    app = Pregel(chains={"one": chain})
+
+    assert app.input_schema.schema() == {"title": "PregelInput"}
+    assert app.output_schema.schema() == {"title": "PregelOutput"}
+    assert app.invoke(2) == {
+        "input": 2,
+        "idempotency_key": "6e6ec8f84f6c02e24a58440f77e9de1ba4413287f1f0d7057cb86fc5756ced88",
+    }
+    assert app.invoke(2) == {
+        "input": 2,
+        "idempotency_key": "6e6ec8f84f6c02e24a58440f77e9de1ba4413287f1f0d7057cb86fc5756ced88",
+    }
+    assert app.invoke(3) == {
+        "input": 3,
+        "idempotency_key": "4d254a25824a081472e5eb3a8688f6b843bd8d04a9bcc5bf2525b227122dc8b4",
+    }
+
+
 def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
