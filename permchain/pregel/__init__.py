@@ -150,9 +150,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
         return get_unique_config_specs(
             [spec for chain in self.chains.values() for spec in chain.config_specs]
-            + self.checkpoint.config_specs
-            if self.checkpoint is not None
-            else []
+            + (self.checkpoint.config_specs if self.checkpoint is not None else [])
         )
 
     @property
