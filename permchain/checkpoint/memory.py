@@ -19,6 +19,7 @@ class MemoryCheckpoint(BaseCheckpointAdapter):
                 name="Thread ID",
                 description=None,
                 default="",
+                is_shared=True,
             ),
         ]
 
