@@ -37,6 +37,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {"title": "PregelInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "PregelOutput", "type": "integer"}
     assert app.invoke(2) == 3
+    assert repr(app), "does not raise recursion error"
 
 
 def test_invoke_single_process_in_out_implicit_channels(mocker: MockerFixture) -> None:
