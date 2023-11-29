@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Optional, Sequence
+from typing import Any, Callable, List, Mapping, Optional, Sequence
 
 from langchain.pydantic_v1 import Field
 from langchain.schema.runnable import (
@@ -67,6 +67,10 @@ default_bound = RunnablePassthrough()
 class ChannelInvoke(RunnableBindingBase):
     channels: Mapping[None, str] | Mapping[str, str]
 
+    triggers: List[str] = Field(default_factory=list)
+
+    skip: Optional[Callable[[Any], bool]] = None
+
     bound: Runnable[Any, Any] = Field(default=default_bound)
 
     kwargs: Mapping[str, Any] = Field(default_factory=dict)
@@ -74,6 +78,7 @@ class ChannelInvoke(RunnableBindingBase):
     def __init__(
         self,
         channels: Mapping[None, str] | Mapping[str, str],
+        triggers: Sequence[str],
         *,
         bound: Optional[Runnable[Any, Any]] = None,
         kwargs: Optional[Mapping[str, Any]] = None,
@@ -82,6 +87,7 @@ class ChannelInvoke(RunnableBindingBase):
     ) -> None:
         super().__init__(
             channels=channels,
+            triggers=triggers,
             bound=bound or default_bound,
             kwargs=kwargs or {},
             config=config,
@@ -92,13 +98,19 @@ class ChannelInvoke(RunnableBindingBase):
         assert isinstance(channels, list) or isinstance(
             channels, tuple
         ), "channels must be a list or tuple"
-        joiner = RunnablePassthrough.assign(
-            **{chan: ChannelRead(chan) for chan in channels}
+        assert all(
+            k is not None for k in self.channels.keys()
+        ), "all channels must be named when using .join()"
+        return ChannelInvoke(
+            channels={
+                **self.channels,
+                **{chan: chan for chan in channels},
+            },
+            triggers=self.triggers,
+            bound=self.bound,
+            kwargs=self.kwargs,
+            config=self.config,
         )
-        if self.bound is default_bound:
-            return ChannelInvoke(channels=self.channels, bound=joiner)
-        else:
-            return ChannelInvoke(channels=self.channels, bound=self.bound | joiner)
 
     def __or__(
         self,
@@ -108,11 +120,21 @@ class ChannelInvoke(RunnableBindingBase):
     ) -> ChannelInvoke:
         if self.bound is default_bound:
             return ChannelInvoke(
-                channels=self.channels, bound=coerce_to_runnable(other)
+                channels=self.channels,
+                triggers=self.triggers,
+                bound=coerce_to_runnable(other),
+                kwargs=self.kwargs,
+                config=self.config,
             )
         else:
-            # delegate to __or__ in self.bound
-            return ChannelInvoke(channels=self.channels, bound=self.bound | other)
+            return ChannelInvoke(
+                channels=self.channels,
+                triggers=self.triggers,
+                # delegate to __or__ in self.bound
+                bound=self.bound | other,
+                kwargs=self.kwargs,
+                config=self.config,
+            )
 
     def __ror__(
         self,

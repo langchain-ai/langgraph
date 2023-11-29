@@ -3,6 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
+from functools import partial
 from typing import (
     Any,
     AsyncIterator,
@@ -26,7 +27,6 @@ from langchain.globals import get_debug
 from langchain.pydantic_v1 import BaseModel, Field, create_model, root_validator
 from langchain.schema.runnable import (
     Runnable,
-    RunnablePassthrough,
     RunnableSerializable,
 )
 from langchain.schema.runnable.base import Input, Output, coerce_to_runnable
@@ -98,7 +98,8 @@ class Channel:
                 {key: channels}
                 if isinstance(channels, str)
                 else {chan: chan for chan in channels},
-            )
+            ),
+            triggers=[channels] if isinstance(channels, str) else channels,
         )
 
     @classmethod
@@ -115,7 +116,7 @@ class Channel:
         """Writes to channels the result of the lambda, or None to skip writing."""
         return ChannelWrite(
             channels=(
-                [(c, RunnablePassthrough()) for c in channels]
+                [(c, None) for c in channels]
                 + [(k, _coerce_write_value(v)) for k, v in kwargs.items()]
             )
         )
@@ -150,9 +151,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
         return get_unique_config_specs(
             [spec for chain in self.chains.values() for spec in chain.config_specs]
-            + self.checkpoint.config_specs
-            if self.checkpoint is not None
-            else []
+            + (self.checkpoint.config_specs if self.checkpoint is not None else [])
         )
 
     @property
@@ -213,11 +212,10 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 0,
             )
 
-            def read(chan: str) -> Any:
-                try:
-                    return channels[chan].get()
-                except EmptyChannelError:
-                    return None
+            if not next_tasks:
+                return
+
+            read = partial(_read_channel, channels)
 
             # Similarly to Bulk Synchronous Parallel / Pregel model
             # computation proceeds in steps, while there are channel updates
@@ -311,11 +309,10 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 0,
             )
 
-            def read(chan: str) -> Any:
-                try:
-                    return channels[chan].get()
-                except EmptyChannelError:
-                    return None
+            if not next_tasks:
+                return
+
+            read = partial(_read_channel, channels)
 
             # Similarly to Bulk Synchronous Parallel / Pregel model
             # computation proceeds in steps, while there are channel updates
@@ -478,6 +475,15 @@ def _interrupt_or_proceed(
         raise TimeoutError(f"Timed out at step {step}")
 
 
+def _read_channel(
+    channels: Mapping[str, BaseChannel], chan: str, catch: bool = True
+) -> Any:
+    try:
+        return channels[chan].get()
+    except EmptyChannelError:
+        return None
+
+
 def _apply_writes_and_prepare_next_tasks(
     processes: Mapping[str, ChannelInvoke | ChannelBatch],
     channels: Mapping[str, BaseChannel],
@@ -516,19 +522,24 @@ def _apply_writes_and_prepare_next_tasks(
     for name, proc in processes.items():
         if isinstance(proc, ChannelInvoke):
             # If any of the channels read by this process were updated
-            if any(chan in updated_channels for chan in proc.channels.values()):
-                # If all channels read by this process have been initialized
+            if any(chan in updated_channels for chan in proc.triggers):
+                # If all channels subscribed by this process have been initialized
                 try:
-                    val = {k: channels[chan].get() for k, chan in proc.channels.items()}
+                    val = {
+                        k: _read_channel(
+                            channels, chan, catch=chan not in proc.triggers
+                        )
+                        for k, chan in proc.channels.items()
+                    }
                 except EmptyChannelError:
                     continue
 
                 # Processes that subscribe to a single keyless channel get
                 # the value directly, instead of a dict
                 if list(proc.channels.keys()) == [None]:
-                    tasks.append((proc, val[None], name))
-                else:
-                    tasks.append((proc, val, name))
+                    val = val[None]
+
+                tasks.append((proc, val, name))
         elif isinstance(proc, ChannelBatch):
             # If the channel read by this process was updated
             if proc.channel in updated_channels:

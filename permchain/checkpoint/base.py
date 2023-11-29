@@ -1,6 +1,6 @@
 import asyncio
 from abc import ABC, abstractmethod
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping
 
 from langchain.load.serializable import Serializable
 from langchain.schema.runnable import RunnableConfig
@@ -18,7 +18,7 @@ class BaseCheckpointAdapter(Serializable, ABC):
     at: CheckpointAt = CheckpointAt.END_OF_RUN
 
     @property
-    def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
+    def config_specs(self) -> list[ConfigurableFieldSpec]:
         return []
 
     @abstractmethod

@@ -14,7 +14,7 @@ FORBIDDEN_CHANNEL_NAMES = {
 
 def validate_chains_channels(
     chains: Mapping[str, ChannelInvoke | ChannelBatch],
-    channels: Mapping[str, BaseChannel],
+    channels: dict[str, BaseChannel],
     input: str | Sequence[str],
     output: str | Sequence[str],
 ) -> None:
@@ -31,17 +31,17 @@ def validate_chains_channels(
 
     for chan in subscribed_channels:
         if chan not in channels:
-            channels[chan] = LastValue(Any)
+            channels[chan] = LastValue(Any)  # type: ignore[arg-type]
 
     if isinstance(input, str):
         if input not in channels:
-            channels[input] = LastValue(Any)
+            channels[input] = LastValue(Any)  # type: ignore[arg-type]
         if input not in subscribed_channels:
             raise ValueError(f"Input channel {input} is not subscribed to by any chain")
     else:
         for chan in input:
             if chan not in channels:
-                channels[chan] = LastValue(Any)
+                channels[chan] = LastValue(Any)  # type: ignore[arg-type]
         if all(chan not in subscribed_channels for chan in input):
             raise ValueError(
                 f"None of the input channels {input} are subscribed to by any chain"
@@ -49,11 +49,11 @@ def validate_chains_channels(
 
     if isinstance(output, str):
         if output not in channels:
-            channels[output] = LastValue(Any)
+            channels[output] = LastValue(Any)  # type: ignore[arg-type]
     else:
         for chan in output:
             if chan not in channels:
-                channels[chan] = LastValue(Any)
+                channels[chan] = LastValue(Any)  # type: ignore[arg-type]
 
     for name in FORBIDDEN_CHANNEL_NAMES:
         if name in channels:
@@ -61,4 +61,4 @@ def validate_chains_channels(
 
     for chan in ReservedChannels:
         if chan not in channels:
-            channels[chan] = LastValue(Any)
+            channels[chan] = LastValue(Any)  # type: ignore[arg-type]
