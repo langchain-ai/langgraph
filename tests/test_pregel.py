@@ -281,27 +281,39 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
         | raise_if_above_10
     )
 
+    memory = MemoryCheckpoint()
+
     app = Pregel(
         chains={"chain_one": chain_one},
         channels={"total": BinaryOperatorAggregate(int, operator.add)},
-        checkpoint=MemoryCheckpoint(),
+        checkpoint=memory,
     )
 
     # total starts out as 0, so output is 0+2=2
     assert app.invoke(2, {"configurable": {"thread_id": "1"}}) == 2
-    assert app.checkpoint.get({"configurable": {"thread_id": "1"}}).get("total") == 2
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint.get("total") == 2
     # total is now 2, so output is 2+3=5
     assert app.invoke(3, {"configurable": {"thread_id": "1"}}) == 5
-    assert app.checkpoint.get({"configurable": {"thread_id": "1"}}).get("total") == 7
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint.get("total") == 7
     # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
     with pytest.raises(ValueError):
         app.invoke(4, {"configurable": {"thread_id": "1"}})
     # checkpoint is not updated
-    assert app.checkpoint.get({"configurable": {"thread_id": "1"}}).get("total") == 7
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint.get("total") == 7
     # on a new thread, total starts out as 0, so output is 0+5=5
     assert app.invoke(5, {"configurable": {"thread_id": "2"}}) == 5
-    assert app.checkpoint.get({"configurable": {"thread_id": "1"}}).get("total") == 7
-    assert app.checkpoint.get({"configurable": {"thread_id": "2"}}).get("total") == 5
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint.get("total") == 7
+    checkpoint = memory.get({"configurable": {"thread_id": "2"}})
+    assert checkpoint is not None
+    assert checkpoint.get("total") == 5
 
 
 def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:

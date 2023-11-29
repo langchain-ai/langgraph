@@ -43,7 +43,7 @@ class Topic(
         return Sequence[self.typ]  # type: ignore[name-defined]
 
     @property
-    def UpdateType(self) -> Type[Value]:
+    def UpdateType(self) -> Any:
         """The type of the update received by the channel."""
         return Union[self.typ, list[self.typ]]  # type: ignore[name-defined]
 

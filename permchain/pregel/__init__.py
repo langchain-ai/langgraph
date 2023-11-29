@@ -27,7 +27,6 @@ from langchain.globals import get_debug
 from langchain.pydantic_v1 import BaseModel, Field, create_model, root_validator
 from langchain.schema.runnable import (
     Runnable,
-    RunnablePassthrough,
     RunnableSerializable,
 )
 from langchain.schema.runnable.base import Input, Output, coerce_to_runnable

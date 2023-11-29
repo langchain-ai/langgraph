@@ -1,4 +1,4 @@
-from typing import Any, Dict, Mapping, Sequence
+from typing import Any, Dict, Mapping
 
 from langchain.pydantic_v1 import Field
 from langchain.schema.runnable import RunnableConfig
@@ -11,7 +11,7 @@ class MemoryCheckpoint(BaseCheckpointAdapter):
     storage: Dict[str, Mapping[str, Any]] = Field(default_factory=dict)
 
     @property
-    def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
+    def config_specs(self) -> list[ConfigurableFieldSpec]:
         return [
             ConfigurableFieldSpec(
                 id="thread_id",

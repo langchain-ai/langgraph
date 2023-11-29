@@ -54,7 +54,7 @@ class BaseChannel(Generic[Value, Update, Checkpoint], ABC):
 
     @asynccontextmanager
     async def aempty(
-        self, checkpoint: Optional[str] = None
+        self, checkpoint: Optional[Checkpoint] = None
     ) -> AsyncGenerator[Self, None]:
         """Return a new identical channel, optionally initialized from a checkpoint."""
         with self.empty(checkpoint) as value:
