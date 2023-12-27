@@ -299,7 +299,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     app = Pregel(
         chains={"chain_one": chain_one},
         channels={"total": BinaryOperatorAggregate(int, operator.add)},
-        checkpoint=memory,
+        saver=memory,
     )
 
     # total starts out as 0, so output is 0+2=2
