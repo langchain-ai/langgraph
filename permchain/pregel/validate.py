@@ -2,14 +2,8 @@ from typing import Any, Mapping, Sequence
 
 from permchain.channels.base import BaseChannel
 from permchain.channels.last_value import LastValue
-from permchain.constants import CHECKPOINT_KEY_TS, CHECKPOINT_KEY_VERSION
 from permchain.pregel.read import ChannelBatch, ChannelInvoke
 from permchain.pregel.reserved import ReservedChannels
-
-FORBIDDEN_CHANNEL_NAMES = {
-    CHECKPOINT_KEY_TS,
-    CHECKPOINT_KEY_VERSION,
-}
 
 
 def validate_chains_channels(
@@ -54,10 +48,6 @@ def validate_chains_channels(
         for chan in output:
             if chan not in channels:
                 channels[chan] = LastValue(Any)  # type: ignore[arg-type]
-
-    for name in FORBIDDEN_CHANNEL_NAMES:
-        if name in channels:
-            raise ValueError(f"Channel name {name} is reserved")
 
     for chan in ReservedChannels:
         if chan not in channels:

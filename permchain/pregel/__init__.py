@@ -207,11 +207,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     ) -> Iterator[dict[str, Any] | Any]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
+        # copy chains to ignore mutations during execution
         processes = {**self.chains}
+        # get checkpoint from saver, or create an empty one
         saver = saver or self.saver
-        checkpoint = (
-            self.saver.get(config) if self.saver else None
-        ) or empty_checkpoint()
+        checkpoint = self.saver.get(config) if self.saver else None
+        checkpoint = checkpoint or empty_checkpoint()
         with ChannelsManager(
             self.channels, checkpoint
         ) as channels, get_executor_for_config(config) as executor:
@@ -299,22 +300,20 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     ) -> AsyncIterator[dict[str, Any] | Any]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
+        # copy chains to ignore mutations during execution
         processes = {**self.chains}
+        # get checkpoint from saver, or create an empty one
         saver = saver or self.saver
-        checkpoint = (
-            await self.saver.aget(config) if self.saver else None
-        ) or empty_checkpoint()
+        checkpoint = await self.saver.aget(config) if self.saver else None
+        checkpoint = checkpoint or empty_checkpoint()
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
-            next_tasks = _apply_writes(
-                processes,
+            _apply_writes(
+                checkpoint,
                 channels,
                 deque([w async for c in input for w in map_input(self.input, c)]),
                 config,
                 0,
             )
-
-            if not next_tasks:
-                return
 
             read = partial(_read_channel, channels)
 
@@ -324,6 +323,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             # channels are guaranteed to be immutable for the duration of the step,
             # channel updates being applied only at the transition between steps
             for step in range(config["recursion_limit"]):
+                next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
+
+                # if no more tasks, we're done
+                if not next_tasks:
+                    break
+
                 if self.debug:
                     print_step_start(step, next_tasks)
 
@@ -359,10 +364,8 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 # interrupt on failure or timeout
                 _interrupt_or_proceed(done, inflight, step)
 
-                # apply writes to channels, decide on next step
-                next_tasks = _apply_writes(
-                    processes, channels, pending_writes, config, step + 1
-                )
+                # apply writes to channels
+                _apply_writes(checkpoint, channels, pending_writes, config, step + 1)
 
                 if self.debug:
                     print_checkpoint(step, channels)
@@ -372,21 +375,14 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                     yield output
 
                 # save end of step checkpoint
-                if (
-                    checkpointer is not None
-                    and checkpointer.at == CheckpointAt.END_OF_STEP
-                ):
-                    checkpoint = create_checkpoint(channels)
-                    await checkpointer.aput(config, checkpoint)
-
-                # if no more tasks, we're done
-                if not next_tasks:
-                    break
+                if saver is not None and saver.at == CheckpointAt.END_OF_STEP:
+                    checkpoint = create_checkpoint(checkpoint, channels)
+                    await saver.aput(config, checkpoint)
 
             # save end of run checkpoint
-            if checkpointer is not None and checkpointer.at == CheckpointAt.END_OF_RUN:
-                checkpoint = create_checkpoint(channels)
-                await checkpointer.aput(config, checkpoint)
+            if saver is not None and saver.at == CheckpointAt.END_OF_RUN:
+                checkpoint = create_checkpoint(checkpoint, channels)
+                await saver.aput(config, checkpoint)
 
     def invoke(
         self,

@@ -15,7 +15,6 @@ from typing import (
 from typing_extensions import Self
 
 from permchain.checkpoint.base import Checkpoint
-from permchain.constants import CHECKPOINT_KEY_TS, CHECKPOINT_KEY_VERSION
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
@@ -98,11 +97,10 @@ def ChannelsManager(
 @asynccontextmanager
 async def AsyncChannelsManager(
     channels: Mapping[str, BaseChannel],
-    checkpoint: Optional[Mapping[str, Any]],
+    checkpoint: Checkpoint,
 ) -> AsyncGenerator[Mapping[str, BaseChannel], None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
-    checkpoint = checkpoint or {}
-    empty = {k: v.aempty(checkpoint.get(k)) for k, v in channels.items()}
+    empty = {k: v.aempty(checkpoint["values"].get(k)) for k, v in channels.items()}
     try:
         yield {k: await v.__aenter__() for k, v in empty.items()}
     finally:
@@ -110,7 +108,9 @@ async def AsyncChannelsManager(
             await v.__aexit__(None, None, None)
 
 
-def create_checkpoint(checkpoint, channels: Mapping[str, BaseChannel]) -> Checkpoint:
+def create_checkpoint(
+    checkpoint: Checkpoint, channels: Mapping[str, BaseChannel]
+) -> Checkpoint:
     """Create a checkpoint for the given channels."""
     checkpoint = Checkpoint(checkpoint, v=1, ts=datetime.now(timezone.utc).isoformat())
     for k, v in channels.items():

@@ -306,27 +306,27 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     assert await app.ainvoke(2, {"configurable": {"thread_id": "1"}}) == 2
     checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 2
+    assert checkpoint["values"].get("total") == 2
     # total is now 2, so output is 2+3=5
     assert await app.ainvoke(3, {"configurable": {"thread_id": "1"}}) == 5
     checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 7
+    assert checkpoint["values"].get("total") == 7
     # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
     with pytest.raises(ValueError):
         await app.ainvoke(4, {"configurable": {"thread_id": "1"}})
     # checkpoint is not updated
     checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 7
+    assert checkpoint["values"].get("total") == 7
     # on a new thread, total starts out as 0, so output is 0+5=5
     assert await app.ainvoke(5, {"configurable": {"thread_id": "2"}}) == 5
     checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 7
+    assert checkpoint["values"].get("total") == 7
     checkpoint = await memory.aget({"configurable": {"thread_id": "2"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 5
+    assert checkpoint["values"].get("total") == 5
 
 
 async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:

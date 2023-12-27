@@ -5,10 +5,12 @@ from permchain.pregel.log import logger
 
 
 def map_input(
-    input_channels: str | Sequence[str], chunk: dict[str, Any] | Any
+    input_channels: str | Sequence[str], chunk: dict[str, Any] | Any | None
 ) -> Iterator[tuple[str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
-    if isinstance(input_channels, str):
+    if chunk is None:
+        return
+    elif isinstance(input_channels, str):
         yield (input_channels, chunk)
     else:
         if not isinstance(chunk, dict):
