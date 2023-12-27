@@ -1,6 +1,6 @@
 from abc import ABC, abstractmethod
 from contextlib import asynccontextmanager, contextmanager
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import (
     Any,
     AsyncGenerator,
@@ -116,7 +116,7 @@ def create_checkpoint(channels: Mapping[str, BaseChannel]) -> Mapping[str, Any]:
     """Create a checkpoint for the given channels."""
     checkpoint = {
         CHECKPOINT_KEY_VERSION: 1,
-        CHECKPOINT_KEY_TS: datetime.utcnow().isoformat(),
+        CHECKPOINT_KEY_TS: datetime.now(timezone.utc).isoformat(),
     }
     for k, v in channels.items():
         try:

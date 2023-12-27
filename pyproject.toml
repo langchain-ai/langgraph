@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/permchain"
 
 [tool.poetry.dependencies]
 python = ">=3.8.1,<4.0"
-langchain = ">=0.0.335"
+langchain = "^0.0.352"
 
 
 [tool.poetry.group.test.dependencies]
@@ -23,6 +23,7 @@ pytest-asyncio = "^0.20.3"
 pytest-mock  = "^3.10.0"
 syrupy = "^4.0.2"
 pytest-watch = "^4.2.0"
+httpx = "^0.26.0"
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.4"

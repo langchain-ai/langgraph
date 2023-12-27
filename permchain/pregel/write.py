@@ -32,7 +32,7 @@ class ChannelWrite(RunnablePassthrough):
         super().__init__(func=self._write, afunc=self._awrite, channels=channels)
 
     @property
-    def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
+    def config_specs(self) -> list[ConfigurableFieldSpec]:
         return [
             ConfigurableFieldSpec(
                 id=CONFIG_KEY_SEND,

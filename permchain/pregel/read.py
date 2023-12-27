@@ -3,19 +3,20 @@ from __future__ import annotations
 from typing import Any, Callable, List, Mapping, Optional, Sequence
 
 from langchain.pydantic_v1 import Field
-from langchain.schema.runnable import (
+from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
     RunnableLambda,
     RunnablePassthrough,
+    RunnableSerializable,
 )
-from langchain.schema.runnable.base import (
+from langchain_core.runnables.base import (
     Other,
     RunnableBindingBase,
     RunnableEach,
     coerce_to_runnable,
 )
-from langchain.schema.runnable.utils import ConfigurableFieldSpec
+from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from permchain.channels.base import BaseChannel
 from permchain.constants import CONFIG_KEY_READ
@@ -25,7 +26,7 @@ class ChannelRead(RunnableLambda):
     channel: str
 
     @property
-    def config_specs(self) -> Sequence[ConfigurableFieldSpec]:
+    def config_specs(self) -> list[ConfigurableFieldSpec]:
         return [
             ConfigurableFieldSpec(
                 id=CONFIG_KEY_READ,
@@ -61,7 +62,7 @@ class ChannelRead(RunnableLambda):
         return read(self.channel)
 
 
-default_bound = RunnablePassthrough()
+default_bound: RunnablePassthrough = RunnablePassthrough()
 
 
 class ChannelInvoke(RunnableBindingBase):
@@ -141,7 +142,7 @@ class ChannelInvoke(RunnableBindingBase):
         other: Runnable[Other, Any]
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Other, Any] | Callable[[Other], Any]],
-    ) -> Runnable:
+    ) -> RunnableSerializable:
         raise NotImplementedError()
 
 
@@ -190,5 +191,5 @@ class ChannelBatch(RunnableEach):
         other: Runnable[Other, Any]
         | Callable[[Any], Other]
         | Mapping[str, Runnable[Other, Any] | Callable[[Other], Any]],
-    ) -> Runnable:
+    ) -> RunnableSerializable:
         raise NotImplementedError()
