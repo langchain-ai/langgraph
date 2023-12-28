@@ -34,3 +34,4 @@ def map_output(
     else:
         if updated := {c for c, _ in pending_writes if c in output_channels}:
             return {chan: channels[chan].get() for chan in updated}
+    return None

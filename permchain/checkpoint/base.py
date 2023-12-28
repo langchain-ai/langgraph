@@ -4,10 +4,10 @@ from collections import defaultdict
 from datetime import datetime, timezone
 from typing import Any, TypedDict
 
-from langchain.load.serializable import Serializable
-from langchain.pydantic_v1 import Field
-from langchain.schema.runnable import RunnableConfig
-from langchain.schema.runnable.utils import ConfigurableFieldSpec
+from langchain_core.load.serializable import Serializable
+from langchain_core.pydantic_v1 import Field
+from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from permchain.utils import StrEnum
 

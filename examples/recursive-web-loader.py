@@ -2,9 +2,9 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import AsyncGenerator, Callable, FrozenSet, Generator, Optional, TypedDict
 
 import httpx
-from langchain.schema import Document
-from langchain.schema.runnable import RunnableLambda, RunnablePassthrough
-from langchain.utils.html import extract_sub_links
+from langchain_core.documents import Document
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.utils.html import extract_sub_links
 
 from permchain import Channel, Pregel
 from permchain.channels.context import Context

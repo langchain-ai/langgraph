@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Any, AsyncGenerator, AsyncIterator, Generator
 
 import pytest
-from langchain.schema.runnable import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
 
 from permchain import Channel, Pregel

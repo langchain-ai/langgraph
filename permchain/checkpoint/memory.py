@@ -1,6 +1,6 @@
-from langchain.pydantic_v1 import Field
-from langchain.schema.runnable import RunnableConfig
-from langchain.schema.runnable.utils import ConfigurableFieldSpec
+from langchain_core.pydantic_v1 import Field
+from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from permchain.checkpoint.base import BaseCheckpointAdapter, Checkpoint
 

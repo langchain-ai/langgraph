@@ -2,8 +2,8 @@ from __future__ import annotations
 
 from langchain.chat_models.openai import ChatOpenAI
 from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
-from langchain.prompts import SystemMessagePromptTemplate
-from langchain.schema.output_parser import StrOutputParser
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import SystemMessagePromptTemplate
 
 from permchain import Channel, Pregel
 

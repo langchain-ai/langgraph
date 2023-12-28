@@ -1,8 +1,8 @@
 from langchain.chat_models import ChatOpenAI
 from langchain.embeddings import OpenAIEmbeddings
-from langchain.prompts import PromptTemplate
-from langchain.schema.messages import AIMessage, AnyMessage, FunctionMessage
 from langchain.vectorstores import FAISS
+from langchain_core.messages import AIMessage, AnyMessage, FunctionMessage
+from langchain_core.prompts import PromptTemplate
 
 from permchain import Channel, Pregel
 from permchain.channels import Topic

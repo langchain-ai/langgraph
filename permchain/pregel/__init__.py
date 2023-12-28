@@ -19,23 +19,23 @@ from typing import (
     overload,
 )
 
-from langchain.callbacks.manager import (
+from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     CallbackManagerForChainRun,
 )
-from langchain.globals import get_debug
-from langchain.pydantic_v1 import BaseModel, Field, create_model, root_validator
-from langchain.schema.runnable import (
+from langchain_core.globals import get_debug
+from langchain_core.pydantic_v1 import BaseModel, Field, create_model, root_validator
+from langchain_core.runnables import (
     Runnable,
     RunnableSerializable,
 )
-from langchain.schema.runnable.base import Input, Output, coerce_to_runnable
-from langchain.schema.runnable.config import (
+from langchain_core.runnables.base import Input, Output, coerce_to_runnable
+from langchain_core.runnables.config import (
     RunnableConfig,
     get_executor_for_config,
     patch_config,
 )
-from langchain.schema.runnable.utils import (
+from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     get_unique_config_specs,
 )
@@ -433,10 +433,10 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         config: RunnableConfig | None = None,
         **kwargs: Any,
     ) -> Iterator[tuple[dict[str, Any] | Any, CheckpointView]]:
-        for output, view in self._transform_stream_with_config(
+        for tup in self._transform_stream_with_config(
             iter([input]), self._transform, config, **kwargs
         ):
-            yield output, view
+            yield cast(tuple[dict[str, Any] | Any, CheckpointView], tup)
 
     async def ainvoke(
         self,
@@ -482,10 +482,10 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         async def input_stream() -> AsyncIterator[dict[str, Any] | Any]:
             yield input
 
-        async for output, view in self._atransform_stream_with_config(
+        async for tup in self._atransform_stream_with_config(
             input_stream(), self._atransform, config, **kwargs
         ):
-            yield output, view
+            yield cast(tuple[dict[str, Any] | Any, CheckpointView], tup)
 
 
 def _interrupt_or_proceed(
@@ -590,7 +590,7 @@ def _prepare_next_tasks(
             ):
                 # If all channels subscribed by this process have been initialized
                 try:
-                    val = {
+                    val: Any = {
                         k: _read_channel(
                             channels, chan, catch=chan not in proc.triggers
                         )

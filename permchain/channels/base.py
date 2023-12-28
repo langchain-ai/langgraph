@@ -116,7 +116,13 @@ def create_checkpoint(
     checkpoint: Checkpoint, channels: Mapping[str, BaseChannel]
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
-    checkpoint = Checkpoint(checkpoint, v=1, ts=datetime.now(timezone.utc).isoformat())
+    checkpoint = Checkpoint(
+        v=1,
+        ts=datetime.now(timezone.utc).isoformat(),
+        channel_values=checkpoint["channel_values"],
+        channel_versions=checkpoint["channel_versions"],
+        versions_seen=checkpoint["versions_seen"],
+    )
     for k, v in channels.items():
         try:
             checkpoint["channel_values"][k] = v.checkpoint()

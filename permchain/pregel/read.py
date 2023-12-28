@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, List, Mapping, Optional, Sequence
 
-from langchain.pydantic_v1 import Field
+from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
