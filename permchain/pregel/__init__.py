@@ -214,9 +214,11 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         # get checkpoint from saver, or create an empty one
         checkpoint = self.saver.get(config) if self.saver else None
         checkpoint = checkpoint or empty_checkpoint()
+        # create channels from checkpoint
         with ChannelsManager(
             self.channels, checkpoint
         ) as channels, get_executor_for_config(config) as executor:
+            # map inputs to channel updates
             _apply_writes(
                 checkpoint,
                 channels,
@@ -309,7 +311,9 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         # get checkpoint from saver, or create an empty one
         checkpoint = await self.saver.aget(config) if self.saver else None
         checkpoint = checkpoint or empty_checkpoint()
+        # create channels from checkpoint
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+            # map inputs to channel updates
             _apply_writes(
                 checkpoint,
                 channels,
