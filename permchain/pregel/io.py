@@ -26,11 +26,11 @@ def map_output(
     output_channels: str | Sequence[str],
     pending_writes: Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
-) -> Iterator[dict[str, Any] | Any]:
+) -> dict[str, Any] | Any | None:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
         if any(chan == output_channels for chan, _ in pending_writes):
-            yield channels[output_channels].get()
+            return channels[output_channels].get()
     else:
         if updated := {c for c, _ in pending_writes if c in output_channels}:
-            yield {chan: channels[chan].get() for chan in updated}
+            return {chan: channels[chan].get() for chan in updated}

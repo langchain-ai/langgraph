@@ -86,7 +86,9 @@ def ChannelsManager(
 ) -> Generator[Mapping[str, BaseChannel], None, None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     # TODO use https://docs.python.org/3/library/contextlib.html#contextlib.ExitStack
-    empty = {k: v.empty(checkpoint["values"].get(k)) for k, v in channels.items()}
+    empty = {
+        k: v.empty(checkpoint["channel_values"].get(k)) for k, v in channels.items()
+    }
     try:
         yield {k: v.__enter__() for k, v in empty.items()}
     finally:
@@ -100,7 +102,9 @@ async def AsyncChannelsManager(
     checkpoint: Checkpoint,
 ) -> AsyncGenerator[Mapping[str, BaseChannel], None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
-    empty = {k: v.aempty(checkpoint["values"].get(k)) for k, v in channels.items()}
+    empty = {
+        k: v.aempty(checkpoint["channel_values"].get(k)) for k, v in channels.items()
+    }
     try:
         yield {k: await v.__aenter__() for k, v in empty.items()}
     finally:
@@ -115,7 +119,18 @@ def create_checkpoint(
     checkpoint = Checkpoint(checkpoint, v=1, ts=datetime.now(timezone.utc).isoformat())
     for k, v in channels.items():
         try:
-            checkpoint["values"][k] = v.checkpoint()
+            checkpoint["channel_values"][k] = v.checkpoint()
         except EmptyChannelError:
             pass
     return checkpoint
+
+
+def channel_values(channels: Mapping[str, BaseChannel]) -> dict[str, Any]:
+    """Return a dictionary of channel values."""
+    values: dict[str, Any] = {}
+    for k, v in channels.items():
+        try:
+            values[k] = v.get()
+        except EmptyChannelError:
+            pass
+    return values

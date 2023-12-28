@@ -1,7 +1,8 @@
 import asyncio
 from abc import ABC, abstractmethod
 from collections import defaultdict
-from typing import Any, Mapping, TypedDict
+from datetime import datetime, timezone
+from typing import Any, TypedDict
 
 from langchain.load.serializable import Serializable
 from langchain.pydantic_v1 import Field
@@ -14,16 +15,18 @@ from permchain.utils import StrEnum
 class Checkpoint(TypedDict):
     v: int
     ts: str
-    values: dict[str, Any]
-    versions: defaultdict[str, int]
-    seen: defaultdict[str, defaultdict[str, int]]
+    channel_values: dict[str, Any]
+    channel_versions: defaultdict[str, int]
+    versions_seen: defaultdict[str, defaultdict[str, int]]
 
 
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
-        values={},
-        versions=defaultdict(int),
-        seen=defaultdict(lambda: defaultdict(int)),
+        v=1,
+        ts=datetime.now(timezone.utc).isoformat(),
+        channel_values={},
+        channel_versions=defaultdict(int),
+        versions_seen=defaultdict(lambda: defaultdict(int)),
     )
 
 
@@ -56,14 +59,7 @@ class BaseCheckpointAdapter(Serializable, ABC):
         )
 
 
-class StepState(Serializable):
-    _checkpoint: Checkpoint
+class CheckpointView(Serializable):
+    values: dict[str, Any] = Field(frozen=True)
 
-    _puts: set[str] = Field(default_factory=set)
-
-    def get(self, key: str, default: Any | None = None) -> Any | None:
-        return self._checkpoint["values"].get(key)
-
-    def put(self, key: str, value: Any) -> None:
-        self._puts.add(key)
-        self._checkpoint["values"][key] = value
+    step: int
