@@ -56,7 +56,6 @@ from permchain.checkpoint.base import (
     CheckpointView,
     empty_checkpoint,
 )
-from permchain.checkpoint.memory import MemoryCheckpoint
 from permchain.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
 from permchain.pregel.debug import print_checkpoint, print_step_start
 from permchain.pregel.io import map_input, map_output
