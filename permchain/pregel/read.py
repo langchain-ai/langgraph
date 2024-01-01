@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from typing import Any, Callable, List, Mapping, Optional, Sequence
 
-from langchain.pydantic_v1 import Field
+from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
@@ -70,7 +70,7 @@ class ChannelInvoke(RunnableBindingBase):
 
     triggers: List[str] = Field(default_factory=list)
 
-    skip: Optional[Callable[[Any], bool]] = None
+    when: Optional[Callable[[Any], bool]] = None
 
     bound: Runnable[Any, Any] = Field(default=default_bound)
 
@@ -80,6 +80,7 @@ class ChannelInvoke(RunnableBindingBase):
         self,
         channels: Mapping[None, str] | Mapping[str, str],
         triggers: Sequence[str],
+        when: Optional[Callable[[Any], bool]] = None,
         *,
         bound: Optional[Runnable[Any, Any]] = None,
         kwargs: Optional[Mapping[str, Any]] = None,
@@ -89,6 +90,7 @@ class ChannelInvoke(RunnableBindingBase):
         super().__init__(
             channels=channels,
             triggers=triggers,
+            when=when,
             bound=bound or default_bound,
             kwargs=kwargs or {},
             config=config,
@@ -108,6 +110,7 @@ class ChannelInvoke(RunnableBindingBase):
                 **{chan: chan for chan in channels},
             },
             triggers=self.triggers,
+            when=self.when,
             bound=self.bound,
             kwargs=self.kwargs,
             config=self.config,
@@ -123,6 +126,7 @@ class ChannelInvoke(RunnableBindingBase):
             return ChannelInvoke(
                 channels=self.channels,
                 triggers=self.triggers,
+                when=self.when,
                 bound=coerce_to_runnable(other),
                 kwargs=self.kwargs,
                 config=self.config,
@@ -131,6 +135,7 @@ class ChannelInvoke(RunnableBindingBase):
             return ChannelInvoke(
                 channels=self.channels,
                 triggers=self.triggers,
+                when=self.when,
                 # delegate to __or__ in self.bound
                 bound=self.bound | other,
                 kwargs=self.kwargs,

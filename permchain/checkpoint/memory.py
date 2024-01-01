@@ -1,14 +1,12 @@
-from typing import Any, Dict, Mapping
+from langchain_core.pydantic_v1 import Field
+from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langchain.pydantic_v1 import Field
-from langchain.schema.runnable import RunnableConfig
-from langchain.schema.runnable.utils import ConfigurableFieldSpec
-
-from permchain.checkpoint.base import BaseCheckpointAdapter
+from permchain.checkpoint.base import BaseCheckpointAdapter, Checkpoint
 
 
 class MemoryCheckpoint(BaseCheckpointAdapter):
-    storage: Dict[str, Mapping[str, Any]] = Field(default_factory=dict)
+    storage: dict[str, Checkpoint] = Field(default_factory=dict)
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -23,8 +21,8 @@ class MemoryCheckpoint(BaseCheckpointAdapter):
             ),
         ]
 
-    def get(self, config: RunnableConfig) -> Mapping[str, Any] | None:
+    def get(self, config: RunnableConfig) -> Checkpoint | None:
         return self.storage.get(config["configurable"]["thread_id"], None)
 
-    def put(self, config: RunnableConfig, checkpoint: Mapping[str, Any]) -> None:
+    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> None:
         return self.storage.update({config["configurable"]["thread_id"]: checkpoint})

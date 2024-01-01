@@ -2,12 +2,12 @@ from __future__ import annotations
 
 from typing import Any, Callable, Sequence
 
-from langchain.schema.runnable import (
+from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
     RunnablePassthrough,
 )
-from langchain.schema.runnable.utils import ConfigurableFieldSpec
+from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from permchain.constants import CONFIG_KEY_SEND
 

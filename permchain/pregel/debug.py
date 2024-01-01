@@ -1,8 +1,8 @@
 from pprint import pformat
 from typing import Any, Iterator, Mapping
 
-from langchain.schema.runnable import Runnable
-from langchain.utils.input import get_bolded_text, get_colored_text
+from langchain_core.runnables import Runnable
+from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from permchain.channels.base import BaseChannel, EmptyChannelError
 

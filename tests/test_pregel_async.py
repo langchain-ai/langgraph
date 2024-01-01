@@ -4,7 +4,7 @@ from contextlib import asynccontextmanager, contextmanager
 from typing import Any, AsyncGenerator, AsyncIterator, Generator
 
 import pytest
-from langchain.schema.runnable import RunnablePassthrough
+from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
 
 from permchain import Channel, Pregel
@@ -144,16 +144,50 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
 async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    chain_two = (
-        Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
-    )
+    chain_two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
     app = Pregel(
         chains={"chain_one": chain_one, "chain_two": chain_two},
-        channels={"inbox": Topic(int)},
     )
 
     assert await app.ainvoke(2) == 4
+
+    async for output, view in app.astep(2):
+        if view.step == 1:
+            assert view.values == {
+                "inbox": 3,
+                "input": 2,
+                "is_last_step": False,
+            }
+            assert output is None
+        elif view.step == 2:
+            assert view.values == {
+                "output": 4,
+                "inbox": 3,
+                "input": 2,
+                "is_last_step": False,
+            }
+            assert output == 4
+
+    async for output, view in app.astep(2):
+        if view.step == 1:
+            assert view.values == {
+                "inbox": 3,
+                "input": 2,
+                "is_last_step": False,
+            }
+            assert output is None
+            # modify inbox value
+            view.values["inbox"] = 5
+        elif view.step == 2:
+            assert view.values == {
+                "output": 6,
+                "inbox": 5,
+                "input": 2,
+                "is_last_step": False,
+            }
+            # output is different now
+            assert output == 6
 
 
 async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
@@ -299,34 +333,34 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     app = Pregel(
         chains={"chain_one": chain_one},
         channels={"total": BinaryOperatorAggregate(int, operator.add)},
-        checkpoint=memory,
+        saver=memory,
     )
 
     # total starts out as 0, so output is 0+2=2
     assert await app.ainvoke(2, {"configurable": {"thread_id": "1"}}) == 2
     checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 2
+    assert checkpoint["channel_values"].get("total") == 2
     # total is now 2, so output is 2+3=5
     assert await app.ainvoke(3, {"configurable": {"thread_id": "1"}}) == 5
     checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 7
+    assert checkpoint["channel_values"].get("total") == 7
     # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
     with pytest.raises(ValueError):
         await app.ainvoke(4, {"configurable": {"thread_id": "1"}})
     # checkpoint is not updated
     checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 7
+    assert checkpoint["channel_values"].get("total") == 7
     # on a new thread, total starts out as 0, so output is 0+5=5
     assert await app.ainvoke(5, {"configurable": {"thread_id": "2"}}) == 5
     checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 7
+    assert checkpoint["channel_values"].get("total") == 7
     checkpoint = await memory.aget({"configurable": {"thread_id": "2"}})
     assert checkpoint is not None
-    assert checkpoint.get("total") == 5
+    assert checkpoint["channel_values"].get("total") == 5
 
 
 async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:

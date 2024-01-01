@@ -19,23 +19,23 @@ from typing import (
     overload,
 )
 
-from langchain.callbacks.manager import (
+from langchain_core.callbacks.manager import (
     AsyncCallbackManagerForChainRun,
     CallbackManagerForChainRun,
 )
-from langchain.globals import get_debug
-from langchain.pydantic_v1 import BaseModel, Field, create_model, root_validator
-from langchain.schema.runnable import (
+from langchain_core.globals import get_debug
+from langchain_core.pydantic_v1 import BaseModel, Field, create_model, root_validator
+from langchain_core.runnables import (
     Runnable,
     RunnableSerializable,
 )
-from langchain.schema.runnable.base import Input, Output, coerce_to_runnable
-from langchain.schema.runnable.config import (
+from langchain_core.runnables.base import Input, Output, coerce_to_runnable
+from langchain_core.runnables.config import (
     RunnableConfig,
     get_executor_for_config,
     patch_config,
 )
-from langchain.schema.runnable.utils import (
+from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     get_unique_config_specs,
 )
@@ -45,9 +45,17 @@ from permchain.channels.base import (
     BaseChannel,
     ChannelsManager,
     EmptyChannelError,
+    channel_values,
     create_checkpoint,
 )
-from permchain.checkpoint.base import BaseCheckpointAdapter, CheckpointAt
+from permchain.channels.last_value import LastValue
+from permchain.checkpoint.base import (
+    BaseCheckpointAdapter,
+    Checkpoint,
+    CheckpointAt,
+    CheckpointView,
+    empty_checkpoint,
+)
 from permchain.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
 from permchain.pregel.debug import print_checkpoint, print_step_start
 from permchain.pregel.io import map_input, map_output
@@ -84,7 +92,10 @@ class Channel:
 
     @classmethod
     def subscribe_to(
-        cls, channels: str | Sequence[str], key: Optional[str] = None
+        cls,
+        channels: str | Sequence[str],
+        key: Optional[str] = None,
+        when: Callable[[Any], bool] | None = None,
     ) -> ChannelInvoke:
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
@@ -100,6 +111,7 @@ class Channel:
                 else {chan: chan for chan in channels},
             ),
             triggers=[channels] if isinstance(channels, str) else channels,
+            when=when,
         )
 
     @classmethod
@@ -135,7 +147,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     debug: bool = Field(default_factory=get_debug)
 
-    checkpoint: Optional[BaseCheckpointAdapter] = None
+    saver: Optional[BaseCheckpointAdapter] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -151,7 +163,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     def config_specs(self) -> list[ConfigurableFieldSpec]:
         return get_unique_config_specs(
             [spec for chain in self.chains.values() for spec in chain.config_specs]
-            + (self.checkpoint.config_specs if self.checkpoint is not None else [])
+            + (self.saver.config_specs if self.saver is not None else [])
         )
 
     @property
@@ -194,26 +206,26 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         input: Iterator[dict[str, Any] | Any],
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
-    ) -> Iterator[dict[str, Any] | Any]:
+    ) -> Iterator[tuple[dict[str, Any] | Any, CheckpointView]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
+        # copy chains to ignore mutations during execution
         processes = {**self.chains}
-        checkpoint = (
-            self.checkpoint.get(config) if self.checkpoint is not None else None
-        )
+        # get checkpoint from saver, or create an empty one
+        checkpoint = self.saver.get(config) if self.saver else None
+        checkpoint = checkpoint or empty_checkpoint()
+        # create channels from checkpoint
         with ChannelsManager(
             self.channels, checkpoint
         ) as channels, get_executor_for_config(config) as executor:
-            next_tasks = _apply_writes_and_prepare_next_tasks(
-                processes,
+            # map inputs to channel updates
+            _apply_writes(
+                checkpoint,
                 channels,
                 deque(w for c in input for w in map_input(self.input, c)),
                 config,
                 0,
             )
-
-            if not next_tasks:
-                return
 
             read = partial(_read_channel, channels)
 
@@ -223,6 +235,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             # channels are guaranteed to be immutable for the duration of the step,
             # with channel updates applied only at the transition between steps
             for step in range(config["recursion_limit"]):
+                next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
+
+                # if no more tasks, we're done
+                if not next_tasks:
+                    break
+
                 if self.debug:
                     print_step_start(step, next_tasks)
 
@@ -255,62 +273,54 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 # interrupt on failure or timeout
                 _interrupt_or_proceed(done, inflight, step)
 
-                # apply writes to channels, decide on next step
-
-                next_tasks = _apply_writes_and_prepare_next_tasks(
-                    processes, channels, pending_writes, config, step + 1
-                )
+                # apply writes to channels
+                _apply_writes(checkpoint, channels, pending_writes, config, step + 1)
 
                 if self.debug:
                     print_checkpoint(step, channels)
 
-                # if any write to output channels in this step, yield current value
-                for output in map_output(self.output, pending_writes, channels):
-                    yield output
+                # yield current value and checkpoint view
+                view = CheckpointView(
+                    values=channel_values(channels),
+                    step=step + 1,
+                )
+                yield map_output(self.output, pending_writes, channels), view
+                # if view was updated, apply writes to channels
+                _apply_writes_from_view(checkpoint, channels, view)
 
                 # save end of step checkpoint
-                if (
-                    self.checkpoint is not None
-                    and self.checkpoint.at == CheckpointAt.END_OF_STEP
-                ):
-                    checkpoint = create_checkpoint(channels)
-                    self.checkpoint.put(config, checkpoint)
-
-                # if no more tasks, we're done
-                if not next_tasks:
-                    break
+                if self.saver is not None and self.saver.at == CheckpointAt.END_OF_STEP:
+                    checkpoint = create_checkpoint(checkpoint, channels)
+                    self.saver.put(config, checkpoint)
 
             # save end of run checkpoint
-            if (
-                self.checkpoint is not None
-                and self.checkpoint.at == CheckpointAt.END_OF_RUN
-            ):
-                checkpoint = create_checkpoint(channels)
-                self.checkpoint.put(config, checkpoint)
+            if self.saver is not None and self.saver.at == CheckpointAt.END_OF_RUN:
+                checkpoint = create_checkpoint(checkpoint, channels)
+                self.saver.put(config, checkpoint)
 
     async def _atransform(
         self,
         input: AsyncIterator[dict[str, Any] | Any],
         run_manager: AsyncCallbackManagerForChainRun,
         config: RunnableConfig,
-    ) -> AsyncIterator[dict[str, Any] | Any]:
+    ) -> AsyncIterator[tuple[dict[str, Any] | Any, CheckpointView]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
+        # copy chains to ignore mutations during execution
         processes = {**self.chains}
-        checkpoint = (
-            await self.checkpoint.aget(config) if self.checkpoint is not None else None
-        )
+        # get checkpoint from saver, or create an empty one
+        checkpoint = await self.saver.aget(config) if self.saver else None
+        checkpoint = checkpoint or empty_checkpoint()
+        # create channels from checkpoint
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
-            next_tasks = _apply_writes_and_prepare_next_tasks(
-                processes,
+            # map inputs to channel updates
+            _apply_writes(
+                checkpoint,
                 channels,
                 deque([w async for c in input for w in map_input(self.input, c)]),
                 config,
                 0,
             )
-
-            if not next_tasks:
-                return
 
             read = partial(_read_channel, channels)
 
@@ -320,6 +330,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             # channels are guaranteed to be immutable for the duration of the step,
             # channel updates being applied only at the transition between steps
             for step in range(config["recursion_limit"]):
+                next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
+
+                # if no more tasks, we're done
+                if not next_tasks:
+                    break
+
                 if self.debug:
                     print_step_start(step, next_tasks)
 
@@ -355,37 +371,30 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 # interrupt on failure or timeout
                 _interrupt_or_proceed(done, inflight, step)
 
-                # apply writes to channels, decide on next step
-                next_tasks = _apply_writes_and_prepare_next_tasks(
-                    processes, channels, pending_writes, config, step + 1
-                )
+                # apply writes to channels
+                _apply_writes(checkpoint, channels, pending_writes, config, step + 1)
 
                 if self.debug:
                     print_checkpoint(step, channels)
 
-                # if any write to output channels in this step, yield current value
-                for output in map_output(self.output, pending_writes, channels):
-                    yield output
+                # yield current value and checkpoint view
+                view = CheckpointView(
+                    values=channel_values(channels),
+                    step=step + 1,
+                )
+                yield map_output(self.output, pending_writes, channels), view
+                # if view was updated, apply writes to channels
+                _apply_writes_from_view(checkpoint, channels, view)
 
                 # save end of step checkpoint
-                if (
-                    self.checkpoint is not None
-                    and self.checkpoint.at == CheckpointAt.END_OF_STEP
-                ):
-                    checkpoint = create_checkpoint(channels)
-                    await self.checkpoint.aput(config, checkpoint)
-
-                # if no more tasks, we're done
-                if not next_tasks:
-                    break
+                if self.saver is not None and self.saver.at == CheckpointAt.END_OF_STEP:
+                    checkpoint = create_checkpoint(checkpoint, channels)
+                    await self.saver.aput(config, checkpoint)
 
             # save end of run checkpoint
-            if (
-                self.checkpoint is not None
-                and self.checkpoint.at == CheckpointAt.END_OF_RUN
-            ):
-                checkpoint = create_checkpoint(channels)
-                await self.checkpoint.aput(config, checkpoint)
+            if self.saver is not None and self.saver.at == CheckpointAt.END_OF_RUN:
+                checkpoint = create_checkpoint(checkpoint, channels)
+                await self.saver.aput(config, checkpoint)
 
     def invoke(
         self,
@@ -412,9 +421,22 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> Iterator[dict[str, Any] | Any]:
-        return self._transform_stream_with_config(
+        for output, _ in self._transform_stream_with_config(
             input, self._transform, config, **kwargs
-        )
+        ):
+            if output is not None:
+                yield output
+
+    def step(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
+    ) -> Iterator[tuple[dict[str, Any] | Any, CheckpointView]]:
+        for tup in self._transform_stream_with_config(
+            iter([input]), self._transform, config, **kwargs
+        ):
+            yield cast(tuple[dict[str, Any] | Any, CheckpointView], tup)
 
     async def ainvoke(
         self,
@@ -445,10 +467,25 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         config: RunnableConfig | None = None,
         **kwargs: Any | None,
     ) -> AsyncIterator[dict[str, Any] | Any]:
-        async for chunk in self._atransform_stream_with_config(
+        async for output, _ in self._atransform_stream_with_config(
             input, self._atransform, config, **kwargs
         ):
-            yield chunk
+            if output is not None:
+                yield output
+
+    async def astep(
+        self,
+        input: dict[str, Any] | Any,
+        config: RunnableConfig | None = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[tuple[dict[str, Any] | Any, CheckpointView]]:
+        async def input_stream() -> AsyncIterator[dict[str, Any] | Any]:
+            yield input
+
+        async for tup in self._atransform_stream_with_config(
+            input_stream(), self._atransform, config, **kwargs
+        ):
+            yield cast(tuple[dict[str, Any] | Any, CheckpointView], tup)
 
 
 def _interrupt_or_proceed(
@@ -484,13 +521,13 @@ def _read_channel(
         return None
 
 
-def _apply_writes_and_prepare_next_tasks(
-    processes: Mapping[str, ChannelInvoke | ChannelBatch],
+def _apply_writes(
+    checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
     pending_writes: Sequence[tuple[str, Any]],
     config: RunnableConfig,
     for_step: int,
-) -> list[tuple[Runnable, Any, str]]:
+) -> None:
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
     for chan, val in pending_writes:
@@ -508,6 +545,7 @@ def _apply_writes_and_prepare_next_tasks(
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
             channels[chan].update(vals)
+            checkpoint["channel_versions"][chan] += 1
             updated_channels.add(chan)
         else:
             logger.warning(f"Skipping write for channel {chan} which has no readers")
@@ -516,16 +554,43 @@ def _apply_writes_and_prepare_next_tasks(
         if chan not in updated_channels:
             channels[chan].update([])
 
+
+def _apply_writes_from_view(
+    checkpoint: Checkpoint,
+    channels: Mapping[str, BaseChannel],
+    view: CheckpointView,
+) -> None:
+    for chan, value in view.values.items():
+        if value == channels[chan].get():
+            continue
+
+        assert isinstance(channels[chan], LastValue), (
+            f"Can't modify channel {chan} of type "
+            f"{channels[chan].__class__.__name__}"
+        )
+        checkpoint["channel_versions"][chan] += 1
+        channels[chan].update([view.values[chan]])
+
+
+def _prepare_next_tasks(
+    checkpoint: Checkpoint,
+    processes: Mapping[str, ChannelInvoke | ChannelBatch],
+    channels: Mapping[str, BaseChannel],
+) -> list[tuple[Runnable, Any, str]]:
     tasks: list[tuple[Runnable, Any, str]] = []
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
+        seen = checkpoint["versions_seen"][name]
         if isinstance(proc, ChannelInvoke):
             # If any of the channels read by this process were updated
-            if any(chan in updated_channels for chan in proc.triggers):
+            if any(
+                checkpoint["channel_versions"][chan] > seen[chan]
+                for chan in proc.triggers
+            ):
                 # If all channels subscribed by this process have been initialized
                 try:
-                    val = {
+                    val: Any = {
                         k: _read_channel(
                             channels, chan, catch=chan not in proc.triggers
                         )
@@ -539,10 +604,20 @@ def _apply_writes_and_prepare_next_tasks(
                 if list(proc.channels.keys()) == [None]:
                     val = val[None]
 
-                tasks.append((proc, val, name))
+                # update seen versions
+                seen.update(
+                    {
+                        chan: checkpoint["channel_versions"][chan]
+                        for chan in proc.triggers
+                    }
+                )
+
+                # skip if condition is not met
+                if proc.when is None or proc.when(val):
+                    tasks.append((proc, val, name))
         elif isinstance(proc, ChannelBatch):
             # If the channel read by this process was updated
-            if proc.channel in updated_channels:
+            if checkpoint["channel_versions"][proc.channel] > seen[proc.channel]:
                 # Here we don't catch EmptyChannelError because the channel
                 # must be intialized if the previous `if` condition is true
                 val = channels[proc.channel].get()
@@ -550,5 +625,6 @@ def _apply_writes_and_prepare_next_tasks(
                     val = [{proc.key: v} for v in val]
 
                 tasks.append((proc, val, name))
+                seen[proc.channel] = checkpoint["channel_versions"][proc.channel]
 
     return tasks
