@@ -30,7 +30,6 @@ class Graph:
         self.connections = {}
         self.branches = {}
         self.entry_point: Optional[str] = None
-        self.finish_points = set()
 
     def register(self, node: Union[Actor, DecisionPoint]):
         if node.name in self.nodes:
@@ -66,12 +65,12 @@ class Graph:
     def set_finish_point(self, node: Actor):
         if node.name not in self.nodes:
             raise ValueError(f"Need to register `{node.name}` first")
-        self.finish_points |= node.name
+        self.connections[node.name] = "end"
 
     def compile(self):
         # Validate all nodes have an entry point
         all_nodes = set(self.nodes)
-        all_entry_points = set(self.connections).union(self.branches).union(self.finish_points)
+        all_entry_points = set(self.connections).union(self.branches)
         branch_ends = set()
         for v in self.branches.values():
             branch_ends.update(v.values())
@@ -93,12 +92,8 @@ class Graph:
             start: Channel.subscribe_to(start) | (lambda x: branch(x, self.nodes[start].callable, mapping))
             for start, mapping in self.branches.items()
         }
-        endings = {
-            end: Channel.subscribe_to(end) | self.nodes[end].runnable | Channel.write_to("end")
-            for end in self.finish_points
-        }
         app = Pregel(
-            chains = {**chains, **decisions, **endings},
+            chains = {**chains, **decisions},
             input=self.entry_point,
             output="end"
         )
