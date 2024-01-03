@@ -126,17 +126,17 @@ class Graph:
         # self.branches = {}
         self.entry_point: Optional[str] = None
 
-    def register_node(self, node: Actor):
+    def add_node(self, node: Actor):
         if node.key in self.nodes:
             raise ValueError(f"Actor `{node.key}` already present.")
         self.nodes[node.key] = node
 
 
-    def register_edge(self, start_key: str, end_key: str):
+    def add_edge(self, start_key: str, end_key: str):
         if start_key not in self.nodes:
-            raise ValueError(f"Need to register_node `{start_key}` first")
+            raise ValueError(f"Need to add_node `{start_key}` first")
         if end_key not in self.nodes:
-            raise ValueError(f"Need to register_node `{end_key}` first")
+            raise ValueError(f"Need to add_node `{end_key}` first")
 
         # TODO: support multiple message passing
         if start_key in set(edge.start_key for edge in self.edges):
@@ -144,7 +144,7 @@ class Graph:
             
         self.edges.append(LangGraphEdge(start_key, end_key))
 
-    def register_conditional_edges(
+    def add_conditional_edges(
         self,
         start_key: str,
         condition: Callable[Any, str],
@@ -156,11 +156,11 @@ class Graph:
             condition
         )
 
-        self.register_node(conditional_node)
-        self.register_edge(start_key, conditional_node.key)
+        self.add_node(conditional_node)
+        self.add_edge(start_key, conditional_node.key)
 
         for branch in conditional_node.branches:
-            self.register_node(branch)
+            self.add_node(branch)
             self.edges.append(ConditionalEdge(conditional_node.key, branch.key))
             self.edges.append(
                 BranchEdge(branch.key, conditional_node.conditional_edge_mapping[branch.condition])
@@ -169,13 +169,13 @@ class Graph:
     
     def set_entry_point(self, key: str):
         if key not in self.nodes:
-            raise ValueError(f"Need to register_node `{node.key}` first")
+            raise ValueError(f"Need to add_node `{node.key}` first")
         self.entry_point = key
 
     def set_finish_point(self, key: str):
         if key not in self.nodes:
-            raise ValueError(f"Need to register_node `{node.key}` first")
-        self.register_edge(key, "end")
+            raise ValueError(f"Need to add_node `{node.key}` first")
+        self.add_edge(key, "end")
 
     def compile(self):
 
