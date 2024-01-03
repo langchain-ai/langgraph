@@ -37,7 +37,8 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 jupyter = "^1.0.0"
 openai = "^0.27.8"
-langchain = "^0.0.352"
+langchain = "^0.0.353"
+langchainhub = "^0.1.14"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]
