@@ -129,14 +129,3 @@ def create_checkpoint(
         except EmptyChannelError:
             pass
     return checkpoint
-
-
-def channel_values(channels: Mapping[str, BaseChannel]) -> dict[str, Any]:
-    """Return a dictionary of channel values."""
-    values: dict[str, Any] = {}
-    for k, v in channels.items():
-        try:
-            values[k] = v.get()
-        except EmptyChannelError:
-            pass
-    return values
