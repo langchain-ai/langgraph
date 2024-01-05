@@ -45,7 +45,6 @@ from permchain.channels.base import (
     BaseChannel,
     ChannelsManager,
     EmptyChannelError,
-    channel_values,
     create_checkpoint,
 )
 from permchain.channels.last_value import LastValue
@@ -281,7 +280,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
                 # yield current value and checkpoint view
                 view = CheckpointView(
-                    values=channel_values(channels),
+                    values=_updateable_channel_values(channels),
                     step=step + 1,
                 )
                 yield map_output(self.output, pending_writes, channels), view
@@ -379,7 +378,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
                 # yield current value and checkpoint view
                 view = CheckpointView(
-                    values=channel_values(channels),
+                    values=_updateable_channel_values(channels),
                     step=step + 1,
                 )
                 yield map_output(self.output, pending_writes, channels), view
@@ -628,3 +627,15 @@ def _prepare_next_tasks(
                 seen[proc.channel] = checkpoint["channel_versions"][proc.channel]
 
     return tasks
+
+
+def _updateable_channel_values(channels: Mapping[str, BaseChannel]) -> dict[str, Any]:
+    """Return a dictionary of updateable channel values."""
+    values: dict[str, Any] = {}
+    for k, v in channels.items():
+        if isinstance(v, LastValue):
+            try:
+                values[k] = v.get()
+            except EmptyChannelError:
+                pass
+    return values
