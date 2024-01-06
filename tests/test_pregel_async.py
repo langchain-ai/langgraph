@@ -582,3 +582,178 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     assert cleanup_sync.call_count == 0
     assert setup_async.call_count == 1, "Expected setup to be called once"
     assert cleanup_async.call_count == 1, "Expected cleanup to be called once"
+
+
+async def test_conditional_graph() -> None:
+    from copy import deepcopy
+
+    from langchain.llms.fake import FakeStreamingListLLM
+    from langchain_community.tools import tool
+    from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.prompts import PromptTemplate
+    from langchain_core.runnables import RunnablePassthrough
+
+    from permchain.langgraph import END
+
+    # Assemble the tools
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    # Construct the agent
+    prompt = PromptTemplate.from_template("Hello!")
+
+    llm = FakeStreamingListLLM(
+        responses=[
+            "tool:search_api:query",
+            "tool:search_api:another",
+            "finish:answer",
+        ]
+    )
+
+    async def agent_parser(input: str) -> AgentFinish | AgentAction:
+        if input.startswith("finish"):
+            _, answer = input.split(":")
+            return AgentFinish(return_values={"answer": answer}, log=input)
+        else:
+            _, tool_name, tool_input = input.split(":")
+            return AgentAction(tool=tool_name, tool_input=tool_input, log=input)
+
+    agent = RunnablePassthrough.assign(agent_outcome=prompt | llm | agent_parser)
+
+    # Define tool execution logic
+    async def execute_tools(data):
+        agent_action: AgentAction | AgentFinish = data.pop("agent_outcome")
+        observation = await {t.name: t for t in tools}[agent_action.tool].ainvoke(
+            agent_action.tool_input
+        )
+        if data.get("intermediate_steps") is None:
+            data["intermediate_steps"] = []
+        data["intermediate_steps"].append((agent_action, observation))
+        return data
+
+    # Define decision-making logic
+    def should_continue(data):
+        # Logic to decide whether to continue in the loop or exit
+        if isinstance(data["agent_outcome"], AgentFinish):
+            return "exit"
+        else:
+            return "continue"
+
+    # Define a new graph
+    workflow = Graph()
+
+    workflow.add_node("agent", agent)
+    workflow.add_node("tools", execute_tools)
+
+    workflow.set_entry_point("agent")
+
+    workflow.add_conditional_edges(
+        "agent", should_continue, {"continue": "tools", "exit": END}
+    )
+
+    workflow.add_edge("tools", "agent")
+
+    app = workflow.compile()
+
+    assert await app.ainvoke({"input": "what is weather in sf"}) == {
+        "input": "what is weather in sf",
+        "intermediate_steps": [
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+                "result for query",
+            ),
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+                "result for another",
+            ),
+        ],
+        "agent_outcome": AgentFinish(
+            return_values={"answer": "answer"}, log="finish:answer"
+        ),
+    }
+
+    assert [
+        deepcopy(c)
+        async for c in app.astream(
+            {"input": "what is weather in sf"}, output=["agent", "tools"]
+        )
+    ] == [
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    )
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ),
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
+                    ),
+                ],
+            }
+        },
+    ]

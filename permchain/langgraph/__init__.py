@@ -1,3 +1,4 @@
+from asyncio import iscoroutinefunction
 from collections import defaultdict
 from typing import Any, Callable, Dict, NamedTuple
 
@@ -57,6 +58,8 @@ class Graph:
     ):
         if start_key not in self.nodes:
             raise ValueError(f"Need to add_node `{start_key}` first")
+        if iscoroutinefunction(condition):
+            raise ValueError("Condition cannot be a coroutine function")
 
         self.branches[start_key].append(Branch(condition, conditional_edge_mapping))
 

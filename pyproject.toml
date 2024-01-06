@@ -67,6 +67,6 @@ asyncio_mode = "auto"
 #
 # https://github.com/tophat/syrupy
 # --snapshot-warn-unused    Prints a warning on unused snapshots rather than fail the test suite.
-addopts = "-x --full-trace --strict-markers --strict-config --durations=5 --snapshot-warn-unused"
+addopts = "-x -vv --full-trace --strict-markers --strict-config --durations=5 --snapshot-warn-unused"
 # Registering custom markers.
 # https://docs.pytest.org/en/7.1.x/example/markers.html#registering-markers
