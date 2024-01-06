@@ -36,6 +36,7 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {"title": "PregelInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "PregelOutput", "type": "integer"}
     assert await app.ainvoke(2) == 3
+    assert await app.ainvoke(2, output=["output"]) == {"output": 3}
 
 
 async def test_invoke_single_process_in_out_implicit_channels(
@@ -195,6 +196,9 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
 
     # [12 + 1, 2 + 1 + 1]
     assert [c async for c in pubsub.astream({"input": 2, "inbox": 12})] == [13, 4]
+    assert [
+        c async for c in pubsub.astream({"input": 2, "inbox": 12}, output=["output"])
+    ] == [{"output": 13}, {"output": 4}]
 
 
 async def test_batch_two_processes_in_out() -> None:
@@ -211,6 +215,13 @@ async def test_batch_two_processes_in_out() -> None:
     )
 
     assert await app.abatch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
+    assert await app.abatch([3, 2, 1, 3, 5], output=["output"]) == [
+        {"output": 5},
+        {"output": 4},
+        {"output": 3},
+        {"output": 5},
+        {"output": 7},
+    ]
 
 
 async def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
