@@ -22,7 +22,7 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={
+        nodes={
             "one": chain,
         },
         channels={
@@ -39,12 +39,12 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
 
 
 async def test_invoke_single_process_in_out_implicit_channels(
-    mocker: MockerFixture
+    mocker: MockerFixture,
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
-    app = Pregel(chains={"one": chain})
+    app = Pregel(nodes={"one": chain})
 
     assert app.input_schema.schema() == {"title": "PregelInput"}
     assert app.output_schema.schema() == {"title": "PregelOutput"}
@@ -59,7 +59,7 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
         | Channel.write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
     )
 
-    app = Pregel(chains={"one": chain}, output=["output", "fixed", "output_plus_one"])
+    app = Pregel(nodes={"one": chain}, output=["output", "fixed", "output_plus_one"])
 
     assert app.input_schema.schema() == {"title": "PregelInput"}
     assert app.output_schema.schema() == {
@@ -75,7 +75,7 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
 
 
 async def test_invoke_single_process_in_out_reserved_is_last(
-    mocker: MockerFixture
+    mocker: MockerFixture,
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: {**x, "input": x["input"] + 1})
 
@@ -85,7 +85,7 @@ async def test_invoke_single_process_in_out_reserved_is_last(
         | Channel.write_to("output")
     )
 
-    app = Pregel(chains={"one": chain})
+    app = Pregel(nodes={"one": chain})
 
     assert app.input_schema.schema() == {"title": "PregelInput"}
     assert app.output_schema.schema() == {"title": "PregelOutput"}
@@ -101,9 +101,7 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={
-            "one": chain,
-        },
+        nodes={"one": chain},
         output=["output"],
     )
 
@@ -121,7 +119,7 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={
+        nodes={
             "one": chain,
         },
         input=["input"],
@@ -143,12 +141,10 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
 
 async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    chain_two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
-    app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
-    )
+    app = Pregel(nodes={"one": one, "two": two})
 
     assert await app.ainvoke(2) == 4
 
@@ -188,13 +184,11 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
 async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    chain_two = (
-        Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
-    )
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    two = Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
 
     pubsub = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
+        nodes={"one": one, "two": two},
         channels={"inbox": Topic(int)},
         input=["input", "inbox"],
     )
@@ -208,15 +202,11 @@ async def test_batch_two_processes_in_out() -> None:
         await asyncio.sleep(inp / 10)
         return inp + 1
 
-    chain_one = (
-        Channel.subscribe_to("input") | add_one_with_delay | Channel.write_to("one")
-    )
-    chain_two = (
-        Channel.subscribe_to("one") | add_one_with_delay | Channel.write_to("output")
-    )
+    one = Channel.subscribe_to("input") | add_one_with_delay | Channel.write_to("one")
+    two = Channel.subscribe_to("one") | add_one_with_delay | Channel.write_to("output")
 
     app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
+        nodes={"one": one, "two": two},
         channels={"one": LastValue(int)},
     )
 
@@ -227,14 +217,14 @@ async def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
     test_size = 100
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chains = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
+    nodes = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
     for i in range(test_size - 2):
-        chains[str(i)] = (
+        nodes[str(i)] = (
             Channel.subscribe_to(str(i - 1)) | add_one | Channel.write_to(str(i))
         )
-    chains["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
+    nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(chains=chains)
+    app = Pregel(nodes=nodes)
 
     # No state is left over from previous invocations
     for _ in range(10):
@@ -250,14 +240,14 @@ async def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
     test_size = 100
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chains = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
+    nodes = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
     for i in range(test_size - 2):
-        chains[str(i)] = (
+        nodes[str(i)] = (
             Channel.subscribe_to(str(i - 1)) | add_one | Channel.write_to(str(i))
         )
-    chains["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
+    nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(chains=chains)
+    app = Pregel(nodes=nodes)
 
     # No state is left over from previous invocations
     for _ in range(3):
@@ -284,10 +274,10 @@ async def test_invoke_two_processes_two_in_two_out_invalid(
 ) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-    chain_two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
-    app = Pregel(chains={"chain_one": chain_one, "chain_two": chain_two})
+    app = Pregel(nodes={"one": one, "two": two})
 
     with pytest.raises(InvalidUpdateError):
         # LastValue channels can only be updated once per iteration
@@ -297,11 +287,11 @@ async def test_invoke_two_processes_two_in_two_out_invalid(
 async def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-    chain_two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
+        nodes={"one": one, "two": two},
         channels={"output": Topic(int)},
     )
 
@@ -317,7 +307,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
             raise ValueError("Input is too large")
         return input
 
-    chain_one = (
+    one = (
         Channel.subscribe_to(["input"]).join(["total"])
         | add_one
         | Channel.write_to("output", "total")
@@ -327,7 +317,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     memory = MemoryCheckpoint()
 
     app = Pregel(
-        chains={"chain_one": chain_one},
+        nodes={"one": one},
         channels={"total": BinaryOperatorAggregate(int, operator.add)},
         saver=memory,
     )
@@ -363,15 +353,15 @@ async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: sorted(y + 10 for y in x))
 
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     chain_three = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     chain_four = (
         Channel.subscribe_to("inbox") | add_10_each | Channel.write_to("output")
     )
 
     app = Pregel(
-        chains={
-            "chain_one": chain_one,
+        nodes={
+            "one": one,
             "chain_three": chain_three,
             "chain_four": chain_four,
         },
@@ -394,17 +384,17 @@ async def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
     inner_app = Pregel(
-        chains={
+        nodes={
             "one": Channel.subscribe_to("input") | add_one | Channel.write_to("output")
         }
     )
 
-    chain_one = (
+    one = (
         Channel.subscribe_to("input")
         | add_10_each
         | Channel.write_to("inbox_one").map()
     )
-    chain_two = (
+    two = (
         Channel.subscribe_to("inbox_one")
         | inner_app.map()
         | sorted
@@ -413,9 +403,9 @@ async def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None
     chain_three = Channel.subscribe_to("outbox_one") | sum | Channel.write_to("output")
 
     app = Pregel(
-        chains={
-            "chain_one": chain_one,
-            "chain_two": chain_two,
+        nodes={
+            "one": one,
+            "two": two,
             "chain_three": chain_three,
         },
         channels={
@@ -436,14 +426,14 @@ async def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None
 async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chain_one = (
+    one = (
         Channel.subscribe_to("input")
         | add_one
         | Channel.write_to(output=RunnablePassthrough(), between=RunnablePassthrough())
     )
-    chain_two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
+    two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(chains={"chain_one": chain_one, "chain_two": chain_two})
+    app = Pregel(nodes={"one": one, "two": two})
 
     # Then invoke pubsub
     assert [c async for c in app.astream(2)] == [3, 4]
@@ -451,10 +441,10 @@ async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> Non
 
 async def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("between")
-    chain_two = Channel.subscribe_to("between") | add_one
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("between")
+    two = Channel.subscribe_to("between") | add_one
 
-    app = Pregel(chains={"chain_one": chain_one, "chain_two": chain_two})
+    app = Pregel(nodes={"one": one, "two": two})
 
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to "output" topic
@@ -484,13 +474,11 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             cleanup_async()
 
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    chain_two = (
-        Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
-    )
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    two = Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
+        nodes={"one": one, "two": two},
         channels={
             "inbox": Topic(int),
             "ctx": Context(an_int, an_int_async, typ=int),

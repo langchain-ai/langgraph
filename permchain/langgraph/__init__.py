@@ -107,7 +107,7 @@ class Graph:
         if hasattr(self, "finish_point"):
             outgoing_edges[self.finish_point].append(END)
 
-        chains = {
+        nodes = {
             key: (
                 Channel.subscribe_to(key)
                 | node
@@ -118,10 +118,10 @@ class Graph:
 
         for key, branches in self.branches.items():
             for branch in branches:
-                chains[key] |= branch.runnable
+                nodes[key] |= branch.runnable
 
         return Pregel(
-            chains=chains,
+            nodes=nodes,
             input=self.entry_point,
             output=END,
         )

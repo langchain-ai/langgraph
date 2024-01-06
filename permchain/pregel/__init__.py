@@ -61,7 +61,7 @@ from permchain.pregel.io import map_input, map_output
 from permchain.pregel.log import logger
 from permchain.pregel.read import ChannelBatch, ChannelInvoke
 from permchain.pregel.reserved import ReservedChannels
-from permchain.pregel.validate import validate_chains_channels
+from permchain.pregel.validate import validate_graph
 from permchain.pregel.write import ChannelWrite
 
 WriteValue = Union[
@@ -81,12 +81,22 @@ def _coerce_write_value(value: WriteValue) -> Runnable[Input, Output]:
 class Channel:
     @overload
     @classmethod
-    def subscribe_to(cls, channels: str, key: Optional[str] = None) -> ChannelInvoke:
+    def subscribe_to(
+        cls,
+        channels: str,
+        key: Optional[str] = None,
+        when: Callable[[Any], bool] | None = None,
+    ) -> ChannelInvoke:
         ...
 
     @overload
     @classmethod
-    def subscribe_to(cls, channels: Sequence[str], key: None = None) -> ChannelInvoke:
+    def subscribe_to(
+        cls,
+        channels: Sequence[str],
+        key: None = None,
+        when: Callable[[Any], bool] | None = None,
+    ) -> ChannelInvoke:
         ...
 
     @classmethod
@@ -134,7 +144,7 @@ class Channel:
 
 
 class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
-    chains: Mapping[str, ChannelInvoke | ChannelBatch]
+    nodes: Mapping[str, ChannelInvoke | ChannelBatch]
 
     channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
 
@@ -153,15 +163,15 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     @root_validator(skip_on_failure=True)
     def validate_pregel(cls, values: dict[str, Any]) -> dict[str, Any]:
-        validate_chains_channels(
-            values["chains"], values["channels"], values["input"], values["output"]
+        validate_graph(
+            values["nodes"], values["channels"], values["input"], values["output"]
         )
         return values
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
         return get_unique_config_specs(
-            [spec for chain in self.chains.values() for spec in chain.config_specs]
+            [spec for node in self.nodes.values() for spec in node.config_specs]
             + (self.saver.config_specs if self.saver is not None else [])
         )
 
@@ -208,8 +218,8 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     ) -> Iterator[tuple[dict[str, Any] | Any, CheckpointView]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
-        # copy chains to ignore mutations during execution
-        processes = {**self.chains}
+        # copy nodes to ignore mutations during execution
+        processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
         checkpoint = self.saver.get(config) if self.saver else None
         checkpoint = checkpoint or empty_checkpoint()
@@ -305,8 +315,8 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     ) -> AsyncIterator[tuple[dict[str, Any] | Any, CheckpointView]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
-        # copy chains to ignore mutations during execution
-        processes = {**self.chains}
+        # copy nodes to ignore mutations during execution
+        processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
         checkpoint = await self.saver.aget(config) if self.saver else None
         checkpoint = checkpoint or empty_checkpoint()
