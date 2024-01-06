@@ -8,7 +8,7 @@ import pytest
 from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
 
-from permchain import Channel, Pregel
+from permchain import Channel, Graph, Pregel
 from permchain.channels.base import InvalidUpdateError
 from permchain.channels.binop import BinaryOperatorAggregate
 from permchain.channels.context import Context
@@ -33,11 +33,18 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         input="input",
         output="output",
     )
+    graph = Graph()
+    graph.add_node("add_one", add_one)
+    graph.set_entry_point("add_one")
+    graph.set_finish_point("add_one")
+    gapp = graph.compile()
 
     assert app.input_schema.schema() == {"title": "PregelInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "PregelOutput", "type": "integer"}
     assert app.invoke(2) == 3
     assert repr(app), "does not raise recursion error"
+
+    assert gapp.invoke(2) == 3
 
 
 def test_invoke_single_process_in_out_implicit_channels(mocker: MockerFixture) -> None:
@@ -152,7 +159,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             assert view.values == {
                 "inbox": 3,
                 "input": 2,
-                "is_last_step": False,
             }
             assert output is None
         elif view.step == 2:
@@ -160,7 +166,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "output": 4,
                 "inbox": 3,
                 "input": 2,
-                "is_last_step": False,
             }
             assert output == 4
 
@@ -169,7 +174,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             assert view.values == {
                 "inbox": 3,
                 "input": 2,
-                "is_last_step": False,
             }
             assert output is None
             # modify inbox value
@@ -179,7 +183,49 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "output": 6,
                 "inbox": 5,
                 "input": 2,
-                "is_last_step": False,
+            }
+            # output is different now
+            assert output == 6
+
+    graph = Graph()
+    graph.add_node("add_one", add_one)
+    graph.add_node("add_one_more", add_one)
+    graph.set_entry_point("add_one")
+    graph.set_finish_point("add_one_more")
+    graph.add_edge("add_one", "add_one_more")
+    gapp = graph.compile()
+
+    assert gapp.invoke(2) == 4
+
+    for output, view in gapp.step(2):
+        if view.step == 1:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 3,
+            }
+            assert output is None
+        elif view.step == 2:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 3,
+                "__end__": 4,
+            }
+            assert output == 4
+
+    for output, view in gapp.step(2):
+        if view.step == 1:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 3,
+            }
+            assert output is None
+            # modify inbox value
+            view.values["add_one_more"] = 5
+        elif view.step == 2:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 5,
+                "__end__": 6,
             }
             # output is different now
             assert output == 6
@@ -216,6 +262,16 @@ def test_batch_two_processes_in_out() -> None:
     app = Pregel(chains={"chain_one": chain_one, "chain_two": chain_two})
 
     assert app.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
+
+    graph = Graph()
+    graph.add_node("add_one", add_one_with_delay)
+    graph.add_node("add_one_more", add_one_with_delay)
+    graph.set_entry_point("add_one")
+    graph.set_finish_point("add_one_more")
+    graph.add_edge("add_one", "add_one_more")
+    gapp = graph.compile()
+
+    assert gapp.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
 
 
 def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:

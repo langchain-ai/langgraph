@@ -633,7 +633,7 @@ def _updateable_channel_values(channels: Mapping[str, BaseChannel]) -> dict[str,
     """Return a dictionary of updateable channel values."""
     values: dict[str, Any] = {}
     for k, v in channels.items():
-        if isinstance(v, LastValue):
+        if isinstance(v, LastValue) and k not in [c.value for c in ReservedChannels]:
             try:
                 values[k] = v.get()
             except EmptyChannelError:

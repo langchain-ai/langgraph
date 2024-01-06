@@ -157,7 +157,6 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             assert view.values == {
                 "inbox": 3,
                 "input": 2,
-                "is_last_step": False,
             }
             assert output is None
         elif view.step == 2:
@@ -165,7 +164,6 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "output": 4,
                 "inbox": 3,
                 "input": 2,
-                "is_last_step": False,
             }
             assert output == 4
 
@@ -174,7 +172,6 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             assert view.values == {
                 "inbox": 3,
                 "input": 2,
-                "is_last_step": False,
             }
             assert output is None
             # modify inbox value
@@ -184,7 +181,6 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "output": 6,
                 "inbox": 5,
                 "input": 2,
-                "is_last_step": False,
             }
             # output is different now
             assert output == 6
