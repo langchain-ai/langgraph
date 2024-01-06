@@ -26,7 +26,6 @@ class Branch(NamedTuple):
         return Channel.write_to(self.ends[result])
 
 
-START = "__start__"
 END = "__end__"
 
 
@@ -39,6 +38,8 @@ class Graph:
     def add_node(self, key: str, action: RunnableLike) -> None:
         if key in self.nodes:
             raise ValueError(f"Node `{key}` already present.")
+        if key == END:
+            raise ValueError(f"Node `{key}` is reserved.")
 
         self.nodes[key] = coerce_to_runnable(action)
 
