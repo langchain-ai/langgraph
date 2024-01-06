@@ -39,6 +39,7 @@ from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     get_unique_config_specs,
 )
+from langchain_core.tracers.log_stream import LogStreamCallbackHandler
 
 from permchain.channels.base import (
     AsyncChannelsManager,
@@ -328,6 +329,15 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
     ) -> AsyncIterator[tuple[dict[str, Any] | Any, CheckpointView]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
+        # if running from astream_log() run each proc with streaming
+        do_stream = next(
+            (
+                h
+                for h in run_manager.handlers
+                if isinstance(h, LogStreamCallbackHandler)
+            ),
+            None,
+        )
         # assign defaults
         output = output if output is not None else self.output
         # copy nodes to ignore mutations during execution
@@ -389,6 +399,11 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 # each task is independent from all other concurrent tasks
                 done, inflight = await asyncio.wait(
                     [
+                        asyncio.create_task(_aconsume(proc.astream(input, config)))
+                        for proc, input, config in tasks_w_config
+                    ]
+                    if do_stream
+                    else [
                         asyncio.create_task(proc.ainvoke(input, config))
                         for proc, input, config in tasks_w_config
                     ],
@@ -686,3 +701,9 @@ def _updateable_channel_values(channels: Mapping[str, BaseChannel]) -> dict[str,
             except EmptyChannelError:
                 pass
     return values
+
+
+async def _aconsume(iterator: AsyncIterator[Any]) -> None:
+    """Consume an async iterator."""
+    async for _ in iterator:
+        pass

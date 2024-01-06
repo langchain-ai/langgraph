@@ -2,7 +2,7 @@ import operator
 import time
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Any, Generator
+from typing import Generator
 
 import pytest
 from langchain_core.runnables import RunnablePassthrough

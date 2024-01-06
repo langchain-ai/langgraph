@@ -757,3 +757,9 @@ async def test_conditional_graph() -> None:
             }
         },
     ]
+
+    patches = [c async for c in app.astream_log({"input": "what is weather in sf"})]
+    patch_paths = {op["path"] for log in patches for op in log.ops}
+
+    # Check that agent (one of the nodes) has its output streamed to the logs
+    assert "/logs/agent/streamed_output/-" in patch_paths
