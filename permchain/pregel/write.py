@@ -30,6 +30,7 @@ class ChannelWrite(RunnablePassthrough):
         channels: Sequence[tuple[str, Runnable | None]],
     ):
         super().__init__(func=self._write, afunc=self._awrite, channels=channels)
+        self.name = f"ChannelWrite<{','.join(chan for chan, _ in self.channels)}>"
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:

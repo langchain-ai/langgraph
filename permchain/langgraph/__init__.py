@@ -3,7 +3,11 @@ from collections import defaultdict
 from typing import Any, Callable, Dict, NamedTuple
 
 from langchain_core.runnables import Runnable
-from langchain_core.runnables.base import RunnableLike, coerce_to_runnable
+from langchain_core.runnables.base import (
+    RunnableLambda,
+    RunnableLike,
+    coerce_to_runnable,
+)
 
 from permchain.pregel import Channel, Pregel
 
@@ -111,17 +115,16 @@ class Graph:
             outgoing_edges[self.finish_point].append(END)
 
         nodes = {
-            key: (
-                Channel.subscribe_to(key)
-                | node
-                | Channel.write_to(*outgoing_edges[key])
-            )
-            for key, node in self.nodes.items()
+            key: Channel.subscribe_to(key) | node for key, node in self.nodes.items()
         }
+
+        for key, edges in outgoing_edges.items():
+            if edges:
+                nodes[key] |= Channel.write_to(*edges)
 
         for key, branches in self.branches.items():
             for branch in branches:
-                nodes[key] |= branch.runnable
+                nodes[key] |= RunnableLambda(branch.runnable, name=f"{key}_condition")
 
         return Pregel(
             nodes=nodes,
