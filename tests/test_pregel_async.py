@@ -7,7 +7,7 @@ import pytest
 from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
 
-from permchain import Channel, Pregel
+from permchain import Channel, Graph, Pregel
 from permchain.channels.base import InvalidUpdateError
 from permchain.channels.binop import BinaryOperatorAggregate
 from permchain.channels.context import Context
@@ -32,11 +32,18 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         input="input",
         output="output",
     )
+    graph = Graph()
+    graph.add_node("add_one", add_one)
+    graph.set_entry_point("add_one")
+    graph.set_finish_point("add_one")
+    gapp = graph.compile()
 
     assert app.input_schema.schema() == {"title": "PregelInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "PregelOutput", "type": "integer"}
     assert await app.ainvoke(2) == 3
     assert await app.ainvoke(2, output=["output"]) == {"output": 3}
+
+    assert await gapp.ainvoke(2) == 3
 
 
 async def test_invoke_single_process_in_out_implicit_channels(
@@ -182,6 +189,49 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             # output is different now
             assert output == 6
 
+    graph = Graph()
+    graph.add_node("add_one", add_one)
+    graph.add_node("add_one_more", add_one)
+    graph.set_entry_point("add_one")
+    graph.set_finish_point("add_one_more")
+    graph.add_edge("add_one", "add_one_more")
+    gapp = graph.compile()
+
+    assert await gapp.ainvoke(2) == 4
+
+    async for output, view in gapp.astep(2):
+        if view.step == 1:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 3,
+            }
+            assert output is None
+        elif view.step == 2:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 3,
+                "__end__": 4,
+            }
+            assert output == 4
+
+    async for output, view in gapp.astep(2):
+        if view.step == 1:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 3,
+            }
+            assert output is None
+            # modify inbox value
+            view.values["add_one_more"] = 5
+        elif view.step == 2:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 5,
+                "__end__": 6,
+            }
+            # output is different now
+            assert output == 6
+
 
 async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
@@ -222,6 +272,16 @@ async def test_batch_two_processes_in_out() -> None:
         {"output": 5},
         {"output": 7},
     ]
+
+    graph = Graph()
+    graph.add_node("add_one", add_one_with_delay)
+    graph.add_node("add_one_more", add_one_with_delay)
+    graph.set_entry_point("add_one")
+    graph.set_finish_point("add_one_more")
+    graph.add_edge("add_one", "add_one_more")
+    gapp = graph.compile()
+
+    assert await gapp.abatch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
 
 
 async def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
