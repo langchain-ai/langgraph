@@ -8,7 +8,7 @@ import pytest
 from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
 
-from permchain import Channel, Pregel
+from permchain import Channel, Graph, Pregel
 from permchain.channels.base import InvalidUpdateError
 from permchain.channels.binop import BinaryOperatorAggregate
 from permchain.channels.context import Context
@@ -23,7 +23,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={
+        nodes={
             "one": chain,
         },
         channels={
@@ -33,18 +33,26 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
         input="input",
         output="output",
     )
+    graph = Graph()
+    graph.add_node("add_one", add_one)
+    graph.set_entry_point("add_one")
+    graph.set_finish_point("add_one")
+    gapp = graph.compile()
 
     assert app.input_schema.schema() == {"title": "PregelInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "PregelOutput", "type": "integer"}
     assert app.invoke(2) == 3
+    assert app.invoke(2, output=["output"]) == {"output": 3}
     assert repr(app), "does not raise recursion error"
+
+    assert gapp.invoke(2) == 3
 
 
 def test_invoke_single_process_in_out_implicit_channels(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
-    app = Pregel(chains={"one": chain})
+    app = Pregel(nodes={"one": chain})
 
     assert app.input_schema.schema() == {"title": "PregelInput"}
     assert app.output_schema.schema() == {"title": "PregelOutput"}
@@ -59,7 +67,7 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
         | Channel.write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
     )
 
-    app = Pregel(chains={"one": chain}, output=["output", "fixed", "output_plus_one"])
+    app = Pregel(nodes={"one": chain}, output=["output", "fixed", "output_plus_one"])
 
     assert app.input_schema.schema() == {"title": "PregelInput"}
     assert app.output_schema.schema() == {
@@ -83,7 +91,7 @@ def test_invoke_single_process_in_out_reserved_is_last(mocker: MockerFixture) ->
         | Channel.write_to("output")
     )
 
-    app = Pregel(chains={"one": chain})
+    app = Pregel(nodes={"one": chain})
 
     assert app.input_schema.schema() == {"title": "PregelInput"}
     assert app.output_schema.schema() == {"title": "PregelOutput"}
@@ -96,7 +104,7 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={
+        nodes={
             "one": chain,
         },
         output=["output"],
@@ -116,7 +124,7 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={
+        nodes={
             "one": chain,
         },
         input=["input"],
@@ -138,11 +146,11 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
 
 def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    chain_two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
+        nodes={"one": one, "two": two},
     )
 
     assert app.invoke(2) == 4
@@ -152,7 +160,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             assert view.values == {
                 "inbox": 3,
                 "input": 2,
-                "is_last_step": False,
             }
             assert output is None
         elif view.step == 2:
@@ -160,7 +167,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "output": 4,
                 "inbox": 3,
                 "input": 2,
-                "is_last_step": False,
             }
             assert output == 4
 
@@ -169,7 +175,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             assert view.values == {
                 "inbox": 3,
                 "input": 2,
-                "is_last_step": False,
             }
             assert output is None
             # modify inbox value
@@ -179,7 +184,49 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "output": 6,
                 "inbox": 5,
                 "input": 2,
-                "is_last_step": False,
+            }
+            # output is different now
+            assert output == 6
+
+    graph = Graph()
+    graph.add_node("add_one", add_one)
+    graph.add_node("add_one_more", add_one)
+    graph.set_entry_point("add_one")
+    graph.set_finish_point("add_one_more")
+    graph.add_edge("add_one", "add_one_more")
+    gapp = graph.compile()
+
+    assert gapp.invoke(2) == 4
+
+    for output, view in gapp.step(2):
+        if view.step == 1:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 3,
+            }
+            assert output is None
+        elif view.step == 2:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 3,
+                "__end__": 4,
+            }
+            assert output == 4
+
+    for output, view in gapp.step(2):
+        if view.step == 1:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 3,
+            }
+            assert output is None
+            # modify inbox value
+            view.values["add_one_more"] = 5
+        elif view.step == 2:
+            assert view.values == {
+                "add_one": 2,
+                "add_one_more": 5,
+                "__end__": 6,
             }
             # output is different now
             assert output == 6
@@ -187,18 +234,20 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
 def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    chain_two = (
-        Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
-    )
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    two = Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
+        nodes={"one": one, "two": two},
         channels={"inbox": Topic(int)},
         input=["input", "inbox"],
     )
 
     assert [*app.stream({"input": 2, "inbox": 12})] == [13, 4]  # [12 + 1, 2 + 1 + 1]
+    assert [*app.stream({"input": 2, "inbox": 12}, output=["output"])] == [
+        {"output": 13},
+        {"output": 4},
+    ]
 
 
 def test_batch_two_processes_in_out() -> None:
@@ -206,30 +255,43 @@ def test_batch_two_processes_in_out() -> None:
         time.sleep(inp / 10)
         return inp + 1
 
-    chain_one = (
-        Channel.subscribe_to("input") | add_one_with_delay | Channel.write_to("one")
-    )
-    chain_two = (
-        Channel.subscribe_to("one") | add_one_with_delay | Channel.write_to("output")
-    )
+    one = Channel.subscribe_to("input") | add_one_with_delay | Channel.write_to("one")
+    two = Channel.subscribe_to("one") | add_one_with_delay | Channel.write_to("output")
 
-    app = Pregel(chains={"chain_one": chain_one, "chain_two": chain_two})
+    app = Pregel(nodes={"one": one, "two": two})
 
     assert app.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
+    assert app.batch([3, 2, 1, 3, 5], output=["output"]) == [
+        {"output": 5},
+        {"output": 4},
+        {"output": 3},
+        {"output": 5},
+        {"output": 7},
+    ]
+
+    graph = Graph()
+    graph.add_node("add_one", add_one_with_delay)
+    graph.add_node("add_one_more", add_one_with_delay)
+    graph.set_entry_point("add_one")
+    graph.set_finish_point("add_one_more")
+    graph.add_edge("add_one", "add_one_more")
+    gapp = graph.compile()
+
+    assert gapp.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
 
 
 def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
     test_size = 100
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chains = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
+    nodes = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
     for i in range(test_size - 2):
-        chains[str(i)] = (
+        nodes[str(i)] = (
             Channel.subscribe_to(str(i - 1)) | add_one | Channel.write_to(str(i))
         )
-    chains["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
+    nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(chains=chains)
+    app = Pregel(nodes=nodes)
 
     for _ in range(10):
         assert app.invoke(2, {"recursion_limit": test_size}) == 2 + test_size
@@ -244,14 +306,14 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
     test_size = 100
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chains = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
+    nodes = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
     for i in range(test_size - 2):
-        chains[str(i)] = (
+        nodes[str(i)] = (
             Channel.subscribe_to(str(i - 1)) | add_one | Channel.write_to(str(i))
         )
-    chains["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
+    nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(chains=chains)
+    app = Pregel(nodes=nodes)
 
     for _ in range(3):
         assert app.batch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) == [
@@ -275,10 +337,10 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
 def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-    chain_two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
-    app = Pregel(chains={"chain_one": chain_one, "chain_two": chain_two})
+    app = Pregel(nodes={"one": one, "two": two})
 
     with pytest.raises(InvalidUpdateError):
         # LastValue channels can only be updated once per iteration
@@ -288,11 +350,11 @@ def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> N
 def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-    chain_two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
+    two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
+        nodes={"one": one, "two": two},
         channels={"output": Topic(int)},
     )
 
@@ -308,7 +370,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
             raise ValueError("Input is too large")
         return input
 
-    chain_one = (
+    one = (
         Channel.subscribe_to(["input"]).join(["total"])
         | add_one
         | Channel.write_to("output", "total")
@@ -318,7 +380,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     memory = MemoryCheckpoint()
 
     app = Pregel(
-        chains={"chain_one": chain_one},
+        nodes={"one": one},
         channels={"total": BinaryOperatorAggregate(int, operator.add)},
         saver=memory,
     )
@@ -354,15 +416,15 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: sorted(y + 10 for y in x))
 
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     chain_three = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     chain_four = (
         Channel.subscribe_to("inbox") | add_10_each | Channel.write_to("output")
     )
 
     app = Pregel(
-        chains={
-            "chain_one": chain_one,
+        nodes={
+            "one": one,
             "chain_three": chain_three,
             "chain_four": chain_four,
         },
@@ -384,17 +446,17 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
     inner_app = Pregel(
-        chains={
+        nodes={
             "one": Channel.subscribe_to("input") | add_one | Channel.write_to("output")
         }
     )
 
-    chain_one = (
+    one = (
         Channel.subscribe_to("input")
         | add_10_each
         | Channel.write_to("inbox_one").map()
     )
-    chain_two = (
+    two = (
         Channel.subscribe_to("inbox_one")
         | inner_app.map()
         | sorted
@@ -403,9 +465,9 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
     chain_three = Channel.subscribe_to("outbox_one") | sum | Channel.write_to("output")
 
     app = Pregel(
-        chains={
-            "chain_one": chain_one,
-            "chain_two": chain_two,
+        nodes={
+            "one": one,
+            "two": two,
             "chain_three": chain_three,
         },
         channels={"inbox_one": Topic(int)},
@@ -421,28 +483,24 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
 def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chain_one = (
+    one = (
         Channel.subscribe_to("input")
         | add_one
         | Channel.write_to(output=RunnablePassthrough(), between=RunnablePassthrough())
     )
-    chain_two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
+    two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
-    )
+    app = Pregel(nodes={"one": one, "two": two})
 
     assert [c for c in app.stream(2)] == [3, 4]
 
 
 def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("between")
-    chain_two = Channel.subscribe_to("between") | add_one
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("between")
+    two = Channel.subscribe_to("between") | add_one
 
-    app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
-    )
+    app = Pregel(nodes={"one": one, "two": two})
 
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to OUT topic
@@ -452,13 +510,11 @@ def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
 def test_invoke_two_processes_no_in(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
-    chain_one = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
-    chain_two = Channel.subscribe_to("between") | add_one
+    one = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
+    two = Channel.subscribe_to("between") | add_one
 
     with pytest.raises(ValueError):
-        Pregel(
-            chains={"chain_one": chain_one, "chain_two": chain_two},
-        )
+        Pregel(nodes={"one": one, "two": two})
 
 
 def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
@@ -474,13 +530,11 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             cleanup()
 
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain_one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    chain_two = (
-        Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
-    )
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    two = Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        chains={"chain_one": chain_one, "chain_two": chain_two},
+        nodes={"one": one, "two": two},
         channels={
             "inbox": Topic(int),
             "ctx": Context(an_int, typ=int),
@@ -500,3 +554,178 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         else:
             assert False, "Expected only two chunks"
     assert cleanup.call_count == 1, "Expected cleanup to be called once"
+
+
+def test_conditional_graph() -> None:
+    from copy import deepcopy
+
+    from langchain.llms.fake import FakeStreamingListLLM
+    from langchain_community.tools import tool
+    from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.prompts import PromptTemplate
+    from langchain_core.runnables import RunnablePassthrough
+
+    from permchain.langgraph import END
+
+    # Assemble the tools
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    # Construct the agent
+    prompt = PromptTemplate.from_template("Hello!")
+
+    llm = FakeStreamingListLLM(
+        responses=[
+            "tool:search_api:query",
+            "tool:search_api:another",
+            "finish:answer",
+        ]
+    )
+
+    def agent_parser(input: str) -> AgentFinish | AgentAction:
+        if input.startswith("finish"):
+            _, answer = input.split(":")
+            return AgentFinish(return_values={"answer": answer}, log=input)
+        else:
+            _, tool_name, tool_input = input.split(":")
+            return AgentAction(tool=tool_name, tool_input=tool_input, log=input)
+
+    agent = RunnablePassthrough.assign(agent_outcome=prompt | llm | agent_parser)
+
+    # Define tool execution logic
+    def execute_tools(data: dict) -> dict:
+        agent_action: AgentAction = data.pop("agent_outcome")
+        observation = {t.name: t for t in tools}[agent_action.tool].invoke(
+            agent_action.tool_input
+        )
+        if data.get("intermediate_steps") is None:
+            data["intermediate_steps"] = []
+        data["intermediate_steps"].append((agent_action, observation))
+        return data
+
+    # Define decision-making logic
+    def should_continue(data: dict) -> str:
+        # Logic to decide whether to continue in the loop or exit
+        if isinstance(data["agent_outcome"], AgentFinish):
+            return "exit"
+        else:
+            return "continue"
+
+    # Define a new graph
+    workflow = Graph()
+
+    workflow.add_node("agent", agent)
+    workflow.add_node("tools", execute_tools)
+
+    workflow.set_entry_point("agent")
+
+    workflow.add_conditional_edges(
+        "agent", should_continue, {"continue": "tools", "exit": END}
+    )
+
+    workflow.add_edge("tools", "agent")
+
+    app = workflow.compile()
+
+    assert app.invoke({"input": "what is weather in sf"}) == {
+        "input": "what is weather in sf",
+        "intermediate_steps": [
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+                "result for query",
+            ),
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+                "result for another",
+            ),
+        ],
+        "agent_outcome": AgentFinish(
+            return_values={"answer": "answer"}, log="finish:answer"
+        ),
+    }
+
+    assert [
+        deepcopy(c)
+        for c in app.stream(
+            {"input": "what is weather in sf"}, output=["agent", "tools"]
+        )
+    ] == [
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    )
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ),
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
+                    ),
+                ],
+            }
+        },
+    ]

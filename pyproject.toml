@@ -22,8 +22,8 @@ pytest-dotenv = "^0.5.2"
 pytest-asyncio = "^0.20.3"
 pytest-mock  = "^3.10.0"
 syrupy = "^4.0.2"
-pytest-watch = "^4.2.0"
 httpx = "^0.26.0"
+pytest-watcher = "^0.3.4"
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.4"
@@ -37,7 +37,8 @@ optional = true
 [tool.poetry.group.dev.dependencies]
 jupyter = "^1.0.0"
 openai = "^0.27.8"
-langchain = "^0.0.352"
+langchain = "^0.1.0"
+langchainhub = "^0.1.14"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]
@@ -66,6 +67,6 @@ asyncio_mode = "auto"
 #
 # https://github.com/tophat/syrupy
 # --snapshot-warn-unused    Prints a warning on unused snapshots rather than fail the test suite.
-addopts = "-x --full-trace --strict-markers --strict-config --durations=5 --snapshot-warn-unused"
+addopts = "--full-trace --strict-markers --strict-config --durations=5 --snapshot-warn-unused"
 # Registering custom markers.
 # https://docs.pytest.org/en/7.1.x/example/markers.html#registering-markers

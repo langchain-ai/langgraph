@@ -40,6 +40,7 @@ class ChannelRead(RunnableLambda):
     def __init__(self, channel: str) -> None:
         super().__init__(func=self._read, afunc=self._aread)
         self.channel = channel
+        self.name = f"ChannelRead<{channel}>"
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
         try:

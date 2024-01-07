@@ -39,6 +39,7 @@ from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     get_unique_config_specs,
 )
+from langchain_core.tracers.log_stream import LogStreamCallbackHandler
 
 from permchain.channels.base import (
     AsyncChannelsManager,
@@ -61,7 +62,7 @@ from permchain.pregel.io import map_input, map_output
 from permchain.pregel.log import logger
 from permchain.pregel.read import ChannelBatch, ChannelInvoke
 from permchain.pregel.reserved import ReservedChannels
-from permchain.pregel.validate import validate_chains_channels
+from permchain.pregel.validate import validate_graph
 from permchain.pregel.write import ChannelWrite
 
 WriteValue = Union[
@@ -81,12 +82,22 @@ def _coerce_write_value(value: WriteValue) -> Runnable[Input, Output]:
 class Channel:
     @overload
     @classmethod
-    def subscribe_to(cls, channels: str, key: Optional[str] = None) -> ChannelInvoke:
+    def subscribe_to(
+        cls,
+        channels: str,
+        key: Optional[str] = None,
+        when: Callable[[Any], bool] | None = None,
+    ) -> ChannelInvoke:
         ...
 
     @overload
     @classmethod
-    def subscribe_to(cls, channels: Sequence[str], key: None = None) -> ChannelInvoke:
+    def subscribe_to(
+        cls,
+        channels: Sequence[str],
+        key: None = None,
+        when: Callable[[Any], bool] | None = None,
+    ) -> ChannelInvoke:
         ...
 
     @classmethod
@@ -134,7 +145,7 @@ class Channel:
 
 
 class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
-    chains: Mapping[str, ChannelInvoke | ChannelBatch]
+    nodes: Mapping[str, ChannelInvoke | ChannelBatch]
 
     channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
 
@@ -153,15 +164,15 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     @root_validator(skip_on_failure=True)
     def validate_pregel(cls, values: dict[str, Any]) -> dict[str, Any]:
-        validate_chains_channels(
-            values["chains"], values["channels"], values["input"], values["output"]
+        validate_graph(
+            values["nodes"], values["channels"], values["input"], values["output"]
         )
         return values
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
         return get_unique_config_specs(
-            [spec for chain in self.chains.values() for spec in chain.config_specs]
+            [spec for node in self.nodes.values() for spec in node.config_specs]
             + (self.saver.config_specs if self.saver is not None else [])
         )
 
@@ -205,11 +216,15 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         input: Iterator[dict[str, Any] | Any],
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
+        *,
+        output: str | Sequence[str] | None = None,
     ) -> Iterator[tuple[dict[str, Any] | Any, CheckpointView]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
-        # copy chains to ignore mutations during execution
-        processes = {**self.chains}
+        # assign defaults
+        output = output if output is not None else self.output
+        # copy nodes to ignore mutations during execution
+        processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
         checkpoint = self.saver.get(config) if self.saver else None
         checkpoint = checkpoint or empty_checkpoint()
@@ -246,24 +261,31 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 # collect all writes to channels, without applying them yet
                 pending_writes = deque[tuple[str, Any]]()
 
+                # prepare tasks with config
+                tasks_w_config = [
+                    (
+                        proc,
+                        input,
+                        patch_config(
+                            config,
+                            run_name=name,
+                            callbacks=run_manager.get_child(f"graph:step:{step}"),
+                            configurable={
+                                # deque.extend is thread-safe
+                                CONFIG_KEY_SEND: pending_writes.extend,
+                                CONFIG_KEY_READ: read,
+                            },
+                        ),
+                    )
+                    for proc, input, name in next_tasks
+                ]
+
                 # execute tasks, and wait for one to fail or all to finish.
                 # each task is independent from all other concurrent tasks
                 done, inflight = concurrent.futures.wait(
                     [
-                        executor.submit(
-                            proc.invoke,
-                            input,
-                            patch_config(
-                                config,
-                                callbacks=run_manager.get_child(f"pregel:step:{step}"),
-                                configurable={
-                                    # deque.extend is thread-safe
-                                    CONFIG_KEY_SEND: pending_writes.extend,
-                                    CONFIG_KEY_READ: read,
-                                },
-                            ),
-                        )
-                        for proc, input, _ in next_tasks
+                        executor.submit(proc.invoke, input, config)
+                        for proc, input, config in tasks_w_config
                     ],
                     return_when=concurrent.futures.FIRST_EXCEPTION,
                     timeout=self.step_timeout,
@@ -283,7 +305,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                     values=_updateable_channel_values(channels),
                     step=step + 1,
                 )
-                yield map_output(self.output, pending_writes, channels), view
+                yield map_output(output, pending_writes, channels), view
                 # if view was updated, apply writes to channels
                 _apply_writes_from_view(checkpoint, channels, view)
 
@@ -302,11 +324,24 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         input: AsyncIterator[dict[str, Any] | Any],
         run_manager: AsyncCallbackManagerForChainRun,
         config: RunnableConfig,
+        *,
+        output: str | Sequence[str] | None = None,
     ) -> AsyncIterator[tuple[dict[str, Any] | Any, CheckpointView]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
-        # copy chains to ignore mutations during execution
-        processes = {**self.chains}
+        # if running from astream_log() run each proc with streaming
+        do_stream = next(
+            (
+                h
+                for h in run_manager.handlers
+                if isinstance(h, LogStreamCallbackHandler)
+            ),
+            None,
+        )
+        # assign defaults
+        output = output if output is not None else self.output
+        # copy nodes to ignore mutations during execution
+        processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
         checkpoint = await self.saver.aget(config) if self.saver else None
         checkpoint = checkpoint or empty_checkpoint()
@@ -341,27 +376,36 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                 # collect all writes to channels, without applying them yet
                 pending_writes = deque[tuple[str, Any]]()
 
+                # prepare tasks with config
+                tasks_w_config = [
+                    (
+                        proc,
+                        input,
+                        patch_config(
+                            config,
+                            run_name=name,
+                            callbacks=run_manager.get_child(f"graph:step:{step}"),
+                            configurable={
+                                # deque.extend is thread-safe
+                                CONFIG_KEY_SEND: pending_writes.extend,
+                                CONFIG_KEY_READ: read,
+                            },
+                        ),
+                    )
+                    for proc, input, name in next_tasks
+                ]
+
                 # execute tasks, and wait for one to fail or all to finish.
                 # each task is independent from all other concurrent tasks
                 done, inflight = await asyncio.wait(
                     [
-                        asyncio.create_task(
-                            proc.ainvoke(
-                                input,
-                                patch_config(
-                                    config,
-                                    callbacks=run_manager.get_child(
-                                        f"pregel:step:{step}"
-                                    ),
-                                    configurable={
-                                        # deque.extend is thread-safe
-                                        CONFIG_KEY_SEND: pending_writes.extend,
-                                        CONFIG_KEY_READ: read,
-                                    },
-                                ),
-                            )
-                        )
-                        for proc, input, _ in next_tasks
+                        asyncio.create_task(_aconsume(proc.astream(input, config)))
+                        for proc, input, config in tasks_w_config
+                    ]
+                    if do_stream
+                    else [
+                        asyncio.create_task(proc.ainvoke(input, config))
+                        for proc, input, config in tasks_w_config
                     ],
                     return_when=asyncio.FIRST_EXCEPTION,
                     timeout=self.step_timeout,
@@ -381,7 +425,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
                     values=_updateable_channel_values(channels),
                     step=step + 1,
                 )
-                yield map_output(self.output, pending_writes, channels), view
+                yield map_output(output, pending_writes, channels), view
                 # if view was updated, apply writes to channels
                 _apply_writes_from_view(checkpoint, channels, view)
 
@@ -399,10 +443,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         self,
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
+        *,
+        output: str | Sequence[str] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         latest: dict[str, Any] | Any = None
-        for chunk in self.stream(input, config, **kwargs):
+        for chunk in self.stream(input, config, output=output, **kwargs):
             latest = chunk
         return latest
 
@@ -410,30 +456,36 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         self,
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
+        *,
+        output: str | Sequence[str] | None = None,
         **kwargs: Any,
     ) -> Iterator[dict[str, Any] | Any]:
-        return self.transform(iter([input]), config, **kwargs)
+        return self.transform(iter([input]), config, output=output, **kwargs)
 
     def transform(
         self,
         input: Iterator[dict[str, Any] | Any],
         config: RunnableConfig | None = None,
+        *,
+        output: str | Sequence[str] | None = None,
         **kwargs: Any | None,
     ) -> Iterator[dict[str, Any] | Any]:
-        for output, _ in self._transform_stream_with_config(
-            input, self._transform, config, **kwargs
+        for out, _ in self._transform_stream_with_config(
+            input, self._transform, config, output=output, **kwargs
         ):
-            if output is not None:
-                yield output
+            if out is not None:
+                yield cast(dict[str, Any] | Any, out)
 
     def step(
         self,
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
+        *,
+        output: str | Sequence[str] | None = None,
         **kwargs: Any,
     ) -> Iterator[tuple[dict[str, Any] | Any, CheckpointView]]:
         for tup in self._transform_stream_with_config(
-            iter([input]), self._transform, config, **kwargs
+            iter([input]), self._transform, config, output=output, **kwargs
         ):
             yield cast(tuple[dict[str, Any] | Any, CheckpointView], tup)
 
@@ -441,10 +493,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         self,
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
+        *,
+        output: str | Sequence[str] | None = None,
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         latest: dict[str, Any] | Any = None
-        async for chunk in self.astream(input, config, **kwargs):
+        async for chunk in self.astream(input, config, output=output, **kwargs):
             latest = chunk
         return latest
 
@@ -452,37 +506,45 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         self,
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
+        *,
+        output: str | Sequence[str] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[dict[str, Any] | Any]:
         async def input_stream() -> AsyncIterator[dict[str, Any] | Any]:
             yield input
 
-        async for chunk in self.atransform(input_stream(), config, **kwargs):
+        async for chunk in self.atransform(
+            input_stream(), config, output=output, **kwargs
+        ):
             yield chunk
 
     async def atransform(
         self,
         input: AsyncIterator[dict[str, Any] | Any],
         config: RunnableConfig | None = None,
+        *,
+        output: str | Sequence[str] | None = None,
         **kwargs: Any | None,
     ) -> AsyncIterator[dict[str, Any] | Any]:
-        async for output, _ in self._atransform_stream_with_config(
-            input, self._atransform, config, **kwargs
+        async for out, _ in self._atransform_stream_with_config(
+            input, self._atransform, config, output=output, **kwargs
         ):
-            if output is not None:
-                yield output
+            if out is not None:
+                yield out
 
     async def astep(
         self,
         input: dict[str, Any] | Any,
         config: RunnableConfig | None = None,
+        *,
+        output: str | Sequence[str] | None = None,
         **kwargs: Any,
     ) -> AsyncIterator[tuple[dict[str, Any] | Any, CheckpointView]]:
         async def input_stream() -> AsyncIterator[dict[str, Any] | Any]:
             yield input
 
         async for tup in self._atransform_stream_with_config(
-            input_stream(), self._atransform, config, **kwargs
+            input_stream(), self._atransform, config, output=output, **kwargs
         ):
             yield cast(tuple[dict[str, Any] | Any, CheckpointView], tup)
 
@@ -633,9 +695,15 @@ def _updateable_channel_values(channels: Mapping[str, BaseChannel]) -> dict[str,
     """Return a dictionary of updateable channel values."""
     values: dict[str, Any] = {}
     for k, v in channels.items():
-        if isinstance(v, LastValue):
+        if isinstance(v, LastValue) and k not in [c.value for c in ReservedChannels]:
             try:
                 values[k] = v.get()
             except EmptyChannelError:
                 pass
     return values
+
+
+async def _aconsume(iterator: AsyncIterator[Any]) -> None:
+    """Consume an async iterator."""
+    async for _ in iterator:
+        pass
