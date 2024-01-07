@@ -597,8 +597,8 @@ def test_conditional_graph() -> None:
     agent = RunnablePassthrough.assign(agent_outcome=prompt | llm | agent_parser)
 
     # Define tool execution logic
-    def execute_tools(data):
-        agent_action: AgentAction | AgentFinish = data.pop("agent_outcome")
+    def execute_tools(data: dict) -> dict:
+        agent_action: AgentAction = data.pop("agent_outcome")
         observation = {t.name: t for t in tools}[agent_action.tool].invoke(
             agent_action.tool_input
         )
@@ -608,7 +608,7 @@ def test_conditional_graph() -> None:
         return data
 
     # Define decision-making logic
-    def should_continue(data):
+    def should_continue(data: dict) -> str:
         # Logic to decide whether to continue in the loop or exit
         if isinstance(data["agent_outcome"], AgentFinish):
             return "exit"

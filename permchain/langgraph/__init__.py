@@ -12,11 +12,6 @@ from langchain_core.runnables.base import (
 from permchain.pregel import Channel, Pregel
 
 
-class Edge(NamedTuple):
-    start: str
-    end: str
-
-
 class Branch(NamedTuple):
     condition: Callable[..., str]
     ends: dict[str, str]
@@ -30,9 +25,9 @@ END = "__end__"
 
 
 class Graph:
-    def __init__(self):
+    def __init__(self) -> None:
         self.nodes: dict[str, Runnable] = {}
-        self.edges = set[Edge]()
+        self.edges = set[tuple[str, str]]()
         self.branches: defaultdict[str, list[Branch]] = defaultdict(list)
 
     def add_node(self, key: str, action: RunnableLike) -> None:
@@ -60,7 +55,7 @@ class Graph:
         start_key: str,
         condition: Callable[..., str],
         conditional_edge_mapping: Dict[str, str],
-    ):
+    ) -> None:
         if start_key not in self.nodes:
             raise ValueError(f"Need to add_node `{start_key}` first")
         if iscoroutinefunction(condition):
@@ -68,17 +63,17 @@ class Graph:
 
         self.branches[start_key].append(Branch(condition, conditional_edge_mapping))
 
-    def set_entry_point(self, key: str):
+    def set_entry_point(self, key: str) -> None:
         if key not in self.nodes:
             raise ValueError(f"Need to add_node `{key}` first")
         self.entry_point = key
 
-    def set_finish_point(self, key: str):
+    def set_finish_point(self, key: str) -> None:
         if key not in self.nodes:
             raise ValueError(f"Need to add_node `{key}` first")
         self.finish_point = key
 
-    def compile(self):
+    def compile(self) -> Pregel:
         ################################################
         #       STEP 1: VALIDATE GRAPH STRUCTURE       #
         ################################################
