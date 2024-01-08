@@ -120,7 +120,7 @@ def should_continue(data):
 We can now put it alltogether and define the graph!
 
 ```python
-from permchain.langgraph import Graph, END
+from langgraph.graph import END, Graph
 
 workflow = Graph()
 
@@ -180,7 +180,7 @@ There are only a few new APIs to use.
 The main new class is `Graph`.
 
 ```python
-from permchain.langgraph import Graph
+from langgraph.graph import Graph
 ```
 
 This class is responsible for constructing the graph.
@@ -260,7 +260,7 @@ Note: This does not need to be called if at any point you previously created an 
 ### `END`
 
 ```python
-from permchain.langgraph import END
+from langgraph.graph import END
 ```
 
 This is a special node representing the end of the graph.
