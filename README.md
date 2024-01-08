@@ -26,6 +26,11 @@ pip install langgraph
 Here we will go over an example of recreating the [`AgentExecutor`](https://python.langchain.com/docs/modules/agents/concepts#agentexecutor) class from LangChain.
 The benefits of creating it with LangGraph is that it is more modifiable.
 
+We will also want to install some LangChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
+
+```shell
+pip install -U langchain langchain_openai langchainhub tavily-python
+```
 ### Define the LangChain Agent
 
 This is the LangChain agent. 
@@ -33,10 +38,9 @@ Crucially, this agent is just responsible for deciding what actions to take.
 For more information on what is happening here, please see [this documentation](https://python.langchain.com/docs/modules/agents/quick_start).
 
 ```python
-from langchain.chat_models import ChatOpenAI
 from langchain import hub
 from langchain.agents import create_openai_functions_agent
-from langchain_community.chat_models import ChatOpenAI
+from langchain_openai.chat_models import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
 
 tools = [TavilySearchResults(max_results=1)]

@@ -18,8 +18,8 @@ from langchain_core.runnables.base import (
 )
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from permchain.channels.base import BaseChannel
-from permchain.constants import CONFIG_KEY_READ
+from langgraph.channels.base import BaseChannel
+from langgraph.constants import CONFIG_KEY_READ
 
 
 class ChannelRead(RunnableLambda):

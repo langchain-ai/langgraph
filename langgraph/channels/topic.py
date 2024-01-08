@@ -3,7 +3,7 @@ from typing import Any, Generator, Generic, Iterator, Optional, Sequence, Type, 
 
 from typing_extensions import Self
 
-from permchain.channels.base import BaseChannel, Value
+from langgraph.channels.base import BaseChannel, Value
 
 
 def flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:

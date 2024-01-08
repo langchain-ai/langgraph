@@ -6,11 +6,11 @@ import httpx
 import pytest
 from pytest_mock import MockerFixture
 
-from permchain.channels.base import EmptyChannelError, InvalidUpdateError
-from permchain.channels.binop import BinaryOperatorAggregate
-from permchain.channels.context import Context
-from permchain.channels.last_value import LastValue
-from permchain.channels.topic import Topic
+from langgraph.channels.base import EmptyChannelError, InvalidUpdateError
+from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.context import Context
+from langgraph.channels.last_value import LastValue
+from langgraph.channels.topic import Topic
 
 
 def test_last_value() -> None:

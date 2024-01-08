@@ -5,7 +5,7 @@ from langchain.output_parsers.openai_functions import JsonOutputFunctionsParser
 from langchain_core.output_parsers import StrOutputParser
 from langchain_core.prompts import SystemMessagePromptTemplate
 
-from permchain import Channel, Pregel
+from langgraph.pregel import Channel, Pregel
 
 # prompts
 

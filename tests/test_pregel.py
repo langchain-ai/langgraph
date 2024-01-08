@@ -8,14 +8,15 @@ import pytest
 from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
 
-from permchain import Channel, Graph, Pregel
-from permchain.channels.base import InvalidUpdateError
-from permchain.channels.binop import BinaryOperatorAggregate
-from permchain.channels.context import Context
-from permchain.channels.last_value import LastValue
-from permchain.channels.topic import Topic
-from permchain.checkpoint.memory import MemoryCheckpoint
-from permchain.pregel.reserved import ReservedChannels
+from langgraph.channels.base import InvalidUpdateError
+from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.context import Context
+from langgraph.channels.last_value import LastValue
+from langgraph.channels.topic import Topic
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, Graph
+from langgraph.pregel import Channel, Pregel
+from langgraph.pregel.reserved import ReservedChannels
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -161,14 +162,14 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "inbox": 3,
                 "input": 2,
             }
-            assert output is None
+            assert output == {"inbox": 3}
         elif view.step == 2:
             assert view.values == {
                 "output": 4,
                 "inbox": 3,
                 "input": 2,
             }
-            assert output == 4
+            assert output == {"output": 4}
 
     for output, view in app.step(2):
         if view.step == 1:
@@ -176,7 +177,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "inbox": 3,
                 "input": 2,
             }
-            assert output is None
+            assert output == {"inbox": 3}
             # modify inbox value
             view.values["inbox"] = 5
         elif view.step == 2:
@@ -186,7 +187,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "input": 2,
             }
             # output is different now
-            assert output == 6
+            assert output == {"output": 6}
 
     graph = Graph()
     graph.add_node("add_one", add_one)
@@ -204,14 +205,14 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "add_one": 2,
                 "add_one_more": 3,
             }
-            assert output is None
+            assert output == {"add_one_more": 3}
         elif view.step == 2:
             assert view.values == {
                 "add_one": 2,
                 "add_one_more": 3,
                 "__end__": 4,
             }
-            assert output == 4
+            assert output == {"__end__": 4}
 
     for output, view in gapp.step(2):
         if view.step == 1:
@@ -219,7 +220,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "add_one": 2,
                 "add_one_more": 3,
             }
-            assert output is None
+            assert output == {"add_one_more": 3}
             # modify inbox value
             view.values["add_one_more"] = 5
         elif view.step == 2:
@@ -229,7 +230,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
                 "__end__": 6,
             }
             # output is different now
-            assert output == 6
+            assert output == {"__end__": 6}
 
 
 def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
@@ -243,9 +244,12 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
         input=["input", "inbox"],
     )
 
-    assert [*app.stream({"input": 2, "inbox": 12})] == [13, 4]  # [12 + 1, 2 + 1 + 1]
-    assert [*app.stream({"input": 2, "inbox": 12}, output=["output"])] == [
-        {"output": 13},
+    assert [*app.stream({"input": 2, "inbox": 12}, output="output")] == [
+        13,
+        4,
+    ]  # [12 + 1, 2 + 1 + 1]
+    assert [*app.stream({"input": 2, "inbox": 12})] == [
+        {"inbox": [3], "output": 13},
         {"output": 4},
     ]
 
@@ -377,7 +381,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
         | raise_if_above_10
     )
 
-    memory = MemoryCheckpoint()
+    memory = MemorySaver()
 
     app = Pregel(
         nodes={"one": one},
@@ -492,7 +496,7 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
 
     app = Pregel(nodes={"one": one, "two": two})
 
-    assert [c for c in app.stream(2)] == [3, 4]
+    assert [c for c in app.stream(2)] == [{"between": 3, "output": 3}, {"output": 4}]
 
 
 def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
@@ -564,8 +568,6 @@ def test_conditional_graph() -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
-
-    from permchain.langgraph import END
 
     # Assemble the tools
     @tool()

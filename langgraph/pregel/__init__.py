@@ -41,29 +41,29 @@ from langchain_core.runnables.utils import (
 )
 from langchain_core.tracers.log_stream import LogStreamCallbackHandler
 
-from permchain.channels.base import (
+from langgraph.channels.base import (
     AsyncChannelsManager,
     BaseChannel,
     ChannelsManager,
     EmptyChannelError,
     create_checkpoint,
 )
-from permchain.channels.last_value import LastValue
-from permchain.checkpoint.base import (
-    BaseCheckpointAdapter,
+from langgraph.channels.last_value import LastValue
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
     Checkpoint,
     CheckpointAt,
     CheckpointView,
     empty_checkpoint,
 )
-from permchain.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
-from permchain.pregel.debug import print_checkpoint, print_step_start
-from permchain.pregel.io import map_input, map_output
-from permchain.pregel.log import logger
-from permchain.pregel.read import ChannelBatch, ChannelInvoke
-from permchain.pregel.reserved import ReservedChannels
-from permchain.pregel.validate import validate_graph
-from permchain.pregel.write import ChannelWrite
+from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
+from langgraph.pregel.debug import print_checkpoint, print_step_start
+from langgraph.pregel.io import map_input, map_output
+from langgraph.pregel.log import logger
+from langgraph.pregel.read import ChannelBatch, ChannelInvoke
+from langgraph.pregel.reserved import ReservedChannels
+from langgraph.pregel.validate import validate_graph
+from langgraph.pregel.write import ChannelWrite
 
 WriteValue = Union[
     Runnable[Input, Output],
@@ -157,7 +157,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     debug: bool = Field(default_factory=get_debug)
 
-    saver: Optional[BaseCheckpointAdapter] = None
+    saver: Optional[BaseCheckpointSaver] = None
 
     class Config:
         arbitrary_types_allowed = True
@@ -222,7 +222,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
         # assign defaults
-        output = output if output is not None else self.output
+        output = output if output is not None else [chan for chan in self.channels]
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
@@ -339,7 +339,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             None,
         )
         # assign defaults
-        output = output if output is not None else self.output
+        output = output if output is not None else [chan for chan in self.channels]
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
@@ -448,7 +448,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         latest: dict[str, Any] | Any = None
-        for chunk in self.stream(input, config, output=output, **kwargs):
+        for chunk in self.stream(
+            input,
+            config,
+            output=output if output is not None else self.output,
+            **kwargs,
+        ):
             latest = chunk
         return latest
 
@@ -498,7 +503,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         latest: dict[str, Any] | Any = None
-        async for chunk in self.astream(input, config, output=output, **kwargs):
+        async for chunk in self.astream(
+            input,
+            config,
+            output=output if output is not None else self.output,
+            **kwargs,
+        ):
             latest = chunk
         return latest
 
