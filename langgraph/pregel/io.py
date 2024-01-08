@@ -1,7 +1,7 @@
 from typing import Any, Iterator, Mapping, Sequence
 
-from permchain.channels.base import BaseChannel
-from permchain.pregel.log import logger
+from langgraph.channels.base import BaseChannel
+from langgraph.pregel.log import logger
 
 
 def map_input(

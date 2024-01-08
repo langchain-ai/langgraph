@@ -41,29 +41,29 @@ from langchain_core.runnables.utils import (
 )
 from langchain_core.tracers.log_stream import LogStreamCallbackHandler
 
-from permchain.channels.base import (
+from langgraph.channels.base import (
     AsyncChannelsManager,
     BaseChannel,
     ChannelsManager,
     EmptyChannelError,
     create_checkpoint,
 )
-from permchain.channels.last_value import LastValue
-from permchain.checkpoint.base import (
-    BaseCheckpointAdapter,
+from langgraph.channels.last_value import LastValue
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
     Checkpoint,
     CheckpointAt,
     CheckpointView,
     empty_checkpoint,
 )
-from permchain.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
-from permchain.pregel.debug import print_checkpoint, print_step_start
-from permchain.pregel.io import map_input, map_output
-from permchain.pregel.log import logger
-from permchain.pregel.read import ChannelBatch, ChannelInvoke
-from permchain.pregel.reserved import ReservedChannels
-from permchain.pregel.validate import validate_graph
-from permchain.pregel.write import ChannelWrite
+from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
+from langgraph.pregel.debug import print_checkpoint, print_step_start
+from langgraph.pregel.io import map_input, map_output
+from langgraph.pregel.log import logger
+from langgraph.pregel.read import ChannelBatch, ChannelInvoke
+from langgraph.pregel.reserved import ReservedChannels
+from langgraph.pregel.validate import validate_graph
+from langgraph.pregel.write import ChannelWrite
 
 WriteValue = Union[
     Runnable[Input, Output],
@@ -157,7 +157,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     debug: bool = Field(default_factory=get_debug)
 
-    saver: Optional[BaseCheckpointAdapter] = None
+    saver: Optional[BaseCheckpointSaver] = None
 
     class Config:
         arbitrary_types_allowed = True

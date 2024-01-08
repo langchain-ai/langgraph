@@ -1,4 +1,4 @@
-from permchain import Channel, Pregel
+from langgraph.pregel import Channel, Pregel
 
 grow_value = (
     Channel.subscribe_to("value")

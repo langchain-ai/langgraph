@@ -9,7 +9,7 @@ from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from permchain.utils import StrEnum
+from langgraph.utils import StrEnum
 
 
 class Checkpoint(TypedDict):
@@ -35,7 +35,7 @@ class CheckpointAt(StrEnum):
     END_OF_RUN = "end_of_run"
 
 
-class BaseCheckpointAdapter(Serializable, ABC):
+class BaseCheckpointSaver(Serializable, ABC):
     at: CheckpointAt = CheckpointAt.END_OF_RUN
 
     @property

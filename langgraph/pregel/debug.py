@@ -4,7 +4,7 @@ from typing import Any, Iterator, Mapping
 from langchain_core.runnables import Runnable
 from langchain_core.utils.input import get_bolded_text, get_colored_text
 
-from permchain.channels.base import BaseChannel, EmptyChannelError
+from langgraph.channels.base import BaseChannel, EmptyChannelError
 
 
 def print_step_start(step: int, next_tasks: list[tuple[Runnable, Any, str]]) -> None:

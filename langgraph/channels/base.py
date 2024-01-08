@@ -14,7 +14,7 @@ from typing import (
 
 from typing_extensions import Self
 
-from permchain.checkpoint.base import Checkpoint
+from langgraph.checkpoint.base import Checkpoint
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")

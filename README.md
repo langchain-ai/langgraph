@@ -1,12 +1,12 @@
-# `permchain`
+# `langgraph`
 
 ## Get started
 
-`pip install permchain`
+`pip install langgraph`
 
 ## Overview
 
-PermChain is an alpha-stage library for building stateful, multi-actor applications with LLMs. It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation. It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
+LangGraph is an alpha-stage library for building stateful, multi-actor applications with LLMs. It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation. It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
 
 Some of the use cases are:
 
@@ -20,7 +20,7 @@ Some of the use cases are:
 
 ### Channels
 
-Channels are used to communicate between chains. Each channel has a value type, an update type, and an update function – which takes a sequence of updates and modifies the stored value. Channels can be used to send data from one chain to another, or to send data from a chain to itself in a future step. PermChain provides a number of built-in channels:
+Channels are used to communicate between chains. Each channel has a value type, an update type, and an update function – which takes a sequence of updates and modifies the stored value. Channels can be used to send data from one chain to another, or to send data from a chain to itself in a future step. LangGraph provides a number of built-in channels:
 
 #### Basic channels: LastValue and Topic
 
@@ -49,7 +49,7 @@ Repeat until no chains are planned for execution, or a maximum number of steps i
 ## Example
 
 ```python
-from permchain import Channel, Pregel
+from langgraph import Channel, Pregel
 
 grow_value = (
     Channel.subscribe_to("value")

@@ -14,7 +14,7 @@ from typing import (
 
 from typing_extensions import Self
 
-from permchain.channels.base import (
+from langgraph.channels.base import (
     BaseChannel,
     EmptyChannelError,
     InvalidUpdateError,

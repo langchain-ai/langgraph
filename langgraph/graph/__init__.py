@@ -9,7 +9,7 @@ from langchain_core.runnables.base import (
     coerce_to_runnable,
 )
 
-from permchain.pregel import Channel, Pregel
+from langgraph.pregel import Channel, Pregel
 
 
 class Branch(NamedTuple):

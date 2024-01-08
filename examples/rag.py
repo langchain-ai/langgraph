@@ -4,8 +4,8 @@ from langchain.vectorstores import FAISS
 from langchain_core.messages import AIMessage, AnyMessage, FunctionMessage
 from langchain_core.prompts import PromptTemplate
 
-from permchain import Channel, Pregel
-from permchain.channels import Topic
+from langgraph.channels import Topic
+from langgraph.pregel import Channel, Pregel
 
 texts = ["harrison went to kensho"]
 embeddings = OpenAIEmbeddings()
