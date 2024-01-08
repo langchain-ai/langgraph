@@ -2,7 +2,7 @@ import asyncio
 from abc import ABC, abstractmethod
 from collections import defaultdict
 from datetime import datetime, timezone
-from typing import Any, TypedDict
+from typing import Any, Optional, TypedDict
 
 from langchain_core.load.serializable import Serializable
 from langchain_core.pydantic_v1 import Field
@@ -43,14 +43,14 @@ class BaseCheckpointSaver(Serializable, ABC):
         return []
 
     @abstractmethod
-    def get(self, config: RunnableConfig) -> Checkpoint | None:
+    def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
         ...
 
     @abstractmethod
     def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> None:
         ...
 
-    async def aget(self, config: RunnableConfig) -> Checkpoint | None:
+    async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         return await asyncio.get_running_loop().run_in_executor(None, self.get, config)
 
     async def aput(self, config: RunnableConfig, checkpoint: Checkpoint) -> None:

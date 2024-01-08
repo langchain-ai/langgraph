@@ -1,4 +1,4 @@
-from typing import Any, Mapping, Sequence
+from typing import Any, Mapping, Sequence, Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.last_value import LastValue
@@ -7,10 +7,10 @@ from langgraph.pregel.reserved import ReservedChannels
 
 
 def validate_graph(
-    nodes: Mapping[str, ChannelInvoke | ChannelBatch],
+    nodes: Mapping[str, Union[ChannelInvoke, ChannelBatch]],
     channels: dict[str, BaseChannel],
-    input: str | Sequence[str],
-    output: str | Sequence[str],
+    input: Union[str, Sequence[str]],
+    output: Union[str, Sequence[str]],
 ) -> None:
     subscribed_channels = set[str]()
     for node in nodes.values():

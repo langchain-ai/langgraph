@@ -6,7 +6,7 @@ from typing_extensions import Self
 from langgraph.channels.base import BaseChannel, Value
 
 
-def flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
+def flatten(values: Sequence[Union[Value, list[Value]]]) -> Iterator[Value]:
     for value in values:
         if isinstance(value, list):
             yield from value
@@ -16,7 +16,9 @@ def flatten(values: Sequence[Value | list[Value]]) -> Iterator[Value]:
 
 class Topic(
     Generic[Value],
-    BaseChannel[Sequence[Value], Value | list[Value], tuple[set[Value], list[Value]]],
+    BaseChannel[
+        Sequence[Value], Union[Value, list[Value]], tuple[set[Value], list[Value]]
+    ],
 ):
     """A configurable PubSub Topic.
 
@@ -60,7 +62,7 @@ class Topic(
         finally:
             pass
 
-    def update(self, values: Sequence[Value | list[Value]]) -> None:
+    def update(self, values: Sequence[Union[Value, list[Value]]]) -> None:
         if not self.accumulate:
             self.values = list[Value]()
         if flat_values := flatten(values):

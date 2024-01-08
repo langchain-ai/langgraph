@@ -1,3 +1,5 @@
+from typing import Optional
+
 from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
@@ -21,7 +23,7 @@ class MemorySaver(BaseCheckpointSaver):
             ),
         ]
 
-    def get(self, config: RunnableConfig) -> Checkpoint | None:
+    def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
         return self.storage.get(config["configurable"]["thread_id"], None)
 
     def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> None:

@@ -72,7 +72,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         Raises EmptyChannelError if the channel is empty (never updated yet)."""
 
     @abstractmethod
-    def checkpoint(self) -> C | None:
+    def checkpoint(self) -> Optional[C]:
         """Return a string representation of the channel's current state.
 
         Raises EmptyChannelError if the channel is empty (never updated yet),
