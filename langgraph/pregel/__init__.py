@@ -53,7 +53,6 @@ from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointAt,
-    CheckpointView,
     empty_checkpoint,
 )
 from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND
@@ -153,6 +152,8 @@ class Pregel(
 
     output: Union[str, Sequence[str]] = "output"
 
+    hidden: Sequence[str] = Field(default_factory=list)
+
     input: Union[str, Sequence[str]] = "input"
 
     step_timeout: Optional[float] = None
@@ -220,11 +221,12 @@ class Pregel(
         config: RunnableConfig,
         *,
         output: Optional[Union[str, Sequence[str]]] = None,
-    ) -> Iterator[tuple[Union[dict[str, Any], Any], CheckpointView]]:
+    ) -> Iterator[Union[dict[str, Any], Any]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
         # assign defaults
-        output = output if output is not None else [chan for chan in self.channels]
+        if output is None:
+            output = [chan for chan in self.channels if chan not in self.hidden]
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
@@ -303,13 +305,12 @@ class Pregel(
                     print_checkpoint(step, channels)
 
                 # yield current value and checkpoint view
-                view = CheckpointView(
-                    values=_updateable_channel_values(channels),
-                    step=step + 1,
-                )
-                yield map_output(output, pending_writes, channels), view
-                # if view was updated, apply writes to channels
-                _apply_writes_from_view(checkpoint, channels, view)
+                if step_output := map_output(output, pending_writes, channels):
+                    yield step_output
+                    # we can detect updates when output is multiple channels (ie. dict)
+                    if not isinstance(output, str):
+                        # if view was updated, apply writes to channels
+                        _apply_writes_from_view(checkpoint, channels, step_output)
 
                 # save end of step checkpoint
                 if self.saver is not None and self.saver.at == CheckpointAt.END_OF_STEP:
@@ -328,7 +329,7 @@ class Pregel(
         config: RunnableConfig,
         *,
         output: Optional[Union[str, Sequence[str]]] = None,
-    ) -> AsyncIterator[tuple[Union[dict[str, Any], Any], CheckpointView]]:
+    ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
         # if running from astream_log() run each proc with streaming
@@ -341,7 +342,8 @@ class Pregel(
             None,
         )
         # assign defaults
-        output = output if output is not None else [chan for chan in self.channels]
+        if output is None:
+            output = [chan for chan in self.channels if chan not in self.hidden]
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
@@ -423,13 +425,12 @@ class Pregel(
                     print_checkpoint(step, channels)
 
                 # yield current value and checkpoint view
-                view = CheckpointView(
-                    values=_updateable_channel_values(channels),
-                    step=step + 1,
-                )
-                yield map_output(output, pending_writes, channels), view
-                # if view was updated, apply writes to channels
-                _apply_writes_from_view(checkpoint, channels, view)
+                if step_output := map_output(output, pending_writes, channels):
+                    yield step_output
+                    # we can detect updates when output is multiple channels (ie. dict)
+                    if not isinstance(output, str):
+                        # if view was updated, apply writes to channels
+                        _apply_writes_from_view(checkpoint, channels, step_output)
 
                 # save end of step checkpoint
                 if self.saver is not None and self.saver.at == CheckpointAt.END_OF_STEP:
@@ -477,24 +478,10 @@ class Pregel(
         output: Optional[Union[str, Sequence[str]]] = None,
         **kwargs: Any,
     ) -> Iterator[Union[dict[str, Any], Any]]:
-        for out, _ in self._transform_stream_with_config(
+        for chunk in self._transform_stream_with_config(
             input, self._transform, config, output=output, **kwargs
         ):
-            if out is not None:
-                yield cast(Union[dict[str, Any], Any], out)
-
-    def step(
-        self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
-        *,
-        output: Optional[Union[str, Sequence[str]]] = None,
-        **kwargs: Any,
-    ) -> Iterator[tuple[Union[dict[str, Any], Any], CheckpointView]]:
-        for tup in self._transform_stream_with_config(
-            iter([input]), self._transform, config, output=output, **kwargs
-        ):
-            yield cast(tuple[Union[dict[str, Any], Any], CheckpointView], tup)
+            yield chunk
 
     async def ainvoke(
         self,
@@ -538,27 +525,10 @@ class Pregel(
         output: Optional[Union[str, Sequence[str]]] = None,
         **kwargs: Any,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
-        async for out, _ in self._atransform_stream_with_config(
+        async for chunk in self._atransform_stream_with_config(
             input, self._atransform, config, output=output, **kwargs
         ):
-            if out is not None:
-                yield out
-
-    async def astep(
-        self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
-        *,
-        output: Optional[Union[str, Sequence[str]]] = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[tuple[Union[dict[str, Any], Any], CheckpointView]]:
-        async def input_stream() -> AsyncIterator[Union[dict[str, Any], Any]]:
-            yield input
-
-        async for tup in self._atransform_stream_with_config(
-            input_stream(), self._atransform, config, output=output, **kwargs
-        ):
-            yield cast(tuple[Union[dict[str, Any], Any], CheckpointView], tup)
+            yield chunk
 
 
 def _interrupt_or_proceed(
@@ -629,11 +599,9 @@ def _apply_writes(
 
 
 def _apply_writes_from_view(
-    checkpoint: Checkpoint,
-    channels: Mapping[str, BaseChannel],
-    view: CheckpointView,
+    checkpoint: Checkpoint, channels: Mapping[str, BaseChannel], values: dict[str, Any]
 ) -> None:
-    for chan, value in view.values.items():
+    for chan, value in values.items():
         if value == channels[chan].get():
             continue
 
@@ -642,7 +610,7 @@ def _apply_writes_from_view(
             f"{channels[chan].__class__.__name__}"
         )
         checkpoint["channel_versions"][chan] += 1
-        channels[chan].update([view.values[chan]])
+        channels[chan].update([values[chan]])
 
 
 def _prepare_next_tasks(
@@ -701,18 +669,6 @@ def _prepare_next_tasks(
                 seen[proc.channel] = checkpoint["channel_versions"][proc.channel]
 
     return tasks
-
-
-def _updateable_channel_values(channels: Mapping[str, BaseChannel]) -> dict[str, Any]:
-    """Return a dictionary of updateable channel values."""
-    values: dict[str, Any] = {}
-    for k, v in channels.items():
-        if isinstance(v, LastValue) and k not in [c.value for c in ReservedChannels]:
-            try:
-                values[k] = v.get()
-            except EmptyChannelError:
-                pass
-    return values
 
 
 async def _aconsume(iterator: AsyncIterator[Any]) -> None:
