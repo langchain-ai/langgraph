@@ -32,6 +32,9 @@ class ChannelWrite(RunnablePassthrough):
         super().__init__(func=self._write, afunc=self._awrite, channels=channels)
         self.name = f"ChannelWrite<{','.join(chan for chan, _ in self.channels)}>"
 
+    def __repr_args__(self) -> Any:
+        return [("channels", self.channels)]
+
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
         return [

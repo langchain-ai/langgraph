@@ -11,6 +11,8 @@ from langchain_core.runnables.base import (
 
 from langgraph.pregel import Channel, Pregel
 
+END = "__end__"
+
 
 class Branch(NamedTuple):
     condition: Callable[..., str]
@@ -18,10 +20,8 @@ class Branch(NamedTuple):
 
     def runnable(self, input: Any) -> Runnable:
         result = self.condition(input)
-        return Channel.write_to(self.ends[result])
-
-
-END = "__end__"
+        destination = self.ends[result]
+        return Channel.write_to(f"{destination}:inbox" if destination != END else END)
 
 
 class Graph:
@@ -106,24 +106,31 @@ class Graph:
 
         outgoing_edges = defaultdict(list)
         for start, end in self.edges:
-            outgoing_edges[start].append(end)
+            outgoing_edges[start].append(f"{end}:inbox")
         if hasattr(self, "finish_point"):
             outgoing_edges[self.finish_point].append(END)
 
         nodes = {
-            key: Channel.subscribe_to(key) | node for key, node in self.nodes.items()
+            key: (Channel.subscribe_to(f"{key}:inbox") | node | Channel.write_to(key))
+            for key, node in self.nodes.items()
         }
 
-        for key, edges in outgoing_edges.items():
-            if edges:
-                nodes[key] |= Channel.write_to(*edges)
-
-        for key, branches in self.branches.items():
-            for branch in branches:
-                nodes[key] |= RunnableLambda(branch.runnable, name=f"{key}_condition")
+        for key in self.nodes:
+            outgoing = outgoing_edges[key]
+            edges_key = f"{key}:edges"
+            if outgoing or key in self.branches:
+                nodes[edges_key] = Channel.subscribe_to(key)
+            if outgoing:
+                nodes[edges_key] |= Channel.write_to(*[dest for dest in outgoing])
+            if key in self.branches:
+                for branch in self.branches[key]:
+                    nodes[edges_key] |= RunnableLambda(
+                        branch.runnable, name=f"{key}_condition"
+                    )
 
         return Pregel(
             nodes=nodes,
-            input=self.entry_point,
+            input=f"{self.entry_point}:inbox",
             output=END,
+            hidden=[f"{node}:inbox" for node in self.nodes],
         )

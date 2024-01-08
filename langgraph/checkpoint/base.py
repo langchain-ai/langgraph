@@ -5,7 +5,6 @@ from datetime import datetime, timezone
 from typing import Any, Optional, TypedDict
 
 from langchain_core.load.serializable import Serializable
-from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
@@ -57,9 +56,3 @@ class BaseCheckpointSaver(Serializable, ABC):
         return await asyncio.get_running_loop().run_in_executor(
             None, self.put, config, checkpoint
         )
-
-
-class CheckpointView(Serializable):
-    values: dict[str, Any] = Field(frozen=True)
-
-    step: int

@@ -156,38 +156,28 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert app.invoke(2) == 4
 
-    for output, view in app.step(2):
-        if view.step == 1:
-            assert view.values == {
+    for step, values in enumerate(app.stream(2), start=1):
+        if step == 1:
+            assert values == {
                 "inbox": 3,
-                "input": 2,
             }
-            assert output == {"inbox": 3}
-        elif view.step == 2:
-            assert view.values == {
+        elif step == 2:
+            assert values == {
                 "output": 4,
-                "inbox": 3,
-                "input": 2,
             }
-            assert output == {"output": 4}
 
-    for output, view in app.step(2):
-        if view.step == 1:
-            assert view.values == {
+    for step, values in enumerate(app.stream(2), start=1):
+        if step == 1:
+            assert values == {
                 "inbox": 3,
-                "input": 2,
             }
-            assert output == {"inbox": 3}
             # modify inbox value
-            view.values["inbox"] = 5
-        elif view.step == 2:
-            assert view.values == {
-                "output": 6,
-                "inbox": 5,
-                "input": 2,
-            }
+            values["inbox"] = 5
+        elif step == 2:
             # output is different now
-            assert output == {"output": 6}
+            assert values == {
+                "output": 6,
+            }
 
     graph = Graph()
     graph.add_node("add_one", add_one)
@@ -199,38 +189,41 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert gapp.invoke(2) == 4
 
-    for output, view in gapp.step(2):
-        if view.step == 1:
-            assert view.values == {
-                "add_one": 2,
-                "add_one_more": 3,
+    for step, values in enumerate(gapp.stream(2), start=1):
+        if step == 1:
+            assert values == {
+                "add_one": 3,
             }
-            assert output == {"add_one_more": 3}
-        elif view.step == 2:
-            assert view.values == {
-                "add_one": 2,
-                "add_one_more": 3,
+        elif step == 2:
+            assert values == {
+                "add_one_more": 4,
+            }
+        elif step == 3:
+            assert values == {
                 "__end__": 4,
             }
-            assert output == {"__end__": 4}
+        else:
+            assert 0, f"{step}:{values}"
+    assert step == 3
 
-    for output, view in gapp.step(2):
-        if view.step == 1:
-            assert view.values == {
-                "add_one": 2,
-                "add_one_more": 3,
+    for step, values in enumerate(gapp.stream(2), start=1):
+        if step == 1:
+            assert values == {
+                "add_one": 3,
             }
-            assert output == {"add_one_more": 3}
-            # modify inbox value
-            view.values["add_one_more"] = 5
-        elif view.step == 2:
-            assert view.values == {
-                "add_one": 2,
-                "add_one_more": 5,
+            # modify value before next step
+            values["add_one"] = 5
+        elif step == 2:
+            assert values == {
+                "add_one_more": 6,
+            }
+        elif step == 3:
+            assert values == {
                 "__end__": 6,
             }
-            # output is different now
-            assert output == {"__end__": 6}
+        else:
+            assert 0, "Should not get here"
+    assert step == 3
 
 
 def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
@@ -658,14 +651,9 @@ def test_conditional_graph() -> None:
         ),
     }
 
-    assert [
-        deepcopy(c)
-        for c in app.stream(
-            {"input": "what is weather in sf"}, output=["agent", "tools"]
-        )
-    ] == [
+    assert [deepcopy(c) for c in app.stream({"input": "what is weather in sf"})] == [
         {
-            "tools": {
+            "agent": {
                 "input": "what is weather in sf",
                 "agent_outcome": AgentAction(
                     tool="search_api", tool_input="query", log="tool:search_api:query"
@@ -673,7 +661,7 @@ def test_conditional_graph() -> None:
             }
         },
         {
-            "agent": {
+            "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
                     (
@@ -688,7 +676,7 @@ def test_conditional_graph() -> None:
             }
         },
         {
-            "tools": {
+            "agent": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
                     (
@@ -705,6 +693,29 @@ def test_conditional_graph() -> None:
                     tool_input="another",
                     log="tool:search_api:another",
                 ),
+            }
+        },
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ),
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
+                    ),
+                ],
             }
         },
         {
@@ -728,6 +739,35 @@ def test_conditional_graph() -> None:
                         "result for another",
                     ),
                 ],
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "answer"}, log="finish:answer"
+                ),
+            }
+        },
+        {
+            "__end__": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ),
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
+                    ),
+                ],
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "answer"}, log="finish:answer"
+                ),
             }
         },
     ]
