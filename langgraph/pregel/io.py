@@ -27,7 +27,7 @@ def map_output(
     output_channels: Union[str, Sequence[str]],
     pending_writes: Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
-) -> dict[str, Any] | Any | None:
+) -> Optional[Union[dict[str, Any], Any]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
         if any(chan == output_channels for chan, _ in pending_writes):
