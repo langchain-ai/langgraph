@@ -1,102 +1,374 @@
-# `langgraph`
+# 🦜🕸️LangGraph
 
-## Get started
-
-`pip install langgraph`
+⚡ Building language agents as graphs ⚡
 
 ## Overview
 
-LangGraph is an alpha-stage library for building stateful, multi-actor applications with LLMs. It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation. It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
+LangGraph is a library for building stateful, multi-actor applications with LLMs, built on top of (and intended to be used with) [LangChain](https://github.com/langchain-ai/langchain). 
+It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation in a cyclic manner. 
+It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
+The current interface exposed is one inspired by [NetworkX](https://networkx.org/documentation/latest/).
 
-Some of the use cases are:
+The main use is for adding **cycles** to your LLM application.
+Crucially, this is NOT a **DAG** framework.
+If you want to build a DAG, you should use just use [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
 
-- Recursive/iterative LLM chains
-- LLM chains with persistent state/memory
-- LLM agents
-- Multi-agent simulations
-- ...and more!
+Cycles are important for agent-like behaviors, where you call an LLM in a loop, asking it what action to take next.
 
-## How it works
+## Installation
 
-### Channels
-
-Channels are used to communicate between chains. Each channel has a value type, an update type, and an update function – which takes a sequence of updates and modifies the stored value. Channels can be used to send data from one chain to another, or to send data from a chain to itself in a future step. LangGraph provides a number of built-in channels:
-
-#### Basic channels: LastValue and Topic
-
-- `LastValue`: The default channel, stores the last value sent to the channel, useful for input and output values, or for sending data from one step to the next
-- `Topic`: A configurable PubSub Topic, useful for sending multiple values between chains, or for accumulating output. Can be configured to deduplicate values, and/or to accummulate values over the course of multiple steps.
-
-#### Advanced channels: Context and BinaryOperatorAggregate
-
-- `Context`: exposes the value of a context manager, managing its lifecycle. Useful for accessing external resources that require setup and/or teardown. eg. `client = Context(httpx.Client)`
-- `BinaryOperatorAggregate`: stores a persistent value, updated by applying a binary operator to the current value and each update sent to the channel, useful for computing aggregates over multiple steps. eg. `total = BinaryOperatorAggregate(int, operator.add)`
-
-### Chains
-
-Chains are LCEL Runnables which subscribe to one or more channels, and write to one or more channels. Any valid LCEL expression can be used as a chain. Chains can be combined into a Pregel application, which coordinates the execution of the chains across multiple steps.
-
-### Pregel
-
-Pregel combines multiple chains (or actors) into a single application. It coordinates the execution of the chains across multiple steps, following the Pregel/Bulk Synchronous Parallel model. Each step consists of three phases:
-
-- **Plan**: Determine which chains to execute in this step, ie. the chains that subscribe to channels updated in the previous step (or, in the first step, chains that subscribe to input channels)
-- **Execution**: Execute those chains in parallel, until all complete, or one fails, or a timeout is reached. Any channel updates are invisible to other chains until the next step.
-- **Update**: Update the channels with the values written by the chains in this step.
-
-Repeat until no chains are planned for execution, or a maximum number of steps is reached.
-
-## Example
-
-```python
-from langgraph import Channel, Pregel
-
-grow_value = (
-    Channel.subscribe_to("value")
-    | (lambda x: x + x)
-    | Channel.write_to(value=lambda x: x if len(x) < 10 else None)
-)
-
-app = Pregel(
-    chains={"grow_value": grow_value},
-    input="value",
-    output="value",
-)
-
-assert app.invoke("a") == "aaaaaaaa"
+```shell
+pip install langgraph
 ```
 
-Check `examples` for more examples.
+## Quick Start
 
-## Near-term Roadmap
+Here we will go over an example of recreating the [`AgentExecutor`](https://python.langchain.com/docs/modules/agents/concepts#agentexecutor) class from LangChain.
+The benefits of creating it with LangGraph is that it is more modifiable.
 
-- [x] Iterate on API
-  - [x] do we want api to receive output from multiple channels in invoke()
-  - [x] do we want api to send input to multiple channels in invoke()
-  - [x] Finish updating tests to new API
-- [x] Implement input_schema and output_schema in Pregel
-- [ ] More tests
-  - [x] Test different input and output types (str, str sequence)
-  - [x] Add tests for Stream, UniqueInbox
-  - [ ] Add tests for subscribe_to_each().join()
-- [x] Add optional debug logging
-- [ ] Add an optional Diff value for Channels that implements `__add__`, returned by update(), yielded by Pregel for output channels. Add replacing_keys set to AddableDict. use an addabledict for yielding values. channels that dont implement it get marked with replacing_keys
-- [x] Implement checkpointing
-  - [x] Save checkpoints at end of each step/run
-  - [x] Load checkpoint at start of invocation
-  - [x] API to specify storage backend and save key
-  - [x] Tests
-- [ ] Add more examples
-  - [ ] multi agent simulation
-  - [ ] human in the loop
-  - [ ] combine documents
-  - [ ] agent executor (add current v total iterations info to read/write steps to enable doing a final update at the end)
-  - [ ] run over dataset
-- [ ] Fault tolerance
-  - [ ] Expose a unique id to each step, hash of (app, chain, checkpoint) (include input updates for first step)
-  - [ ] Retry individual processes in a step
-  - [ ] Retry entire step?
-- [ ] Pregel.stream_log to contain additional keys specific to Pregel
-  - [ ] tasks: inputs of each chain in each step, keyed by {name}:{step}
-  - [ ] task_results: same as above but outputs
-  - [ ] channels: channel values at end of each step, keyed by {name}:{step}
+We will also want to install some LangChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
+
+```shell
+pip install -U langchain langchain_openai langchainhub tavily-python
+```
+
+We also need to export some environment variables needed for our agent.
+
+```shell
+export OPENAI_API_KEY=sk-...
+export TAVILY_API_KEY=tvly-...
+```
+
+Optionally, we can set up [LangSmith](https://docs.smith.langchain.com/) for best-in-class observability.
+
+```shell
+export LANGCHAIN_TRACING_V2="true"
+export LANGCHAIN_API_KEY=ls__...
+export LANGCHAIN_ENDPOINT=https://api.langchain.plus
+```
+
+### Define the LangChain Agent
+
+This is the LangChain agent. 
+Crucially, this agent is just responsible for deciding what actions to take.
+For more information on what is happening here, please see [this documentation](https://python.langchain.com/docs/modules/agents/quick_start).
+
+```python
+from langchain import hub
+from langchain.agents import create_openai_functions_agent
+from langchain_openai.chat_models import ChatOpenAI
+from langchain_community.tools.tavily_search import TavilySearchResults
+
+tools = [TavilySearchResults(max_results=1)]
+
+# Get the prompt to use - you can modify this!
+prompt = hub.pull("hwchase17/openai-functions-agent")
+
+# Choose the LLM that will drive the agent
+llm = ChatOpenAI(model="gpt-3.5-turbo-1106")
+
+# Construct the OpenAI Functions agent
+agent_runnable = create_openai_functions_agent(llm, tools, prompt)
+```
+
+### Define the nodes
+We now need to define a few different nodes in our graph.
+In `langgraph`, a node can be either a function or a [runnable](https://python.langchain.com/docs/expression_language/).
+There are two main nodes we need for this:
+
+1. The agent: responsible for deciding what (if any) actions to take.
+2. A function to invoke tools: if the agent decides to take an action, this node will then execute that action.
+
+We will also need to define some edges.
+Some of these edges may be conditional.
+The reason they are conditional is that based on the output of a node, one of several paths may be taken.
+The path that is taken is not known until that node is run (the LLM decides).
+
+1. Conditional Edge: after the agent is called, we should either:
+   a. If the agent said to take an action, then the function to invoke tools should be called
+   b. If the agent said that it was finished, then it should finish
+2. Normal Edge: after the tools are invoked, it should always go back to the agent to decide what to do next
+
+Let's define the nodes, as well as a function to decide how what conditional edge to take.
+
+```python
+from langchain_core.runnables import RunnablePassthrough
+from langchain_core.agents import AgentFinish
+
+
+# Define the agent
+# Note that here, we are using `.assign` to add the output of the agent to the dictionary
+# This dictionary will be returned from the node
+# The reason we don't want to return just the result of `agent_runnable` from this node is
+# that we want to continue passing around all the other inputs
+agent = RunnablePassthrough.assign(
+    agent_outcome = agent_runnable
+)
+
+# Define the function to execute tools
+def execute_tools(data):
+    # Get the most recent agent_outcome - this is the key added in the `agent` above
+    agent_action = data.pop('agent_outcome')
+    # Get the tool to use
+    tool_to_use = {t.name: t for t in tools}[agent_action.tool]
+    # Call that tool on the input
+    observation = tool_to_use.invoke(agent_action.tool_input)
+    # We now add in the action and the observation to the `intermediate_steps` list
+    # This is the list of all previous actions taken and their output
+    data['intermediate_steps'].append((agent_action, observation))
+    return data
+
+# Define logic that will be used to determine which conditional edge to go down
+def should_continue(data):
+    # If the agent outcome is an AgentFinish, then we return `exit` string
+    # This will be used when setting up the graph to define the flow
+    if isinstance(data['agent_outcome'], AgentFinish):
+        return "exit"
+    # Otherwise, an AgentAction is returned
+    # Here we return `continue` string
+    # This will be used when setting up the graph to define the flow
+    else:
+        return "continue"
+```
+
+### Define the graph
+
+We can now put it alltogether and define the graph!
+
+```python
+from langgraph.graph import END, Graph
+
+workflow = Graph()
+
+# Add the agent node, we give it name `agent` which we will use later
+workflow.add_node("agent", agent)
+# Add the tools node, we give it name `tools` which we will use later
+workflow.add_node("tools", execute_tools)
+
+# Set the entrypoint as `agent`
+# This means that this node is the first one called
+workflow.set_entry_point("agent")
+
+# We now add a conditional edge
+workflow.add_conditional_edges(
+    # First, we define the start node. We use `agent`.
+    # This means these are the edges taken after the `agent` node is called.
+    "agent",
+    # Next, we pass in the function that will determine which node is called next.
+    should_continue,
+    # Finally we pass in a mapping.
+    # The keys are strings, and the values are other nodes.
+    # END is a special node marking that the graph should finish.
+    # What will happen is we will call `should_continue`, and then the output of that
+    # will be matched against the keys in this mapping.
+    # Based on which one it matches, that node will then be called.
+    {
+        # If `tools`, then we call the tool node.
+        "continue": "tools",
+        # Otherwise we finish.
+        "exit": END
+    }
+)
+
+# We now add a normal edge from `tools` to `agent`.
+# This means that after `tools` is called, `agent` node is called next.
+workflow.add_edge('tools', 'agent')
+
+# Finally, we compile it! 
+# This compiles it into a LangChain Runnable, 
+# meaning you can use it as you would any other runnable
+chain = workflow.compile()
+```
+
+### Use it!
+
+We can now use it!
+This now exposes the [same interface](https://python.langchain.com/docs/expression_language/) as all other LangChain runnables
+
+```python
+chain.invoke({"input": "what is the weather in sf", "intermediate_steps": []})
+```
+
+## Documentation
+
+There are only a few new APIs to use.
+
+The main new class is `Graph`.
+
+```python
+from langgraph.graph import Graph
+```
+
+This class is responsible for constructing the graph.
+It exposes an interface inspired by [NetworkX](https://networkx.org/documentation/latest/).
+
+
+### `.add_node`
+
+```python
+    def add_node(self, key: str, action: RunnableLike) -> None:
+```
+
+This method adds a node to the graph.
+It takes two arguments:
+
+- `key`: A string representing the name of the node. This must be unique.
+- `action`: The action to take when this node is called. This should either be a function or a runnable.
+
+### `.add_edge`
+
+```python
+    def add_edge(self, start_key: str, end_key: str) -> None:
+```
+
+Creates an edge from one node to the next.
+This means that output of the first node will be passed to the next node.
+It takes two arguments.
+
+- `start_key`: A string representing the name of the start node. This key must have already been registered in the graph.
+- `end_key`: A string representing the name of the end node. This key must have already been registered in the graph.
+
+### `.add_conditional_edges`
+
+```python
+    def add_conditional_edges(
+        self,
+        start_key: str,
+        condition: Callable[..., str],
+        conditional_edge_mapping: Dict[str, str],
+    ) -> None:
+```
+
+This method adds conditional edges.
+What this means is that only one of the downstream edges will be taken, and which one that is depends on the results of the start node.
+This takes three arguments:
+
+- `start_key`: A string representing the name of the start node. This key must have already been registered in the graph.
+- `condition`: A function to call to decide what to do next. The input will be the output of the start node. It should return a string that is present in `conditional_edge_mapping` and represents the edge to take.
+- `conditional_edge_mapping`: A mapping of string to string. The keys should be strings that may be returned by `condition`. The values should be the downstream node to call if that condition is returned.
+
+### `.set_entry_point`
+
+```python
+    def set_entry_point(self, key: str) -> None:
+```
+
+The entrypoint to the graph.
+This is the node that is first called.
+It only takes one argument:
+
+- `key`: The name of the node that should be called first.
+
+### `.set_finish_point`
+
+```python
+    def set_finish_point(self, key: str) -> None:
+```
+
+This is the exit point of the graph.
+When this node is called, the results will be the final result from the graph.
+It only has one argument:
+
+- `key`: The name of the node that, when called, will return the results of calling it as the final output
+
+Note: This does not need to be called if at any point you previously created an edge (conditional or normal) to `END`
+
+### `END`
+
+```python
+from langgraph.graph import END
+```
+
+This is a special node representing the end of the graph.
+This means that anything passed to this node will be the final output of the graph.
+It can be used in two places:
+
+- As the `end_key` in `add_edge`
+- As a value in `conditional_edge_mapping` as passed to `add_conditional_edges`
+
+## When to Use
+
+When should you use this versus [LangChain Expression Language](https://python.langchain.com/docs/expression_language/)?
+
+If you need cycles.
+
+Langchain Expression Language allows you to easily define chains (DAGs) but does not have a good mechanism for adding in cycles.
+`langgraph` adds that syntax.
+
+## Examples
+
+### AgentExecutor
+
+See the above Quick Start for an example of re-creating the LangChain [`AgentExecutor`](https://python.langchain.com/docs/modules/agents/concepts#agentexecutor) class.
+
+### Forced Function Calling
+
+One simple modification of the above Graph is to modify it such that a certain tool is always called first.
+This can be useful if you want to enforce a certain tool is called, but still want to enable agentic behavior after the fact.
+
+Assuming you have done the above Quick Start, you can build off it like:
+
+#### Define the first tool call
+
+Here, we manually define the first tool call that we will make.
+Notice that it does that same thing as `agent` would have done (adds the `agent_outcome` key).
+This is so that we can easily plug it in.
+
+```python
+from langchain_core.agents import AgentActionMessageLog
+
+def first_agent(inputs):
+    action = AgentActionMessageLog(
+      # We force call this tool
+      tool="tavily_search_results_json", 
+      # We just pass in the `input` key to this tool
+      tool_input=inputs["input"], 
+      log="", 
+      message_log=[]
+    )
+    inputs["agent_outcome"] = action
+    return inputs
+```
+
+#### Create the graph
+
+We can now create a new graph with this new node
+
+```python
+workflow = Graph()
+
+# Add the same nodes as before, plus this "first agent"
+workflow.add_node("first_agent", first_agent)
+workflow.add_node("agent", agent)
+workflow.add_node("tools", execute_tools)
+
+# We now set the entry point to be this first agent
+workflow.set_entry_point("first_agent")
+
+# We define the same edges as before
+workflow.add_conditional_edges(
+    "agent",
+    should_continue,
+    {
+        "continue": "tools",
+        "exit": END
+    }
+)
+workflow.add_edge('tools', 'agent')
+
+# We also define a new edge, from the "first agent" to the tools node
+# This is so that we can call the tool
+workflow.add_edge('first_agent', 'tools')
+
+# We now compile the graph as before
+chain = workflow.compile()
+```
+
+#### Use it!
+
+We can now use it as before!
+Depending on whether or not the first tool call is actually useful, this may save you an LLM call or two.
+
+```python
+chain.invoke({"input": "what is the weather in sf", "intermediate_steps": []})
+```
