@@ -6,9 +6,9 @@ from langchain_core.documents import Document
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.utils.html import extract_sub_links
 
-from permchain import Channel, Pregel
-from permchain.channels.context import Context
-from permchain.channels.topic import Topic
+from langgraph.channels.context import Context
+from langgraph.channels.topic import Topic
+from langgraph.pregel import Channel, Pregel
 
 # Load url with sync httpx client
 

@@ -9,7 +9,7 @@ from langchain_core.runnables import (
 )
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from permchain.constants import CONFIG_KEY_SEND
+from langgraph.constants import CONFIG_KEY_SEND
 
 TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
 

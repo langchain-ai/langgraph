@@ -8,14 +8,15 @@ import pytest
 from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
 
-from permchain import Channel, Graph, Pregel
-from permchain.channels.base import InvalidUpdateError
-from permchain.channels.binop import BinaryOperatorAggregate
-from permchain.channels.context import Context
-from permchain.channels.last_value import LastValue
-from permchain.channels.topic import Topic
-from permchain.checkpoint.memory import MemoryCheckpoint
-from permchain.pregel.reserved import ReservedChannels
+from langgraph.channels.base import InvalidUpdateError
+from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.context import Context
+from langgraph.channels.last_value import LastValue
+from langgraph.channels.topic import Topic
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, Graph
+from langgraph.pregel import Channel, Pregel
+from langgraph.pregel.reserved import ReservedChannels
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -377,7 +378,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
         | raise_if_above_10
     )
 
-    memory = MemoryCheckpoint()
+    memory = MemorySaver()
 
     app = Pregel(
         nodes={"one": one},
@@ -564,8 +565,6 @@ def test_conditional_graph() -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
-
-    from permchain.langgraph import END
 
     # Assemble the tools
     @tool()

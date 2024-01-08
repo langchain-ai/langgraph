@@ -2,10 +2,10 @@ from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from permchain.checkpoint.base import BaseCheckpointAdapter, Checkpoint
+from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint
 
 
-class MemoryCheckpoint(BaseCheckpointAdapter):
+class MemorySaver(BaseCheckpointSaver):
     storage: dict[str, Checkpoint] = Field(default_factory=dict)
 
     @property

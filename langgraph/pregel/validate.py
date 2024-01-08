@@ -1,9 +1,9 @@
 from typing import Any, Mapping, Sequence
 
-from permchain.channels.base import BaseChannel
-from permchain.channels.last_value import LastValue
-from permchain.pregel.read import ChannelBatch, ChannelInvoke
-from permchain.pregel.reserved import ReservedChannels
+from langgraph.channels.base import BaseChannel
+from langgraph.channels.last_value import LastValue
+from langgraph.pregel.read import ChannelBatch, ChannelInvoke
+from langgraph.pregel.reserved import ReservedChannels
 
 
 def validate_graph(

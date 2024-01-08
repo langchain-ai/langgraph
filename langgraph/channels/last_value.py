@@ -1,28 +1,21 @@
 from contextlib import contextmanager
-from typing import Callable, Generator, Generic, Optional, Sequence, Type
+from typing import Generator, Generic, Optional, Sequence, Type
 
 from typing_extensions import Self
 
-from permchain.channels.base import BaseChannel, EmptyChannelError, Value
+from langgraph.channels.base import (
+    BaseChannel,
+    EmptyChannelError,
+    InvalidUpdateError,
+    Value,
+)
 
 
-class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
-    """Stores the result of applying a binary operator to the current value and each new value.
+class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
+    """Stores the last value received, can receive at most one value per step."""
 
-    ```python
-    import operator
-
-    total = Channels.BinaryOperatorAggregate(int, operator.add)
-    ```
-    """
-
-    def __init__(self, typ: Type[Value], operator: Callable[[Value, Value], Value]):
+    def __init__(self, typ: Type[Value]) -> None:
         self.typ = typ
-        self.operator = operator
-        try:
-            self.value = typ()
-        except Exception:
-            pass
 
     @property
     def ValueType(self) -> Type[Value]:
@@ -36,7 +29,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     @contextmanager
     def empty(self, checkpoint: Optional[Value] = None) -> Generator[Self, None, None]:
-        empty = self.__class__(self.typ, self.operator)
+        empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.value = checkpoint
         try:
@@ -48,14 +41,12 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
                 pass
 
     def update(self, values: Sequence[Value]) -> None:
-        if not values:
+        if len(values) == 0:
             return
-        if not hasattr(self, "value"):
-            self.value = values[0]
-            values = values[1:]
+        if len(values) != 1:
+            raise InvalidUpdateError()
 
-        for value in values:
-            self.value = self.operator(self.value, value)
+        self.value = values[-1]
 
     def get(self) -> Value:
         try:
