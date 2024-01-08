@@ -222,7 +222,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
         # assign defaults
-        output = output if output is not None else self.output
+        output = output if output is not None else [chan for chan in self.channels]
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
@@ -339,7 +339,7 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
             None,
         )
         # assign defaults
-        output = output if output is not None else self.output
+        output = output if output is not None else [chan for chan in self.channels]
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
@@ -448,7 +448,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         latest: dict[str, Any] | Any = None
-        for chunk in self.stream(input, config, output=output, **kwargs):
+        for chunk in self.stream(
+            input,
+            config,
+            output=output if output is not None else self.output,
+            **kwargs,
+        ):
             latest = chunk
         return latest
 
@@ -498,7 +503,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
         **kwargs: Any,
     ) -> dict[str, Any] | Any:
         latest: dict[str, Any] | Any = None
-        async for chunk in self.astream(input, config, output=output, **kwargs):
+        async for chunk in self.astream(
+            input,
+            config,
+            output=output if output is not None else self.output,
+            **kwargs,
+        ):
             latest = chunk
         return latest
 
