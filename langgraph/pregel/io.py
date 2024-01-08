@@ -1,11 +1,12 @@
-from typing import Any, Iterator, Mapping, Sequence
+from typing import Any, Iterator, Mapping, Optional, Sequence, Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.pregel.log import logger
 
 
 def map_input(
-    input_channels: str | Sequence[str], chunk: dict[str, Any] | Any | None
+    input_channels: Union[str, Sequence[str]],
+    chunk: Optional[Union[dict[str, Any], Any]],
 ) -> Iterator[tuple[str, Any]]:
     """Map input chunk to a sequence of pending writes in the form (channel, value)."""
     if chunk is None:
@@ -23,10 +24,10 @@ def map_input(
 
 
 def map_output(
-    output_channels: str | Sequence[str],
+    output_channels: Union[str, Sequence[str]],
     pending_writes: Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
-) -> dict[str, Any] | Any | None:
+) -> Optional[Union[dict[str, Any], Any]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
         if any(chan == output_channels for chan, _ in pending_writes):

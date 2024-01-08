@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, List, Mapping, Optional, Sequence
+from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import (
@@ -67,9 +67,9 @@ default_bound: RunnablePassthrough = RunnablePassthrough()
 
 
 class ChannelInvoke(RunnableBindingBase):
-    channels: Mapping[None, str] | Mapping[str, str]
+    channels: Union[Mapping[None, str], Mapping[str, str]]
 
-    triggers: List[str] = Field(default_factory=list)
+    triggers: list[str] = Field(default_factory=list)
 
     when: Optional[Callable[[Any], bool]] = None
 
@@ -119,9 +119,11 @@ class ChannelInvoke(RunnableBindingBase):
 
     def __or__(
         self,
-        other: Runnable[Any, Other]
-        | Callable[[Any], Other]
-        | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
+        other: Union[
+            Runnable[Any, Other],
+            Callable[[Any], Other],
+            Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
+        ],
     ) -> ChannelInvoke:
         if self.bound is default_bound:
             return ChannelInvoke(
@@ -145,9 +147,11 @@ class ChannelInvoke(RunnableBindingBase):
 
     def __ror__(
         self,
-        other: Runnable[Other, Any]
-        | Callable[[Any], Other]
-        | Mapping[str, Runnable[Other, Any] | Callable[[Other], Any]],
+        other: Union[
+            Runnable[Other, Any],
+            Callable[[Any], Other],
+            Mapping[str, Union[Runnable[Other, Any], Callable[[Other], Any]]],
+        ],
     ) -> RunnableSerializable:
         raise NotImplementedError()
 
@@ -178,9 +182,11 @@ class ChannelBatch(RunnableEach):
 
     def __or__(  # type: ignore[override]
         self,
-        other: Runnable[Any, Other]
-        | Callable[[Any], Other]
-        | Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
+        other: Union[
+            Runnable[Any, Other],
+            Callable[[Any], Other],
+            Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
+        ],
     ) -> ChannelBatch:
         if self.bound is default_bound:
             return ChannelBatch(
@@ -194,8 +200,10 @@ class ChannelBatch(RunnableEach):
 
     def __ror__(
         self,
-        other: Runnable[Other, Any]
-        | Callable[[Any], Other]
-        | Mapping[str, Runnable[Other, Any] | Callable[[Other], Any]],
+        other: Union[
+            Runnable[Other, Any],
+            Callable[[Any], Other],
+            Mapping[str, Runnable[Other, Any] | Callable[[Other], Any]],
+        ],
     ) -> RunnableSerializable:
         raise NotImplementedError()

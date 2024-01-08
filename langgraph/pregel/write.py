@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Sequence
+from typing import Any, Callable, Optional, Sequence
 
 from langchain_core.runnables import (
     Runnable,
@@ -15,7 +15,7 @@ TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
 
 
 class ChannelWrite(RunnablePassthrough):
-    channels: Sequence[tuple[str, Runnable | None]]
+    channels: Sequence[tuple[str, Optional[Runnable]]]
     """
     Mapping of write channels to Runnables that return the value to be written,
     or None to skip writing.
@@ -27,7 +27,7 @@ class ChannelWrite(RunnablePassthrough):
     def __init__(
         self,
         *,
-        channels: Sequence[tuple[str, Runnable | None]],
+        channels: Sequence[tuple[str, Optional[Runnable]]],
     ):
         super().__init__(func=self._write, afunc=self._awrite, channels=channels)
         self.name = f"ChannelWrite<{','.join(chan for chan, _ in self.channels)}>"

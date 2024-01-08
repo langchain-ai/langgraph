@@ -1,4 +1,4 @@
-from enum import StrEnum
+from langgraph.utils import StrEnum
 
 
 class ReservedChannels(StrEnum):

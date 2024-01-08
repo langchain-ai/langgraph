@@ -86,7 +86,7 @@ class Channel:
         cls,
         channels: str,
         key: Optional[str] = None,
-        when: Callable[[Any], bool] | None = None,
+        when: Optional[Callable[[Any], bool]] = None,
     ) -> ChannelInvoke:
         ...
 
@@ -96,16 +96,16 @@ class Channel:
         cls,
         channels: Sequence[str],
         key: None = None,
-        when: Callable[[Any], bool] | None = None,
+        when: Optional[Callable[[Any], bool]] = None,
     ) -> ChannelInvoke:
         ...
 
     @classmethod
     def subscribe_to(
         cls,
-        channels: str | Sequence[str],
+        channels: Union[str, Sequence[str]],
         key: Optional[str] = None,
-        when: Callable[[Any], bool] | None = None,
+        when: Optional[Callable[[Any], bool]] = None,
     ) -> ChannelInvoke:
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
@@ -115,7 +115,7 @@ class Channel:
             )
         return ChannelInvoke(
             channels=cast(
-                Mapping[None, str] | Mapping[str, str],
+                Union[Mapping[None, str], Mapping[str, str]],
                 {key: channels}
                 if isinstance(channels, str)
                 else {chan: chan for chan in channels},
@@ -144,14 +144,16 @@ class Channel:
         )
 
 
-class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
-    nodes: Mapping[str, ChannelInvoke | ChannelBatch]
+class Pregel(
+    RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
+):
+    nodes: Mapping[str, Union[ChannelInvoke, ChannelBatch]]
 
     channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
 
-    output: str | Sequence[str] = "output"
+    output: Union[str, Sequence[str]] = "output"
 
-    input: str | Sequence[str] = "input"
+    input: Union[str, Sequence[str]] = "input"
 
     step_timeout: Optional[float] = None
 
@@ -213,12 +215,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     def _transform(
         self,
-        input: Iterator[dict[str, Any] | Any],
+        input: Iterator[Union[dict[str, Any], Any]],
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
         *,
-        output: str | Sequence[str] | None = None,
-    ) -> Iterator[tuple[dict[str, Any] | Any, CheckpointView]]:
+        output: Optional[Union[str, Sequence[str]]] = None,
+    ) -> Iterator[tuple[Union[dict[str, Any], Any], CheckpointView]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
         # assign defaults
@@ -321,12 +323,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     async def _atransform(
         self,
-        input: AsyncIterator[dict[str, Any] | Any],
+        input: AsyncIterator[Union[dict[str, Any], Any]],
         run_manager: AsyncCallbackManagerForChainRun,
         config: RunnableConfig,
         *,
-        output: str | Sequence[str] | None = None,
-    ) -> AsyncIterator[tuple[dict[str, Any] | Any, CheckpointView]]:
+        output: Optional[Union[str, Sequence[str]]] = None,
+    ) -> AsyncIterator[tuple[Union[dict[str, Any], Any], CheckpointView]]:
         if config["recursion_limit"] < 1:
             raise ValueError("recursion_limit must be at least 1")
         # if running from astream_log() run each proc with streaming
@@ -441,13 +443,13 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     def invoke(
         self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
+        input: Union[dict[str, Any], Any],
+        config: Optional[RunnableConfig] = None,
         *,
-        output: str | Sequence[str] | None = None,
+        output: Optional[Union[str, Sequence[str]]] = None,
         **kwargs: Any,
-    ) -> dict[str, Any] | Any:
-        latest: dict[str, Any] | Any = None
+    ) -> Union[dict[str, Any], Any]:
+        latest: Union[dict[str, Any], Any] = None
         for chunk in self.stream(
             input,
             config,
@@ -459,50 +461,50 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     def stream(
         self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
+        input: Union[dict[str, Any], Any],
+        config: Optional[RunnableConfig] = None,
         *,
-        output: str | Sequence[str] | None = None,
+        output: Optional[Union[str, Sequence[str]]] = None,
         **kwargs: Any,
-    ) -> Iterator[dict[str, Any] | Any]:
+    ) -> Iterator[Union[dict[str, Any], Any]]:
         return self.transform(iter([input]), config, output=output, **kwargs)
 
     def transform(
         self,
-        input: Iterator[dict[str, Any] | Any],
-        config: RunnableConfig | None = None,
+        input: Iterator[Union[dict[str, Any], Any]],
+        config: Optional[RunnableConfig] = None,
         *,
-        output: str | Sequence[str] | None = None,
-        **kwargs: Any | None,
-    ) -> Iterator[dict[str, Any] | Any]:
+        output: Optional[Union[str, Sequence[str]]] = None,
+        **kwargs: Any,
+    ) -> Iterator[Union[dict[str, Any], Any]]:
         for out, _ in self._transform_stream_with_config(
             input, self._transform, config, output=output, **kwargs
         ):
             if out is not None:
-                yield cast(dict[str, Any] | Any, out)
+                yield cast(Union[dict[str, Any], Any], out)
 
     def step(
         self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
+        input: Union[dict[str, Any], Any],
+        config: Optional[RunnableConfig] = None,
         *,
-        output: str | Sequence[str] | None = None,
+        output: Optional[Union[str, Sequence[str]]] = None,
         **kwargs: Any,
-    ) -> Iterator[tuple[dict[str, Any] | Any, CheckpointView]]:
+    ) -> Iterator[tuple[Union[dict[str, Any], Any], CheckpointView]]:
         for tup in self._transform_stream_with_config(
             iter([input]), self._transform, config, output=output, **kwargs
         ):
-            yield cast(tuple[dict[str, Any] | Any, CheckpointView], tup)
+            yield cast(tuple[Union[dict[str, Any], Any], CheckpointView], tup)
 
     async def ainvoke(
         self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
+        input: Union[dict[str, Any], Any],
+        config: Optional[RunnableConfig] = None,
         *,
-        output: str | Sequence[str] | None = None,
+        output: Optional[Union[str, Sequence[str]]] = None,
         **kwargs: Any,
-    ) -> dict[str, Any] | Any:
-        latest: dict[str, Any] | Any = None
+    ) -> Union[dict[str, Any], Any]:
+        latest: Union[dict[str, Any], Any] = None
         async for chunk in self.astream(
             input,
             config,
@@ -514,13 +516,13 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     async def astream(
         self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
+        input: Union[dict[str, Any], Any],
+        config: Optional[RunnableConfig] = None,
         *,
-        output: str | Sequence[str] | None = None,
+        output: Optional[Union[str, Sequence[str]]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[dict[str, Any] | Any]:
-        async def input_stream() -> AsyncIterator[dict[str, Any] | Any]:
+    ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+        async def input_stream() -> AsyncIterator[Union[dict[str, Any], Any]]:
             yield input
 
         async for chunk in self.atransform(
@@ -530,12 +532,12 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     async def atransform(
         self,
-        input: AsyncIterator[dict[str, Any] | Any],
-        config: RunnableConfig | None = None,
+        input: AsyncIterator[Union[dict[str, Any], Any]],
+        config: Optional[RunnableConfig] = None,
         *,
-        output: str | Sequence[str] | None = None,
-        **kwargs: Any | None,
-    ) -> AsyncIterator[dict[str, Any] | Any]:
+        output: Optional[Union[str, Sequence[str]]] = None,
+        **kwargs: Any,
+    ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         async for out, _ in self._atransform_stream_with_config(
             input, self._atransform, config, output=output, **kwargs
         ):
@@ -544,24 +546,24 @@ class Pregel(RunnableSerializable[dict[str, Any] | Any, dict[str, Any] | Any]):
 
     async def astep(
         self,
-        input: dict[str, Any] | Any,
-        config: RunnableConfig | None = None,
+        input: Union[dict[str, Any], Any],
+        config: Optional[RunnableConfig] = None,
         *,
-        output: str | Sequence[str] | None = None,
+        output: Optional[Union[str, Sequence[str]]] = None,
         **kwargs: Any,
-    ) -> AsyncIterator[tuple[dict[str, Any] | Any, CheckpointView]]:
-        async def input_stream() -> AsyncIterator[dict[str, Any] | Any]:
+    ) -> AsyncIterator[tuple[Union[dict[str, Any], Any], CheckpointView]]:
+        async def input_stream() -> AsyncIterator[Union[dict[str, Any], Any]]:
             yield input
 
         async for tup in self._atransform_stream_with_config(
             input_stream(), self._atransform, config, output=output, **kwargs
         ):
-            yield cast(tuple[dict[str, Any] | Any, CheckpointView], tup)
+            yield cast(tuple[Union[dict[str, Any], Any], CheckpointView], tup)
 
 
 def _interrupt_or_proceed(
-    done: set[concurrent.futures.Future[Any]] | set[asyncio.Task[Any]],
-    inflight: set[concurrent.futures.Future[Any]] | set[asyncio.Task[Any]],
+    done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
+    inflight: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     step: int,
 ) -> None:
     while done:
@@ -645,7 +647,7 @@ def _apply_writes_from_view(
 
 def _prepare_next_tasks(
     checkpoint: Checkpoint,
-    processes: Mapping[str, ChannelInvoke | ChannelBatch],
+    processes: Mapping[str, Union[ChannelInvoke, ChannelBatch]],
     channels: Mapping[str, BaseChannel],
 ) -> list[tuple[Runnable, Any, str]]:
     tasks: list[tuple[Runnable, Any, str]] = []
