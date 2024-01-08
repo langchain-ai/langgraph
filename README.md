@@ -31,6 +31,22 @@ We will also want to install some LangChain packages, as well as [Tavily](https:
 ```shell
 pip install -U langchain langchain_openai langchainhub tavily-python
 ```
+
+We also need to export some environment variables needed for our agent.
+
+```shell
+export OPENAI_API_KEY=sk-...
+export TAVILY_API_KEY=tvly-...
+```
+
+Optionally, we can set up [LangSmith](https://docs.smith.langchain.com/) for best-in-class observability.
+
+```shell
+export LANGCHAIN_TRACING_V2="true"
+export LANGCHAIN_API_KEY=ls__...
+export LANGCHAIN_ENDPOINT=https://api.langchain.plus
+```
+
 ### Define the LangChain Agent
 
 This is the LangChain agent. 
