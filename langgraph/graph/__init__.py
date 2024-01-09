@@ -39,9 +39,11 @@ class Graph:
         self.nodes[key] = coerce_to_runnable(action)
 
     def add_edge(self, start_key: str, end_key: str) -> None:
+        if start_key == END:
+            raise ValueError("END cannot be a start node")
         if start_key not in self.nodes:
             raise ValueError(f"Need to add_node `{start_key}` first")
-        if end_key not in self.nodes:
+        if end_key not in self.nodes and end_key != END:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
         # TODO: support multiple message passing
@@ -60,6 +62,9 @@ class Graph:
             raise ValueError(f"Need to add_node `{start_key}` first")
         if iscoroutinefunction(condition):
             raise ValueError("Condition cannot be a coroutine function")
+        for destination in conditional_edge_mapping.values():
+            if destination not in self.nodes and destination != END:
+                raise ValueError(f"Need to add_node `{destination}` first")
 
         self.branches[start_key].append(Branch(condition, conditional_edge_mapping))
 
@@ -69,20 +74,14 @@ class Graph:
         self.entry_point = key
 
     def set_finish_point(self, key: str) -> None:
-        if key not in self.nodes:
-            raise ValueError(f"Need to add_node `{key}` first")
-        self.finish_point = key
+        return self.add_edge(key, END)
 
     def compile(self) -> Pregel:
         ################################################
         #       STEP 1: VALIDATE GRAPH STRUCTURE       #
         ################################################
 
-        all_starts = (
-            {start for start, _ in self.edges}
-            | {start for start in self.branches}
-            | ({self.finish_point} if hasattr(self, "finish_point") else set())
-        )
+        all_starts = {src for src, _ in self.edges} | {src for src in self.branches}
         all_ends = (
             {end for _, end in self.edges}
             | {
@@ -106,9 +105,7 @@ class Graph:
 
         outgoing_edges = defaultdict(list)
         for start, end in self.edges:
-            outgoing_edges[start].append(f"{end}:inbox")
-        if hasattr(self, "finish_point"):
-            outgoing_edges[self.finish_point].append(END)
+            outgoing_edges[start].append(f"{end}:inbox" if end != END else END)
 
         nodes = {
             key: (Channel.subscribe_to(f"{key}:inbox") | node | Channel.write_to(key))
