@@ -4,8 +4,8 @@
 
 ## Overview
 
-LangGraph is a library for building stateful, multi-actor applications with LLMs, built on top of (and intended to be used with) [LangChain](https://github.com/langchain-ai/langchain). 
-It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation in a cyclic manner. 
+LangGraph is a library for building stateful, multi-actor applications with LLMs, built on top of (and intended to be used with) [LangChain](https://github.com/langchain-ai/langchain).
+It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation in a cyclic manner.
 It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
 The current interface exposed is one inspired by [NetworkX](https://networkx.org/documentation/latest/).
 
@@ -49,7 +49,7 @@ export LANGCHAIN_ENDPOINT=https://api.langchain.plus
 
 ### Define the LangChain Agent
 
-This is the LangChain agent. 
+This is the LangChain agent.
 Crucially, this agent is just responsible for deciding what actions to take.
 For more information on what is happening here, please see [this documentation](https://python.langchain.com/docs/modules/agents/quick_start).
 
@@ -72,6 +72,7 @@ agent_runnable = create_openai_functions_agent(llm, tools, prompt)
 ```
 
 ### Define the nodes
+
 We now need to define a few different nodes in our graph.
 In `langgraph`, a node can be either a function or a [runnable](https://python.langchain.com/docs/expression_language/).
 There are two main nodes we need for this:
@@ -174,8 +175,8 @@ workflow.add_conditional_edges(
 # This means that after `tools` is called, `agent` node is called next.
 workflow.add_edge('tools', 'agent')
 
-# Finally, we compile it! 
-# This compiles it into a LangChain Runnable, 
+# Finally, we compile it!
+# This compiles it into a LangChain Runnable,
 # meaning you can use it as you would any other runnable
 chain = workflow.compile()
 ```
@@ -187,6 +188,211 @@ This now exposes the [same interface](https://python.langchain.com/docs/expressi
 
 ```python
 chain.invoke({"input": "what is the weather in sf", "intermediate_steps": []})
+```
+
+## Streaming
+
+LangGraph has support for several different types of streaming.
+
+### Streaming Node Output
+
+One of the benefits of using LangGraph is that it is easy to stream output as it's produced by each node.
+
+```python
+for output in chain.stream(
+    {"input": "what is the weather in sf", "intermediate_steps": []}
+):
+    # stream() yields dictionaries with output keyed by node name
+    for key, value in output.items():
+        print(f"Output from node '{key}':")
+        print("---")
+        print(value)
+    print("\n---\n")
+```
+
+```
+Output from node 'agent':
+---
+{'agent_outcome': AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]),
+ 'input': 'what is the weather in sf',
+ 'intermediate_steps': []}
+
+---
+
+Output from node 'tools':
+---
+{'input': 'what is the weather in sf',
+ 'intermediate_steps': [(AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]),
+                         [{'content': 'Best time to go to San Francisco? '
+                                      'Weather in San Francisco in january '
+                                      '2024  How was the weather last january? '
+                                      'Here is the day by day recorded weather '
+                                      'in San Francisco in january 2023:  '
+                                      'Seasonal average climate and '
+                                      'temperature of San Francisco in '
+                                      'january  8% 46% 29% 12% 8% Evolution of '
+                                      'daily average temperature and '
+                                      'precipitation in San Francisco in '
+                                      'januaryWeather in San Francisco in '
+                                      'january 2024. The weather in San '
+                                      'Francisco in january comes from '
+                                      'statistical datas on the past years. '
+                                      'You can view the weather statistics the '
+                                      'entire month, but also by using the '
+                                      'tabs for the beginning, the middle and '
+                                      'the end of the month. ... 08-01-2023 '
+                                      '52°F to 58°F. 09-01-2023 54°F to 61°F. '
+                                      '10-01-2023 52°F to ...',
+                           'url': 'https://www.whereandwhen.net/when/north-america/california/san-francisco-ca/january/'}])]}
+
+---
+
+Output from node 'agent':
+---
+{'agent_outcome': AgentFinish(return_values={'output': 'The weather in San Francisco in January ranges from 52°F to 61°F. For more detailed and current weather information, you may want to check a reliable weather website or app.'}, log='The weather in San Francisco in January ranges from 52°F to 61°F. For more detailed and current weather information, you may want to check a reliable weather website or app.'),
+ 'input': 'what is the weather in sf',
+ 'intermediate_steps': [(AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]),
+                         [{'content': 'Best time to go to San Francisco? '
+                                      'Weather in San Francisco in january '
+                                      '2024  How was the weather last january? '
+                                      'Here is the day by day recorded weather '
+                                      'in San Francisco in january 2023:  '
+                                      'Seasonal average climate and '
+                                      'temperature of San Francisco in '
+                                      'january  8% 46% 29% 12% 8% Evolution of '
+                                      'daily average temperature and '
+                                      'precipitation in San Francisco in '
+                                      'januaryWeather in San Francisco in '
+                                      'january 2024. The weather in San '
+                                      'Francisco in january comes from '
+                                      'statistical datas on the past years. '
+                                      'You can view the weather statistics the '
+                                      'entire month, but also by using the '
+                                      'tabs for the beginning, the middle and '
+                                      'the end of the month. ... 08-01-2023 '
+                                      '52°F to 58°F. 09-01-2023 54°F to 61°F. '
+                                      '10-01-2023 52°F to ...',
+                           'url': 'https://www.whereandwhen.net/when/north-america/california/san-francisco-ca/january/'}])]}
+
+---
+
+Output from node '__end__':
+---
+{'agent_outcome': AgentFinish(return_values={'output': 'The weather in San Francisco in January ranges from 52°F to 61°F. For more detailed and current weather information, you may want to check a reliable weather website or app.'}, log='The weather in San Francisco in January ranges from 52°F to 61°F. For more detailed and current weather information, you may want to check a reliable weather website or app.'),
+ 'input': 'what is the weather in sf',
+ 'intermediate_steps': [(AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]),
+                         [{'content': 'Best time to go to San Francisco? '
+                                      'Weather in San Francisco in january '
+                                      '2024  How was the weather last january? '
+                                      'Here is the day by day recorded weather '
+                                      'in San Francisco in january 2023:  '
+                                      'Seasonal average climate and '
+                                      'temperature of San Francisco in '
+                                      'january  8% 46% 29% 12% 8% Evolution of '
+                                      'daily average temperature and '
+                                      'precipitation in San Francisco in '
+                                      'januaryWeather in San Francisco in '
+                                      'january 2024. The weather in San '
+                                      'Francisco in january comes from '
+                                      'statistical datas on the past years. '
+                                      'You can view the weather statistics the '
+                                      'entire month, but also by using the '
+                                      'tabs for the beginning, the middle and '
+                                      'the end of the month. ... 08-01-2023 '
+                                      '52°F to 58°F. 09-01-2023 54°F to 61°F. '
+                                      '10-01-2023 52°F to ...',
+                           'url': 'https://www.whereandwhen.net/when/north-america/california/san-francisco-ca/january/'}])]}
+
+---
+```
+
+### Streaming LLM Tokens
+
+You can also access the LLM tokens as they are produced by each node. In this case only the "agent" node produces LLM tokens.
+
+```python
+async for output in chain.astream_log(
+    {"input": "what is the weather in sf", "intermediate_steps": []},
+    include_types=["llm"],
+):
+    # astream_log() yields the requested logs (here LLMs) in JSONPatch format
+    for op in output.ops:
+        if op["path"] == "/streamed_output/-":
+            # this is the output from .stream()
+            ...
+        elif op["path"].startswith("/logs/") and op["path"].endswith(
+            "/streamed_output/-"
+        ):
+            # these are tokens from the LLM
+            print(op["value"])
+```
+
+```
+content='' additional_kwargs={'function_call': {'arguments': '', 'name': 'tavily_search_results_json'}}
+content='' additional_kwargs={'function_call': {'arguments': '{"', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': 'query', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': '":"', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': 'current', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': ' weather', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': ' in', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': ' San', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': ' Francisco', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': '"}', 'name': ''}}
+content=''
+content=''
+content='I'
+content=' found'
+content=' a'
+content=' website'
+content=' that'
+content=' provides'
+content=' detailed'
+content=' weather'
+content=' information'
+content=' for'
+content=' San'
+content=' Francisco'
+content='.'
+content=' You'
+content=' can'
+content=' visit'
+content=' the'
+content=' following'
+content=' link'
+content=' for'
+content=' the'
+content=' current'
+content=' weather'
+content=' report'
+content=':'
+content=' ['
+content='San'
+content=' Francisco'
+content=' Weather'
+content=' Report'
+content=']('
+content='https'
+content='://'
+content='www'
+content='.weather'
+content='25'
+content='.com'
+content='/n'
+content='orth'
+content='-'
+content='amer'
+content='ica'
+content='/'
+content='usa'
+content='/cal'
+content='ifornia'
+content='/s'
+content='an'
+content='-fr'
+content='anc'
+content='isco'
+content=')'
+content=''
 ```
 
 ## Documentation
@@ -201,7 +407,6 @@ from langgraph.graph import Graph
 
 This class is responsible for constructing the graph.
 It exposes an interface inspired by [NetworkX](https://networkx.org/documentation/latest/).
-
 
 ### `.add_node`
 
@@ -320,10 +525,10 @@ from langchain_core.agents import AgentActionMessageLog
 def first_agent(inputs):
     action = AgentActionMessageLog(
       # We force call this tool
-      tool="tavily_search_results_json", 
+      tool="tavily_search_results_json",
       # We just pass in the `input` key to this tool
-      tool_input=inputs["input"], 
-      log="", 
+      tool_input=inputs["input"],
+      log="",
       message_log=[]
     )
     inputs["agent_outcome"] = action
