@@ -190,7 +190,11 @@ This now exposes the [same interface](https://python.langchain.com/docs/expressi
 chain.invoke({"input": "what is the weather in sf", "intermediate_steps": []})
 ```
 
-### Streaming
+## Streaming
+
+LangGraph has support for several different types of streaming.
+
+### Streaming Node Output
 
 One of the benefits of using LangGraph is that it is easy to stream output as it's produced by each node.
 
