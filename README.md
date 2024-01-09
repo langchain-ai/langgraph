@@ -323,7 +323,7 @@ async for output in chain.astream_log(
         elif op["path"].startswith("/logs/") and op["path"].endswith(
             "/streamed_output/-"
         ):
-            # these are tokens from the LLM
+            # because we chose to only include LLMs, these are LLM tokens
             print(op["value"])
 ```
 
