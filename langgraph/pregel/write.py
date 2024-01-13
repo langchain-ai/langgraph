@@ -51,6 +51,11 @@ class ChannelWrite(RunnablePassthrough):
         values = [
             (chan, r.invoke(input, config) if r else input) for chan, r in self.channels
         ]
+        values = [
+            write
+            for write, chan in zip(values, self.channels)
+            if chan[1] is None or write[1] is not None
+        ]
 
         self.do_write(config, **dict(values))
 
@@ -59,10 +64,15 @@ class ChannelWrite(RunnablePassthrough):
             (chan, await r.ainvoke(input, config) if r else input)
             for chan, r in self.channels
         ]
+        values = [
+            write
+            for write, chan in zip(values, self.channels)
+            if chan[1] is None or write[1] is not None
+        ]
 
         self.do_write(config, **dict(values))
 
     @staticmethod
     def do_write(config: RunnableConfig, **values: Any) -> None:
         write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
-        write([(chan, val) for chan, val in values.items() if val is not None])
+        write([(chan, val) for chan, val in values.items()])

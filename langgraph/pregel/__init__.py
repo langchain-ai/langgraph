@@ -563,7 +563,10 @@ def _read_channel(
     try:
         return channels[chan].get()
     except EmptyChannelError:
-        return None
+        if catch:
+            return None
+        else:
+            raise
 
 
 def _apply_writes(
@@ -604,7 +607,7 @@ def _apply_writes_from_view(
     checkpoint: Checkpoint, channels: Mapping[str, BaseChannel], values: dict[str, Any]
 ) -> None:
     for chan, value in values.items():
-        if value == channels[chan].get():
+        if value == _read_channel(channels, chan):
             continue
 
         assert isinstance(channels[chan], LastValue), (

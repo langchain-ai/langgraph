@@ -83,7 +83,8 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
 
 
 def _update_state(input: dict[str, Any], config: RunnableConfig):
-    ChannelWrite.do_write(config, **input)
+    if input is not None:
+        ChannelWrite.do_write(config, **input)
     return input
 
 
