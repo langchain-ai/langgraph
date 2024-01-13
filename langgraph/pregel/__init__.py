@@ -162,6 +162,8 @@ class Pregel(
 
     saver: Optional[BaseCheckpointSaver] = None
 
+    name: str = "LangGraph"
+
     class Config:
         arbitrary_types_allowed = True
 
@@ -191,7 +193,7 @@ class Pregel(
             return super().get_input_schema(config)
         else:
             return create_model(  # type: ignore[call-overload]
-                "PregelInput",
+                self.get_name("Input"),
                 **{
                     k: (self.channels[k].UpdateType, None)
                     for k in self.input or self.channels.keys()
@@ -210,7 +212,7 @@ class Pregel(
             return super().get_output_schema(config)
         else:
             return create_model(  # type: ignore[call-overload]
-                "PregelOutput",
+                self.get_name("Output"),
                 **{k: (self.channels[k].ValueType, None) for k in self.output},
             )
 

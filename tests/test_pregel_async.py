@@ -39,8 +39,8 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.schema() == {"title": "PregelInput", "type": "integer"}
-    assert app.output_schema.schema() == {"title": "PregelOutput", "type": "integer"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
+    assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
     assert await app.ainvoke(2) == 3
     assert await app.ainvoke(2, output=["output"]) == {"output": 3}
 
@@ -55,8 +55,8 @@ async def test_invoke_single_process_in_out_implicit_channels(
 
     app = Pregel(nodes={"one": chain})
 
-    assert app.input_schema.schema() == {"title": "PregelInput"}
-    assert app.output_schema.schema() == {"title": "PregelOutput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
     assert await app.ainvoke(2) == 3
 
 
@@ -70,9 +70,9 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
 
     app = Pregel(nodes={"one": chain}, output=["output", "fixed", "output_plus_one"])
 
-    assert app.input_schema.schema() == {"title": "PregelInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput"}
     assert app.output_schema.schema() == {
-        "title": "PregelOutput",
+        "title": "LangGraphOutput",
         "type": "object",
         "properties": {
             "output": {"title": "Output"},
@@ -96,8 +96,8 @@ async def test_invoke_single_process_in_out_reserved_is_last(
 
     app = Pregel(nodes={"one": chain})
 
-    assert app.input_schema.schema() == {"title": "PregelInput"}
-    assert app.output_schema.schema() == {"title": "PregelOutput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
     assert await app.ainvoke(2) == {"input": 3, "is_last_step": False}
     assert await app.ainvoke(2, {"recursion_limit": 1}) == {
         "input": 3,
@@ -114,9 +114,9 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "PregelInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput"}
     assert app.output_schema.schema() == {
-        "title": "PregelOutput",
+        "title": "LangGraphOutput",
         "type": "object",
         "properties": {"output": {"title": "Output"}},
     }
@@ -136,12 +136,12 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
     )
 
     assert app.input_schema.schema() == {
-        "title": "PregelInput",
+        "title": "LangGraphInput",
         "type": "object",
         "properties": {"input": {"title": "Input"}},
     }
     assert app.output_schema.schema() == {
-        "title": "PregelOutput",
+        "title": "LangGraphOutput",
         "type": "object",
         "properties": {"output": {"title": "Output"}},
     }
