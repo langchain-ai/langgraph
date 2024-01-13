@@ -1,5 +1,5 @@
 from contextlib import contextmanager
-from typing import Callable, Generator, Generic, Optional, Sequence, Type
+from typing import Annotated, Callable, Generator, Generic, Optional, Sequence, Type
 
 from typing_extensions import Self
 
@@ -16,7 +16,11 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     ```
     """
 
-    def __init__(self, typ: Type[Value], operator: Callable[[Value, Value], Value]):
+    def __init__(
+        self,
+        typ: Type[Value],
+        operator: Callable[[Value, Value], Value],
+    ):
         self.typ = typ
         self.operator = operator
         try:

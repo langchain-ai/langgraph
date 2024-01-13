@@ -23,7 +23,7 @@ from langgraph.constants import CONFIG_KEY_READ
 
 
 class ChannelRead(RunnableLambda):
-    channel: str
+    channel: Union[str, list[str]]
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -37,7 +37,7 @@ class ChannelRead(RunnableLambda):
             ),
         ]
 
-    def __init__(self, channel: str) -> None:
+    def __init__(self, channel: Union[str, list[str]]) -> None:
         super().__init__(func=self._read, afunc=self._aread)
         self.channel = channel
         self.name = f"ChannelRead<{channel}>"
@@ -50,7 +50,11 @@ class ChannelRead(RunnableLambda):
                 f"Runnable {self} is not configured with a read function"
                 "Make sure to call in the context of a Pregel process"
             )
-        return read(self.channel)
+        return (
+            read(self.channel)
+            if isinstance(self.channel, str)
+            else {chan: read(chan) for chan in self.channel}
+        )
 
     async def _aread(self, _: Any, config: RunnableConfig) -> Any:
         try:
@@ -60,7 +64,11 @@ class ChannelRead(RunnableLambda):
                 f"Runnable {self} is not configured with a read function"
                 "Make sure to call in the context of a Pregel process"
             )
-        return read(self.channel)
+        return (
+            read(self.channel)
+            if isinstance(self.channel, str)
+            else {chan: read(chan) for chan in self.channel}
+        )
 
 
 default_bound: RunnablePassthrough = RunnablePassthrough()
