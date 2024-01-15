@@ -29,6 +29,7 @@ class Graph:
         self.nodes: dict[str, Runnable] = {}
         self.edges = set[tuple[str, str]]()
         self.branches: defaultdict[str, list[Branch]] = defaultdict(list)
+        self.support_multiple_edges = False
 
     def add_node(self, key: str, action: RunnableLike) -> None:
         if key in self.nodes:
@@ -46,8 +47,9 @@ class Graph:
         if end_key not in self.nodes and end_key != END:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
-        # TODO: support multiple message passing
-        if start_key in set(start for start, _ in self.edges):
+        if not self.support_multiple_edges and start_key in set(
+            start for start, _ in self.edges
+        ):
             raise ValueError(f"Already found path for {start_key}")
 
         self.edges.add((start_key, end_key))
@@ -111,7 +113,7 @@ class Graph:
             outgoing = outgoing_edges[key]
             edges_key = f"{key}:edges"
             if outgoing or key in self.branches:
-                nodes[edges_key] = Channel.subscribe_to(key)
+                nodes[edges_key] = Channel.subscribe_to(key, tags=["langsmith:hidden"])
             if outgoing:
                 nodes[edges_key] |= Channel.write_to(*[dest for dest in outgoing])
             if key in self.branches:
