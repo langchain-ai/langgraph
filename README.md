@@ -618,10 +618,10 @@ tool_executor = ToolExecutor(tools)
 It then exposes a [runnable interface](https://python.langchain.com/docs/expression_language/interface).
 It can be used to call tools: you can pass in an [AgentAction](https://python.langchain.com/docs/modules/agents/concepts#agentaction) and it will look up the relevant tool and call it with the appropriate input.
 
-### chat_executor.create_function_calling_executor
+### chat_agent_executor.create_function_calling_executor
 
 ```python
-from langgraph.prebuilt import chat_executor
+from langgraph.prebuilt import chat_agent_executor
 ```
 
 This is a helper function for creating a graph that works with a chat model that utilizes function calling.
@@ -631,13 +631,13 @@ The model must be one that supports OpenAI function calling.
 ```python
 from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
-from langgraph.prebuilt import chat_executor
+from langgraph.prebuilt import chat_agent_executor
 from langchain_core.messages import HumanMessage
 
 tools = [TavilySearchResults(max_results=1)]
 model = ChatOpenAI()
 
-app = chat_executor.create_function_calling_executor(model, tools)
+app = chat_agent_executor.create_function_calling_executor(model, tools)
 
 inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
 for s in app.stream(inputs):
