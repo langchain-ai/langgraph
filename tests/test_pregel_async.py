@@ -1,7 +1,16 @@
 import asyncio
 import operator
 from contextlib import asynccontextmanager, contextmanager
-from typing import Annotated, Any, AsyncGenerator, AsyncIterator, Generator, TypedDict
+from typing import (
+    Annotated,
+    Any,
+    AsyncGenerator,
+    AsyncIterator,
+    Generator,
+    Optional,
+    TypedDict,
+    Union,
+)
 
 import pytest
 from langchain_core.runnables import RunnablePassthrough
@@ -621,7 +630,7 @@ async def test_conditional_graph() -> None:
         ]
     )
 
-    async def agent_parser(input: str) -> AgentFinish | AgentAction:
+    async def agent_parser(input: str) -> Union[AgentAction, AgentFinish]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return AgentFinish(return_values={"answer": answer}, log=input)
@@ -831,7 +840,7 @@ async def test_conditional_graph_state() -> None:
 
     class AgentState(TypedDict):
         input: str
-        agent_outcome: AgentAction | AgentFinish | None
+        agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
 
     # Assemble the tools
@@ -853,7 +862,7 @@ async def test_conditional_graph_state() -> None:
         ]
     )
 
-    def agent_parser(input: str) -> AgentFinish | AgentAction:
+    def agent_parser(input: str) -> Union[AgentAction, AgentFinish]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return {
