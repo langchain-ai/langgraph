@@ -3,6 +3,7 @@ from typing import Annotated, Sequence, TypedDict, Union
 
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
+from langchain_core.runnables import RunnableLambda
 
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
@@ -63,6 +64,10 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
         agent_outcome = agent_runnable.invoke(data)
         return {"agent_outcome": agent_outcome}
 
+    async def arun_agent(data):
+        agent_outcome = await agent_runnable.ainvoke(data)
+        return {"agent_outcome": agent_outcome}
+
     # Define the function to execute tools
     def execute_tools(data):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
@@ -70,12 +75,18 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
         output = tool_executor.invoke(agent_action)
         return {"intermediate_steps": [(agent_action, str(output))]}
 
+    async def aexecute_tools(data):
+        # Get the most recent agent_outcome - this is the key added in the `agent` above
+        agent_action = data["agent_outcome"]
+        output = await tool_executor.ainvoke(agent_action)
+        return {"intermediate_steps": [(agent_action, str(output))]}
+
     # Define a new graph
     workflow = StateGraph(state)
 
     # Define the two nodes we will cycle between
-    workflow.add_node("agent", run_agent)
-    workflow.add_node("action", execute_tools)
+    workflow.add_node("agent", RunnableLambda(run_agent, arun_agent))
+    workflow.add_node("action", RunnableLambda(execute_tools, aexecute_tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
