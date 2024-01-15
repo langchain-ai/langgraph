@@ -1,22 +1,16 @@
 import operator
-from typing import Annotated, TypedDict, Union, Sequence
+from typing import Annotated, Sequence, TypedDict, Union
 
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
 
-
-from typing import Annotated, Optional, TypedDict
-
-from langchain_core.agents import AgentAction, AgentFinish
-
-from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
 
 
-
-def _get_agent_state(input_schema= None):
+def _get_agent_state(input_schema=None):
     if input_schema is None:
+
         class AgentState(TypedDict):
             # The input string
             input: str
@@ -31,6 +25,7 @@ def _get_agent_state(input_schema= None):
             intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
 
     else:
+
         class AgentState(input_schema):
             # The outcome of a given call to the agent
             # Needs `None` as a valid type, since this is what this will start as
@@ -43,12 +38,7 @@ def _get_agent_state(input_schema= None):
     return AgentState
 
 
-def create_agent_executor(
-    agent_runnable,
-    tools,
-    input_schema=None,
-    checkpointer: Optional[BaseCheckpointSaver] = None,
-):
+def create_agent_executor(agent_runnable, tools, input_schema=None):
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
     else:
@@ -119,4 +109,4 @@ def create_agent_executor(
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
-    return workflow.compile(checkpointer=checkpointer)
+    return workflow.compile()
