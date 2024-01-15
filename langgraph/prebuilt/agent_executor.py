@@ -1,10 +1,39 @@
-from typing import Annotated, TypedDict
 import operator
+from typing import Annotated, TypedDict, Union, Sequence
+
 from langchain_core.agents import AgentAction, AgentFinish
-from langgraph.graph import StateGraph, END
+from langchain_core.messages import BaseMessage
+
+from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
 
 
+def _get_agent_state(input_schema= None):
+    if input_schema is None:
+        class AgentState(TypedDict):
+            # The input string
+            input: str
+            # The list of previous messages in the conversation
+            chat_history: Sequence[BaseMessage]
+            # The outcome of a given call to the agent
+            # Needs `None` as a valid type, since this is what this will start as
+            agent_outcome: Union[AgentAction, AgentFinish, None]
+            # List of actions and corresponding observations
+            # Here we annotate this with `operator.add` to indicate that operations to
+            # this state should be ADDED to the existing values (not overwrite it)
+            intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+
+    else:
+        class AgentState(input_schema):
+            # The outcome of a given call to the agent
+            # Needs `None` as a valid type, since this is what this will start as
+            agent_outcome: Union[AgentAction, AgentFinish, None]
+            # List of actions and corresponding observations
+            # Here we annotate this with `operator.add` to indicate that operations to
+            # this state should be ADDED to the existing values (not overwrite it)
+            intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+
+    return AgentState
 
 
 def create_agent_executor(agent_runnable, tools, input_schema=None):
@@ -14,18 +43,9 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
     else:
         tool_executor = ToolExecutor(tools)
 
+    state = _get_agent_state(input_schema)
 
-    if input_schema is None:
-        class AgentState(TypedDict):
-            input: str
-            agent_outcome: AgentAction | AgentFinish | None
-            intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
-
-    else:
-        class AgentState(input_schema):
-            agent_outcome: AgentAction | AgentFinish | None
-            intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
-
+    # Define logic that will be used to determine which conditional edge to go down
     def should_continue(data):
         # If the agent outcome is an AgentFinish, then we return `exit` string
         # This will be used when setting up the graph to define the flow
@@ -49,7 +69,7 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
         return {"intermediate_steps": [(agent_action, str(output))]}
 
     # Define a new graph
-    workflow = StateGraph(AgentState)
+    workflow = StateGraph(state)
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", run_agent)

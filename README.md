@@ -65,10 +65,50 @@ tools = [TavilySearchResults(max_results=1)]
 prompt = hub.pull("hwchase17/openai-functions-agent")
 
 # Choose the LLM that will drive the agent
-llm = ChatOpenAI(model="gpt-3.5-turbo-1106")
+# We set streaming=True so that we can stream tokens (we will cover this more detail later on)
+llm = ChatOpenAI(model="gpt-3.5-turbo-1106", streaming=True)
 
 # Construct the OpenAI Functions agent
 agent_runnable = create_openai_functions_agent(llm, tools, prompt)
+```
+
+### Define the agent state
+
+The main type of graph in `langgraph` is the `StatefulGraph`.
+This graph is parameterized by a state object that it passes around to each node.
+Each node then returns operations to update that state.
+These operations can either SET specific attributes on the state (e.g. overwrite the existing values) or ADD to the existing attribute.
+Whether to set or add is denoted by annotating the state object you construct the graph with.
+
+The state for the traditional LangChain agent has a few attributes:
+
+1. `input`: This is the input string representing the main ask from the user, passed in as input.
+2. `chat_history`: This is any previous conversation messages, also passed in as input.
+3. `intermediate_steps`: This is list of actions and corresponding observations that the agent takes over time. This is updated each iteration of the agent.
+4. `agent_outcome`: This is the response from the agent, either an AgentAction or AgentFinish. The AgentExecutor should finish when this is an AgentFinish, otherwise it should call the requested tools.
+
+Let's make these ideas concrete by create an agent state!
+
+```python
+from typing import TypedDict, Annotated, Sequence, Union
+from langchain_core.agents import AgentAction, AgentFinish
+from langchain_core.messages import BaseMessage
+import operator
+
+
+class AgentState(TypedDict):
+   # The input string
+   input: str
+   # The list of previous messages in the conversation
+   chat_history: Sequence[BaseMessage]
+   # The outcome of a given call to the agent
+   # Needs `None` as a valid type, since this is what this will start as
+   agent_outcome: Union[AgentAction, AgentFinish, None]
+   # List of actions and corresponding observations
+   # Here we annotate this with `operator.add` to indicate that operations to
+   # this state should be ADDED to the existing values (not overwrite it)
+   intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+
 ```
 
 ### Define the nodes
@@ -93,38 +133,31 @@ The path that is taken is not known until that node is run (the LLM decides).
 Let's define the nodes, as well as a function to decide how what conditional edge to take.
 
 ```python
-from langchain_core.runnables import RunnablePassthrough
 from langchain_core.agents import AgentFinish
+from langgraph.prebuilt.tool_executor import ToolExecutor
 
+# This a helper class we have that is useful for running tools
+# It takes in an agent action and calls that tool and returns the result
+tool_executor = ToolExecutor(tools)
 
 # Define the agent
-# Note that here, we are using `.assign` to add the output of the agent to the dictionary
-# This dictionary will be returned from the node
-# The reason we don't want to return just the result of `agent_runnable` from this node is
-# that we want to continue passing around all the other inputs
-agent = RunnablePassthrough.assign(
-    agent_outcome = agent_runnable
-)
+def run_agent(data):
+    agent_outcome = agent_runnable.invoke(data)
+    return {"agent_outcome": agent_outcome}
 
 # Define the function to execute tools
 def execute_tools(data):
     # Get the most recent agent_outcome - this is the key added in the `agent` above
-    agent_action = data.pop('agent_outcome')
-    # Get the tool to use
-    tool_to_use = {t.name: t for t in tools}[agent_action.tool]
-    # Call that tool on the input
-    observation = tool_to_use.invoke(agent_action.tool_input)
-    # We now add in the action and the observation to the `intermediate_steps` list
-    # This is the list of all previous actions taken and their output
-    data['intermediate_steps'].append((agent_action, observation))
-    return data
+    agent_action = data['agent_outcome']
+    output = tool_executor.invoke(agent_action)
+    return {"intermediate_steps": [(agent_action, str(output))]}
 
 # Define logic that will be used to determine which conditional edge to go down
 def should_continue(data):
     # If the agent outcome is an AgentFinish, then we return `exit` string
     # This will be used when setting up the graph to define the flow
     if isinstance(data['agent_outcome'], AgentFinish):
-        return "exit"
+        return "end"
     # Otherwise, an AgentAction is returned
     # Here we return `continue` string
     # This will be used when setting up the graph to define the flow
@@ -134,51 +167,51 @@ def should_continue(data):
 
 ### Define the graph
 
-We can now put it alltogether and define the graph!
+We can now put it all together and define the graph!
 
 ```python
-from langgraph.graph import END, Graph
+from langgraph.graph import END, StateGraph
 
-workflow = Graph()
+# Define a new graph
+ workflow = StateGraph(AgentState)
 
-# Add the agent node, we give it name `agent` which we will use later
-workflow.add_node("agent", agent)
-# Add the tools node, we give it name `tools` which we will use later
-workflow.add_node("tools", execute_tools)
+ # Define the two nodes we will cycle between
+ workflow.add_node("agent", run_agent)
+ workflow.add_node("action", execute_tools)
 
-# Set the entrypoint as `agent`
-# This means that this node is the first one called
-workflow.set_entry_point("agent")
+ # Set the entrypoint as `agent`
+ # This means that this node is the first one called
+ workflow.set_entry_point("agent")
 
-# We now add a conditional edge
-workflow.add_conditional_edges(
-    # First, we define the start node. We use `agent`.
-    # This means these are the edges taken after the `agent` node is called.
-    "agent",
-    # Next, we pass in the function that will determine which node is called next.
-    should_continue,
-    # Finally we pass in a mapping.
-    # The keys are strings, and the values are other nodes.
-    # END is a special node marking that the graph should finish.
-    # What will happen is we will call `should_continue`, and then the output of that
-    # will be matched against the keys in this mapping.
-    # Based on which one it matches, that node will then be called.
-    {
-        # If `tools`, then we call the tool node.
-        "continue": "tools",
-        # Otherwise we finish.
-        "exit": END
-    }
-)
+ # We now add a conditional edge
+ workflow.add_conditional_edges(
+     # First, we define the start node. We use `agent`.
+     # This means these are the edges taken after the `agent` node is called.
+     "agent",
+     # Next, we pass in the function that will determine which node is called next.
+     should_continue,
+     # Finally we pass in a mapping.
+     # The keys are strings, and the values are other nodes.
+     # END is a special node marking that the graph should finish.
+     # What will happen is we will call `should_continue`, and then the output of that
+     # will be matched against the keys in this mapping.
+     # Based on which one it matches, that node will then be called.
+     {
+         # If `tools`, then we call the tool node.
+         "continue": "action",
+         # Otherwise we finish.
+         "end": END
+     }
+ )
 
-# We now add a normal edge from `tools` to `agent`.
-# This means that after `tools` is called, `agent` node is called next.
-workflow.add_edge('tools', 'agent')
+ # We now add a normal edge from `tools` to `agent`.
+ # This means that after `tools` is called, `agent` node is called next.
+ workflow.add_edge('action', 'agent')
 
-# Finally, we compile it!
-# This compiles it into a LangChain Runnable,
-# meaning you can use it as you would any other runnable
-chain = workflow.compile()
+ # Finally, we compile it!
+ # This compiles it into a LangChain Runnable,
+ # meaning you can use it as you would any other runnable
+ chain = workflow.compile()
 ```
 
 ### Use it!
@@ -187,7 +220,7 @@ We can now use it!
 This now exposes the [same interface](https://python.langchain.com/docs/expression_language/) as all other LangChain runnables
 
 ```python
-chain.invoke({"input": "what is the weather in sf", "intermediate_steps": []})
+chain.invoke({"input": "what is the weather in sf"})
 ```
 
 ## Streaming
@@ -200,7 +233,7 @@ One of the benefits of using LangGraph is that it is easy to stream output as it
 
 ```python
 for output in chain.stream(
-    {"input": "what is the weather in sf", "intermediate_steps": []}
+    {"input": "what is the weather in sf"}
 ):
     # stream() yields dictionaries with output keyed by node name
     for key, value in output.items():
@@ -213,102 +246,34 @@ for output in chain.stream(
 ```
 Output from node 'agent':
 ---
-{'agent_outcome': AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]),
- 'input': 'what is the weather in sf',
- 'intermediate_steps': []}
+{'agent_outcome': AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})])}
 
 ---
 
-Output from node 'tools':
+Output from node 'action':
 ---
-{'input': 'what is the weather in sf',
- 'intermediate_steps': [(AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]),
-                         [{'content': 'Best time to go to San Francisco? '
-                                      'Weather in San Francisco in january '
-                                      '2024  How was the weather last january? '
-                                      'Here is the day by day recorded weather '
-                                      'in San Francisco in january 2023:  '
-                                      'Seasonal average climate and '
-                                      'temperature of San Francisco in '
-                                      'january  8% 46% 29% 12% 8% Evolution of '
-                                      'daily average temperature and '
-                                      'precipitation in San Francisco in '
-                                      'januaryWeather in San Francisco in '
-                                      'january 2024. The weather in San '
-                                      'Francisco in january comes from '
-                                      'statistical datas on the past years. '
-                                      'You can view the weather statistics the '
-                                      'entire month, but also by using the '
-                                      'tabs for the beginning, the middle and '
-                                      'the end of the month. ... 08-01-2023 '
-                                      '52°F to 58°F. 09-01-2023 54°F to 61°F. '
-                                      '10-01-2023 52°F to ...',
-                           'url': 'https://www.whereandwhen.net/when/north-america/california/san-francisco-ca/january/'}])]}
+{'intermediate_steps': [(AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]), "[{'url': 'https://weatherspark.com/h/m/557/2024/1/Historical-Weather-in-January-2024-in-San-Francisco-California-United-States', 'content': 'January 2024 Weather History in San Francisco California, United States  Daily Precipitation in January 2024 in San Francisco Observed Weather in January 2024 in San Francisco  San Francisco Temperature History January 2024 Hourly Temperature in January 2024 in San Francisco  Hours of Daylight and Twilight in January 2024 in San FranciscoThis report shows the past weather for San Francisco, providing a weather history for January 2024. It features all historical weather data series we have available, including the San Francisco temperature history for January 2024. You can drill down from year to month and even day level reports by clicking on the graphs.'}]")]}
 
 ---
 
 Output from node 'agent':
 ---
-{'agent_outcome': AgentFinish(return_values={'output': 'The weather in San Francisco in January ranges from 52°F to 61°F. For more detailed and current weather information, you may want to check a reliable weather website or app.'}, log='The weather in San Francisco in January ranges from 52°F to 61°F. For more detailed and current weather information, you may want to check a reliable weather website or app.'),
- 'input': 'what is the weather in sf',
- 'intermediate_steps': [(AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]),
-                         [{'content': 'Best time to go to San Francisco? '
-                                      'Weather in San Francisco in january '
-                                      '2024  How was the weather last january? '
-                                      'Here is the day by day recorded weather '
-                                      'in San Francisco in january 2023:  '
-                                      'Seasonal average climate and '
-                                      'temperature of San Francisco in '
-                                      'january  8% 46% 29% 12% 8% Evolution of '
-                                      'daily average temperature and '
-                                      'precipitation in San Francisco in '
-                                      'januaryWeather in San Francisco in '
-                                      'january 2024. The weather in San '
-                                      'Francisco in january comes from '
-                                      'statistical datas on the past years. '
-                                      'You can view the weather statistics the '
-                                      'entire month, but also by using the '
-                                      'tabs for the beginning, the middle and '
-                                      'the end of the month. ... 08-01-2023 '
-                                      '52°F to 58°F. 09-01-2023 54°F to 61°F. '
-                                      '10-01-2023 52°F to ...',
-                           'url': 'https://www.whereandwhen.net/when/north-america/california/san-francisco-ca/january/'}])]}
+{'agent_outcome': AgentFinish(return_values={'output': "It seems that I couldn't retrieve the current weather in San Francisco. However, you can easily check the current weather in San Francisco by using a weather website or app."}, log="It seems that I couldn't retrieve the current weather in San Francisco. However, you can easily check the current weather in San Francisco by using a weather website or app.")}
 
 ---
 
 Output from node '__end__':
 ---
-{'agent_outcome': AgentFinish(return_values={'output': 'The weather in San Francisco in January ranges from 52°F to 61°F. For more detailed and current weather information, you may want to check a reliable weather website or app.'}, log='The weather in San Francisco in January ranges from 52°F to 61°F. For more detailed and current weather information, you may want to check a reliable weather website or app.'),
- 'input': 'what is the weather in sf',
- 'intermediate_steps': [(AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]),
-                         [{'content': 'Best time to go to San Francisco? '
-                                      'Weather in San Francisco in january '
-                                      '2024  How was the weather last january? '
-                                      'Here is the day by day recorded weather '
-                                      'in San Francisco in january 2023:  '
-                                      'Seasonal average climate and '
-                                      'temperature of San Francisco in '
-                                      'january  8% 46% 29% 12% 8% Evolution of '
-                                      'daily average temperature and '
-                                      'precipitation in San Francisco in '
-                                      'januaryWeather in San Francisco in '
-                                      'january 2024. The weather in San '
-                                      'Francisco in january comes from '
-                                      'statistical datas on the past years. '
-                                      'You can view the weather statistics the '
-                                      'entire month, but also by using the '
-                                      'tabs for the beginning, the middle and '
-                                      'the end of the month. ... 08-01-2023 '
-                                      '52°F to 58°F. 09-01-2023 54°F to 61°F. '
-                                      '10-01-2023 52°F to ...',
-                           'url': 'https://www.whereandwhen.net/when/north-america/california/san-francisco-ca/january/'}])]}
+{'input': 'what is the weather in sf', 'chat_history': [], 'agent_outcome': AgentFinish(return_values={'output': "It seems that I couldn't retrieve the current weather in San Francisco. However, you can easily check the current weather in San Francisco by using a weather website or app."}, log="It seems that I couldn't retrieve the current weather in San Francisco. However, you can easily check the current weather in San Francisco by using a weather website or app."), 'intermediate_steps': [(AgentActionMessageLog(tool='tavily_search_results_json', tool_input={'query': 'weather in San Francisco'}, log="\nInvoking: `tavily_search_results_json` with `{'query': 'weather in San Francisco'}`\n\n\n", message_log=[AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{"query":"weather in San Francisco"}', 'name': 'tavily_search_results_json'}})]), "[{'url': 'https://weatherspark.com/h/m/557/2024/1/Historical-Weather-in-January-2024-in-San-Francisco-California-United-States', 'content': 'January 2024 Weather History in San Francisco California, United States  Daily Precipitation in January 2024 in San Francisco Observed Weather in January 2024 in San Francisco  San Francisco Temperature History January 2024 Hourly Temperature in January 2024 in San Francisco  Hours of Daylight and Twilight in January 2024 in San FranciscoThis report shows the past weather for San Francisco, providing a weather history for January 2024. It features all historical weather data series we have available, including the San Francisco temperature history for January 2024. You can drill down from year to month and even day level reports by clicking on the graphs.'}]")]}
 
 ---
 ```
 
 ### Streaming LLM Tokens
 
-You can also access the LLM tokens as they are produced by each node. In this case only the "agent" node produces LLM tokens.
+You can also access the LLM tokens as they are produced by each node. 
+In this case only the "agent" node produces LLM tokens.
+In order for this to work properly, you must be using an LLM that supports streaming as well as have set it when constructing the LLM (e.g. `ChatOpenAI(model="gpt-3.5-turbo-1106", streaming=True)`)
 
 ```python
 async for output in chain.astream_log(
@@ -395,20 +360,106 @@ content=')'
 content=''
 ```
 
+
+
+
+
+## When to Use
+
+When should you use this versus [LangChain Expression Language](https://python.langchain.com/docs/expression_language/)?
+
+If you need cycles.
+
+Langchain Expression Language allows you to easily define chains (DAGs) but does not have a good mechanism for adding in cycles.
+`langgraph` adds that syntax.
+
+## Examples
+
+
+### ChatExecutor: with function calling
+
+### AgentExecutor
+
+
 ## Documentation
 
 There are only a few new APIs to use.
 
-The main new class is `Graph`.
+### StateGraph
+
+The main entrypoint is `StateGraph`.
 
 ```python
-from langgraph.graph import Graph
+from langgraph.graph import StateGraph
 ```
 
 This class is responsible for constructing the graph.
 It exposes an interface inspired by [NetworkX](https://networkx.org/documentation/latest/).
+This graph is parameterized by a state object that it passes around to each node.
 
-### `.add_node`
+
+#### `__init__`
+
+```python
+    def __init__(self, schema: Type[Any]) -> None:
+```
+
+When constructing the graph, you need to pass in a schema for a state.
+Each node then returns operations to update that state.
+These operations can either SET specific attributes on the state (e.g. overwrite the existing values) or ADD to the existing attribute.
+Whether to set or add is denoted by annotating the state object you construct the graph with.
+
+The recommended way to specify the schema is with a typed dictionary: `from typing import TypedDict`
+
+You can then annotate the different attributes using `from typing imoport Annotated`.
+Currently, the only supported annotation is `import operator; operator.add`.
+This annotation will make it so that any node that returns this attribute ADDS that new result to the existing value.
+
+Let's take a look at an example:
+
+```python
+from typing import TypedDict, Annotated, Union
+from langchain_core.agents import AgentAction, AgentFinish
+import operator
+
+
+class AgentState(TypedDict):
+   # The input string
+   input: str
+   # The outcome of a given call to the agent
+   # Needs `None` as a valid type, since this is what this will start as
+   agent_outcome: Union[AgentAction, AgentFinish, None]
+   # List of actions and corresponding observations
+   # Here we annotate this with `operator.add` to indicate that operations to
+   # this state should be ADDED to the existing values (not overwrite it)
+   intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+
+```
+
+We can then use this like:
+
+```python
+# Initialize the StateGraph with this state
+graph = StateGraph(AgentState)
+# Create nodes and edges
+...
+# Compile the graph
+app = graph.compile()
+
+# The inputs should be a dictionary, because the state is a TypedDict
+inputs = {
+   # Let's assume this the input
+   "input": "hi"
+   # Let's assume agent_outcome is set by the graph as some point
+   # It doesn't need to be provided, and it will be None by default
+   # Let's assume `intermediate_steps` is built up over time by the graph
+   # It doesn't need to provided, and it will be empty list by default
+   # The reason `intermediate_steps` is an empty list and not `None` is because
+   # it's annotated with `operator.add`
+}
+```
+
+#### `.add_node`
 
 ```python
     def add_node(self, key: str, action: RunnableLike) -> None:
@@ -420,7 +471,7 @@ It takes two arguments:
 - `key`: A string representing the name of the node. This must be unique.
 - `action`: The action to take when this node is called. This should either be a function or a runnable.
 
-### `.add_edge`
+#### `.add_edge`
 
 ```python
     def add_edge(self, start_key: str, end_key: str) -> None:
@@ -433,7 +484,7 @@ It takes two arguments.
 - `start_key`: A string representing the name of the start node. This key must have already been registered in the graph.
 - `end_key`: A string representing the name of the end node. This key must have already been registered in the graph.
 
-### `.add_conditional_edges`
+#### `.add_conditional_edges`
 
 ```python
     def add_conditional_edges(
@@ -452,7 +503,7 @@ This takes three arguments:
 - `condition`: A function to call to decide what to do next. The input will be the output of the start node. It should return a string that is present in `conditional_edge_mapping` and represents the edge to take.
 - `conditional_edge_mapping`: A mapping of string to string. The keys should be strings that may be returned by `condition`. The values should be the downstream node to call if that condition is returned.
 
-### `.set_entry_point`
+#### `.set_entry_point`
 
 ```python
     def set_entry_point(self, key: str) -> None:
@@ -464,7 +515,7 @@ It only takes one argument:
 
 - `key`: The name of the node that should be called first.
 
-### `.set_finish_point`
+#### `.set_finish_point`
 
 ```python
     def set_finish_point(self, key: str) -> None:
@@ -477,6 +528,17 @@ It only has one argument:
 - `key`: The name of the node that, when called, will return the results of calling it as the final output
 
 Note: This does not need to be called if at any point you previously created an edge (conditional or normal) to `END`
+
+### Graph
+
+```python
+from langgraph.graph import Graph
+
+graph = Graph()
+```
+
+This has the same interface as `StateGraph` with the exception that it doesn't update a state object over time, and rather relies on passing around the full state from each step.
+This means that whatever is returned from one node is the input to the next as is.
 
 ### `END`
 
@@ -491,89 +553,86 @@ It can be used in two places:
 - As the `end_key` in `add_edge`
 - As a value in `conditional_edge_mapping` as passed to `add_conditional_edges`
 
-## When to Use
 
-When should you use this versus [LangChain Expression Language](https://python.langchain.com/docs/expression_language/)?
+## Prebuilt Examples
 
-If you need cycles.
+There are also a few methods we've added to make it easy to use common, prebuilt graphs and components.
 
-Langchain Expression Language allows you to easily define chains (DAGs) but does not have a good mechanism for adding in cycles.
-`langgraph` adds that syntax.
-
-## Examples
-
-### AgentExecutor
-
-See the above Quick Start for an example of re-creating the LangChain [`AgentExecutor`](https://python.langchain.com/docs/modules/agents/concepts#agentexecutor) class.
-
-### Forced Function Calling
-
-One simple modification of the above Graph is to modify it such that a certain tool is always called first.
-This can be useful if you want to enforce a certain tool is called, but still want to enable agentic behavior after the fact.
-
-Assuming you have done the above Quick Start, you can build off it like:
-
-#### Define the first tool call
-
-Here, we manually define the first tool call that we will make.
-Notice that it does that same thing as `agent` would have done (adds the `agent_outcome` key).
-This is so that we can easily plug it in.
+### ToolExecutor
 
 ```python
-from langchain_core.agents import AgentActionMessageLog
-
-def first_agent(inputs):
-    action = AgentActionMessageLog(
-      # We force call this tool
-      tool="tavily_search_results_json",
-      # We just pass in the `input` key to this tool
-      tool_input=inputs["input"],
-      log="",
-      message_log=[]
-    )
-    inputs["agent_outcome"] = action
-    return inputs
+from langgraph.prebuilt import ToolExecutor
 ```
 
-#### Create the graph
-
-We can now create a new graph with this new node
+This is a simple helper class to help with calling tools.
+It is parameterized by a list of tools:
 
 ```python
-workflow = Graph()
-
-# Add the same nodes as before, plus this "first agent"
-workflow.add_node("first_agent", first_agent)
-workflow.add_node("agent", agent)
-workflow.add_node("tools", execute_tools)
-
-# We now set the entry point to be this first agent
-workflow.set_entry_point("first_agent")
-
-# We define the same edges as before
-workflow.add_conditional_edges(
-    "agent",
-    should_continue,
-    {
-        "continue": "tools",
-        "exit": END
-    }
-)
-workflow.add_edge('tools', 'agent')
-
-# We also define a new edge, from the "first agent" to the tools node
-# This is so that we can call the tool
-workflow.add_edge('first_agent', 'tools')
-
-# We now compile the graph as before
-chain = workflow.compile()
+tools = [...]
+tool_executor = ToolExecutor(tools)
 ```
 
-#### Use it!
+It then exposes a [runnable interface](https://python.langchain.com/docs/expression_language/interface).
+It can be used to call tools: you can pass in an [AgentAction](https://python.langchain.com/docs/modules/agents/concepts#agentaction) and it will look up the relevant tool and call it with the appropriate input.
 
-We can now use it as before!
-Depending on whether or not the first tool call is actually useful, this may save you an LLM call or two.
+### chat_executor.create_function_calling_executor
 
 ```python
-chain.invoke({"input": "what is the weather in sf", "intermediate_steps": []})
+from langgraph.prebuilt import chat_executor
+```
+
+This is a helper function for creating a graph that works with a chat model that utilizes function calling.
+Can be created by passing in a model and a list of tools.
+The model must be one that supports OpenAI function calling.
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langgraph.prebuilt import chat_executor
+from langchain_core.messages import HumanMessage
+
+tools = [TavilySearchResults(max_results=1)]
+model = ChatOpenAI()
+
+app = chat_executor.create_function_calling_executor(model, tools)
+
+inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
+for s in app.stream(inputs):
+    print(list(s.values())[0])
+    print("----")
+```
+
+### create_agent_executor
+
+```python
+from langgraph.prebuilt import create_agent_executor
+```
+
+This is a helper function for creating a graph that works with [LangChain Agents](https://python.langchain.com/docs/modules/agents/).
+Can be created by passing in an agent and a list of tools.
+
+```python
+from langgraph.prebuilt import create_agent_executor
+from langchain_openai import ChatOpenAI
+from langchain import hub
+from langchain.agents import create_openai_functions_agent
+from langchain_community.tools.tavily_search import TavilySearchResults
+
+tools = [TavilySearchResults(max_results=1)]
+
+# Get the prompt to use - you can modify this!
+prompt = hub.pull("hwchase17/openai-functions-agent")
+
+# Choose the LLM that will drive the agent
+llm = ChatOpenAI(model="gpt-3.5-turbo-1106")
+
+# Construct the OpenAI Functions agent
+agent_runnable = create_openai_functions_agent(llm, tools, prompt)
+
+app = create_agent_executor(agent_runnable, tools)
+
+inputs = {"input": "what is the weather in sf", "chat_history": []}
+for s in app.stream(inputs):
+    print(list(s.values())[0])
+    print("----")
 ```

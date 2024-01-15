@@ -1,35 +1,23 @@
-from langchain_core.runnables import RunnablePassthrough
-from langchain_core.messages import FunctionMessage
-from langchain_core.agents import AgentFinish, AgentAction
 import json
+import operator
+from typing import Annotated, Sequence, TypedDict
 
 from langchain.tools.render import format_tool_to_openai_function
+from langchain_core.agents import AgentAction
+from langchain_core.messages import BaseMessage, FunctionMessage
+
+from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
-from langchain_core.utils.function_calling import convert_pydantic_to_openai_function
-from typing import Annotated, TypedDict, Sequence
-from langchain_core.messages import BaseMessage
-import operator
-from langchain_core.agents import AgentAction, AgentFinish
-from langgraph.graph import StateGraph, END
 
 
-def _get_tool_executor_and_functions(tools, response_format):
+def create_function_calling_executor(model, tools):
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
         tool_classes = tools.tools
     else:
         tool_executor = ToolExecutor(tools)
         tool_classes = tools
-
-    functions = [format_tool_to_openai_function(t) for t in tool_classes]
-    if response_format is not None:
-        functions.append(convert_pydantic_to_openai_function(response_format))
-    return tool_executor, functions
-
-
-def create_messages_executor(model, tools, response_format = None):
-    tool_executor, functions = _get_tool_executor_and_functions(tools, response_format)
-    model = model.bind_functions([format_tool_to_openai_function(t) for t in tools])
+    model = model.bind_functions([format_tool_to_openai_function(t) for t in tool_classes])
 
     # Define the function that determines whether to continue or not
     def should_continue(state):
@@ -38,14 +26,9 @@ def create_messages_executor(model, tools, response_format = None):
         # If there is no function call, then we finish
         if "function_call" not in last_message.additional_kwargs:
             return "end"
-        # Otherwise if there is, we need to check what type of function call it is
+        # Otherwise if there is, we continue
         else:
-            if response_format is None:
-                return "continue"
-            elif last_message.additional_kwargs["function_call"]["name"] == response_format.__name__:
-                return "end"
-            else:
-                return "continue"
+            return "continue"
 
     # Define the function that calls the model
     def call_model(state):
