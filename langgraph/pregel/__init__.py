@@ -84,8 +84,10 @@ class Channel:
     def subscribe_to(
         cls,
         channels: str,
+        *,
         key: Optional[str] = None,
         when: Optional[Callable[[Any], bool]] = None,
+        tags: Optional[Sequence[str]] = None,
     ) -> ChannelInvoke:
         ...
 
@@ -94,8 +96,10 @@ class Channel:
     def subscribe_to(
         cls,
         channels: Sequence[str],
+        *,
         key: None = None,
         when: Optional[Callable[[Any], bool]] = None,
+        tags: Optional[Sequence[str]] = None,
     ) -> ChannelInvoke:
         ...
 
@@ -103,8 +107,10 @@ class Channel:
     def subscribe_to(
         cls,
         channels: Union[str, Sequence[str]],
+        *,
         key: Optional[str] = None,
         when: Optional[Callable[[Any], bool]] = None,
+        tags: Optional[Sequence[str]] = None,
     ) -> ChannelInvoke:
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
@@ -121,6 +127,7 @@ class Channel:
             ),
             triggers=[channels] if isinstance(channels, str) else channels,
             when=when,
+            tags=tags,
         )
 
     @classmethod

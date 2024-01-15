@@ -21,6 +21,8 @@ class StateGraph(Graph):
         super().__init__()
         self.schema = schema
         self.channels = _get_channels(schema)
+        if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
+            self.support_multiple_edges = True
 
     def compile(self) -> Pregel:
         self.validate()
@@ -49,7 +51,9 @@ class StateGraph(Graph):
             outgoing = outgoing_edges[key]
             edges_key = f"{key}:edges"
             if outgoing or key in self.branches:
-                nodes[edges_key] = Channel.subscribe_to(key) | ChannelRead(state_keys)
+                nodes[edges_key] = Channel.subscribe_to(
+                    key, tags=["langsmith:hidden"]
+                ) | ChannelRead(state_keys)
             if outgoing:
                 nodes[edges_key] |= Channel.write_to(*[dest for dest in outgoing])
             if key in self.branches:
@@ -59,12 +63,12 @@ class StateGraph(Graph):
                     )
 
         nodes[START] = (
-            Channel.subscribe_to(f"{START}:inbox")
+            Channel.subscribe_to(f"{START}:inbox", tags=["langsmith:hidden"])
             | _update_state
             | Channel.write_to(START)
         )
         nodes[f"{START}:edges"] = (
-            Channel.subscribe_to(START)
+            Channel.subscribe_to(START, tags=["langsmith:hidden"])
             | ChannelRead(state_keys)
             | Channel.write_to(f"{self.entry_point}:inbox")
         )

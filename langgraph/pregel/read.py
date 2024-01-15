@@ -90,6 +90,7 @@ class ChannelInvoke(RunnableBindingBase):
         channels: Mapping[None, str] | Mapping[str, str],
         triggers: Sequence[str],
         when: Optional[Callable[[Any], bool]] = None,
+        tags: Optional[Sequence[str]] = None,
         *,
         bound: Optional[Runnable[Any, Any]] = None,
         kwargs: Optional[Mapping[str, Any]] = None,
@@ -102,7 +103,7 @@ class ChannelInvoke(RunnableBindingBase):
             when=when,
             bound=bound or default_bound,
             kwargs=kwargs or {},
-            config=config,
+            config={**(config or {}), "tags": tags or []},
             **other_kwargs,
         )
 
