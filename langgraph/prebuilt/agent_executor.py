@@ -4,8 +4,15 @@ from typing import Annotated, TypedDict, Union, Sequence
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
 
+
+from typing import Annotated, Optional, TypedDict
+
+from langchain_core.agents import AgentAction, AgentFinish
+
+from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
+
 
 
 def _get_agent_state(input_schema= None):
@@ -36,8 +43,12 @@ def _get_agent_state(input_schema= None):
     return AgentState
 
 
-def create_agent_executor(agent_runnable, tools, input_schema=None):
-
+def create_agent_executor(
+    agent_runnable,
+    tools,
+    input_schema=None,
+    checkpointer: Optional[BaseCheckpointSaver] = None,
+):
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
     else:
@@ -46,10 +57,11 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
     state = _get_agent_state(input_schema)
 
     # Define logic that will be used to determine which conditional edge to go down
+
     def should_continue(data):
         # If the agent outcome is an AgentFinish, then we return `exit` string
         # This will be used when setting up the graph to define the flow
-        if isinstance(data['agent_outcome'], AgentFinish):
+        if isinstance(data["agent_outcome"], AgentFinish):
             return "end"
         # Otherwise, an AgentAction is returned
         # Here we return `continue` string
@@ -64,7 +76,7 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
     # Define the function to execute tools
     def execute_tools(data):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
-        agent_action = data['agent_outcome']
+        agent_action = data["agent_outcome"]
         output = tool_executor.invoke(agent_action)
         return {"intermediate_steps": [(agent_action, str(output))]}
 
@@ -96,15 +108,15 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
             # If `tools`, then we call the tool node.
             "continue": "action",
             # Otherwise we finish.
-            "end": END
-        }
+            "end": END,
+        },
     )
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge('action', 'agent')
+    workflow.add_edge("action", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
-    return workflow.compile()
+    return workflow.compile(checkpointer=checkpointer)

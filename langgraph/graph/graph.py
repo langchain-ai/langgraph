@@ -1,6 +1,6 @@
 from asyncio import iscoroutinefunction
 from collections import defaultdict
-from typing import Any, Callable, Dict, NamedTuple
+from typing import Any, Callable, Dict, NamedTuple, Optional
 
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.base import (
@@ -9,6 +9,7 @@ from langchain_core.runnables.base import (
     coerce_to_runnable,
 )
 
+from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.pregel import Channel, Pregel
 
 END = "__end__"
@@ -97,7 +98,7 @@ class Graph:
             if node not in all_starts:
                 raise ValueError(f"Node `{node}` is a dead-end")
 
-    def compile(self) -> Pregel:
+    def compile(self, checkpointer: Optional[BaseCheckpointSaver] = None) -> Pregel:
         self.validate()
 
         outgoing_edges = defaultdict(list)
@@ -127,4 +128,5 @@ class Graph:
             input=f"{self.entry_point}:inbox",
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes],
+            checkpointer=checkpointer,
         )

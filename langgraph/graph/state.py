@@ -8,6 +8,7 @@ from langchain_core.runnables import RunnableConfig, RunnableLambda
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
+from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph.graph import END, Graph
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import ChannelRead
@@ -24,7 +25,7 @@ class StateGraph(Graph):
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
 
-    def compile(self) -> Pregel:
+    def compile(self, checkpointer: Optional[BaseCheckpointSaver] = None) -> Pregel:
         self.validate()
 
         if any(key in self.nodes for key in self.channels):
@@ -79,6 +80,7 @@ class StateGraph(Graph):
             input=f"{START}:inbox",
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
+            checkpointer=checkpointer,
         )
 
 

@@ -169,7 +169,7 @@ class Pregel(
 
     debug: bool = Field(default_factory=get_debug)
 
-    saver: Optional[BaseCheckpointSaver] = None
+    checkpointer: Optional[BaseCheckpointSaver] = None
 
     name: str = "LangGraph"
 
@@ -187,7 +187,7 @@ class Pregel(
     def config_specs(self) -> list[ConfigurableFieldSpec]:
         return get_unique_config_specs(
             [spec for node in self.nodes.values() for spec in node.config_specs]
-            + (self.saver.config_specs if self.saver is not None else [])
+            + (self.checkpointer.config_specs if self.checkpointer is not None else [])
         )
 
     @property
@@ -244,7 +244,7 @@ class Pregel(
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
-        checkpoint = self.saver.get(config) if self.saver else None
+        checkpoint = self.checkpointer.get(config) if self.checkpointer else None
         checkpoint = checkpoint or empty_checkpoint()
         # create channels from checkpoint
         with ChannelsManager(
@@ -327,18 +327,24 @@ class Pregel(
                         _apply_writes_from_view(checkpoint, channels, step_output)
 
                 # save end of step checkpoint
-                if self.saver is not None and self.saver.at == CheckpointAt.END_OF_STEP:
+                if (
+                    self.checkpointer is not None
+                    and self.checkpointer.at == CheckpointAt.END_OF_STEP
+                ):
                     checkpoint = create_checkpoint(checkpoint, channels)
-                    self.saver.put(config, checkpoint)
+                    self.checkpointer.put(config, checkpoint)
 
                 # interrupt if any channel written to is in interrupt list
                 if any(chan for chan, _ in pending_writes if chan in self.interrupt):
                     break
 
             # save end of run checkpoint
-            if self.saver is not None and self.saver.at == CheckpointAt.END_OF_RUN:
+            if (
+                self.checkpointer is not None
+                and self.checkpointer.at == CheckpointAt.END_OF_RUN
+            ):
                 checkpoint = create_checkpoint(checkpoint, channels)
-                self.saver.put(config, checkpoint)
+                self.checkpointer.put(config, checkpoint)
 
     async def _atransform(
         self,
@@ -368,7 +374,7 @@ class Pregel(
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
-        checkpoint = await self.saver.aget(config) if self.saver else None
+        checkpoint = await self.checkpointer.aget(config) if self.checkpointer else None
         checkpoint = checkpoint or empty_checkpoint()
         # create channels from checkpoint
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
@@ -454,18 +460,24 @@ class Pregel(
                         _apply_writes_from_view(checkpoint, channels, step_output)
 
                 # save end of step checkpoint
-                if self.saver is not None and self.saver.at == CheckpointAt.END_OF_STEP:
+                if (
+                    self.checkpointer is not None
+                    and self.checkpointer.at == CheckpointAt.END_OF_STEP
+                ):
                     checkpoint = create_checkpoint(checkpoint, channels)
-                    await self.saver.aput(config, checkpoint)
+                    await self.checkpointer.aput(config, checkpoint)
 
                 # interrupt if any channel written to is in interrupt list
                 if any(chan for chan, _ in pending_writes if chan in self.interrupt):
                     break
 
             # save end of run checkpoint
-            if self.saver is not None and self.saver.at == CheckpointAt.END_OF_RUN:
+            if (
+                self.checkpointer is not None
+                and self.checkpointer.at == CheckpointAt.END_OF_RUN
+            ):
                 checkpoint = create_checkpoint(checkpoint, channels)
-                await self.saver.aput(config, checkpoint)
+                await self.checkpointer.aput(config, checkpoint)
 
     def invoke(
         self,
