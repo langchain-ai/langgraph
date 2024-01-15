@@ -44,7 +44,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
     assert app.invoke(2) == 3
-    assert app.invoke(2, output=["output"]) == {"output": 3}
+    assert app.invoke(2, output_keys=["output"]) == {"output": 3}
     assert repr(app), "does not raise recursion error"
 
     assert gapp.invoke(2) == 3
@@ -157,6 +157,8 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert app.invoke(2) == 4
 
+    assert app.invoke(2, input_keys="inbox") == 3
+
     for step, values in enumerate(app.stream(2), start=1):
         if step == 1:
             assert values == {
@@ -238,7 +240,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
         input=["input", "inbox"],
     )
 
-    assert [*app.stream({"input": 2, "inbox": 12}, output="output")] == [
+    assert [*app.stream({"input": 2, "inbox": 12}, output_keys="output")] == [
         13,
         4,
     ]  # [12 + 1, 2 + 1 + 1]
@@ -259,7 +261,7 @@ def test_batch_two_processes_in_out() -> None:
     app = Pregel(nodes={"one": one, "two": two})
 
     assert app.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
-    assert app.batch([3, 2, 1, 3, 5], output=["output"]) == [
+    assert app.batch([3, 2, 1, 3, 5], output_keys=["output"]) == [
         {"output": 5},
         {"output": 4},
         {"output": 3},
