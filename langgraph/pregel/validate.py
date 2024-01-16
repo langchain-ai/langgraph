@@ -61,7 +61,7 @@ def validate_graph(
 
 def validate_keys(
     keys: Union[str, Sequence[str]],
-    channels: dict[str, BaseChannel],
+    channels: Mapping[str, BaseChannel],
 ) -> None:
     if isinstance(keys, str):
         if keys not in channels:

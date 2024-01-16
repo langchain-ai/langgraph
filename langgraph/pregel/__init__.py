@@ -87,7 +87,7 @@ class Channel:
         *,
         key: Optional[str] = None,
         when: Optional[Callable[[Any], bool]] = None,
-        tags: Optional[Sequence[str]] = None,
+        tags: Optional[list[str]] = None,
     ) -> ChannelInvoke:
         ...
 
@@ -99,7 +99,7 @@ class Channel:
         *,
         key: None = None,
         when: Optional[Callable[[Any], bool]] = None,
-        tags: Optional[Sequence[str]] = None,
+        tags: Optional[list[str]] = None,
     ) -> ChannelInvoke:
         ...
 
@@ -110,7 +110,7 @@ class Channel:
         *,
         key: Optional[str] = None,
         when: Optional[Callable[[Any], bool]] = None,
-        tags: Optional[Sequence[str]] = None,
+        tags: Optional[list[str]] = None,
     ) -> ChannelInvoke:
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
