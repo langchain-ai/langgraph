@@ -1,22 +1,17 @@
 import operator
-from typing import Annotated, TypedDict, Union, Sequence
+from typing import Annotated, Sequence, TypedDict, Union
 
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
+from langchain_core.runnables import RunnableLambda
 
-
-from typing import Annotated, Optional, TypedDict
-
-from langchain_core.agents import AgentAction, AgentFinish
-
-from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
 
 
-
-def _get_agent_state(input_schema= None):
+def _get_agent_state(input_schema=None):
     if input_schema is None:
+
         class AgentState(TypedDict):
             # The input string
             input: str
@@ -31,6 +26,7 @@ def _get_agent_state(input_schema= None):
             intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
 
     else:
+
         class AgentState(input_schema):
             # The outcome of a given call to the agent
             # Needs `None` as a valid type, since this is what this will start as
@@ -43,12 +39,7 @@ def _get_agent_state(input_schema= None):
     return AgentState
 
 
-def create_agent_executor(
-    agent_runnable,
-    tools,
-    input_schema=None,
-    checkpointer: Optional[BaseCheckpointSaver] = None,
-):
+def create_agent_executor(agent_runnable, tools, input_schema=None):
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
     else:
@@ -73,6 +64,10 @@ def create_agent_executor(
         agent_outcome = agent_runnable.invoke(data)
         return {"agent_outcome": agent_outcome}
 
+    async def arun_agent(data):
+        agent_outcome = await agent_runnable.ainvoke(data)
+        return {"agent_outcome": agent_outcome}
+
     # Define the function to execute tools
     def execute_tools(data):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
@@ -80,12 +75,18 @@ def create_agent_executor(
         output = tool_executor.invoke(agent_action)
         return {"intermediate_steps": [(agent_action, str(output))]}
 
+    async def aexecute_tools(data):
+        # Get the most recent agent_outcome - this is the key added in the `agent` above
+        agent_action = data["agent_outcome"]
+        output = await tool_executor.ainvoke(agent_action)
+        return {"intermediate_steps": [(agent_action, str(output))]}
+
     # Define a new graph
     workflow = StateGraph(state)
 
     # Define the two nodes we will cycle between
-    workflow.add_node("agent", run_agent)
-    workflow.add_node("action", execute_tools)
+    workflow.add_node("agent", RunnableLambda(run_agent, arun_agent))
+    workflow.add_node("action", RunnableLambda(execute_tools, aexecute_tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -119,4 +120,4 @@ def create_agent_executor(
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
-    return workflow.compile(checkpointer=checkpointer)
+    return workflow.compile()
