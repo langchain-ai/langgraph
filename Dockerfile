@@ -1,4 +1,4 @@
-FROM python:3.9-slim
+FROM python:3.9
 
 # Set the working directory to /app
 WORKDIR /app
@@ -7,6 +7,6 @@ WORKDIR /app
 COPY . .
 
 # Install any needed packages specified in requirements.txt
-RUN pip install poetry && poetry config virtualenvs.create false && poetry install --with test,lint,typing
+RUN pip install poetry && poetry config virtualenvs.create false && poetry install --with test,lint,typing,dev
 
 RUN poetry run pytest

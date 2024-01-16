@@ -1,7 +1,16 @@
 import asyncio
 import operator
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any, AsyncGenerator, AsyncIterator, Generator
+from typing import (
+    Annotated,
+    Any,
+    AsyncGenerator,
+    AsyncIterator,
+    Generator,
+    Optional,
+    TypedDict,
+    Union,
+)
 
 import pytest
 from langchain_core.runnables import RunnablePassthrough
@@ -13,7 +22,7 @@ from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, Graph
+from langgraph.graph import END, Graph, StateGraph
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.reserved import ReservedChannels
 
@@ -39,10 +48,10 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.schema() == {"title": "PregelInput", "type": "integer"}
-    assert app.output_schema.schema() == {"title": "PregelOutput", "type": "integer"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
+    assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
     assert await app.ainvoke(2) == 3
-    assert await app.ainvoke(2, output=["output"]) == {"output": 3}
+    assert await app.ainvoke(2, output_keys=["output"]) == {"output": 3}
 
     assert await gapp.ainvoke(2) == 3
 
@@ -55,8 +64,8 @@ async def test_invoke_single_process_in_out_implicit_channels(
 
     app = Pregel(nodes={"one": chain})
 
-    assert app.input_schema.schema() == {"title": "PregelInput"}
-    assert app.output_schema.schema() == {"title": "PregelOutput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
     assert await app.ainvoke(2) == 3
 
 
@@ -70,9 +79,9 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
 
     app = Pregel(nodes={"one": chain}, output=["output", "fixed", "output_plus_one"])
 
-    assert app.input_schema.schema() == {"title": "PregelInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput"}
     assert app.output_schema.schema() == {
-        "title": "PregelOutput",
+        "title": "LangGraphOutput",
         "type": "object",
         "properties": {
             "output": {"title": "Output"},
@@ -96,8 +105,8 @@ async def test_invoke_single_process_in_out_reserved_is_last(
 
     app = Pregel(nodes={"one": chain})
 
-    assert app.input_schema.schema() == {"title": "PregelInput"}
-    assert app.output_schema.schema() == {"title": "PregelOutput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
     assert await app.ainvoke(2) == {"input": 3, "is_last_step": False}
     assert await app.ainvoke(2, {"recursion_limit": 1}) == {
         "input": 3,
@@ -114,9 +123,9 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "PregelInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput"}
     assert app.output_schema.schema() == {
-        "title": "PregelOutput",
+        "title": "LangGraphOutput",
         "type": "object",
         "properties": {"output": {"title": "Output"}},
     }
@@ -136,12 +145,12 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
     )
 
     assert app.input_schema.schema() == {
-        "title": "PregelInput",
+        "title": "LangGraphInput",
         "type": "object",
         "properties": {"input": {"title": "Input"}},
     }
     assert app.output_schema.schema() == {
-        "title": "PregelOutput",
+        "title": "LangGraphOutput",
         "type": "object",
         "properties": {"output": {"title": "Output"}},
     }
@@ -156,6 +165,8 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     app = Pregel(nodes={"one": one, "two": two})
 
     assert await app.ainvoke(2) == 4
+
+    assert await app.ainvoke(2, input_keys="inbox") == 3
 
     step = 0
     async for values in app.astream(2):
@@ -247,7 +258,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
 
     # [12 + 1, 2 + 1 + 1]
     assert [
-        c async for c in pubsub.astream({"input": 2, "inbox": 12}, output="output")
+        c async for c in pubsub.astream({"input": 2, "inbox": 12}, output_keys="output")
     ] == [13, 4]
     assert [c async for c in pubsub.astream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
@@ -269,7 +280,7 @@ async def test_batch_two_processes_in_out() -> None:
     )
 
     assert await app.abatch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
-    assert await app.abatch([3, 2, 1, 3, 5], output=["output"]) == [
+    assert await app.abatch([3, 2, 1, 3, 5], output_keys=["output"]) == [
         {"output": 5},
         {"output": 4},
         {"output": 3},
@@ -394,7 +405,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     app = Pregel(
         nodes={"one": one},
         channels={"total": BinaryOperatorAggregate(int, operator.add)},
-        saver=memory,
+        checkpointer=memory,
     )
 
     # total starts out as 0, so output is 0+2=2
@@ -619,7 +630,7 @@ async def test_conditional_graph() -> None:
         ]
     )
 
-    async def agent_parser(input: str) -> AgentFinish | AgentAction:
+    async def agent_parser(input: str) -> Union[AgentAction, AgentFinish]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return AgentFinish(return_values={"answer": answer}, log=input)
@@ -817,3 +828,193 @@ async def test_conditional_graph() -> None:
 
     # Check that agent (one of the nodes) has its output streamed to the logs
     assert "/logs/agent/streamed_output/-" in patch_paths
+
+
+async def test_conditional_graph_state() -> None:
+    from copy import deepcopy
+
+    from langchain.llms.fake import FakeStreamingListLLM
+    from langchain_community.tools import tool
+    from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.prompts import PromptTemplate
+
+    class AgentState(TypedDict):
+        input: str
+        agent_outcome: Optional[Union[AgentAction, AgentFinish]]
+        intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+
+    # Assemble the tools
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    # Construct the agent
+    prompt = PromptTemplate.from_template("Hello!")
+
+    llm = FakeStreamingListLLM(
+        responses=[
+            "tool:search_api:query",
+            "tool:search_api:another",
+            "finish:answer",
+        ]
+    )
+
+    def agent_parser(input: str) -> Union[AgentAction, AgentFinish]:
+        if input.startswith("finish"):
+            _, answer = input.split(":")
+            return {
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": answer}, log=input
+                )
+            }
+        else:
+            _, tool_name, tool_input = input.split(":")
+            return {
+                "agent_outcome": AgentAction(
+                    tool=tool_name, tool_input=tool_input, log=input
+                )
+            }
+
+    agent = prompt | llm | agent_parser
+
+    # Define tool execution logic
+    def execute_tools(data: AgentState) -> dict:
+        agent_action: AgentAction = data.pop("agent_outcome")
+        observation = {t.name: t for t in tools}[agent_action.tool].invoke(
+            agent_action.tool_input
+        )
+        return {"intermediate_steps": [(agent_action, observation)]}
+
+    # Define decision-making logic
+    def should_continue(data: AgentState) -> str:
+        # Logic to decide whether to continue in the loop or exit
+        if isinstance(data["agent_outcome"], AgentFinish):
+            return "exit"
+        else:
+            return "continue"
+
+    # Define a new graph
+    workflow = StateGraph(AgentState)
+
+    workflow.add_node("agent", agent)
+    workflow.add_node("tools", execute_tools)
+
+    workflow.set_entry_point("agent")
+
+    workflow.add_conditional_edges(
+        "agent", should_continue, {"continue": "tools", "exit": END}
+    )
+
+    workflow.add_edge("tools", "agent")
+
+    app = workflow.compile()
+
+    assert await app.ainvoke({"input": "what is weather in sf"}) == {
+        "input": "what is weather in sf",
+        "intermediate_steps": [
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:query",
+                ),
+                "result for query",
+            ),
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+                "result for another",
+            ),
+        ],
+        "agent_outcome": AgentFinish(
+            return_values={"answer": "answer"}, log="finish:answer"
+        ),
+    }
+
+    assert [
+        deepcopy(c) async for c in app.astream({"input": "what is weather in sf"})
+    ] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        },
+        {
+            "tools": {
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+        {
+            "tools": {
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
+                    ),
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "answer"}, log="finish:answer"
+                ),
+            }
+        },
+        {
+            "__end__": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ),
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="another",
+                            log="tool:search_api:another",
+                        ),
+                        "result for another",
+                    ),
+                ],
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "answer"}, log="finish:answer"
+                ),
+            }
+        },
+    ]
