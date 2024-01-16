@@ -1,7 +1,16 @@
 import asyncio
 import operator
 from contextlib import asynccontextmanager, contextmanager
-from typing import Annotated, Any, AsyncGenerator, AsyncIterator, Generator, TypedDict
+from typing import (
+    Annotated,
+    Any,
+    AsyncGenerator,
+    AsyncIterator,
+    Generator,
+    Optional,
+    TypedDict,
+    Union,
+)
 
 import pytest
 from langchain_core.runnables import RunnablePassthrough
@@ -42,7 +51,7 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
     assert await app.ainvoke(2) == 3
-    assert await app.ainvoke(2, output=["output"]) == {"output": 3}
+    assert await app.ainvoke(2, output_keys=["output"]) == {"output": 3}
 
     assert await gapp.ainvoke(2) == 3
 
@@ -157,6 +166,8 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert await app.ainvoke(2) == 4
 
+    assert await app.ainvoke(2, input_keys="inbox") == 3
+
     step = 0
     async for values in app.astream(2):
         step += 1
@@ -247,7 +258,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
 
     # [12 + 1, 2 + 1 + 1]
     assert [
-        c async for c in pubsub.astream({"input": 2, "inbox": 12}, output="output")
+        c async for c in pubsub.astream({"input": 2, "inbox": 12}, output_keys="output")
     ] == [13, 4]
     assert [c async for c in pubsub.astream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
@@ -269,7 +280,7 @@ async def test_batch_two_processes_in_out() -> None:
     )
 
     assert await app.abatch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
-    assert await app.abatch([3, 2, 1, 3, 5], output=["output"]) == [
+    assert await app.abatch([3, 2, 1, 3, 5], output_keys=["output"]) == [
         {"output": 5},
         {"output": 4},
         {"output": 3},
@@ -394,7 +405,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     app = Pregel(
         nodes={"one": one},
         channels={"total": BinaryOperatorAggregate(int, operator.add)},
-        saver=memory,
+        checkpointer=memory,
     )
 
     # total starts out as 0, so output is 0+2=2
@@ -619,7 +630,7 @@ async def test_conditional_graph() -> None:
         ]
     )
 
-    async def agent_parser(input: str) -> AgentFinish | AgentAction:
+    async def agent_parser(input: str) -> Union[AgentAction, AgentFinish]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return AgentFinish(return_values={"answer": answer}, log=input)
@@ -829,7 +840,7 @@ async def test_conditional_graph_state() -> None:
 
     class AgentState(TypedDict):
         input: str
-        agent_outcome: AgentAction | AgentFinish | None
+        agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
 
     # Assemble the tools
@@ -851,7 +862,7 @@ async def test_conditional_graph_state() -> None:
         ]
     )
 
-    def agent_parser(input: str) -> AgentFinish | AgentAction:
+    def agent_parser(input: str) -> Union[AgentAction, AgentFinish]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return {
