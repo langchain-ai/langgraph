@@ -452,6 +452,15 @@ We also have a lot of examples highlighting how to slightly modify the base chat
 - [Force calling a tool first](examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
 - [Managing agent steps](examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
 
+### Async
+
+If you are running LangGraph in async workflows, you may want to create the nodes to be async by default.
+In order for a walkthrough on how to do that, see [this documentation](examples/async.ipynb)
+
+### Streaming Tokens
+
+Sometimes language models take a while to respond and you may want to stream tokens to end users.
+For a guide on how to do this, see [this documentation](examples/streaming-tokens.ipynb)
 
 ## Documentation
 
