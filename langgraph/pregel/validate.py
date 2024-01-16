@@ -11,6 +11,8 @@ def validate_graph(
     channels: dict[str, BaseChannel],
     input: Union[str, Sequence[str]],
     output: Union[str, Sequence[str]],
+    hidden: Sequence[str],
+    interrupt: Sequence[str],
 ) -> None:
     subscribed_channels = set[str]()
     for node in nodes.values():
@@ -52,3 +54,19 @@ def validate_graph(
     for chan in ReservedChannels:
         if chan not in channels:
             channels[chan] = LastValue(Any)  # type: ignore[arg-type]
+
+    validate_keys(hidden, channels)
+    validate_keys(interrupt, channels)
+
+
+def validate_keys(
+    keys: Union[str, Sequence[str]],
+    channels: dict[str, BaseChannel],
+) -> None:
+    if isinstance(keys, str):
+        if keys not in channels:
+            raise ValueError(f"Key {keys} not in channels")
+    else:
+        for chan in keys:
+            if chan not in channels:
+                raise ValueError(f"Key {chan} not in channels")

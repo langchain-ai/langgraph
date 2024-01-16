@@ -61,7 +61,7 @@ from langgraph.pregel.io import map_input, map_output
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import ChannelBatch, ChannelInvoke
 from langgraph.pregel.reserved import ReservedChannels
-from langgraph.pregel.validate import validate_graph
+from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite
 
 WriteValue = Union[
@@ -179,7 +179,12 @@ class Pregel(
     @root_validator(skip_on_failure=True)
     def validate_pregel(cls, values: dict[str, Any]) -> dict[str, Any]:
         validate_graph(
-            values["nodes"], values["channels"], values["input"], values["output"]
+            values["nodes"],
+            values["channels"],
+            values["input"],
+            values["output"],
+            values["hidden"],
+            values["interrupt"],
         )
         return values
 
@@ -239,8 +244,12 @@ class Pregel(
         # assign defaults
         if output_keys is None:
             output_keys = [chan for chan in self.channels if chan not in self.hidden]
+        else:
+            validate_keys(output_keys, self.channels)
         if input_keys is None:
             input_keys = self.input
+        else:
+            validate_keys(input_keys, self.channels)
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
@@ -369,8 +378,12 @@ class Pregel(
         # assign defaults
         if output_keys is None:
             output_keys = [chan for chan in self.channels if chan not in self.hidden]
+        else:
+            validate_keys(output_keys, self.channels)
         if input_keys is None:
             input_keys = self.input
+        else:
+            validate_keys(input_keys, self.channels)
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
