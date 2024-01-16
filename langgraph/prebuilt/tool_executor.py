@@ -34,6 +34,7 @@ class ToolExecutor(RunnableBinding):
     def __init__(
         self,
         tools: Sequence[BaseTool],
+        *,
         invalid_tool_msg_template: str = INVALID_TOOL_MSG_TEMPLATE,
         **kwargs: Any,
     ) -> None:
