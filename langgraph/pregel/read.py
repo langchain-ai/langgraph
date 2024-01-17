@@ -104,7 +104,7 @@ class ChannelInvoke(RunnableBindingBase):
             when=when,
             bound=bound or default_bound,
             kwargs=kwargs or {},
-            config=merge_configs(config, {"tags": tags}),
+            config=merge_configs(config, {"tags": tags or []}),
             **other_kwargs,
         )
 

@@ -865,7 +865,7 @@ async def test_conditional_graph_state() -> None:
         ]
     )
 
-    def agent_parser(input: str) -> Union[AgentAction, AgentFinish]:
+    def agent_parser(input: str) -> dict[str, Union[AgentAction, AgentFinish]]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return {
