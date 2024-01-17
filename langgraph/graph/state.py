@@ -70,6 +70,12 @@ class StateGraph(Graph):
             )
             for key, node in self.nodes.items()
         }
+        node_inboxes = {
+            # we can take any value written to channel because all writers
+            # write the entire state as of that step, which is equal for all writers
+            f"{key}:inbox": LastValue(Any, guard=False)
+            for key in self.nodes
+        }
 
         for key in self.nodes:
             outgoing = outgoing_edges[key]
@@ -97,7 +103,7 @@ class StateGraph(Graph):
 
         return Pregel(
             nodes=nodes,
-            channels=self.channels,
+            channels={**self.channels, **node_inboxes},
             input=f"{START}:inbox",
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
