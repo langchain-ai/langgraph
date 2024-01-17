@@ -11,11 +11,12 @@ from langgraph.channels.base import (
 )
 
 
-class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
-    """Stores the last value received, can receive at most one value per step."""
+class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
+    """Stores the value received in the step immediately preceding, clears after."""
 
-    def __init__(self, typ: Type[Value]) -> None:
+    def __init__(self, typ: Type[Value], guard: bool = True) -> None:
         self.typ = typ
+        self.guard = guard
 
     @property
     def ValueType(self) -> Type[Value]:
@@ -29,7 +30,7 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     @contextmanager
     def empty(self, checkpoint: Optional[Value] = None) -> Generator[Self, None, None]:
-        empty = self.__class__(self.typ)
+        empty = self.__class__(self.typ, self.guard)
         if checkpoint is not None:
             empty.value = checkpoint
         try:
@@ -42,8 +43,13 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def update(self, values: Sequence[Value]) -> None:
         if len(values) == 0:
-            return
-        if len(values) != 1:
+            try:
+                del self.value
+            except AttributeError:
+                pass
+            finally:
+                return
+        if len(values) != 1 and self.guard:
             raise InvalidUpdateError("LastValue can only receive one value per step.")
 
         self.value = values[-1]

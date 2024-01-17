@@ -3,16 +3,12 @@ from typing import Generator, Generic, Optional, Sequence, Type
 
 from typing_extensions import Self
 
-from langgraph.channels.base import (
-    BaseChannel,
-    EmptyChannelError,
-    InvalidUpdateError,
-    Value,
-)
+from langgraph.channels.base import BaseChannel, EmptyChannelError, Value
 
 
-class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
-    """Stores the last value received, can receive at most one value per step."""
+class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
+    """Stores the last value received, assumes that if multiple values are
+    received, they are all equal."""
 
     def __init__(self, typ: Type[Value]) -> None:
         self.typ = typ
@@ -43,8 +39,6 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def update(self, values: Sequence[Value]) -> None:
         if len(values) == 0:
             return
-        if len(values) != 1:
-            raise InvalidUpdateError("LastValue can only receive one value per step.")
 
         self.value = values[-1]
 
