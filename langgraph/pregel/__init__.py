@@ -46,6 +46,7 @@ from langgraph.channels.base import (
     BaseChannel,
     ChannelsManager,
     EmptyChannelError,
+    InvalidUpdateError,
     create_checkpoint,
 )
 from langgraph.channels.last_value import LastValue
@@ -684,7 +685,12 @@ def _apply_writes(
     # Apply writes to channels
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
-            channels[chan].update(vals)
+            try:
+                channels[chan].update(vals)
+            except InvalidUpdateError as e:
+                raise InvalidUpdateError(
+                    f"Invalid update for channel {chan}: {e}"
+                ) from e
             checkpoint["channel_versions"][chan] += 1
             updated_channels.add(chan)
         else:
