@@ -16,7 +16,7 @@ from langgraph.channels.topic import Topic
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, Graph
 from langgraph.graph.state import StateGraph
-from langgraph.pregel import Channel, Pregel
+from langgraph.pregel import Channel, GraphRecursionError, Pregel
 from langgraph.pregel.reserved import ReservedChannels
 
 
@@ -158,6 +158,9 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert app.invoke(2) == 4
 
     assert app.invoke(2, input_keys="inbox") == 3
+
+    with pytest.raises(GraphRecursionError):
+        app.invoke(2, {"recursion_limit": 1})
 
     for step, values in enumerate(app.stream(2), start=1):
         if step == 1:

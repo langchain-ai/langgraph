@@ -72,6 +72,10 @@ WriteValue = Union[
 ]
 
 
+class GraphRecursionError(RecursionError):
+    pass
+
+
 def _coerce_write_value(value: WriteValue) -> Runnable[Input, Output]:
     if not isinstance(value, Runnable) and not callable(value):
         return coerce_to_runnable(lambda _: value)
@@ -275,12 +279,18 @@ class Pregel(
             # channel updates from step N are only visible in step N+1
             # channels are guaranteed to be immutable for the duration of the step,
             # with channel updates applied only at the transition between steps
-            for step in range(config["recursion_limit"]):
+            for step in range(config["recursion_limit"] + 1):
                 next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
 
                 # if no more tasks, we're done
                 if not next_tasks:
                     break
+                elif step == config["recursion_limit"]:
+                    raise GraphRecursionError(
+                        f"Recursion limit of {config['recursion_limit']} reached"
+                        "without hitting a stop condition. You can increase the limit"
+                        "by setting the `recursion_limit` config key."
+                    )
 
                 if self.debug:
                     print_step_start(step, next_tasks)
@@ -346,11 +356,6 @@ class Pregel(
                 # interrupt if any channel written to is in interrupt list
                 if any(chan for chan, _ in pending_writes if chan in self.interrupt):
                     break
-            else:
-                raise RuntimeError(
-                    f"Recursion limit of {config['recursion_limit']} reached"
-                    "without hitting a stop condition."
-                )
 
             # save end of run checkpoint
             if (
@@ -412,12 +417,18 @@ class Pregel(
             # channel updates from step N are only visible in step N+1,
             # channels are guaranteed to be immutable for the duration of the step,
             # channel updates being applied only at the transition between steps
-            for step in range(config["recursion_limit"]):
+            for step in range(config["recursion_limit"] + 1):
                 next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
 
                 # if no more tasks, we're done
                 if not next_tasks:
                     break
+                elif step == config["recursion_limit"]:
+                    raise GraphRecursionError(
+                        f"Recursion limit of {config['recursion_limit']} reached"
+                        "without hitting a stop condition. You can increase the limit"
+                        "by setting the `recursion_limit` config key."
+                    )
 
                 if self.debug:
                     print_step_start(step, next_tasks)
@@ -488,11 +499,6 @@ class Pregel(
                 # interrupt if any channel written to is in interrupt list
                 if any(chan for chan, _ in pending_writes if chan in self.interrupt):
                     break
-            else:
-                raise RuntimeError(
-                    f"Recursion limit of {config['recursion_limit']} reached"
-                    "without hitting a stop condition."
-                )
 
             # save end of run checkpoint
             if (
