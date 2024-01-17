@@ -346,6 +346,11 @@ class Pregel(
                 # interrupt if any channel written to is in interrupt list
                 if any(chan for chan, _ in pending_writes if chan in self.interrupt):
                     break
+            else:
+                raise RuntimeError(
+                    f"Recursion limit of {config['recursion_limit']} reached"
+                    "without hitting a stop condition."
+                )
 
             # save end of run checkpoint
             if (
@@ -483,6 +488,11 @@ class Pregel(
                 # interrupt if any channel written to is in interrupt list
                 if any(chan for chan, _ in pending_writes if chan in self.interrupt):
                     break
+            else:
+                raise RuntimeError(
+                    f"Recursion limit of {config['recursion_limit']} reached"
+                    "without hitting a stop condition."
+                )
 
             # save end of run checkpoint
             if (
