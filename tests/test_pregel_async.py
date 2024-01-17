@@ -23,7 +23,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, Graph, StateGraph
-from langgraph.pregel import Channel, Pregel
+from langgraph.pregel import Channel, GraphRecursionError, Pregel
 from langgraph.pregel.reserved import ReservedChannels
 
 
@@ -167,6 +167,9 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert await app.ainvoke(2) == 4
 
     assert await app.ainvoke(2, input_keys="inbox") == 3
+
+    with pytest.raises(GraphRecursionError):
+        await app.ainvoke(2, {"recursion_limit": 1})
 
     step = 0
     async for values in app.astream(2):
