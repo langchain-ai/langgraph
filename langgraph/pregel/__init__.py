@@ -61,7 +61,7 @@ from langgraph.pregel.io import map_input, map_output
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import ChannelBatch, ChannelInvoke
 from langgraph.pregel.reserved import ReservedChannels
-from langgraph.pregel.validate import validate_graph
+from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite
 
 WriteValue = Union[
@@ -70,6 +70,10 @@ WriteValue = Union[
     Callable[[Input], Awaitable[Output]],
     Any,
 ]
+
+
+class GraphRecursionError(RecursionError):
+    pass
 
 
 def _coerce_write_value(value: WriteValue) -> Runnable[Input, Output]:
@@ -87,7 +91,7 @@ class Channel:
         *,
         key: Optional[str] = None,
         when: Optional[Callable[[Any], bool]] = None,
-        tags: Optional[Sequence[str]] = None,
+        tags: Optional[list[str]] = None,
     ) -> ChannelInvoke:
         ...
 
@@ -99,7 +103,7 @@ class Channel:
         *,
         key: None = None,
         when: Optional[Callable[[Any], bool]] = None,
-        tags: Optional[Sequence[str]] = None,
+        tags: Optional[list[str]] = None,
     ) -> ChannelInvoke:
         ...
 
@@ -110,7 +114,7 @@ class Channel:
         *,
         key: Optional[str] = None,
         when: Optional[Callable[[Any], bool]] = None,
-        tags: Optional[Sequence[str]] = None,
+        tags: Optional[list[str]] = None,
     ) -> ChannelInvoke:
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
@@ -179,7 +183,12 @@ class Pregel(
     @root_validator(skip_on_failure=True)
     def validate_pregel(cls, values: dict[str, Any]) -> dict[str, Any]:
         validate_graph(
-            values["nodes"], values["channels"], values["input"], values["output"]
+            values["nodes"],
+            values["channels"],
+            values["input"],
+            values["output"],
+            values["hidden"],
+            values["interrupt"],
         )
         return values
 
@@ -239,8 +248,12 @@ class Pregel(
         # assign defaults
         if output_keys is None:
             output_keys = [chan for chan in self.channels if chan not in self.hidden]
+        else:
+            validate_keys(output_keys, self.channels)
         if input_keys is None:
             input_keys = self.input
+        else:
+            validate_keys(input_keys, self.channels)
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
@@ -266,12 +279,18 @@ class Pregel(
             # channel updates from step N are only visible in step N+1
             # channels are guaranteed to be immutable for the duration of the step,
             # with channel updates applied only at the transition between steps
-            for step in range(config["recursion_limit"]):
+            for step in range(config["recursion_limit"] + 1):
                 next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
 
                 # if no more tasks, we're done
                 if not next_tasks:
                     break
+                elif step == config["recursion_limit"]:
+                    raise GraphRecursionError(
+                        f"Recursion limit of {config['recursion_limit']} reached"
+                        "without hitting a stop condition. You can increase the limit"
+                        "by setting the `recursion_limit` config key."
+                    )
 
                 if self.debug:
                     print_step_start(step, next_tasks)
@@ -369,8 +388,12 @@ class Pregel(
         # assign defaults
         if output_keys is None:
             output_keys = [chan for chan in self.channels if chan not in self.hidden]
+        else:
+            validate_keys(output_keys, self.channels)
         if input_keys is None:
             input_keys = self.input
+        else:
+            validate_keys(input_keys, self.channels)
         # copy nodes to ignore mutations during execution
         processes = {**self.nodes}
         # get checkpoint from saver, or create an empty one
@@ -394,12 +417,18 @@ class Pregel(
             # channel updates from step N are only visible in step N+1,
             # channels are guaranteed to be immutable for the duration of the step,
             # channel updates being applied only at the transition between steps
-            for step in range(config["recursion_limit"]):
+            for step in range(config["recursion_limit"] + 1):
                 next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
 
                 # if no more tasks, we're done
                 if not next_tasks:
                     break
+                elif step == config["recursion_limit"]:
+                    raise GraphRecursionError(
+                        f"Recursion limit of {config['recursion_limit']} reached"
+                        "without hitting a stop condition. You can increase the limit"
+                        "by setting the `recursion_limit` config key."
+                    )
 
                 if self.debug:
                     print_step_start(step, next_tasks)
