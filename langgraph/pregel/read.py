@@ -16,6 +16,7 @@ from langchain_core.runnables.base import (
     RunnableEach,
     coerce_to_runnable,
 )
+from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.channels.base import BaseChannel
@@ -103,7 +104,7 @@ class ChannelInvoke(RunnableBindingBase):
             when=when,
             bound=bound or default_bound,
             kwargs=kwargs or {},
-            config={**(config or {}), "tags": tags or []},
+            config=merge_configs(config, {"tags": tags}),
             **other_kwargs,
         )
 
