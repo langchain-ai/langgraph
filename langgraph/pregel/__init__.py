@@ -195,10 +195,19 @@ class Pregel(
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
-        return get_unique_config_specs(
-            [spec for node in self.nodes.values() for spec in node.config_specs]
-            + (self.checkpointer.config_specs if self.checkpointer is not None else [])
-        )
+        return [
+            spec
+            for spec in get_unique_config_specs(
+                [spec for node in self.nodes.values() for spec in node.config_specs]
+                + (
+                    self.checkpointer.config_specs
+                    if self.checkpointer is not None
+                    else []
+                )
+            )
+            # these are provided by the Pregel class
+            if spec.id not in [CONFIG_KEY_READ, CONFIG_KEY_SEND]
+        ]
 
     @property
     def InputType(self) -> Any:
