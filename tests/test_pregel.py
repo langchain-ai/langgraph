@@ -1,5 +1,6 @@
 import operator
 import time
+import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Annotated, Generator, Optional, TypedDict, Union
@@ -43,6 +44,13 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
 
     assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")  # raise warnings as errors
+        assert app.config_schema().schema() == {
+            "properties": {},
+            "title": "LangGraphConfig",
+            "type": "object",
+        }
     assert app.invoke(2) == 3
     assert app.invoke(2, output_keys=["output"]) == {"output": 3}
     assert repr(app), "does not raise recursion error"

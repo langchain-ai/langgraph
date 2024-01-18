@@ -19,7 +19,6 @@ from langchain_core.runnables.base import (
 from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langgraph.channels.base import BaseChannel
 from langgraph.constants import CONFIG_KEY_READ
 
 
@@ -34,7 +33,7 @@ class ChannelRead(RunnableLambda):
                 name=CONFIG_KEY_READ,
                 description=None,
                 default=None,
-                annotation=Callable[[BaseChannel], Any],
+                annotation=None,
             ),
         ]
 
