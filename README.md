@@ -44,7 +44,6 @@ Optionally, we can set up [LangSmith](https://docs.smith.langchain.com/) for bes
 ```shell
 export LANGCHAIN_TRACING_V2="true"
 export LANGCHAIN_API_KEY=ls__...
-export LANGCHAIN_ENDPOINT=https://api.langchain.plus
 ```
 
 ### Set up the tools
