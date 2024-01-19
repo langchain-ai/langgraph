@@ -19,13 +19,17 @@ class Checkpoint(TypedDict):
     versions_seen: defaultdict[str, defaultdict[str, int]]
 
 
+def _seen_dict():
+    return defaultdict(int)
+
+
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
         v=1,
         ts=datetime.now(timezone.utc).isoformat(),
         channel_values={},
         channel_versions=defaultdict(int),
-        versions_seen=defaultdict(lambda: defaultdict(int)),
+        versions_seen=defaultdict(_seen_dict),
     )
 
 
