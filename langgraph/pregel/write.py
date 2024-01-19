@@ -43,7 +43,7 @@ class ChannelWrite(RunnablePassthrough):
                 name=CONFIG_KEY_SEND,
                 description=None,
                 default=None,
-                annotation=TYPE_SEND,
+                annotation=None,
             ),
         ]
 

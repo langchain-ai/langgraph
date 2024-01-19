@@ -122,3 +122,4 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
                 ]
             ):
                 return BinaryOperatorAggregate(typ, meta[0])
+    return None

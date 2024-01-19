@@ -44,7 +44,6 @@ Optionally, we can set up [LangSmith](https://docs.smith.langchain.com/) for bes
 ```shell
 export LANGCHAIN_TRACING_V2="true"
 export LANGCHAIN_API_KEY=ls__...
-export LANGCHAIN_ENDPOINT=https://api.langchain.plus
 ```
 
 ### Set up the tools
@@ -426,41 +425,41 @@ All agent state is represented as a list of messages.
 This specifically uses OpenAI function calling.
 This is recommended agent executor for newer chat based models that support function calling.
 
-- [Getting Started Notebook](examples/chat_agent_executor_with_function_calling/base.ipynb): Walks through creating this type of executor from scratch
-- [High Level Entrypoint](examples/chat_agent_executor_with_function_calling/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
+- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb): Walks through creating this type of executor from scratch
+- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
 
 **Modifications**
 
 We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](examples/chat_agent_executor_with_function_calling/base.ipynb) so it is recommended you start with that first.
-- [Human-in-the-loop](examples/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb): How to add a human-in-the-loop component
-- [Force calling a tool first](examples/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb): How to always call a specific tool first
-- [Respond in a specific format](examples/chat_agent_executor_with_function_calling/respond-in-format.ipynb): How to force the agent to respond in a specific format
-- [Dynamically returning tool output directly](examples/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb): How to dynamically let the agent choose whether to return the result of a tool directly to the user
-- [Managing agent steps](examples/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
+- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb): How to add a human-in-the-loop component
+- [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb): How to always call a specific tool first
+- [Respond in a specific format](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/respond-in-format.ipynb): How to force the agent to respond in a specific format
+- [Dynamically returning tool output directly](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb): How to dynamically let the agent choose whether to return the result of a tool directly to the user
+- [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
 
 ### AgentExecutor
 
 This agent executor uses existing LangChain agents.
 
-- [Getting Started Notebook](examples/agent_executor/base.ipynb): Walks through creating this type of executor from scratch
-- [High Level Entrypoint](examples/agent_executor/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
+- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb): Walks through creating this type of executor from scratch
+- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
 
 **Modifications**
 
 We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](examples/agent_executor/base.ipynb) so it is recommended you start with that first.
-- [Human-in-the-loop](examples/agent_executor/human-in-the-loop.ipynb): How to add a human-in-the-loop component
-- [Force calling a tool first](examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
-- [Managing agent steps](examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
+- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/human-in-the-loop.ipynb): How to add a human-in-the-loop component
+- [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
+- [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
 
 ### Async
 
 If you are running LangGraph in async workflows, you may want to create the nodes to be async by default.
-In order for a walkthrough on how to do that, see [this documentation](examples/async.ipynb)
+In order for a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb)
 
 ### Streaming Tokens
 
 Sometimes language models take a while to respond and you may want to stream tokens to end users.
-For a guide on how to do this, see [this documentation](examples/streaming-tokens.ipynb)
+For a guide on how to do this, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb)
 
 ## Documentation
 
