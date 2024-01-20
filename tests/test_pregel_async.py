@@ -1,4 +1,5 @@
 import asyncio
+import json
 import operator
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -8,6 +9,7 @@ from typing import (
     AsyncIterator,
     Generator,
     Optional,
+    Self,
     TypedDict,
     Union,
 )
@@ -23,6 +25,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, Graph, StateGraph
+from langgraph.prebuilt.chat_agent_executor import create_function_calling_executor
 from langgraph.pregel import Channel, GraphRecursionError, Pregel
 from langgraph.pregel.reserved import ReservedChannels
 
@@ -834,8 +837,6 @@ async def test_conditional_graph() -> None:
 
 
 async def test_conditional_graph_state() -> None:
-    from copy import deepcopy
-
     from langchain.llms.fake import FakeStreamingListLLM
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
@@ -940,9 +941,7 @@ async def test_conditional_graph_state() -> None:
         ),
     }
 
-    assert [
-        deepcopy(c) async for c in app.astream({"input": "what is weather in sf"})
-    ] == [
+    assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
         {
             "agent": {
                 "agent_outcome": AgentAction(
@@ -1019,5 +1018,122 @@ async def test_conditional_graph_state() -> None:
                     return_values={"answer": "answer"}, log="finish:answer"
                 ),
             }
+        },
+    ]
+
+
+async def test_prebuilt_chat() -> None:
+    from langchain.chat_models.fake import FakeMessagesListChatModel
+    from langchain_community.tools import tool
+    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+
+    class FakeFuntionChatModel(FakeMessagesListChatModel):
+        def bind_functions(self, functions: list) -> Self:
+            return self
+
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    app = create_function_calling_executor(
+        FakeFuntionChatModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": json.dumps("query"),
+                        }
+                    },
+                ),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": json.dumps("another"),
+                        }
+                    },
+                ),
+                AIMessage(content="answer"),
+            ]
+        ),
+        tools,
+    )
+
+    assert await app.ainvoke([HumanMessage(content="what is weather in sf")]) == [
+        HumanMessage(content="what is weather in sf"),
+        AIMessage(
+            content="",
+            additional_kwargs={
+                "function_call": {"name": "search_api", "arguments": '"query"'}
+            },
+        ),
+        FunctionMessage(content="result for query", name="search_api"),
+        AIMessage(
+            content="",
+            additional_kwargs={
+                "function_call": {"name": "search_api", "arguments": '"another"'}
+            },
+        ),
+        FunctionMessage(content="result for another", name="search_api"),
+        AIMessage(content="answer"),
+    ]
+
+    assert [
+        c async for c in app.astream([HumanMessage(content="what is weather in sf")])
+    ] == [
+        {
+            "agent": [
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {"name": "search_api", "arguments": '"query"'}
+                    },
+                )
+            ]
+        },
+        {"action": [FunctionMessage(content="result for query", name="search_api")]},
+        {
+            "agent": [
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": '"another"',
+                        }
+                    },
+                )
+            ]
+        },
+        {"action": [FunctionMessage(content="result for another", name="search_api")]},
+        {"agent": [AIMessage(content="answer")]},
+        {
+            "__end__": [
+                HumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {"name": "search_api", "arguments": '"query"'}
+                    },
+                ),
+                FunctionMessage(content="result for query", name="search_api"),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": '"another"',
+                        }
+                    },
+                ),
+                FunctionMessage(content="result for another", name="search_api"),
+                AIMessage(content="answer"),
+            ]
         },
     ]
