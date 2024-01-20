@@ -451,6 +451,11 @@ We also have a lot of examples highlighting how to slightly modify the base chat
 - [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
 - [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
 
+
+### Multi-agent Examples
+
+- [Chat bot evaluation as multi-agent simulation](examples/multi_agent/agent-simulation-evaluation.ipynb): How to simulate a dialogue between a "virtual user" and your chat bot
+
 ### Async
 
 If you are running LangGraph in async workflows, you may want to create the nodes to be async by default.
