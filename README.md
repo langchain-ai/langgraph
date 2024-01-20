@@ -96,7 +96,6 @@ functions = [format_tool_to_openai_function(t) for t in tools]
 model = model.bind_functions(functions)
 ```
 
-
 ### Define the agent state
 
 The main type of graph in `langgraph` is the `StatefulGraph`.
@@ -293,7 +292,7 @@ Output from node '__end__':
 
 ### Streaming LLM Tokens
 
-You can also access the LLM tokens as they are produced by each node. 
+You can also access the LLM tokens as they are produced by each node.
 In this case only the "agent" node produces LLM tokens.
 In order for this to work properly, you must be using an LLM that supports streaming as well as have set it when constructing the LLM (e.g. `ChatOpenAI(model="gpt-3.5-turbo-1106", streaming=True)`)
 
@@ -417,10 +416,9 @@ Langchain Expression Language allows you to easily define chains (DAGs) but does
 
 ## Examples
 
-
 ### ChatAgentExecutor: with function calling
 
-This agent executor takes a list of messages as input and outputs a list of messages. 
+This agent executor takes a list of messages as input and outputs a list of messages.
 All agent state is represented as a list of messages.
 This specifically uses OpenAI function calling.
 This is recommended agent executor for newer chat based models that support function calling.
@@ -431,6 +429,7 @@ This is recommended agent executor for newer chat based models that support func
 **Modifications**
 
 We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](examples/chat_agent_executor_with_function_calling/base.ipynb) so it is recommended you start with that first.
+
 - [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb): How to add a human-in-the-loop component
 - [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb): How to always call a specific tool first
 - [Respond in a specific format](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/respond-in-format.ipynb): How to force the agent to respond in a specific format
@@ -447,12 +446,12 @@ This agent executor uses existing LangChain agents.
 **Modifications**
 
 We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](examples/agent_executor/base.ipynb) so it is recommended you start with that first.
+
 - [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/human-in-the-loop.ipynb): How to add a human-in-the-loop component
 - [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
 - [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
 
-
-### Advanced + Multi-agent Examples
+### Multi-agent Examples
 
 - [Multi-agent collaboration](examples/multi_agent/multi-agent-collaboration.ipynb): how to create two agents that work together to accomplish a task
 - [Multi-agent with supervisor](examples/multi_agent/agent_supervisor.ipynb): how to orchestrate individual agents by using an LLM as a "supervisor" to distribute work
@@ -484,7 +483,6 @@ from langgraph.graph import StateGraph
 This class is responsible for constructing the graph.
 It exposes an interface inspired by [NetworkX](https://networkx.org/documentation/latest/).
 This graph is parameterized by a state object that it passes around to each node.
-
 
 #### `__init__`
 
@@ -640,7 +638,6 @@ It can be used in two places:
 
 - As the `end_key` in `add_edge`
 - As a value in `conditional_edge_mapping` as passed to `add_conditional_edges`
-
 
 ## Prebuilt Examples
 
