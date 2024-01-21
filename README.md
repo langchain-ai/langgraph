@@ -453,10 +453,15 @@ We also have a lot of examples highlighting how to slightly modify the base chat
 
 ### Multi-agent Examples
 
-- [Multi-agent collaboration](examples/multi_agent/multi-agent-collaboration.ipynb): how to create two agents that work together to accomplish a task
-- [Multi-agent with supervisor](examples/multi_agent/agent_supervisor.ipynb): how to orchestrate individual agents by using an LLM as a "supervisor" to distribute work
-- [Hierarchical agent teams](examples/multi_agent/hierarchical_agent_teams.ipynb): how to orchestrate "teams" of agents as nested graphs that can collaborate to solve a problem
-- [Chat bot evaluation as multi-agent simulation](examples/multi_agent/agent-simulation-evaluation.ipynb): How to simulate a dialogue between a "virtual user" and your chat bot
+- [Multi-agent collaboration](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/multi-agent-collaboration.ipynb): how to create two agents that work together to accomplish a task
+- [Multi-agent with supervisor](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/agent_supervisor.ipynb): how to orchestrate individual agents by using an LLM as a "supervisor" to distribute work
+- [Hierarchical agent teams](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/hierarchical_agent_teams.ipynb): how to orchestrate "teams" of agents as nested graphs that can collaborate to solve a problem
+
+### Chatbot Evaluation via Simulation
+
+It can often be tough to evaluation chat bots in multi-turn situations. One way to do this is with simulations.
+
+- [Chat bot evaluation as multi-agent simulation](https://github.com/langchain-ai/langgraph/blob/main/examples/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): How to simulate a dialogue between a "virtual user" and your chat bot
 
 ### Async
 
