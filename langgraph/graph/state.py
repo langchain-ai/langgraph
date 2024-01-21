@@ -3,7 +3,7 @@ from functools import partial
 from inspect import signature
 from typing import Any, Optional, Type
 
-from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -32,6 +32,17 @@ class StateGraph(Graph):
             raise ValueError("Cannot use channel names as node names")
 
         state_keys = list(self.channels)
+        state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
+        update_state = (
+            _update_state_dict
+            if isinstance(state_keys_read, list)
+            else _update_state_root
+        )
+        coerce_state = (
+            partial(_coerce_state, self.schema)
+            if isinstance(state_keys_read, list)
+            else RunnablePassthrough()
+        )
 
         outgoing_edges = defaultdict(list)
         for start, end in self.edges:
@@ -40,9 +51,9 @@ class StateGraph(Graph):
         nodes = {
             key: (
                 Channel.subscribe_to(f"{key}:inbox")
-                | partial(_coerce_state, self.schema)  # coerce/validate using schema
+                | coerce_state  # coerce/validate using schema
                 | node
-                | _update_state
+                | update_state
                 | Channel.write_to(key)
             )
             for key, node in self.nodes.items()
@@ -54,7 +65,7 @@ class StateGraph(Graph):
             if outgoing or key in self.branches:
                 nodes[edges_key] = Channel.subscribe_to(
                     key, tags=["langsmith:hidden"]
-                ) | ChannelRead(state_keys)
+                ) | ChannelRead(state_keys_read)
             if outgoing:
                 nodes[edges_key] |= Channel.write_to(*[dest for dest in outgoing])
             if key in self.branches:
@@ -65,12 +76,12 @@ class StateGraph(Graph):
 
         nodes[START] = (
             Channel.subscribe_to(f"{START}:inbox", tags=["langsmith:hidden"])
-            | _update_state
+            | update_state
             | Channel.write_to(START)
         )
         nodes[f"{START}:edges"] = (
             Channel.subscribe_to(START, tags=["langsmith:hidden"])
-            | ChannelRead(state_keys)
+            | ChannelRead(state_keys_read)
             | Channel.write_to(f"{self.entry_point}:inbox")
         )
 
@@ -88,24 +99,35 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _update_state(input: dict[str, Any], config: RunnableConfig) -> dict[str, Any]:
+def _update_state_dict(input: dict[str, Any], config: RunnableConfig) -> dict[str, Any]:
     if input is not None:
         ChannelWrite.do_write(config, **input)
     return input
 
 
+def _update_state_root(input: Any, config: RunnableConfig) -> dict[str, Any]:
+    if input is not None:
+        ChannelWrite.do_write(config, __root__=input)
+    return input
+
+
 def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
     if not hasattr(schema, "__annotations__"):
-        raise ValueError("Schema must be a class with type annotations")
+        return {
+            "__root__": _get_channel(schema),
+        }
 
     channels: dict[str, BaseChannel] = {}
     for name, typ in schema.__annotations__.items():
-        if channel := _is_field_binop(typ):
-            channels[name] = channel
-        else:
-            channels[name] = LastValue(typ)
+        channels[name] = _get_channel(typ)
 
     return channels
+
+
+def _get_channel(annotation: Any) -> Optional[BaseChannel]:
+    if channel := _is_field_binop(annotation):
+        return channel
+    return LastValue(annotation)
 
 
 def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
