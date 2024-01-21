@@ -1065,75 +1065,106 @@ async def test_prebuilt_chat() -> None:
         tools,
     )
 
-    assert await app.ainvoke([HumanMessage(content="what is weather in sf")]) == [
-        HumanMessage(content="what is weather in sf"),
-        AIMessage(
-            content="",
-            additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"query"'}
-            },
-        ),
-        FunctionMessage(content="result for query", name="search_api"),
-        AIMessage(
-            content="",
-            additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"another"'}
-            },
-        ),
-        FunctionMessage(content="result for another", name="search_api"),
-        AIMessage(content="answer"),
-    ]
+    assert await app.ainvoke(
+        {"messages": [HumanMessage(content="what is weather in sf")]}
+    ) == {
+        "messages": [
+            HumanMessage(content="what is weather in sf"),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+            ),
+            FunctionMessage(content="result for query", name="search_api"),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"another"'}
+                },
+            ),
+            FunctionMessage(content="result for another", name="search_api"),
+            AIMessage(content="answer"),
+        ]
+    }
 
     assert [
-        c async for c in app.astream([HumanMessage(content="what is weather in sf")])
+        c
+        async for c in app.astream(
+            {"messages": [HumanMessage(content="what is weather in sf")]}
+        )
     ] == [
         {
-            "agent": [
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {"name": "search_api", "arguments": '"query"'}
-                    },
-                )
-            ]
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "function_call": {
+                                "name": "search_api",
+                                "arguments": '"query"',
+                            }
+                        },
+                    )
+                ]
+            }
         },
-        {"action": [FunctionMessage(content="result for query", name="search_api")]},
         {
-            "agent": [
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"another"',
-                        }
-                    },
-                )
-            ]
+            "action": {
+                "messages": [
+                    FunctionMessage(content="result for query", name="search_api")
+                ]
+            }
         },
-        {"action": [FunctionMessage(content="result for another", name="search_api")]},
-        {"agent": [AIMessage(content="answer")]},
         {
-            "__end__": [
-                HumanMessage(content="what is weather in sf"),
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {"name": "search_api", "arguments": '"query"'}
-                    },
-                ),
-                FunctionMessage(content="result for query", name="search_api"),
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"another"',
-                        }
-                    },
-                ),
-                FunctionMessage(content="result for another", name="search_api"),
-                AIMessage(content="answer"),
-            ]
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "function_call": {
+                                "name": "search_api",
+                                "arguments": '"another"',
+                            }
+                        },
+                    )
+                ]
+            }
+        },
+        {
+            "action": {
+                "messages": [
+                    FunctionMessage(content="result for another", name="search_api")
+                ]
+            }
+        },
+        {"agent": {"messages": [AIMessage(content="answer")]}},
+        {
+            "__end__": {
+                "messages": [
+                    HumanMessage(content="what is weather in sf"),
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "function_call": {
+                                "name": "search_api",
+                                "arguments": '"query"',
+                            }
+                        },
+                    ),
+                    FunctionMessage(content="result for query", name="search_api"),
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "function_call": {
+                                "name": "search_api",
+                                "arguments": '"another"',
+                            }
+                        },
+                    ),
+                    FunctionMessage(content="result for another", name="search_api"),
+                    AIMessage(content="answer"),
+                ]
+            }
         },
     ]
