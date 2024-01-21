@@ -4,7 +4,7 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Annotated, Generator, Optional, Self, TypedDict, Union
+from typing import Annotated, Generator, Optional, TypedDict, Union
 
 import pytest
 from langchain_core.runnables import RunnablePassthrough
@@ -983,7 +983,7 @@ def test_prebuilt_chat() -> None:
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list) -> Self:
+        def bind_functions(self, functions: list):
             return self
 
     @tool()
@@ -1129,7 +1129,7 @@ def test_message_graph() -> None:
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list) -> Self:
+        def bind_functions(self, functions: list):
             return self
 
     @tool()

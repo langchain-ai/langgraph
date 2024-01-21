@@ -9,7 +9,6 @@ from typing import (
     AsyncIterator,
     Generator,
     Optional,
-    Self,
     TypedDict,
     Union,
 )
@@ -1030,7 +1029,7 @@ async def test_prebuilt_chat() -> None:
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list) -> Self:
+        def bind_functions(self, functions: list):
             return self
 
     @tool()
@@ -1179,7 +1178,7 @@ async def test_message_graph() -> None:
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list) -> Self:
+        def bind_functions(self, functions: list):
             return self
 
     @tool()
