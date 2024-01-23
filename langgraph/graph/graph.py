@@ -17,11 +17,14 @@ END = "__end__"
 
 class Branch(NamedTuple):
     condition: Callable[..., str]
-    ends: dict[str, str]
+    ends: Optional[dict[str, str]]
 
     def runnable(self, input: Any) -> Runnable:
         result = self.condition(input)
-        destination = self.ends[result]
+        if self.ends:
+            destination = self.ends[result]
+        else:
+            destination = result
         return Channel.write_to(f"{destination}:inbox" if destination != END else END)
 
 
@@ -59,15 +62,21 @@ class Graph:
         self,
         start_key: str,
         condition: Callable[..., str],
-        conditional_edge_mapping: Dict[str, str],
+        conditional_edge_mapping: Optional[Dict[str, str]] = None,
     ) -> None:
         if start_key not in self.nodes:
             raise ValueError(f"Need to add_node `{start_key}` first")
         if iscoroutinefunction(condition):
             raise ValueError("Condition cannot be a coroutine function")
-        for destination in conditional_edge_mapping.values():
-            if destination not in self.nodes and destination != END:
-                raise ValueError(f"Need to add_node `{destination}` first")
+        if conditional_edge_mapping and set(
+            conditional_edge_mapping.values()
+        ).difference(self.nodes):
+            raise ValueError(
+                f"Missing nodes which are in conditional edge mapping. Mapping "
+                f"contains possible destinations: "
+                f"{list(conditional_edge_mapping.values())}. Possible nodes are "
+                f"{list(self.nodes.keys())}."
+            )
 
         self.branches[start_key].append(Branch(condition, conditional_edge_mapping))
 
