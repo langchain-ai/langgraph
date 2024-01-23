@@ -4,6 +4,7 @@ from inspect import signature
 from typing import Any, Optional, Type
 
 from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
+from langchain_core.runnables.base import RunnableLike
 
 from langgraph.channels.base import BaseChannel, InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -25,11 +26,16 @@ class StateGraph(Graph):
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
 
+    def add_node(self, key: str, action: RunnableLike) -> None:
+        if key in self.channels:
+            raise ValueError(
+                f"'{key}' is already being used as a state attribute "
+                "(a.k.a. a channel), cannot also be used as a node name."
+            )
+        return super().add_node(key, action)
+
     def compile(self, checkpointer: Optional[BaseCheckpointSaver] = None) -> Pregel:
         self.validate()
-
-        if any(key in self.nodes for key in self.channels):
-            raise ValueError("Cannot use channel names as node names")
 
         state_keys = list(self.channels)
         state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
