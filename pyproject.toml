@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph"
-version = "0.0.16"
+version = "0.0.17"
 description = "langgraph"
 authors = []
 license = "LangGraph License"
