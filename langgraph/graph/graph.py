@@ -90,22 +90,29 @@ class Graph:
 
     def validate(self) -> None:
         all_starts = {src for src, _ in self.edges} | {src for src in self.branches}
-        all_ends = (
-            {end for _, end in self.edges}
-            | {
-                end
-                for branch_list in self.branches.values()
-                for branch in branch_list
-                for end in branch.ends.values()
-            }
-            | {self.entry_point}
-        )
-
         for node in self.nodes:
-            if node not in all_ends:
-                raise ValueError(f"Node `{node}` is not reachable")
             if node not in all_starts:
                 raise ValueError(f"Node `{node}` is a dead-end")
+
+        if all(
+            branch.ends is not None
+            for branch_list in self.branches.values()
+            for branch in branch_list
+        ):
+            all_ends = (
+                {end for _, end in self.edges}
+                | {
+                    end
+                    for branch_list in self.branches.values()
+                    for branch in branch_list
+                    for end in branch.ends.values()
+                }
+                | {self.entry_point}
+            )
+
+            for node in self.nodes:
+                if node not in all_ends:
+                    raise ValueError(f"Node `{node}` is not reachable")
 
     def compile(self, checkpointer: Optional[BaseCheckpointSaver] = None) -> Pregel:
         self.validate()
