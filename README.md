@@ -294,7 +294,7 @@ Output from node '__end__':
 
 You can also access the LLM tokens as they are produced by each node.
 In this case only the "agent" node produces LLM tokens.
-In order for this to work properly, you must be using an LLM that supports streaming as well as have set it when constructing the LLM (e.g. `ChatOpenAI(model="gpt-3.5-turbo-1106", streaming=True)`)
+In order for this to work properly, you must be using an LLM that supports streaming as well as have set it when constructing the LLM (e.g. `ChatOpenAI(model="gpt-3.5-turbo-1106", streaming=True)`) and you must define all of your node functions as async functions. See the [streaming tokens](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb) example to see how to do this:
 
 ```python
 inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
