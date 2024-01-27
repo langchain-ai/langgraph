@@ -10,9 +10,6 @@ env:
 jobs:
   build:
     if: github.ref == 'refs/heads/master'
-    defaults:
-      run:
-        working-directory: ./langgraph
     runs-on: ubuntu-latest
 
     outputs:
@@ -47,7 +44,7 @@ jobs:
         uses: actions/upload-artifact@v3
         with:
           name: dist
-          path: ./langgraph/dist/
+          path: ./dist/
 
       - name: Check Version
         id: check-version
@@ -68,9 +65,6 @@ jobs:
       - build
       - test-pypi-publish
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./langgraph
     steps:
       - uses: actions/checkout@v4
 
@@ -154,9 +148,6 @@ jobs:
       # Trusted publishing has to also be configured on PyPI for each package:
       # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
       id-token: write
-    defaults:
-      run:
-        working-directory: ./langgraph
 
     steps:
       - uses: actions/checkout@v4
@@ -171,12 +162,12 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: dist
-          path: ./langgraph/dist/
+          path: ./dist/
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: ./langgraph/dist/
+          packages-dir: ./dist/
           verbose: true
           print-hash: true
 
@@ -191,9 +182,6 @@ jobs:
       # This permission is needed by `ncipollo/release-action` to
       # create the GitHub release.
       contents: write
-    defaults:
-      run:
-        working-directory: ./langgraph
 
     steps:
       - uses: actions/checkout@v4
@@ -208,7 +196,7 @@ jobs:
       - uses: actions/download-artifact@v3
         with:
           name: dist
-          path: ./langgraph/dist/
+          path: ./dist/
 
       - name: Create Release
         uses: ncipollo/release-action@v1

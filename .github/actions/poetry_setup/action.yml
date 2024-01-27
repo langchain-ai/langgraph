@@ -19,10 +19,6 @@ inputs:
     description: Cache key to use for manual handling of caching
     required: true
 
-  working-directory:
-    description: Directory whose poetry.lock file should be cached
-    required: true
-
 runs:
   using: composite
   steps:
@@ -82,12 +78,11 @@ runs:
       uses: actions/cache@v3
       env:
         SEGMENT_DOWNLOAD_TIMEOUT_MIN: "4"
-        WORKDIR: ${{ inputs.working-directory == '' && '.' || inputs.working-directory }}
       with:
         path: |
           ~/.cache/pip
           ~/.cache/pypoetry/virtualenvs
           ~/.cache/pypoetry/cache
           ~/.cache/pypoetry/artifacts
-          ${{ env.WORKDIR }}/.venv
-        key: py-deps-${{ runner.os }}-${{ runner.arch }}-py-${{ inputs.python-version }}-poetry-${{ inputs.poetry-version }}-${{ inputs.cache-key }}-${{ hashFiles(format('{0}/**/poetry.lock', env.WORKDIR)) }}
+          ./.venv
+        key: py-deps-${{ runner.os }}-${{ runner.arch }}-py-${{ inputs.python-version }}-poetry-${{ inputs.poetry-version }}-${{ inputs.cache-key }}-${{ hashFiles('./poetry.lock') }}

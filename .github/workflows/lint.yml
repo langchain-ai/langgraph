@@ -14,9 +14,6 @@ env:
 jobs:
   build:
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./langgraph
     strategy:
       matrix:
         # Only lint on the min and max supported Python versions.

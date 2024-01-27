@@ -10,9 +10,6 @@ env:
 
 jobs:
   build:
-    defaults:
-      run:
-        working-directory: ./langgraph
     runs-on: ubuntu-latest
     strategy:
       matrix:

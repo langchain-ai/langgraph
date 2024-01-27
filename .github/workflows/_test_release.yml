@@ -10,9 +10,6 @@ env:
 jobs:
   build:
     if: github.ref == 'refs/heads/master'
-    defaults:
-      run:
-        working-directory: ./langgraph
     runs-on: ubuntu-latest
 
     outputs:
