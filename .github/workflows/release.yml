@@ -68,6 +68,9 @@ jobs:
       - build
       - test-pypi-publish
     runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: ./langgraph
     steps:
       - uses: actions/checkout@v4
 
@@ -122,7 +125,7 @@ jobs:
           poetry run python -c "import $IMPORT_NAME; print(dir($IMPORT_NAME))"
 
       - name: Import test dependencies
-        run: poetry install --with test,test_integration
+        run: poetry install --with test
 
       # Overwrite the local version of the package with the test PyPI version.
       - name: Import published package (again)
@@ -151,7 +154,6 @@ jobs:
       # Trusted publishing has to also be configured on PyPI for each package:
       # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
       id-token: write
-
     defaults:
       run:
         working-directory: ./langgraph
@@ -189,7 +191,6 @@ jobs:
       # This permission is needed by `ncipollo/release-action` to
       # create the GitHub release.
       contents: write
-
     defaults:
       run:
         working-directory: ./langgraph
