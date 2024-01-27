@@ -70,7 +70,7 @@ class Graph:
             raise ValueError("Condition cannot be a coroutine function")
         if conditional_edge_mapping and set(
             conditional_edge_mapping.values()
-        ).difference(self.nodes):
+        ).difference([END]).difference(self.nodes):
             raise ValueError(
                 f"Missing nodes which are in conditional edge mapping. Mapping "
                 f"contains possible destinations: "
