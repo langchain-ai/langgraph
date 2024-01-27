@@ -1,0 +1,220 @@
+name: release
+run-name: Release by @${{ github.actor }}
+on:
+  workflow_dispatch
+
+env:
+  PYTHON_VERSION: "3.10"
+  POETRY_VERSION: "1.7.1"
+
+jobs:
+  build:
+    if: github.ref == 'refs/heads/master'
+    defaults:
+      run:
+        working-directory: ./langgraph
+    runs-on: ubuntu-latest
+
+    outputs:
+      pkg-name: ${{ steps.check-version.outputs.pkg-name }}
+      version: ${{ steps.check-version.outputs.version }}
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: release
+
+      # We want to keep this build stage *separate* from the release stage,
+      # so that there's no sharing of permissions between them.
+      # The release stage has trusted publishing and GitHub repo contents write access,
+      # and we want to keep the scope of that access limited just to the release job.
+      # Otherwise, a malicious `build` step (e.g. via a compromised dependency)
+      # could get access to our GitHub or PyPI credentials.
+      #
+      # Per the trusted publishing GitHub Action:
+      # > It is strongly advised to separate jobs for building [...]
+      # > from the publish job.
+      # https://github.com/pypa/gh-action-pypi-publish#non-goals
+      - name: Build project for distribution
+        run: poetry build
+
+      - name: Upload build
+        uses: actions/upload-artifact@v3
+        with:
+          name: dist
+          path: ./langgraph/dist/
+
+      - name: Check Version
+        id: check-version
+        shell: bash
+        run: |
+          echo pkg-name="$(poetry version | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
+          echo version="$(poetry version --short)" >> $GITHUB_OUTPUT
+
+  test-pypi-publish:
+    needs:
+      - build
+    uses:
+      ./.github/workflows/_test_release.yml
+    secrets: inherit
+
+  pre-release-checks:
+    needs:
+      - build
+      - test-pypi-publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      # We explicitly *don't* set up caching here. This ensures our tests are
+      # maximally sensitive to catching breakage.
+      #
+      # For example, here's a way that caching can cause a falsely-passing test:
+      # - Make the langchain package manifest no longer list a dependency package
+      #   as a requirement. This means it won't be installed by `pip install`,
+      #   and attempting to use it would cause a crash.
+      # - That dependency used to be required, so it may have been cached.
+      #   When restoring the venv packages from cache, that dependency gets included.
+      # - Tests pass, because the dependency is present even though it wasn't specified.
+      # - The package is published, and it breaks on the missing dependency when
+      #   used in the real world.
+
+      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+
+      - name: Import published package
+        shell: bash
+        env:
+          PKG_NAME: ${{ needs.build.outputs.pkg-name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        # Here we use:
+        # - The default regular PyPI index as the *primary* index, meaning 
+        #   that it takes priority (https://pypi.org/simple)
+        # - The test PyPI index as an extra index, so that any dependencies that
+        #   are not found on test PyPI can be resolved and installed anyway.
+        #   (https://test.pypi.org/simple). This will include the PKG_NAME==VERSION
+        #   package because VERSION will not have been uploaded to regular PyPI yet.
+        # - attempt install again after 5 seconds if it fails because there is
+        #   sometimes a delay in availability on test pypi
+        run: |
+          poetry run pip install \
+            --extra-index-url https://test.pypi.org/simple/ \
+            "$PKG_NAME==$VERSION" || \
+          ( \
+            sleep 5 && \
+            poetry run pip install \
+              --extra-index-url https://test.pypi.org/simple/ \
+              "$PKG_NAME==$VERSION" \
+          )
+
+          # Replace all dashes in the package name with underscores,
+          # since that's how Python imports packages with dashes in the name.
+          IMPORT_NAME="$(echo "$PKG_NAME" | sed s/-/_/g)"
+
+          poetry run python -c "import $IMPORT_NAME; print(dir($IMPORT_NAME))"
+
+      - name: Import test dependencies
+        run: poetry install --with test,test_integration
+
+      # Overwrite the local version of the package with the test PyPI version.
+      - name: Import published package (again)
+        shell: bash
+        env:
+          PKG_NAME: ${{ needs.build.outputs.pkg-name }}
+          VERSION: ${{ needs.build.outputs.version }}
+        run: |
+          poetry run pip install \
+            --extra-index-url https://test.pypi.org/simple/ \
+            "$PKG_NAME==$VERSION"
+
+      - name: Run unit tests
+        run: make tests
+
+  publish:
+    needs:
+      - build
+      - test-pypi-publish
+      - pre-release-checks
+    runs-on: ubuntu-latest
+    permissions:
+      # This permission is used for trusted publishing:
+      # https://blog.pypi.org/posts/2023-04-20-introducing-trusted-publishers/
+      #
+      # Trusted publishing has to also be configured on PyPI for each package:
+      # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
+      id-token: write
+
+    defaults:
+      run:
+        working-directory: ./langgraph
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: release
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: ./langgraph/dist/
+
+      - name: Publish package distributions to PyPI
+        uses: pypa/gh-action-pypi-publish@release/v1
+        with:
+          packages-dir: ./langgraph/dist/
+          verbose: true
+          print-hash: true
+
+  mark-release:
+    needs:
+      - build
+      - test-pypi-publish
+      - pre-release-checks
+      - publish
+    runs-on: ubuntu-latest
+    permissions:
+      # This permission is needed by `ncipollo/release-action` to
+      # create the GitHub release.
+      contents: write
+
+    defaults:
+      run:
+        working-directory: ./langgraph
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: release
+
+      - uses: actions/download-artifact@v3
+        with:
+          name: dist
+          path: ./langgraph/dist/
+
+      - name: Create Release
+        uses: ncipollo/release-action@v1
+        with:
+          artifacts: "dist/*"
+          token: ${{ secrets.GITHUB_TOKEN }}
+          draft: false
+          generateReleaseNotes: true
+          tag: v${{ needs.build.outputs.version }}
+          commit: master
