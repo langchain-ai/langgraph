@@ -2,10 +2,10 @@ import json
 import operator
 from typing import Annotated, Sequence, TypedDict
 
-from langchain.tools.render import format_tool_to_openai_function
 from langchain_core.agents import AgentAction
 from langchain_core.messages import BaseMessage, FunctionMessage
 from langchain_core.runnables import RunnableLambda
+from langchain_core.utils.function_calling import convert_to_openai_function
 
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
@@ -18,9 +18,7 @@ def create_function_calling_executor(model, tools):
     else:
         tool_executor = ToolExecutor(tools)
         tool_classes = tools
-    model = model.bind_functions(
-        [format_tool_to_openai_function(t) for t in tool_classes]
-    )
+    model = model.bind(functions=[convert_to_openai_function(t) for t in tool_classes])
 
     # Define the function that determines whether to continue or not
     def should_continue(state):
