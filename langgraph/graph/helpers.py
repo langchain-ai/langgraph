@@ -52,14 +52,14 @@ class StateGraphDrawer:
 
     def add_node(
         self,
-        graph: StateGraph,
+        graphviz_graph,
         node: str,
         label: str = None
     ):
         if not label:
             label = node 
 
-        graph.add_node(
+        graphviz_graph.add_node(
             node,
             label=self.get_node_label(label),
             style='filled',
@@ -70,14 +70,14 @@ class StateGraphDrawer:
 
     def add_conditional_node(
         self,
-        graph: StateGraph,
+        graphviz_graph,
         node: str,
         label: str = None
     ):
         if not label:
             label = node
 
-        graph.add_node(
+        graphviz_graph.add_node(
             node,
             label=self.get_conditional_edge_label(label),
             shape='rect',
@@ -90,12 +90,12 @@ class StateGraphDrawer:
 
     def add_edge(
         self,
-        graph: StateGraph,
+        graphviz_graph,
         source: str,
         target: str,
         label: str = None
     ):
-        graph.add_edge(
+        graphviz_graph.add_edge(
             source,
             target,
             label=self.get_edge_label(label) if label else '',
