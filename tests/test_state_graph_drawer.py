@@ -32,6 +32,12 @@ def drawer_with_label_overrides() -> StateGraphDrawer:
     )
 
 @pytest.fixture
+def drawer_with_custom_font() -> StateGraphDrawer:
+    return StateGraphDrawer(
+        fontname="mono",
+    )
+
+@pytest.fixture
 def state_graph() -> StateGraph:
     def should_continue(self, state): pass
     def should_continue2(self, state): pass
@@ -103,12 +109,43 @@ def test_state_graph_drawer(
     os.remove('graph.png')
 
 def test_state_graph_drawer_with_label_overrides(
+    drawer: StateGraphDrawer,
     drawer_with_label_overrides: StateGraphDrawer,
     state_graph: StateGraph
 ):
-    drawer_with_label_overrides.draw(state_graph, output_file_path='graph.png')
+    drawer.draw(state_graph, output_file_path='graph.png')
+    drawer_with_label_overrides.draw(state_graph, output_file_path='graph2.png')
 
-    # Check file has been created and is not empty
+    # Check files have been created and are not empty
     assert os.path.exists('graph.png')
     assert os.path.getsize('graph.png') > 0
-    # s.remove('graph.png')
+    assert os.path.exists('graph2.png')
+    assert os.path.getsize('graph2.png') > 0
+
+    # Check files are different
+    assert open('graph.png', 'rb').read() != open('graph2.png', 'rb').read()
+
+    # Clean up
+    os.remove('graph.png')
+    os.remove('graph2.png')
+    
+def test_state_graph_drawer_with_custom_font(
+    drawer: StateGraphDrawer,
+    drawer_with_custom_font: StateGraphDrawer,
+    state_graph: StateGraph
+):
+    drawer.draw(state_graph, output_file_path='graph.png')
+    drawer_with_custom_font.draw(state_graph, output_file_path='graph2.png')
+
+    # Check files have been created and are not empty
+    assert os.path.exists('graph.png')
+    assert os.path.getsize('graph.png') > 0
+    assert os.path.exists('graph2.png')
+    assert os.path.getsize('graph2.png') > 0
+
+    # Check files are different
+    assert open('graph.png', 'rb').read() != open('graph2.png', 'rb').read()
+
+    # Clean up
+    os.remove('graph.png')
+    os.remove('graph2.png')

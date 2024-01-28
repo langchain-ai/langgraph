@@ -25,6 +25,7 @@ syrupy = "^4.0.2"
 httpx = "^0.26.0"
 pytest-watcher = "^0.3.4"
 langchain = "^0.1.0"
+pygraphviz = "1.11"
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.4"
