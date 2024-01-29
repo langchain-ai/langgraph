@@ -11,6 +11,7 @@ from langgraph.graph.helpers import StateGraphDrawer
 def drawer() -> StateGraphDrawer:
     return StateGraphDrawer()
 
+
 @pytest.fixture
 def drawer_with_label_overrides() -> StateGraphDrawer:
     return StateGraphDrawer(
@@ -18,18 +19,16 @@ def drawer_with_label_overrides() -> StateGraphDrawer:
             "nodes": {
                 "node1": "Start Node",
                 "node2": "CustomLabel2",
-                "__end__": "End Node"
+                "__end__": "End Node",
             },
             "conditional_edges": {
                 "should_continue": "ConditionLabel",
                 "should_continue2": "ConditionLabel2",
             },
-            "edges": {
-                "continue": "ContinueLabel",
-                "end": "EndLabel"
-            }
+            "edges": {"continue": "ContinueLabel", "end": "EndLabel"},
         }
     )
+
 
 @pytest.fixture
 def drawer_with_custom_font() -> StateGraphDrawer:
@@ -37,11 +36,17 @@ def drawer_with_custom_font() -> StateGraphDrawer:
         fontname="mono",
     )
 
+
 @pytest.fixture
 def state_graph() -> StateGraph:
-    def should_continue(self, state): pass
-    def should_continue2(self, state): pass
-    def mock_call_function(self, state): pass
+    def should_continue(self, state):
+        pass
+
+    def should_continue2(self, state):
+        pass
+
+    def mock_call_function(self, state):
+        pass
 
     graph = StateGraph(BaseModel)
 
@@ -52,9 +57,13 @@ def state_graph() -> StateGraph:
     graph.add_node("node5", mock_call_function)
 
     graph.add_edge("node1", "node2")
-    graph.add_conditional_edges("node2", should_continue, {"go_to_3": "node3", "go_to_4": "node4"})
+    graph.add_conditional_edges(
+        "node2", should_continue, {"go_to_3": "node3", "go_to_4": "node4"}
+    )
     graph.add_edge("node3", "node4")
-    graph.add_conditional_edges("node4", should_continue2, {"shortcut": END, "go_to_5": "node5"})
+    graph.add_conditional_edges(
+        "node4", should_continue2, {"shortcut": END, "go_to_5": "node5"}
+    )
     graph.add_edge("node5", END)
 
     graph.set_entry_point("node1")
@@ -62,14 +71,16 @@ def state_graph() -> StateGraph:
 
     return graph
 
+
 def test_static_methods(drawer: StateGraphDrawer):
     node_label = drawer.get_node_label("node1")
     condition_label = drawer.get_conditional_edge_label("should_continue")
     edge_label = drawer.get_edge_label("continue")
-    
+
     assert node_label == "<<B>node1</B>>"
     assert condition_label == "<<I>should_continue</I>>"
     assert edge_label == "<<U>continue</U>>"
+
 
 def test_labels_override():
     drawer = StateGraphDrawer(
@@ -77,16 +88,13 @@ def test_labels_override():
             "nodes": {
                 "node1": "Start Node",
                 "node2": "CustomLabel2",
-                "__end__": "End Node"
+                "__end__": "End Node",
             },
             "conditional_edges": {
                 "should_continue": "ConditionLabel",
                 "should_continue2": "ConditionLabel2",
             },
-            "edges": {
-                "continue": "ContinueLabel",
-                "end": "EndLabel"
-            }
+            "edges": {"continue": "ContinueLabel", "end": "EndLabel"},
         }
     )
     node_label = drawer.get_node_label("node1")
@@ -97,55 +105,55 @@ def test_labels_override():
     assert condition_label == "<<I>ConditionLabel</I>>"
     assert edge_label == "<<U>ContinueLabel</U>>"
 
-def test_state_graph_drawer(
-    drawer: StateGraphDrawer,
-    state_graph: StateGraph
-):
-    drawer.draw(state_graph, output_file_path='graph.png')
+
+def test_state_graph_drawer(drawer: StateGraphDrawer, state_graph: StateGraph):
+    drawer.draw(state_graph, output_file_path="graph.png")
 
     # Check file has been created and is not empty
-    assert os.path.exists('graph.png')
-    assert os.path.getsize('graph.png') > 0
-    os.remove('graph.png')
+    assert os.path.exists("graph.png")
+    assert os.path.getsize("graph.png") > 0
+    os.remove("graph.png")
+
 
 def test_state_graph_drawer_with_label_overrides(
     drawer: StateGraphDrawer,
     drawer_with_label_overrides: StateGraphDrawer,
-    state_graph: StateGraph
+    state_graph: StateGraph,
 ):
-    drawer.draw(state_graph, output_file_path='graph.png')
-    drawer_with_label_overrides.draw(state_graph, output_file_path='graph2.png')
+    drawer.draw(state_graph, output_file_path="graph.png")
+    drawer_with_label_overrides.draw(state_graph, output_file_path="graph2.png")
 
     # Check files have been created and are not empty
-    assert os.path.exists('graph.png')
-    assert os.path.getsize('graph.png') > 0
-    assert os.path.exists('graph2.png')
-    assert os.path.getsize('graph2.png') > 0
+    assert os.path.exists("graph.png")
+    assert os.path.getsize("graph.png") > 0
+    assert os.path.exists("graph2.png")
+    assert os.path.getsize("graph2.png") > 0
 
     # Check files are different
-    assert open('graph.png', 'rb').read() != open('graph2.png', 'rb').read()
+    assert open("graph.png", "rb").read() != open("graph2.png", "rb").read()
 
     # Clean up
-    os.remove('graph.png')
-    os.remove('graph2.png')
-    
+    os.remove("graph.png")
+    os.remove("graph2.png")
+
+
 def test_state_graph_drawer_with_custom_font(
     drawer: StateGraphDrawer,
     drawer_with_custom_font: StateGraphDrawer,
-    state_graph: StateGraph
+    state_graph: StateGraph,
 ):
-    drawer.draw(state_graph, output_file_path='graph.png')
-    drawer_with_custom_font.draw(state_graph, output_file_path='graph2.png')
+    drawer.draw(state_graph, output_file_path="graph.png")
+    drawer_with_custom_font.draw(state_graph, output_file_path="graph2.png")
 
     # Check files have been created and are not empty
-    assert os.path.exists('graph.png')
-    assert os.path.getsize('graph.png') > 0
-    assert os.path.exists('graph2.png')
-    assert os.path.getsize('graph2.png') > 0
+    assert os.path.exists("graph.png")
+    assert os.path.getsize("graph.png") > 0
+    assert os.path.exists("graph2.png")
+    assert os.path.getsize("graph2.png") > 0
 
     # Check files are different
-    assert open('graph.png', 'rb').read() != open('graph2.png', 'rb').read()
+    assert open("graph.png", "rb").read() != open("graph2.png", "rb").read()
 
     # Clean up
-    os.remove('graph.png')
-    os.remove('graph2.png')
+    os.remove("graph.png")
+    os.remove("graph2.png")

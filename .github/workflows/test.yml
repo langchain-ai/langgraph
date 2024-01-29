@@ -30,7 +30,9 @@ jobs:
 
       - name: Install dependencies
         shell: bash
-        run: poetry install --with test
+        run: |
+          sudo apt install graphviz graphviz-dev
+          poetry install --with test
 
       - name: Run core tests
         shell: bash

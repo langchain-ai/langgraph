@@ -11,7 +11,6 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 python = ">=3.9.0,<4.0"
 langchain-core = "^0.1.16"
 
-
 [tool.poetry.group.test.dependencies]
 # The only dependencies that should be added are
 # dependencies used for running tests (e.g., pytest, freezegun, response).
@@ -41,6 +40,7 @@ jupyter = "^1.0.0"
 langchain = "^0.1.0"
 langchainhub = "^0.1.14"
 langchain-openai = "^0.0.2"
+pygraphviz = "1.11"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]
