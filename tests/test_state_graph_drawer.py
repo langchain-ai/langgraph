@@ -4,7 +4,7 @@ import pytest
 from pydantic import BaseModel
 
 from langgraph.graph import END, StateGraph
-from langgraph.graph.helpers import StateGraphDrawer
+from langgraph.graph.draw import StateGraphDrawer
 
 
 @pytest.fixture
