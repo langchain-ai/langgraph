@@ -149,8 +149,8 @@ class Channel:
         """Writes to channels the result of the lambda, or None to skip writing."""
         return ChannelWrite(
             channels=(
-                [(c, None) for c in channels]
-                + [(k, _coerce_write_value(v)) for k, v in kwargs.items()]
+                [(c, None, False) for c in channels]
+                + [(k, _coerce_write_value(v), True) for k, v in kwargs.items()]
             )
         )
 
