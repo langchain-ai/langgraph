@@ -3,7 +3,7 @@ from functools import partial
 from inspect import signature
 from typing import Any, Optional, Type
 
-from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.runnables.base import RunnableLike
 
 from langgraph.channels.base import BaseChannel, InvalidUpdateError
@@ -13,7 +13,7 @@ from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph.graph import END, Graph
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import ChannelRead
-from langgraph.pregel.write import ChannelWrite
+from langgraph.pregel.write import SKIP_WRITE, ChannelWrite
 
 START = "__start__"
 
@@ -39,10 +39,13 @@ class StateGraph(Graph):
 
         state_keys = list(self.channels)
         state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
-        update_state = (
-            partial(_update_state_dict, state_keys)
-            if isinstance(state_keys_read, list)
-            else _update_state_root
+        update_channels = (
+            [("__root__", None, True)]
+            if not isinstance(state_keys_read, list)
+            else [
+                (key, RunnableLambda(partial(_dict_getter, state_keys, key)), False)
+                for key in state_keys_read
+            ]
         )
         coerce_state = (
             partial(_coerce_state, self.schema)
@@ -59,8 +62,7 @@ class StateGraph(Graph):
                 Channel.subscribe_to(f"{key}:inbox")
                 | coerce_state  # coerce/validate using schema
                 | node
-                | partial(update_state, key)
-                | Channel.write_to(key)
+                | ChannelWrite(channels=[(key, None, False)] + update_channels)
             )
             for key, node in self.nodes.items()
         }
@@ -80,11 +82,9 @@ class StateGraph(Graph):
                         branch.runnable, name=f"{key}_condition"
                     )
 
-        nodes[START] = (
-            Channel.subscribe_to(f"{START}:inbox", tags=["langsmith:hidden"])
-            | partial(update_state, START)
-            | Channel.write_to(START)
-        )
+        nodes[START] = Channel.subscribe_to(
+            f"{START}:inbox", tags=["langsmith:hidden"]
+        ) | ChannelWrite(channels=[(START, None, False)] + update_channels)
         nodes[f"{START}:edges"] = (
             Channel.subscribe_to(START, tags=["langsmith:hidden"])
             | ChannelRead(state_keys_read)
@@ -105,25 +105,16 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _update_state_dict(
-    state_keys: list[str], node_name: str, input: dict[str, Any], config: RunnableConfig
-) -> dict[str, Any]:
+def _dict_getter(allowed_keys: str, key: str, input: dict) -> Any:
     if input is not None:
-        if not isinstance(input, dict) or any(key not in state_keys for key in input):
+        if not isinstance(input, dict) or any(key not in allowed_keys for key in input):
             raise InvalidUpdateError(
-                f"Invalid state update from node {node_name},"
-                f" expected dict with one or more of {state_keys}, got {input}"
+                f"Invalid state update,"
+                f" expected dict with one or more of {allowed_keys}, got {input}"
             )
-        ChannelWrite.do_write(config, **input)
-    return input
-
-
-def _update_state_root(
-    node_name: str, input: Any, config: RunnableConfig
-) -> dict[str, Any]:
-    if input is not None:
-        ChannelWrite.do_write(config, __root__=input)
-    return input
+        return input.get(key, SKIP_WRITE)
+    else:
+        return SKIP_WRITE
 
 
 def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
