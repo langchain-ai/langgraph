@@ -1,0 +1,7 @@
+version: '3.8'
+
+services:
+  mermaid-cli:
+    image: minlag/mermaid-cli:latest
+    volumes:
+      - .:/data

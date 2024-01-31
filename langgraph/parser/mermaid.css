@@ -1,0 +1,47 @@
+/* Custom CSS for Mermaid Diagrams */
+
+/* Select the SVG container */
+.mermaid svg {
+  margin: 30px;
+  width: auto;
+  height: auto;
+}
+
+/* Adjust the nodes within the diagram */
+.node, .diamond {
+  min-width: 150px; /* Increased width */
+  min-height: 60px; /* Increased height */
+  padding: 10px;
+}
+
+/* Adjust the text within the node */
+.node text, .diamond text {
+  text-align: center;
+  font-size: 11px; /* Adjusted font size */
+  white-space: nowrap; /* Consider nowrap or pre-wrap based on requirement */
+  word-wrap: break-word;
+  overflow: hidden; /* Adjust based on preference */
+  max-width: 140px;
+}
+
+/* Custom class for nodes with FontAwesome icons */
+.node.fa-icon {
+  min-width: 180px; /* Further increased width for FontAwesome icons */
+}
+
+/* Adjust diamond shapes for decision nodes */
+.diamond {
+  min-width: 150px;
+  min-height: 75px;
+}
+
+/* Responsive adjustments if needed */
+@media screen and (max-width: 600px) {
+  .node, .diamond {
+    min-width: 120px;
+    min-height: 50px;
+  }
+  .node text, .diamond text {
+    font-size: 10px;
+  }
+}
