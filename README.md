@@ -445,7 +445,7 @@ This agent executor uses existing LangChain agents.
 
 **Modifications**
 
-We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](examples/agent_executor/base.ipynb) so it is recommended you start with that first.
+We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb) so it is recommended you start with that first.
 
 - [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/human-in-the-loop.ipynb): How to add a human-in-the-loop component
 - [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
