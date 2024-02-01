@@ -1,6 +1,10 @@
 import asyncio
+import logging
 
 import nest_asyncio
+
+logger = logging.getLogger(__name__)
+
 
 def apply():
     nest_asyncio.apply()
@@ -16,10 +20,11 @@ def apply():
         try:
             # invoke the original method...
             _original_del(self)
-        except:
+        except Exception as e:  # type: ignore
             # ... but ignore any exceptions it might raise
             # NOTE: horrible anti-pattern. Just using because
             # jupyter notebooks don't play nice with asyncio
+            logger.debug(f"Exception in __del__ of {self}: {e}")
             pass
 
     # replace the original __del__ method
