@@ -16,6 +16,7 @@ from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, Graph
 from langgraph.graph.message import MessageGraph
 from langgraph.graph.state import StateGraph
@@ -393,6 +394,56 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     )
 
     memory = MemorySaver()
+
+    app = Pregel(
+        nodes={"one": one},
+        channels={"total": BinaryOperatorAggregate(int, operator.add)},
+        checkpointer=memory,
+    )
+
+    # total starts out as 0, so output is 0+2=2
+    assert app.invoke(2, {"configurable": {"thread_id": "1"}}) == 2
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 2
+    # total is now 2, so output is 2+3=5
+    assert app.invoke(3, {"configurable": {"thread_id": "1"}}) == 5
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 7
+    # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
+    with pytest.raises(ValueError):
+        app.invoke(4, {"configurable": {"thread_id": "1"}})
+    # checkpoint is not updated
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 7
+    # on a new thread, total starts out as 0, so output is 0+5=5
+    assert app.invoke(5, {"configurable": {"thread_id": "2"}}) == 5
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 7
+    checkpoint = memory.get({"configurable": {"thread_id": "2"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 5
+
+
+def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
+
+    def raise_if_above_10(input: int) -> int:
+        if input > 10:
+            raise ValueError("Input is too large")
+        return input
+
+    one = (
+        Channel.subscribe_to(["input"]).join(["total"])
+        | add_one
+        | Channel.write_to("output", "total")
+        | raise_if_above_10
+    )
+
+    memory = SqliteSaver.from_conn_string(":memory:")
 
     app = Pregel(
         nodes={"one": one},
