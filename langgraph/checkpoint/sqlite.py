@@ -36,7 +36,6 @@ class SqliteSaver(BaseCheckpointSaver):
         ]
 
     def setup(self) -> None:
-        print("Setting up", self.is_setup)
         if self.is_setup:
             return
 
