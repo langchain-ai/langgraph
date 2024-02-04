@@ -245,6 +245,40 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 3
 
 
+def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
+
+    memory = MemorySaver()
+    app = Pregel(
+        nodes={"one": one, "two": two}, checkpointer=memory, interrupt=["inbox"]
+    )
+
+    # start execution, stop at inbox
+    assert app.invoke(2, {"configurable": {"thread_id": 1}}) is None
+
+    # inbox == 3
+    checkpoint = memory.get({"configurable": {"thread_id": 1}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"]["inbox"] == 3
+
+    # resume execution, finish
+    assert app.invoke(None, {"configurable": {"thread_id": 1}}) == 4
+
+    # start execution again, stop at inbox
+    assert app.invoke(20, {"configurable": {"thread_id": 1}}) is None
+
+    # inbox == 21
+    checkpoint = memory.get({"configurable": {"thread_id": 1}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"]["inbox"] == 21
+
+    # send a new value in, interrupting the previous execution
+    assert app.invoke(3, {"configurable": {"thread_id": 1}}) is None
+    assert app.invoke(None, {"configurable": {"thread_id": 1}}) == 5
+
+
 def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
