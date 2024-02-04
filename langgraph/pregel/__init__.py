@@ -252,6 +252,7 @@ class Pregel(
         *,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt: Optional[Sequence[str]] = None,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         try:
             if config["recursion_limit"] < 1:
@@ -267,6 +268,7 @@ class Pregel(
                 input_keys = self.input
             else:
                 validate_keys(input_keys, self.channels)
+            interrupt = interrupt or self.interrupt
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
@@ -277,13 +279,19 @@ class Pregel(
                 self.channels, checkpoint
             ) as channels, get_executor_for_config(config) as executor:
                 # map inputs to channel updates
-                _apply_writes(
-                    checkpoint,
-                    channels,
-                    deque(w for c in input for w in map_input(input_keys, c)),
-                    config,
-                    0,
-                )
+                if input_writes := deque(
+                    w for c in input for w in map_input(input_keys, c)
+                ):
+                    # discard any unfinished tasks from previous checkpoint
+                    _prepare_next_tasks(checkpoint, processes, channels)
+                    # apply input writes
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        input_writes,
+                        config,
+                        0,
+                    )
 
                 read = partial(_read_channel, channels)
 
@@ -371,9 +379,7 @@ class Pregel(
                         self.checkpointer.put(config, checkpoint)
 
                     # interrupt if any channel written to is in interrupt list
-                    if any(
-                        chan for chan, _ in pending_writes if chan in self.interrupt
-                    ):
+                    if any(chan for chan, _ in pending_writes if chan in interrupt):
                         break
 
                 # save end of run checkpoint
@@ -400,6 +406,7 @@ class Pregel(
         *,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt: Optional[Sequence[str]] = None,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         try:
             if config["recursion_limit"] < 1:
@@ -424,6 +431,7 @@ class Pregel(
                 input_keys = self.input
             else:
                 validate_keys(input_keys, self.channels)
+            interrupt = interrupt or self.interrupt
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
@@ -434,13 +442,19 @@ class Pregel(
             # create channels from checkpoint
             async with AsyncChannelsManager(self.channels, checkpoint) as channels:
                 # map inputs to channel updates
-                _apply_writes(
-                    checkpoint,
-                    channels,
-                    deque([w async for c in input for w in map_input(input_keys, c)]),
-                    config,
-                    0,
-                )
+                if input_writes := deque(
+                    [w async for c in input for w in map_input(input_keys, c)]
+                ):
+                    # discard any unfinished tasks from previous checkpoint
+                    _prepare_next_tasks(checkpoint, processes, channels)
+                    # apply input writes
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        input_writes,
+                        config,
+                        0,
+                    )
 
                 read = partial(_read_channel, channels)
 
@@ -535,9 +549,7 @@ class Pregel(
                         await self.checkpointer.aput(config, checkpoint)
 
                     # interrupt if any channel written to is in interrupt list
-                    if any(
-                        chan for chan, _ in pending_writes if chan in self.interrupt
-                    ):
+                    if any(chan for chan, _ in pending_writes if chan in interrupt):
                         break
 
                 # save end of run checkpoint
