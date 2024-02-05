@@ -11,7 +11,7 @@ The current interface exposed is one inspired by [NetworkX](https://networkx.org
 
 The main use is for adding **cycles** to your LLM application.
 Crucially, this is NOT a **DAG** framework.
-If you want to build a DAG, you should use just use [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
+If you want to build a DAG, you should just use [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
 
 Cycles are important for agent-like behaviors, where you call an LLM in a loop, asking it what action to take next.
 
@@ -24,7 +24,7 @@ pip install langgraph
 ## Quick Start
 
 Here we will go over an example of creating a simple agent that uses chat models and function calling.
-This agent will represent all state as a list of messages.
+This agent will represent all its state as a list of messages.
 
 We will need to install some LangChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
 
@@ -32,7 +32,7 @@ We will need to install some LangChain packages, as well as [Tavily](https://app
 pip install -U langchain langchain_openai tavily-python
 ```
 
-We also need to export some environment variables needed for our agent.
+We also need to export some environment variables for OpenAI and Tavily API access.
 
 ```shell
 export OPENAI_API_KEY=sk-...
@@ -58,9 +58,9 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 tools = [TavilySearchResults(max_results=1)]
 ```
 
-We can now wrap these tools in a simple ToolExecutor.
-This is a real simple class that takes in a ToolInvocation and calls that tool, returning the output.
-A ToolInvocation is any class with `tool` and `tool_input` attribute.
+We can now wrap these tools in a simple LangGraph `ToolExecutor`.
+This is a simple class that receives `ToolInvocation` objects, calls that tool, and returns the output.
+`ToolInvocation` is any class with `tool` and `tool_input` attributes.
 
 ```python
 from langgraph.prebuilt import ToolExecutor
@@ -73,8 +73,8 @@ tool_executor = ToolExecutor(tools)
 Now we need to load the chat model we want to use.
 Importantly, this should satisfy two criteria:
 
-1. It should work with messages. We will represent all agent state in the form of messages, so it needs to be able to work well with them.
-2. It should work with OpenAI function calling. This means it should either be an OpenAI model or a model that exposes a similar interface.
+1. It should work with lists of messages. We will represent all agent state in the form of messages, so it needs to be able to work well with them.
+2. It should work with the OpenAI function calling interface. This means it should either be an OpenAI model or a model that exposes a similar interface.
 
 Note: these model requirements are not requirements for using LangGraph - they are just requirements for this one example.
 
@@ -133,8 +133,11 @@ The reason they are conditional is that based on the output of a node, one of se
 The path that is taken is not known until that node is run (the LLM decides).
 
 1. Conditional Edge: after the agent is called, we should either:
+
    a. If the agent said to take an action, then the function to invoke tools should be called
+   
    b. If the agent said that it was finished, then it should finish
+
 2. Normal Edge: after the tools are invoked, it should always go back to the agent to decide what to do next
 
 Let's define the nodes, as well as a function to decide how what conditional edge to take.
