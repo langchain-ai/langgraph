@@ -476,6 +476,11 @@ In order for a walkthrough on how to do that, see [this documentation](https://g
 Sometimes language models take a while to respond and you may want to stream tokens to end users.
 For a guide on how to do this, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb)
 
+### Persistence
+
+LangGraph comes with built-in persistence, allowing you to save the state of the graph at point and resume from there.
+In order for a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/persistence.ipynb)
+
 ## Documentation
 
 There are only a few new APIs to use.
