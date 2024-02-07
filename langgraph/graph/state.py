@@ -105,7 +105,7 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _dict_getter(allowed_keys: str, key: str, input: dict) -> Any:
+def _dict_getter(allowed_keys: list[str], key: str, input: dict) -> Any:
     if input is not None:
         if not isinstance(input, dict) or any(key not in allowed_keys for key in input):
             raise InvalidUpdateError(
