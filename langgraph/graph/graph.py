@@ -1,6 +1,6 @@
 from asyncio import iscoroutinefunction
 from collections import defaultdict
-from typing import Any, Callable, Dict, NamedTuple, Optional
+from typing import Any, Callable, Dict, NamedTuple, Optional, Sequence
 
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.base import (
@@ -88,7 +88,7 @@ class Graph:
     def set_finish_point(self, key: str) -> None:
         return self.add_edge(key, END)
 
-    def validate(self) -> None:
+    def validate(self, interrupt: Optional[Sequence[str]] = None) -> None:
         all_starts = {src for src, _ in self.edges} | {src for src in self.branches}
         for node in self.nodes:
             if node not in all_starts:
@@ -114,8 +114,17 @@ class Graph:
                 if node not in all_ends:
                     raise ValueError(f"Node `{node}` is not reachable")
 
-    def compile(self, checkpointer: Optional[BaseCheckpointSaver] = None) -> Pregel:
-        self.validate()
+        if interrupt:
+            for node in interrupt:
+                if node not in self.nodes:
+                    raise ValueError(f"Node `{node}` is not present")
+
+    def compile(
+        self,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
+        interrupt_before: Optional[Sequence[str]] = None,
+    ) -> Pregel:
+        self.validate(interrupt=interrupt_before)
 
         outgoing_edges = defaultdict(list)
         for start, end in self.edges:
@@ -145,4 +154,7 @@ class Graph:
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes],
             checkpointer=checkpointer,
+            interrupt=[f"{node}:inbox" for node in interrupt_before]
+            if interrupt_before
+            else [],
         )
