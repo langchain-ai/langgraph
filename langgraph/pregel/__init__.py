@@ -392,11 +392,10 @@ class Pregel(
         finally:
             # cancel any pending tasks when generator is interrupted
             try:
-                futures
+                for task in futures:
+                    task.cancel()
             except NameError:
-                return
-            for task in futures:
-                task.cancel()
+                pass
 
     async def _atransform(
         self,
@@ -562,11 +561,10 @@ class Pregel(
         finally:
             # cancel any pending tasks when generator is interrupted
             try:
-                futures
+                for task in futures:
+                    task.cancel()
             except NameError:
-                return
-            for task in futures:
-                task.cancel()
+                pass
 
     def invoke(
         self,
