@@ -16,9 +16,9 @@ from langchain_core.runnables.base import (
     RunnableEach,
     coerce_to_runnable,
 )
+from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langgraph.channels.base import BaseChannel
 from langgraph.constants import CONFIG_KEY_READ
 
 
@@ -33,7 +33,7 @@ class ChannelRead(RunnableLambda):
                 name=CONFIG_KEY_READ,
                 description=None,
                 default=None,
-                annotation=Callable[[BaseChannel], Any],
+                annotation=None,
             ),
         ]
 
@@ -103,7 +103,7 @@ class ChannelInvoke(RunnableBindingBase):
             when=when,
             bound=bound or default_bound,
             kwargs=kwargs or {},
-            config={**(config or {}), "tags": tags or []},
+            config=merge_configs(config, {"tags": tags or []}),
             **other_kwargs,
         )
 

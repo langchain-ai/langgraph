@@ -4,14 +4,14 @@
 
 ## Overview
 
-LangGraph is a library for building stateful, multi-actor applications with LLMs, built on top of (and intended to be used with) [LangChain](https://github.com/langchain-ai/langchain).
+[LangGraph](https://github.com/langchain-ai/langgraph) is a library for building stateful, multi-actor applications with LLMs, built on top of (and intended to be used with) [LangChain](https://github.com/langchain-ai/langchain).
 It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation in a cyclic manner.
 It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
 The current interface exposed is one inspired by [NetworkX](https://networkx.org/documentation/latest/).
 
 The main use is for adding **cycles** to your LLM application.
 Crucially, this is NOT a **DAG** framework.
-If you want to build a DAG, you should use just use [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
+If you want to build a DAG, you should just use [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
 
 Cycles are important for agent-like behaviors, where you call an LLM in a loop, asking it what action to take next.
 
@@ -24,7 +24,7 @@ pip install langgraph
 ## Quick Start
 
 Here we will go over an example of creating a simple agent that uses chat models and function calling.
-This agent will represent all state as a list of messages.
+This agent will represent all its state as a list of messages.
 
 We will need to install some LangChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
 
@@ -32,7 +32,7 @@ We will need to install some LangChain packages, as well as [Tavily](https://app
 pip install -U langchain langchain_openai tavily-python
 ```
 
-We also need to export some environment variables needed for our agent.
+We also need to export some environment variables for OpenAI and Tavily API access.
 
 ```shell
 export OPENAI_API_KEY=sk-...
@@ -44,7 +44,6 @@ Optionally, we can set up [LangSmith](https://docs.smith.langchain.com/) for bes
 ```shell
 export LANGCHAIN_TRACING_V2="true"
 export LANGCHAIN_API_KEY=ls__...
-export LANGCHAIN_ENDPOINT=https://api.langchain.plus
 ```
 
 ### Set up the tools
@@ -59,9 +58,9 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 tools = [TavilySearchResults(max_results=1)]
 ```
 
-We can now wrap these tools in a simple ToolExecutor.
-This is a real simple class that takes in a ToolInvocation and calls that tool, returning the output.
-A ToolInvocation is any class with `tool` and `tool_input` attribute.
+We can now wrap these tools in a simple LangGraph `ToolExecutor`.
+This is a simple class that receives `ToolInvocation` objects, calls that tool, and returns the output.
+`ToolInvocation` is any class with `tool` and `tool_input` attributes.
 
 ```python
 from langgraph.prebuilt import ToolExecutor
@@ -74,8 +73,8 @@ tool_executor = ToolExecutor(tools)
 Now we need to load the chat model we want to use.
 Importantly, this should satisfy two criteria:
 
-1. It should work with messages. We will represent all agent state in the form of messages, so it needs to be able to work well with them.
-2. It should work with OpenAI function calling. This means it should either be an OpenAI model or a model that exposes a similar interface.
+1. It should work with lists of messages. We will represent all agent state in the form of messages, so it needs to be able to work well with them.
+2. It should work with the OpenAI function calling interface. This means it should either be an OpenAI model or a model that exposes a similar interface.
 
 Note: these model requirements are not requirements for using LangGraph - they are just requirements for this one example.
 
@@ -96,7 +95,6 @@ from langchain.tools.render import format_tool_to_openai_function
 functions = [format_tool_to_openai_function(t) for t in tools]
 model = model.bind_functions(functions)
 ```
-
 
 ### Define the agent state
 
@@ -135,8 +133,11 @@ The reason they are conditional is that based on the output of a node, one of se
 The path that is taken is not known until that node is run (the LLM decides).
 
 1. Conditional Edge: after the agent is called, we should either:
+
    a. If the agent said to take an action, then the function to invoke tools should be called
+   
    b. If the agent said that it was finished, then it should finish
+
 2. Normal Edge: after the tools are invoked, it should always go back to the agent to decide what to do next
 
 Let's define the nodes, as well as a function to decide how what conditional edge to take.
@@ -294,7 +295,7 @@ Output from node '__end__':
 
 ### Streaming LLM Tokens
 
-You can also access the LLM tokens as they are produced by each node. 
+You can also access the LLM tokens as they are produced by each node.
 In this case only the "agent" node produces LLM tokens.
 In order for this to work properly, you must be using an LLM that supports streaming as well as have set it when constructing the LLM (e.g. `ChatOpenAI(model="gpt-3.5-turbo-1106", streaming=True)`)
 
@@ -418,49 +419,67 @@ Langchain Expression Language allows you to easily define chains (DAGs) but does
 
 ## Examples
 
-
 ### ChatAgentExecutor: with function calling
 
-This agent executor takes a list of messages as input and outputs a list of messages. 
+This agent executor takes a list of messages as input and outputs a list of messages.
 All agent state is represented as a list of messages.
 This specifically uses OpenAI function calling.
 This is recommended agent executor for newer chat based models that support function calling.
 
-- [Getting Started Notebook](examples/chat_agent_executor_with_function_calling/base.ipynb): Walks through creating this type of executor from scratch
-- [High Level Entrypoint](examples/chat_agent_executor_with_function_calling/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
+- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb): Walks through creating this type of executor from scratch
+- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
 
 **Modifications**
 
-We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](examples/chat_agent_executor_with_function_calling/base.ipynb) so it is recommended you start with that first.
-- [Human-in-the-loop](examples/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb): How to add a human-in-the-loop component
-- [Force calling a tool first](examples/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb): How to always call a specific tool first
-- [Respond in a specific format](examples/chat_agent_executor_with_function_calling/respond-in-format.ipynb): How to force the agent to respond in a specific format
-- [Dynamically returning tool output directly](examples/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb): How to dynamically let the agent choose whether to return the result of a tool directly to the user
-- [Managing agent steps](examples/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
+We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb) so it is recommended you start with that first.
+
+- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb): How to add a human-in-the-loop component
+- [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb): How to always call a specific tool first
+- [Respond in a specific format](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/respond-in-format.ipynb): How to force the agent to respond in a specific format
+- [Dynamically returning tool output directly](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb): How to dynamically let the agent choose whether to return the result of a tool directly to the user
+- [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
 
 ### AgentExecutor
 
 This agent executor uses existing LangChain agents.
 
-- [Getting Started Notebook](examples/agent_executor/base.ipynb): Walks through creating this type of executor from scratch
-- [High Level Entrypoint](examples/agent_executor/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
+- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb): Walks through creating this type of executor from scratch
+- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
 
 **Modifications**
 
-We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](examples/agent_executor/base.ipynb) so it is recommended you start with that first.
-- [Human-in-the-loop](examples/agent_executor/human-in-the-loop.ipynb): How to add a human-in-the-loop component
-- [Force calling a tool first](examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
-- [Managing agent steps](examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
+We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb) so it is recommended you start with that first.
+
+- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/human-in-the-loop.ipynb): How to add a human-in-the-loop component
+- [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
+- [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
+
+### Multi-agent Examples
+
+- [Multi-agent collaboration](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/multi-agent-collaboration.ipynb): how to create two agents that work together to accomplish a task
+- [Multi-agent with supervisor](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/agent_supervisor.ipynb): how to orchestrate individual agents by using an LLM as a "supervisor" to distribute work
+- [Hierarchical agent teams](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/hierarchical_agent_teams.ipynb): how to orchestrate "teams" of agents as nested graphs that can collaborate to solve a problem
+
+### Chatbot Evaluation via Simulation
+
+It can often be tough to evaluation chat bots in multi-turn situations. One way to do this is with simulations.
+
+- [Chat bot evaluation as multi-agent simulation](https://github.com/langchain-ai/langgraph/blob/main/examples/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): How to simulate a dialogue between a "virtual user" and your chat bot
 
 ### Async
 
 If you are running LangGraph in async workflows, you may want to create the nodes to be async by default.
-In order for a walkthrough on how to do that, see [this documentation](examples/async.ipynb)
+In order for a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb)
 
 ### Streaming Tokens
 
 Sometimes language models take a while to respond and you may want to stream tokens to end users.
-For a guide on how to do this, see [this documentation](examples/streaming-tokens.ipynb)
+For a guide on how to do this, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb)
+
+### Persistence
+
+LangGraph comes with built-in persistence, allowing you to save the state of the graph at point and resume from there.
+In order for a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/persistence.ipynb)
 
 ## Documentation
 
@@ -477,7 +496,6 @@ from langgraph.graph import StateGraph
 This class is responsible for constructing the graph.
 It exposes an interface inspired by [NetworkX](https://networkx.org/documentation/latest/).
 This graph is parameterized by a state object that it passes around to each node.
-
 
 #### `__init__`
 
@@ -633,7 +651,6 @@ It can be used in two places:
 
 - As the `end_key` in `add_edge`
 - As a value in `conditional_edge_mapping` as passed to `add_conditional_edges`
-
 
 ## Prebuilt Examples
 

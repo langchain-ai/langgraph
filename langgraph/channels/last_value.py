@@ -44,7 +44,7 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
         if len(values) == 0:
             return
         if len(values) != 1:
-            raise InvalidUpdateError()
+            raise InvalidUpdateError("LastValue can only receive one value per step.")
 
         self.value = values[-1]
 

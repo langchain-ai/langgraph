@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph"
-version = "0.0.12"
+version = "0.0.23"
 description = "langgraph"
 authors = []
 license = "LangGraph License"
@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-langchain-core = "^0.1.8"
+langchain-core = "^0.1.16"
 
 
 [tool.poetry.group.test.dependencies]
@@ -24,6 +24,8 @@ pytest-mock  = "^3.10.0"
 syrupy = "^4.0.2"
 httpx = "^0.26.0"
 pytest-watcher = "^0.3.4"
+langchain = "^0.1.0"
+aiosqlite = "^0.19.0"
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.4"

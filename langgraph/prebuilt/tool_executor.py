@@ -1,7 +1,7 @@
 from typing import Any, Sequence, Union
 
 from langchain_core.load.serializable import Serializable
-from langchain_core.runnables import RunnableBinding, RunnableLambda
+from langchain_core.runnables import RunnableBinding, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 
 INVALID_TOOL_MSG_TEMPLATE = (
@@ -47,7 +47,9 @@ class ToolExecutor(RunnableBinding):
             **kwargs,
         )
 
-    def _execute(self, tool_invocation: ToolInvocationInterface) -> Any:
+    def _execute(
+        self, tool_invocation: ToolInvocationInterface, *, config: RunnableConfig
+    ) -> Any:
         if tool_invocation.tool not in self.tool_map:
             return self.invalid_tool_msg_template.format(
                 requested_tool_name=tool_invocation.tool,
@@ -55,10 +57,12 @@ class ToolExecutor(RunnableBinding):
             )
         else:
             tool = self.tool_map[tool_invocation.tool]
-            output = tool.invoke(tool_invocation.tool_input)
+            output = tool.invoke(tool_invocation.tool_input, config=config)
             return output
 
-    async def _aexecute(self, tool_invocation: ToolInvocationInterface) -> Any:
+    async def _aexecute(
+        self, tool_invocation: ToolInvocationInterface, *, config: RunnableConfig
+    ) -> Any:
         if tool_invocation.tool not in self.tool_map:
             return self.invalid_tool_msg_template.format(
                 requested_tool_name=tool_invocation.tool,
@@ -66,5 +70,5 @@ class ToolExecutor(RunnableBinding):
             )
         else:
             tool = self.tool_map[tool_invocation.tool]
-            output = await tool.ainvoke(tool_invocation.tool_input)
+            output = await tool.ainvoke(tool_invocation.tool_input, config=config)
             return output

@@ -46,6 +46,7 @@ from langgraph.channels.base import (
     BaseChannel,
     ChannelsManager,
     EmptyChannelError,
+    InvalidUpdateError,
     create_checkpoint,
 )
 from langgraph.channels.last_value import LastValue
@@ -148,8 +149,8 @@ class Channel:
         """Writes to channels the result of the lambda, or None to skip writing."""
         return ChannelWrite(
             channels=(
-                [(c, None) for c in channels]
-                + [(k, _coerce_write_value(v)) for k, v in kwargs.items()]
+                [(c, None, False) for c in channels]
+                + [(k, _coerce_write_value(v), True) for k, v in kwargs.items()]
             )
         )
 
@@ -194,10 +195,19 @@ class Pregel(
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
-        return get_unique_config_specs(
-            [spec for node in self.nodes.values() for spec in node.config_specs]
-            + (self.checkpointer.config_specs if self.checkpointer is not None else [])
-        )
+        return [
+            spec
+            for spec in get_unique_config_specs(
+                [spec for node in self.nodes.values() for spec in node.config_specs]
+                + (
+                    self.checkpointer.config_specs
+                    if self.checkpointer is not None
+                    else []
+                )
+            )
+            # these are provided by the Pregel class
+            if spec.id not in [CONFIG_KEY_READ, CONFIG_KEY_SEND]
+        ]
 
     @property
     def InputType(self) -> Any:
@@ -242,128 +252,150 @@ class Pregel(
         *,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt: Optional[Sequence[str]] = None,
     ) -> Iterator[Union[dict[str, Any], Any]]:
-        if config["recursion_limit"] < 1:
-            raise ValueError("recursion_limit must be at least 1")
-        # assign defaults
-        if output_keys is None:
-            output_keys = [chan for chan in self.channels if chan not in self.hidden]
-        else:
-            validate_keys(output_keys, self.channels)
-        if input_keys is None:
-            input_keys = self.input
-        else:
-            validate_keys(input_keys, self.channels)
-        # copy nodes to ignore mutations during execution
-        processes = {**self.nodes}
-        # get checkpoint from saver, or create an empty one
-        checkpoint = self.checkpointer.get(config) if self.checkpointer else None
-        checkpoint = checkpoint or empty_checkpoint()
-        # create channels from checkpoint
-        with ChannelsManager(
-            self.channels, checkpoint
-        ) as channels, get_executor_for_config(config) as executor:
-            # map inputs to channel updates
-            _apply_writes(
-                checkpoint,
-                channels,
-                deque(w for c in input for w in map_input(input_keys, c)),
-                config,
-                0,
-            )
-
-            read = partial(_read_channel, channels)
-
-            # Similarly to Bulk Synchronous Parallel / Pregel model
-            # computation proceeds in steps, while there are channel updates
-            # channel updates from step N are only visible in step N+1
-            # channels are guaranteed to be immutable for the duration of the step,
-            # with channel updates applied only at the transition between steps
-            for step in range(config["recursion_limit"] + 1):
-                next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
-
-                # if no more tasks, we're done
-                if not next_tasks:
-                    break
-                elif step == config["recursion_limit"]:
-                    raise GraphRecursionError(
-                        f"Recursion limit of {config['recursion_limit']} reached"
-                        "without hitting a stop condition. You can increase the limit"
-                        "by setting the `recursion_limit` config key."
-                    )
-
-                if self.debug:
-                    print_step_start(step, next_tasks)
-
-                # collect all writes to channels, without applying them yet
-                pending_writes = deque[tuple[str, Any]]()
-
-                # prepare tasks with config
-                tasks_w_config = [
-                    (
-                        proc,
-                        input,
-                        patch_config(
-                            config,
-                            run_name=name,
-                            callbacks=run_manager.get_child(f"graph:step:{step}"),
-                            configurable={
-                                # deque.extend is thread-safe
-                                CONFIG_KEY_SEND: pending_writes.extend,
-                                CONFIG_KEY_READ: read,
-                            },
-                        ),
-                    )
-                    for proc, input, name in next_tasks
+        try:
+            if config["recursion_limit"] < 1:
+                raise ValueError("recursion_limit must be at least 1")
+            # assign defaults
+            if output_keys is None:
+                output_keys = [
+                    chan for chan in self.channels if chan not in self.hidden
                 ]
+            else:
+                validate_keys(output_keys, self.channels)
+            if input_keys is None:
+                input_keys = self.input
+            else:
+                validate_keys(input_keys, self.channels)
+            interrupt = interrupt or self.interrupt
+            # copy nodes to ignore mutations during execution
+            processes = {**self.nodes}
+            # get checkpoint from saver, or create an empty one
+            checkpoint = self.checkpointer.get(config) if self.checkpointer else None
+            checkpoint = checkpoint or empty_checkpoint()
+            # create channels from checkpoint
+            with ChannelsManager(
+                self.channels, checkpoint
+            ) as channels, get_executor_for_config(config) as executor:
+                # map inputs to channel updates
+                if input_writes := deque(
+                    w for c in input for w in map_input(input_keys, c)
+                ):
+                    # discard any unfinished tasks from previous checkpoint
+                    _prepare_next_tasks(checkpoint, processes, channels)
+                    # apply input writes
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        input_writes,
+                        config,
+                        0,
+                    )
 
-                # execute tasks, and wait for one to fail or all to finish.
-                # each task is independent from all other concurrent tasks
-                done, inflight = concurrent.futures.wait(
-                    [
+                read = partial(_read_channel, channels)
+
+                # Similarly to Bulk Synchronous Parallel / Pregel model
+                # computation proceeds in steps, while there are channel updates
+                # channel updates from step N are only visible in step N+1
+                # channels are guaranteed to be immutable for the duration of the step,
+                # with channel updates applied only at the transition between steps
+                for step in range(config["recursion_limit"] + 1):
+                    next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
+
+                    # if no more tasks, we're done
+                    if not next_tasks:
+                        break
+                    elif step == config["recursion_limit"]:
+                        raise GraphRecursionError(
+                            f"Recursion limit of {config['recursion_limit']} reached"
+                            "without hitting a stop condition. You can increase the limit"
+                            "by setting the `recursion_limit` config key."
+                        )
+
+                    if self.debug:
+                        print_step_start(step, next_tasks)
+
+                    # collect all writes to channels, without applying them yet
+                    pending_writes = deque[tuple[str, Any]]()
+
+                    # prepare tasks with config
+                    tasks_w_config = [
+                        (
+                            proc,
+                            input,
+                            patch_config(
+                                config,
+                                run_name=name,
+                                callbacks=run_manager.get_child(f"graph:step:{step}"),
+                                configurable={
+                                    # deque.extend is thread-safe
+                                    CONFIG_KEY_SEND: pending_writes.extend,
+                                    CONFIG_KEY_READ: read,
+                                },
+                            ),
+                        )
+                        for proc, input, name in next_tasks
+                    ]
+
+                    futures = [
                         executor.submit(proc.invoke, input, config)
                         for proc, input, config in tasks_w_config
-                    ],
-                    return_when=concurrent.futures.FIRST_EXCEPTION,
-                    timeout=self.step_timeout,
-                )
+                    ]
 
-                # interrupt on failure or timeout
-                _interrupt_or_proceed(done, inflight, step)
+                    # execute tasks, and wait for one to fail or all to finish.
+                    # each task is independent from all other concurrent tasks
+                    done, inflight = concurrent.futures.wait(
+                        futures,
+                        return_when=concurrent.futures.FIRST_EXCEPTION,
+                        timeout=self.step_timeout,
+                    )
 
-                # apply writes to channels
-                _apply_writes(checkpoint, channels, pending_writes, config, step + 1)
+                    # interrupt on failure or timeout
+                    _interrupt_or_proceed(done, inflight, step)
 
-                if self.debug:
-                    print_checkpoint(step, channels)
+                    # apply writes to channels
+                    _apply_writes(
+                        checkpoint, channels, pending_writes, config, step + 1
+                    )
 
-                # yield current value and checkpoint view
-                if step_output := map_output(output_keys, pending_writes, channels):
-                    yield step_output
-                    # we can detect updates when output is multiple channels (ie. dict)
-                    if not isinstance(output_keys, str):
-                        # if view was updated, apply writes to channels
-                        _apply_writes_from_view(checkpoint, channels, step_output)
+                    if self.debug:
+                        print_checkpoint(step, channels)
 
-                # save end of step checkpoint
+                    # yield current value and checkpoint view
+                    if step_output := map_output(output_keys, pending_writes, channels):
+                        yield step_output
+                        # we can detect updates when output is multiple channels (ie. dict)
+                        if not isinstance(output_keys, str):
+                            # if view was updated, apply writes to channels
+                            _apply_writes_from_view(checkpoint, channels, step_output)
+
+                    # save end of step checkpoint
+                    if (
+                        self.checkpointer is not None
+                        and self.checkpointer.at == CheckpointAt.END_OF_STEP
+                    ):
+                        checkpoint = create_checkpoint(checkpoint, channels)
+                        self.checkpointer.put(config, checkpoint)
+
+                    # interrupt if any channel written to is in interrupt list
+                    if any(chan for chan, _ in pending_writes if chan in interrupt):
+                        break
+
+                # save end of run checkpoint
                 if (
                     self.checkpointer is not None
-                    and self.checkpointer.at == CheckpointAt.END_OF_STEP
+                    and self.checkpointer.at == CheckpointAt.END_OF_RUN
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
                     self.checkpointer.put(config, checkpoint)
-
-                # interrupt if any channel written to is in interrupt list
-                if any(chan for chan, _ in pending_writes if chan in self.interrupt):
-                    break
-
-            # save end of run checkpoint
-            if (
-                self.checkpointer is not None
-                and self.checkpointer.at == CheckpointAt.END_OF_RUN
-            ):
-                checkpoint = create_checkpoint(checkpoint, channels)
-                self.checkpointer.put(config, checkpoint)
+        finally:
+            # cancel any pending tasks when generator is interrupted
+            try:
+                for task in futures:
+                    task.cancel()
+            except NameError:
+                pass
 
     async def _atransform(
         self,
@@ -373,140 +405,166 @@ class Pregel(
         *,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt: Optional[Sequence[str]] = None,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
-        if config["recursion_limit"] < 1:
-            raise ValueError("recursion_limit must be at least 1")
-        # if running from astream_log() run each proc with streaming
-        do_stream = next(
-            (
-                h
-                for h in run_manager.handlers
-                if isinstance(h, LogStreamCallbackHandler)
-            ),
-            None,
-        )
-        # assign defaults
-        if output_keys is None:
-            output_keys = [chan for chan in self.channels if chan not in self.hidden]
-        else:
-            validate_keys(output_keys, self.channels)
-        if input_keys is None:
-            input_keys = self.input
-        else:
-            validate_keys(input_keys, self.channels)
-        # copy nodes to ignore mutations during execution
-        processes = {**self.nodes}
-        # get checkpoint from saver, or create an empty one
-        checkpoint = await self.checkpointer.aget(config) if self.checkpointer else None
-        checkpoint = checkpoint or empty_checkpoint()
-        # create channels from checkpoint
-        async with AsyncChannelsManager(self.channels, checkpoint) as channels:
-            # map inputs to channel updates
-            _apply_writes(
-                checkpoint,
-                channels,
-                deque([w async for c in input for w in map_input(input_keys, c)]),
-                config,
-                0,
+        try:
+            if config["recursion_limit"] < 1:
+                raise ValueError("recursion_limit must be at least 1")
+            # if running from astream_log() run each proc with streaming
+            do_stream = next(
+                (
+                    h
+                    for h in run_manager.handlers
+                    if isinstance(h, LogStreamCallbackHandler)
+                ),
+                None,
             )
-
-            read = partial(_read_channel, channels)
-
-            # Similarly to Bulk Synchronous Parallel / Pregel model
-            # computation proceeds in steps, while there are channel updates
-            # channel updates from step N are only visible in step N+1,
-            # channels are guaranteed to be immutable for the duration of the step,
-            # channel updates being applied only at the transition between steps
-            for step in range(config["recursion_limit"] + 1):
-                next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
-
-                # if no more tasks, we're done
-                if not next_tasks:
-                    break
-                elif step == config["recursion_limit"]:
-                    raise GraphRecursionError(
-                        f"Recursion limit of {config['recursion_limit']} reached"
-                        "without hitting a stop condition. You can increase the limit"
-                        "by setting the `recursion_limit` config key."
-                    )
-
-                if self.debug:
-                    print_step_start(step, next_tasks)
-
-                # collect all writes to channels, without applying them yet
-                pending_writes = deque[tuple[str, Any]]()
-
-                # prepare tasks with config
-                tasks_w_config = [
-                    (
-                        proc,
-                        input,
-                        patch_config(
-                            config,
-                            run_name=name,
-                            callbacks=run_manager.get_child(f"graph:step:{step}"),
-                            configurable={
-                                # deque.extend is thread-safe
-                                CONFIG_KEY_SEND: pending_writes.extend,
-                                CONFIG_KEY_READ: read,
-                            },
-                        ),
-                    )
-                    for proc, input, name in next_tasks
+            # assign defaults
+            if output_keys is None:
+                output_keys = [
+                    chan for chan in self.channels if chan not in self.hidden
                 ]
+            else:
+                validate_keys(output_keys, self.channels)
+            if input_keys is None:
+                input_keys = self.input
+            else:
+                validate_keys(input_keys, self.channels)
+            interrupt = interrupt or self.interrupt
+            # copy nodes to ignore mutations during execution
+            processes = {**self.nodes}
+            # get checkpoint from saver, or create an empty one
+            checkpoint = (
+                await self.checkpointer.aget(config) if self.checkpointer else None
+            )
+            checkpoint = checkpoint or empty_checkpoint()
+            # create channels from checkpoint
+            async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+                # map inputs to channel updates
+                if input_writes := deque(
+                    [w async for c in input for w in map_input(input_keys, c)]
+                ):
+                    # discard any unfinished tasks from previous checkpoint
+                    _prepare_next_tasks(checkpoint, processes, channels)
+                    # apply input writes
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        input_writes,
+                        config,
+                        0,
+                    )
 
-                # execute tasks, and wait for one to fail or all to finish.
-                # each task is independent from all other concurrent tasks
-                done, inflight = await asyncio.wait(
-                    [
-                        asyncio.create_task(_aconsume(proc.astream(input, config)))
-                        for proc, input, config in tasks_w_config
+                read = partial(_read_channel, channels)
+
+                # Similarly to Bulk Synchronous Parallel / Pregel model
+                # computation proceeds in steps, while there are channel updates
+                # channel updates from step N are only visible in step N+1,
+                # channels are guaranteed to be immutable for the duration of the step,
+                # channel updates being applied only at the transition between steps
+                for step in range(config["recursion_limit"] + 1):
+                    next_tasks = _prepare_next_tasks(checkpoint, processes, channels)
+
+                    # if no more tasks, we're done
+                    if not next_tasks:
+                        break
+                    elif step == config["recursion_limit"]:
+                        raise GraphRecursionError(
+                            f"Recursion limit of {config['recursion_limit']} reached"
+                            "without hitting a stop condition. You can increase the limit"
+                            "by setting the `recursion_limit` config key."
+                        )
+
+                    if self.debug:
+                        print_step_start(step, next_tasks)
+
+                    # collect all writes to channels, without applying them yet
+                    pending_writes = deque[tuple[str, Any]]()
+
+                    # prepare tasks with config
+                    tasks_w_config = [
+                        (
+                            proc,
+                            input,
+                            patch_config(
+                                config,
+                                run_name=name,
+                                callbacks=run_manager.get_child(f"graph:step:{step}"),
+                                configurable={
+                                    # deque.extend is thread-safe
+                                    CONFIG_KEY_SEND: pending_writes.extend,
+                                    CONFIG_KEY_READ: read,
+                                },
+                            ),
+                        )
+                        for proc, input, name in next_tasks
                     ]
-                    if do_stream
-                    else [
-                        asyncio.create_task(proc.ainvoke(input, config))
-                        for proc, input, config in tasks_w_config
-                    ],
-                    return_when=asyncio.FIRST_EXCEPTION,
-                    timeout=self.step_timeout,
-                )
 
-                # interrupt on failure or timeout
-                _interrupt_or_proceed(done, inflight, step)
+                    futures = (
+                        [
+                            asyncio.create_task(_aconsume(proc.astream(input, config)))
+                            for proc, input, config in tasks_w_config
+                        ]
+                        if do_stream
+                        else [
+                            asyncio.create_task(proc.ainvoke(input, config))
+                            for proc, input, config in tasks_w_config
+                        ]
+                    )
 
-                # apply writes to channels
-                _apply_writes(checkpoint, channels, pending_writes, config, step + 1)
+                    # execute tasks, and wait for one to fail or all to finish.
+                    # each task is independent from all other concurrent tasks
+                    done, inflight = await asyncio.wait(
+                        futures,
+                        return_when=asyncio.FIRST_EXCEPTION,
+                        timeout=self.step_timeout,
+                    )
 
-                if self.debug:
-                    print_checkpoint(step, channels)
+                    # interrupt on failure or timeout
+                    _interrupt_or_proceed(done, inflight, step)
 
-                # yield current value and checkpoint view
-                if step_output := map_output(output_keys, pending_writes, channels):
-                    yield step_output
-                    # we can detect updates when output is multiple channels (ie. dict)
-                    if not isinstance(output_keys, str):
-                        # if view was updated, apply writes to channels
-                        _apply_writes_from_view(checkpoint, channels, step_output)
+                    # apply writes to channels
+                    _apply_writes(
+                        checkpoint, channels, pending_writes, config, step + 1
+                    )
 
-                # save end of step checkpoint
+                    if self.debug:
+                        print_checkpoint(step, channels)
+
+                    # yield current value and checkpoint view
+                    if step_output := map_output(output_keys, pending_writes, channels):
+                        yield step_output
+                        # we can detect updates when output is multiple channels (ie. dict)
+                        if not isinstance(output_keys, str):
+                            # if view was updated, apply writes to channels
+                            _apply_writes_from_view(checkpoint, channels, step_output)
+
+                    # save end of step checkpoint
+                    if (
+                        self.checkpointer is not None
+                        and self.checkpointer.at == CheckpointAt.END_OF_STEP
+                    ):
+                        checkpoint = create_checkpoint(checkpoint, channels)
+                        await self.checkpointer.aput(config, checkpoint)
+
+                    # interrupt if any channel written to is in interrupt list
+                    if any(chan for chan, _ in pending_writes if chan in interrupt):
+                        break
+
+                # save end of run checkpoint
                 if (
                     self.checkpointer is not None
-                    and self.checkpointer.at == CheckpointAt.END_OF_STEP
+                    and self.checkpointer.at == CheckpointAt.END_OF_RUN
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
                     await self.checkpointer.aput(config, checkpoint)
-
-                # interrupt if any channel written to is in interrupt list
-                if any(chan for chan, _ in pending_writes if chan in self.interrupt):
-                    break
-
-            # save end of run checkpoint
-            if (
-                self.checkpointer is not None
-                and self.checkpointer.at == CheckpointAt.END_OF_RUN
-            ):
-                checkpoint = create_checkpoint(checkpoint, channels)
-                await self.checkpointer.aput(config, checkpoint)
+        finally:
+            # cancel any pending tasks when generator is interrupted
+            try:
+                for task in futures:
+                    task.cancel()
+            except NameError:
+                pass
 
     def invoke(
         self,
@@ -684,7 +742,12 @@ def _apply_writes(
     # Apply writes to channels
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
-            channels[chan].update(vals)
+            try:
+                channels[chan].update(vals)
+            except InvalidUpdateError as e:
+                raise InvalidUpdateError(
+                    f"Invalid update for channel {chan}: {e}"
+                ) from e
             checkpoint["channel_versions"][chan] += 1
             updated_channels.add(chan)
         else:

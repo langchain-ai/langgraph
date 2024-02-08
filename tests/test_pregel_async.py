@@ -1,4 +1,5 @@
 import asyncio
+import json
 import operator
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -21,8 +22,12 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, Graph, StateGraph
+from langgraph.graph.message import MessageGraph
+from langgraph.prebuilt.chat_agent_executor import create_function_calling_executor
+from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.pregel import Channel, GraphRecursionError, Pregel
 from langgraph.pregel.reserved import ReservedChannels
 
@@ -248,6 +253,40 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 3
 
 
+async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x + 1)
+    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+    two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
+
+    memory = MemorySaver()
+    app = Pregel(
+        nodes={"one": one, "two": two}, checkpointer=memory, interrupt=["inbox"]
+    )
+
+    # start execution, stop at inbox
+    assert await app.ainvoke(2, {"configurable": {"thread_id": 1}}) is None
+
+    # inbox == 3
+    checkpoint = await memory.aget({"configurable": {"thread_id": 1}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"]["inbox"] == 3
+
+    # resume execution, finish
+    assert await app.ainvoke(None, {"configurable": {"thread_id": 1}}) == 4
+
+    # start execution again, stop at inbox
+    assert await app.ainvoke(20, {"configurable": {"thread_id": 1}}) is None
+
+    # inbox == 21
+    checkpoint = await memory.aget({"configurable": {"thread_id": 1}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"]["inbox"] == 21
+
+    # send a new value in, interrupting the previous execution
+    assert await app.ainvoke(3, {"configurable": {"thread_id": 1}}) is None
+    assert await app.ainvoke(None, {"configurable": {"thread_id": 1}}) == 5
+
+
 async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
@@ -436,6 +475,59 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     checkpoint = await memory.aget({"configurable": {"thread_id": "2"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"].get("total") == 5
+
+
+async def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
+
+    def raise_if_above_10(input: int) -> int:
+        if input > 10:
+            raise ValueError("Input is too large")
+        return input
+
+    one = (
+        Channel.subscribe_to(["input"]).join(["total"])
+        | add_one
+        | Channel.write_to("output", "total")
+        | raise_if_above_10
+    )
+
+    memory = AsyncSqliteSaver.from_conn_string(":memory:")
+
+    app = Pregel(
+        nodes={"one": one},
+        channels={"total": BinaryOperatorAggregate(int, operator.add)},
+        checkpointer=memory,
+        debug=True,
+    )
+
+    # total starts out as 0, so output is 0+2=2
+    assert await app.ainvoke(2, {"configurable": {"thread_id": "1"}}) == 2
+    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 2
+    # total is now 2, so output is 2+3=5
+    assert await app.ainvoke(3, {"configurable": {"thread_id": "1"}}) == 5
+    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 7
+    # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
+    with pytest.raises(ValueError):
+        await app.ainvoke(4, {"configurable": {"thread_id": "1"}})
+    # checkpoint is not updated
+    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 7
+    # on a new thread, total starts out as 0, so output is 0+5=5
+    assert await app.ainvoke(5, {"configurable": {"thread_id": "2"}}) == 5
+    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 7
+    checkpoint = await memory.aget({"configurable": {"thread_id": "2"}})
+    assert checkpoint is not None
+    assert checkpoint["channel_values"].get("total") == 5
+
+    await memory.conn.close()
 
 
 async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:
@@ -834,8 +926,6 @@ async def test_conditional_graph() -> None:
 
 
 async def test_conditional_graph_state() -> None:
-    from copy import deepcopy
-
     from langchain.llms.fake import FakeStreamingListLLM
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
@@ -865,7 +955,7 @@ async def test_conditional_graph_state() -> None:
         ]
     )
 
-    def agent_parser(input: str) -> Union[AgentAction, AgentFinish]:
+    def agent_parser(input: str) -> dict[str, Union[AgentAction, AgentFinish]]:
         if input.startswith("finish"):
             _, answer = input.split(":")
             return {
@@ -940,9 +1030,7 @@ async def test_conditional_graph_state() -> None:
         ),
     }
 
-    assert [
-        deepcopy(c) async for c in app.astream({"input": "what is weather in sf"})
-    ] == [
+    assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
         {
             "agent": {
                 "agent_outcome": AgentAction(
@@ -1019,5 +1107,331 @@ async def test_conditional_graph_state() -> None:
                     return_values={"answer": "answer"}, log="finish:answer"
                 ),
             }
+        },
+    ]
+
+
+async def test_prebuilt_chat() -> None:
+    from langchain.chat_models.fake import FakeMessagesListChatModel
+    from langchain_community.tools import tool
+    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+
+    class FakeFuntionChatModel(FakeMessagesListChatModel):
+        def bind_functions(self, functions: list):
+            return self
+
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    app = create_function_calling_executor(
+        FakeFuntionChatModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": json.dumps("query"),
+                        }
+                    },
+                ),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": json.dumps("another"),
+                        }
+                    },
+                ),
+                AIMessage(content="answer"),
+            ]
+        ),
+        tools,
+    )
+
+    assert await app.ainvoke(
+        {"messages": [HumanMessage(content="what is weather in sf")]}
+    ) == {
+        "messages": [
+            HumanMessage(content="what is weather in sf"),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+            ),
+            FunctionMessage(content="result for query", name="search_api"),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"another"'}
+                },
+            ),
+            FunctionMessage(content="result for another", name="search_api"),
+            AIMessage(content="answer"),
+        ]
+    }
+
+    assert [
+        c
+        async for c in app.astream(
+            {"messages": [HumanMessage(content="what is weather in sf")]}
+        )
+    ] == [
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "function_call": {
+                                "name": "search_api",
+                                "arguments": '"query"',
+                            }
+                        },
+                    )
+                ]
+            }
+        },
+        {
+            "action": {
+                "messages": [
+                    FunctionMessage(content="result for query", name="search_api")
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "function_call": {
+                                "name": "search_api",
+                                "arguments": '"another"',
+                            }
+                        },
+                    )
+                ]
+            }
+        },
+        {
+            "action": {
+                "messages": [
+                    FunctionMessage(content="result for another", name="search_api")
+                ]
+            }
+        },
+        {"agent": {"messages": [AIMessage(content="answer")]}},
+        {
+            "__end__": {
+                "messages": [
+                    HumanMessage(content="what is weather in sf"),
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "function_call": {
+                                "name": "search_api",
+                                "arguments": '"query"',
+                            }
+                        },
+                    ),
+                    FunctionMessage(content="result for query", name="search_api"),
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "function_call": {
+                                "name": "search_api",
+                                "arguments": '"another"',
+                            }
+                        },
+                    ),
+                    FunctionMessage(content="result for another", name="search_api"),
+                    AIMessage(content="answer"),
+                ]
+            }
+        },
+    ]
+
+
+async def test_message_graph() -> None:
+    from langchain.chat_models.fake import FakeMessagesListChatModel
+    from langchain_community.tools import tool
+    from langchain_core.agents import AgentAction
+    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+
+    class FakeFuntionChatModel(FakeMessagesListChatModel):
+        def bind_functions(self, functions: list):
+            return self
+
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    model = FakeFuntionChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": json.dumps("query"),
+                    }
+                },
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": json.dumps("another"),
+                    }
+                },
+            ),
+            AIMessage(content="answer"),
+        ]
+    )
+
+    tool_executor = ToolExecutor(tools)
+
+    # Define the function that determines whether to continue or not
+    def should_continue(messages):
+        last_message = messages[-1]
+        # If there is no function call, then we finish
+        if "function_call" not in last_message.additional_kwargs:
+            return "end"
+        # Otherwise if there is, we continue
+        else:
+            return "continue"
+
+    async def call_tool(messages):
+        # Based on the continue condition
+        # we know the last message involves a function call
+        last_message = messages[-1]
+        # We construct an AgentAction from the function_call
+        action = AgentAction(
+            tool=last_message.additional_kwargs["function_call"]["name"],
+            tool_input=json.loads(
+                last_message.additional_kwargs["function_call"]["arguments"]
+            ),
+            log="",
+        )
+        # We call the tool_executor and get back a response
+        response = await tool_executor.ainvoke(action)
+        # We use the response to create a FunctionMessage
+        return FunctionMessage(content=str(response), name=action.tool)
+
+    # Define a new graph
+    workflow = MessageGraph()
+
+    # Define the two nodes we will cycle between
+    workflow.add_node("agent", model)
+    workflow.add_node("action", call_tool)
+
+    # Set the entrypoint as `agent`
+    # This means that this node is the first one called
+    workflow.set_entry_point("agent")
+
+    # We now add a conditional edge
+    workflow.add_conditional_edges(
+        # First, we define the start node. We use `agent`.
+        # This means these are the edges taken after the `agent` node is called.
+        "agent",
+        # Next, we pass in the function that will determine which node is called next.
+        should_continue,
+        # Finally we pass in a mapping.
+        # The keys are strings, and the values are other nodes.
+        # END is a special node marking that the graph should finish.
+        # What will happen is we will call `should_continue`, and then the output of that
+        # will be matched against the keys in this mapping.
+        # Based on which one it matches, that node will then be called.
+        {
+            # If `tools`, then we call the tool node.
+            "continue": "action",
+            # Otherwise we finish.
+            "end": END,
+        },
+    )
+
+    # We now add a normal edge from `tools` to `agent`.
+    # This means that after `tools` is called, `agent` node is called next.
+    workflow.add_edge("action", "agent")
+
+    # Finally, we compile it!
+    # This compiles it into a LangChain Runnable,
+    # meaning you can use it as you would any other runnable
+    app = workflow.compile()
+
+    assert await app.ainvoke(HumanMessage(content="what is weather in sf")) == [
+        HumanMessage(content="what is weather in sf"),
+        AIMessage(
+            content="",
+            additional_kwargs={
+                "function_call": {"name": "search_api", "arguments": '"query"'}
+            },
+        ),
+        FunctionMessage(content="result for query", name="search_api"),
+        AIMessage(
+            content="",
+            additional_kwargs={
+                "function_call": {"name": "search_api", "arguments": '"another"'}
+            },
+        ),
+        FunctionMessage(content="result for another", name="search_api"),
+        AIMessage(content="answer"),
+    ]
+
+    assert [
+        c async for c in app.astream([HumanMessage(content="what is weather in sf")])
+    ] == [
+        {
+            "agent": AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+            )
+        },
+        {"action": FunctionMessage(content="result for query", name="search_api")},
+        {
+            "agent": AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"another"'}
+                },
+            )
+        },
+        {"action": FunctionMessage(content="result for another", name="search_api")},
+        {"agent": AIMessage(content="answer")},
+        {
+            "__end__": [
+                HumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {"name": "search_api", "arguments": '"query"'}
+                    },
+                ),
+                FunctionMessage(content="result for query", name="search_api"),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": '"another"',
+                        }
+                    },
+                ),
+                FunctionMessage(content="result for another", name="search_api"),
+                AIMessage(content="answer"),
+            ]
         },
     ]

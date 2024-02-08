@@ -3,16 +3,17 @@ from functools import partial
 from inspect import signature
 from typing import Any, Optional, Type
 
-from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.runnables.base import RunnableLike
 
-from langgraph.channels.base import BaseChannel
+from langgraph.channels.base import BaseChannel, InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph.graph import END, Graph
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import ChannelRead
-from langgraph.pregel.write import ChannelWrite
+from langgraph.pregel.write import SKIP_WRITE, ChannelWrite
 
 START = "__start__"
 
@@ -25,13 +26,32 @@ class StateGraph(Graph):
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
 
+    def add_node(self, key: str, action: RunnableLike) -> None:
+        if key in self.channels:
+            raise ValueError(
+                f"'{key}' is already being used as a state attribute "
+                "(a.k.a. a channel), cannot also be used as a node name."
+            )
+        return super().add_node(key, action)
+
     def compile(self, checkpointer: Optional[BaseCheckpointSaver] = None) -> Pregel:
         self.validate()
 
-        if any(key in self.nodes for key in self.channels):
-            raise ValueError("Cannot use channel names as node names")
-
         state_keys = list(self.channels)
+        state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
+        update_channels = (
+            [("__root__", None, True)]
+            if not isinstance(state_keys_read, list)
+            else [
+                (key, RunnableLambda(partial(_dict_getter, state_keys, key)), False)
+                for key in state_keys_read
+            ]
+        )
+        coerce_state = (
+            partial(_coerce_state, self.schema)
+            if isinstance(state_keys_read, list)
+            else RunnablePassthrough()
+        )
 
         outgoing_edges = defaultdict(list)
         for start, end in self.edges:
@@ -40,10 +60,9 @@ class StateGraph(Graph):
         nodes = {
             key: (
                 Channel.subscribe_to(f"{key}:inbox")
-                | partial(_coerce_state, self.schema)  # coerce/validate using schema
+                | coerce_state  # coerce/validate using schema
                 | node
-                | _update_state
-                | Channel.write_to(key)
+                | ChannelWrite(channels=[(key, None, False)] + update_channels)
             )
             for key, node in self.nodes.items()
         }
@@ -54,7 +73,7 @@ class StateGraph(Graph):
             if outgoing or key in self.branches:
                 nodes[edges_key] = Channel.subscribe_to(
                     key, tags=["langsmith:hidden"]
-                ) | ChannelRead(state_keys)
+                ) | ChannelRead(state_keys_read)
             if outgoing:
                 nodes[edges_key] |= Channel.write_to(*[dest for dest in outgoing])
             if key in self.branches:
@@ -63,14 +82,12 @@ class StateGraph(Graph):
                         branch.runnable, name=f"{key}_condition"
                     )
 
-        nodes[START] = (
-            Channel.subscribe_to(f"{START}:inbox", tags=["langsmith:hidden"])
-            | _update_state
-            | Channel.write_to(START)
-        )
+        nodes[START] = Channel.subscribe_to(
+            f"{START}:inbox", tags=["langsmith:hidden"]
+        ) | ChannelWrite(channels=[(START, None, False)] + update_channels)
         nodes[f"{START}:edges"] = (
             Channel.subscribe_to(START, tags=["langsmith:hidden"])
-            | ChannelRead(state_keys)
+            | ChannelRead(state_keys_read)
             | Channel.write_to(f"{self.entry_point}:inbox")
         )
 
@@ -88,24 +105,35 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _update_state(input: dict[str, Any], config: RunnableConfig) -> dict[str, Any]:
+def _dict_getter(allowed_keys: str, key: str, input: dict) -> Any:
     if input is not None:
-        ChannelWrite.do_write(config, **input)
-    return input
+        if not isinstance(input, dict) or any(key not in allowed_keys for key in input):
+            raise InvalidUpdateError(
+                f"Invalid state update,"
+                f" expected dict with one or more of {allowed_keys}, got {input}"
+            )
+        return input.get(key, SKIP_WRITE)
+    else:
+        return SKIP_WRITE
 
 
 def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
     if not hasattr(schema, "__annotations__"):
-        raise ValueError("Schema must be a class with type annotations")
+        return {
+            "__root__": _get_channel(schema),
+        }
 
     channels: dict[str, BaseChannel] = {}
     for name, typ in schema.__annotations__.items():
-        if channel := _is_field_binop(typ):
-            channels[name] = channel
-        else:
-            channels[name] = LastValue(typ)
+        channels[name] = _get_channel(typ)
 
     return channels
+
+
+def _get_channel(annotation: Any) -> Optional[BaseChannel]:
+    if channel := _is_field_binop(annotation):
+        return channel
+    return LastValue(annotation)
 
 
 def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
@@ -122,3 +150,4 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
                 ]
             ):
                 return BinaryOperatorAggregate(typ, meta[0])
+    return None
