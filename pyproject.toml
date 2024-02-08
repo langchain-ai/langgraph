@@ -25,6 +25,7 @@ syrupy = "^4.0.2"
 httpx = "^0.26.0"
 pytest-watcher = "^0.3.4"
 langchain = "^0.1.0"
+aiosqlite = "^0.19.0"
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.4"
@@ -40,7 +41,6 @@ jupyter = "^1.0.0"
 langchain = "^0.1.0"
 langchainhub = "^0.1.14"
 langchain-openai = "^0.0.2"
-aiosqlite = "^0.19.0"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]
