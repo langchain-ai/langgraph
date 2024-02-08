@@ -18,7 +18,7 @@ test:
 	poetry run pytest
 
 test_watch:
-	poetry run ptw --snapshot-update --now . -- -vv -x tests
+	poetry run ptw --snapshot-update --now . -- -vv -x --ff tests
 
 ######################
 # LINTING AND FORMATTING
