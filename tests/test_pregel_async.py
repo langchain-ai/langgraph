@@ -527,6 +527,8 @@ async def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
     assert checkpoint is not None
     assert checkpoint["channel_values"].get("total") == 5
 
+    await memory.conn.close()
+
 
 async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
