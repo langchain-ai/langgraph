@@ -135,7 +135,7 @@ The path that is taken is not known until that node is run (the LLM decides).
 1. Conditional Edge: after the agent is called, we should either:
 
    a. If the agent said to take an action, then the function to invoke tools should be called
-   
+
    b. If the agent said that it was finished, then it should finish
 
 2. Normal Edge: after the tools are invoked, it should always go back to the agent to decide what to do next
@@ -469,7 +469,7 @@ It can often be tough to evaluation chat bots in multi-turn situations. One way 
 ### Async
 
 If you are running LangGraph in async workflows, you may want to create the nodes to be async by default.
-In order for a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb)
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb)
 
 ### Streaming Tokens
 
@@ -479,7 +479,12 @@ For a guide on how to do this, see [this documentation](https://github.com/langc
 ### Persistence
 
 LangGraph comes with built-in persistence, allowing you to save the state of the graph at point and resume from there.
-In order for a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/persistence.ipynb)
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/persistence.ipynb)
+
+### Human-in-the-loop
+
+LangGraph comes with built-in support for human-in-the-loop workflows. This is useful when you want to have a human review the current state before proceeding to a particular node.
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb)
 
 ## Documentation
 
