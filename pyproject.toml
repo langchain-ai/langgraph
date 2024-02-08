@@ -40,6 +40,7 @@ jupyter = "^1.0.0"
 langchain = "^0.1.0"
 langchainhub = "^0.1.14"
 langchain-openai = "^0.0.2"
+aiosqlite = "^0.19.0"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]
