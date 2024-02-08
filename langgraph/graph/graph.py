@@ -13,6 +13,7 @@ from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.pregel import Channel, Pregel
 
 END = "__end__"
+START = "START"
 
 
 class Branch(NamedTuple):
@@ -34,6 +35,7 @@ class Graph:
         self.edges = set[tuple[str, str]]()
         self.branches: defaultdict[str, list[Branch]] = defaultdict(list)
         self.support_multiple_edges = False
+        self.entry_point = None
 
     def add_node(self, key: str, action: RunnableLike) -> None:
         if key in self.nodes:
@@ -84,6 +86,12 @@ class Graph:
         if key not in self.nodes:
             raise ValueError(f"Need to add_node `{key}` first")
         self.entry_point = key
+
+    def set_entry_route(self, condition: Callable[..., str],
+        conditional_edge_mapping: Optional[Dict[str, str]] = None) -> None:
+        self.add_node(START, lambda x: None)
+        self.add_conditional_edges(START, condition, conditional_edge_mapping)
+        self.set_entry_point(START)
 
     def set_finish_point(self, key: str) -> None:
         return self.add_edge(key, END)
