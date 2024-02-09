@@ -1,15 +1,18 @@
 [tool.poetry]
-name = "langgraph"
+name = "gigagraph"
 version = "0.0.24"
-description = "langgraph"
+description = "gigagraph"
 authors = []
 license = "LangGraph License"
 readme = "README.md"
-repository = "https://www.github.com/langchain-ai/langgraph"
+repository = "https://github.com/ai-forever/gigagraph"
+packages = [
+    {include = "langgraph"}
+]
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-langchain-core = "^0.1.16"
+gigachain-core = "^0.1.16"
 
 
 [tool.poetry.group.test.dependencies]
@@ -24,7 +27,7 @@ pytest-mock  = "^3.10.0"
 syrupy = "^4.0.2"
 httpx = "^0.26.0"
 pytest-watcher = "^0.3.4"
-langchain = "^0.1.0"
+gigachain = "^0.1.0"
 aiosqlite = "^0.19.0"
 
 [tool.poetry.group.lint.dependencies]
@@ -38,9 +41,9 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 jupyter = "^1.0.0"
-langchain = "^0.1.0"
+gigachain = "^0.1.0"
 langchainhub = "^0.1.14"
-langchain-openai = "^0.0.2"
+gigachain-openai = "^0.0.5"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]
