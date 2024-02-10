@@ -38,8 +38,11 @@ class StateGraph(Graph):
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         interrupt_before: Optional[Sequence[str]] = None,
+        interrupt_after: Optional[Sequence[str]] = None,
     ) -> Pregel:
-        self.validate(interrupt=interrupt_before)
+        interrupt_before = interrupt_before or []
+        interrupt_after = interrupt_after or []
+        self.validate(interrupt=interrupt_before + interrupt_after)
 
         state_keys = list(self.channels)
         state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
@@ -102,9 +105,10 @@ class StateGraph(Graph):
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
             checkpointer=checkpointer,
-            interrupt=[f"{node}:inbox" for node in interrupt_before]
-            if interrupt_before
-            else [],
+            interrupt=(
+                [f"{node}:inbox" for node in interrupt_before]
+                + [node for node in interrupt_after]
+            ),
         )
 
 
