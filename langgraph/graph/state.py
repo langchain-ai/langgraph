@@ -78,7 +78,11 @@ class StateGraph(Graph):
             f"{key}:inbox": AnyValue(Any)
             for key in self.nodes
         }
-        node_outboxes = {key: EphemeralValue(Any) for key in self.nodes}
+        node_outboxes = {
+            # we clear outbox channels after each step
+            key: EphemeralValue(Any)
+            for key in self.nodes
+        }
 
         for key in self.nodes:
             outgoing = outgoing_edges[key]
