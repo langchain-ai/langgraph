@@ -1244,8 +1244,7 @@ def test_prebuilt_tool_chat() -> None:
         },
     ]
 
-
-def test_message_graph() -> None:
+def test_tool_message_graph() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
@@ -1267,19 +1266,27 @@ def test_message_graph() -> None:
             AIMessage(
                 content="",
                 additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": json.dumps("query"),
-                    }
+                    "tool_calls": [{
+                        "id": "tool_call123",
+                        "type": "function",
+                        "function":{
+                            "name": "search_api",
+                            "arguments": json.dumps("query"),
+                        }
+                    }]
                 },
             ),
             AIMessage(
                 content="",
                 additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": json.dumps("another"),
-                    }
+                        "tool_calls": [{
+                            "id": "tool_call234",
+                            "type": "function",
+                            "function":{
+                                "name": "search_api",
+                                "arguments": json.dumps("another"),
+                            }
+                        }]
                 },
             ),
             AIMessage(content="answer"),
@@ -1292,7 +1299,7 @@ def test_message_graph() -> None:
     def should_continue(messages):
         last_message = messages[-1]
         # If there is no function call, then we finish
-        if "function_call" not in last_message.additional_kwargs:
+        if "tool_calls" not in last_message.additional_kwargs:
             return "end"
         # Otherwise if there is, we continue
         else:
@@ -1304,9 +1311,9 @@ def test_message_graph() -> None:
         last_message = messages[-1]
         # We construct an AgentAction from the function_call
         action = AgentAction(
-            tool=last_message.additional_kwargs["function_call"]["name"],
+            tool=last_message.additional_kwargs["tool_calls"][0]["function"]["name"],
             tool_input=json.loads(
-                last_message.additional_kwargs["function_call"]["arguments"]
+                last_message.additional_kwargs["tool_calls"][0]["function"]["arguments"]
             ),
             log="",
         )
@@ -1361,14 +1368,28 @@ def test_message_graph() -> None:
         AIMessage(
             content="",
             additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"query"'}
+                "tool_calls": [{
+                        "id": "tool_call123",
+                        "type": "function",
+                        "function":{
+                            "name": "search_api",
+                            "arguments": "query",
+                        }
+                }]
             },
         ),
         FunctionMessage(content="result for query", name="search_api"),
         AIMessage(
             content="",
             additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"another"'}
+                "tool_calls": [{
+                    "id": "tool_call234",
+                    "type": "function",
+                    "function":{
+                        "name": "search_api",
+                        "arguments": "another",
+                    }
+                }]
             },
         ),
         FunctionMessage(content="result for another", name="search_api"),
@@ -1380,7 +1401,14 @@ def test_message_graph() -> None:
             "agent": AIMessage(
                 content="",
                 additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                    "tool_calls": [{
+                            "id": "tool_call123",
+                            "type": "function",
+                            "function":{
+                                "name": "search_api",
+                                "arguments": "query",
+                            }
+                    }]
                 },
             )
         },
@@ -1389,8 +1417,15 @@ def test_message_graph() -> None:
             "agent": AIMessage(
                 content="",
                 additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                    "tool_calls": [{
+                        "id": "tool_call234",
+                        "type": "function",
+                        "function":{
+                            "name": "search_api",
+                            "arguments": "another",
+                        }
+                    }]
+    },
             )
         },
         {"action": FunctionMessage(content="result for another", name="search_api")},
@@ -1401,18 +1436,29 @@ def test_message_graph() -> None:
                 AIMessage(
                     content="",
                     additional_kwargs={
-                        "function_call": {"name": "search_api", "arguments": '"query"'}
+                        "tool_calls": [{
+                                "id": "tool_call123",
+                                "type": "function",
+                                "function":{
+                                    "name": "search_api",
+                                    "arguments": "query",
+                                }
+                        }]
                     },
                 ),
                 FunctionMessage(content="result for query", name="search_api"),
                 AIMessage(
                     content="",
                     additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"another"',
-                        }
-                    },
+                        "tool_calls": [{
+                            "id": "tool_call234",
+                            "type": "function",
+                            "function":{
+                                "name": "search_api",
+                                "arguments": "another",
+                            }
+                        }]
+            },
                 ),
                 FunctionMessage(content="result for another", name="search_api"),
                 AIMessage(content="answer"),
@@ -1565,7 +1611,7 @@ def test_prebuilt_chat() -> None:
         },
     ]
 
-
+@deprecated("*")
 def test_message_graph() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
