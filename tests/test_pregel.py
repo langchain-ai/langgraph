@@ -10,6 +10,7 @@ import pytest
 from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
 
+from langchain_core._api import deprecated
 from langgraph.channels.base import InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
@@ -20,7 +21,7 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, Graph
 from langgraph.graph.message import MessageGraph
 from langgraph.graph.state import StateGraph
-from langgraph.prebuilt.chat_agent_executor import create_function_calling_executor
+from langgraph.prebuilt.chat_agent_executor import create_function_calling_executor, create_tool_calling_executor
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.pregel import Channel, GraphRecursionError, Pregel
 from langgraph.pregel.reserved import ReservedChannels
@@ -1061,7 +1062,365 @@ def test_conditional_graph_state() -> None:
         },
     ]
 
+def test_prebuilt_tool_chat() -> None:
+    from langchain.chat_models.fake import FakeMessagesListChatModel
+    from langchain_community.tools import tool
+    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
+    class FakeFuntionChatModel(FakeMessagesListChatModel):
+        def bind_functions(self, functions: list):
+            return self
+
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    app = create_tool_calling_executor(
+        FakeFuntionChatModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "tool_calls": [{
+                            "id": "tool_call123",
+                            "type": "function",
+                            "function":{
+                                "name": "search_api",
+                                "arguments": json.dumps("query"),
+                            }
+                        }]
+                    },
+                ),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "tool_calls": [{
+                            "id": "tool_call234",
+                            "type": "function",
+                            "function":{
+                                "name": "search_api",
+                                "arguments": json.dumps("another"),
+                            }
+                        }]
+                    },
+                ),
+                AIMessage(content="answer"),
+            ]
+        ),
+        tools,
+    )
+
+    assert app.invoke(
+        {"messages": [HumanMessage(content="what is weather in sf")]}
+    ) == {
+        "messages": [
+            HumanMessage(content="what is weather in sf"),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "tool_calls": [{
+                        "id": "tool_call123",
+                        "type": "function",
+                        "function":{
+                            "name": "search_api",
+                            "arguments": "query",
+                        }
+                    }]
+                },
+            ),
+            FunctionMessage(content="result for query", name="search_api"),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "tool_calls": [{
+                        "id": "tool_call234",
+                        "type": "function",
+                        "function":{
+                            "name": "search_api",
+                            "arguments": "another",
+                        }
+                    }]
+               },
+            ),
+            FunctionMessage(content="result for another", name="search_api"),
+            AIMessage(content="answer"),
+        ]
+    }
+
+    assert [
+        *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
+    ] == [
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "tool_calls": [{
+                                    "id": "tool_call123",
+                                    "type": "function",
+                                    "function":{
+                                        "name": "search_api",
+                                        "arguments": "query",
+                                    }
+                            }]
+                        },
+                    )
+                ]
+            }
+        },
+        {
+            "action": {
+                "messages": [
+                    FunctionMessage(content="result for query", name="search_api")
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                            additional_kwargs={
+                                "tool_calls": [{
+                                    "id": "tool_call234",
+                                    "type": "function",
+                                    "function":{
+                                        "name": "search_api",
+                                        "arguments": "another",
+                                    }
+                                }]
+                         },
+                    )
+                ]
+            }
+        },
+        {
+            "action": {
+                "messages": [
+                    FunctionMessage(content="result for another", name="search_api")
+                ]
+            }
+        },
+        {"agent": {"messages": [AIMessage(content="answer")]}},
+        {
+            "__end__": {
+                "messages": [
+                    HumanMessage(content="what is weather in sf"),
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "tool_calls": [{
+                                    "id": "tool_call123",
+                                    "type": "function",
+                                    "function":{
+                                        "name": "search_api",
+                                        "arguments": "query",
+                                    }
+                            }]
+                      },
+                    ),
+                    FunctionMessage(content="result for query", name="search_api"),
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                                "tool_calls": [{
+                                    "id": "tool_call234",
+                                    "type": "function",
+                                    "function":{
+                                        "name": "search_api",
+                                        "arguments": "another",
+                                    }
+                                }]
+                        },
+                    ),
+                    FunctionMessage(content="result for another", name="search_api"),
+                    AIMessage(content="answer"),
+                ]
+            }
+        },
+    ]
+
+
+def test_message_graph() -> None:
+    from langchain.chat_models.fake import FakeMessagesListChatModel
+    from langchain_community.tools import tool
+    from langchain_core.agents import AgentAction
+    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+
+    class FakeFuntionChatModel(FakeMessagesListChatModel):
+        def bind_functions(self, functions: list):
+            return self
+
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    model = FakeFuntionChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": json.dumps("query"),
+                    }
+                },
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": json.dumps("another"),
+                    }
+                },
+            ),
+            AIMessage(content="answer"),
+        ]
+    )
+
+    tool_executor = ToolExecutor(tools)
+
+    # Define the function that determines whether to continue or not
+    def should_continue(messages):
+        last_message = messages[-1]
+        # If there is no function call, then we finish
+        if "function_call" not in last_message.additional_kwargs:
+            return "end"
+        # Otherwise if there is, we continue
+        else:
+            return "continue"
+
+    def call_tool(messages):
+        # Based on the continue condition
+        # we know the last message involves a function call
+        last_message = messages[-1]
+        # We construct an AgentAction from the function_call
+        action = AgentAction(
+            tool=last_message.additional_kwargs["function_call"]["name"],
+            tool_input=json.loads(
+                last_message.additional_kwargs["function_call"]["arguments"]
+            ),
+            log="",
+        )
+        # We call the tool_executor and get back a response
+        response = tool_executor.invoke(action)
+        # We use the response to create a FunctionMessage
+        return FunctionMessage(content=str(response), name=action.tool)
+
+    # Define a new graph
+    workflow = MessageGraph()
+
+    # Define the two nodes we will cycle between
+    workflow.add_node("agent", model)
+    workflow.add_node("action", call_tool)
+
+    # Set the entrypoint as `agent`
+    # This means that this node is the first one called
+    workflow.set_entry_point("agent")
+
+    # We now add a conditional edge
+    workflow.add_conditional_edges(
+        # First, we define the start node. We use `agent`.
+        # This means these are the edges taken after the `agent` node is called.
+        "agent",
+        # Next, we pass in the function that will determine which node is called next.
+        should_continue,
+        # Finally we pass in a mapping.
+        # The keys are strings, and the values are other nodes.
+        # END is a special node marking that the graph should finish.
+        # What will happen is we will call `should_continue`, and then the output of that
+        # will be matched against the keys in this mapping.
+        # Based on which one it matches, that node will then be called.
+        {
+            # If `tools`, then we call the tool node.
+            "continue": "action",
+            # Otherwise we finish.
+            "end": END,
+        },
+    )
+
+    # We now add a normal edge from `tools` to `agent`.
+    # This means that after `tools` is called, `agent` node is called next.
+    workflow.add_edge("action", "agent")
+
+    # Finally, we compile it!
+    # This compiles it into a LangChain Runnable,
+    # meaning you can use it as you would any other runnable
+    app = workflow.compile()
+
+    assert app.invoke(HumanMessage(content="what is weather in sf")) == [
+        HumanMessage(content="what is weather in sf"),
+        AIMessage(
+            content="",
+            additional_kwargs={
+                "function_call": {"name": "search_api", "arguments": '"query"'}
+            },
+        ),
+        FunctionMessage(content="result for query", name="search_api"),
+        AIMessage(
+            content="",
+            additional_kwargs={
+                "function_call": {"name": "search_api", "arguments": '"another"'}
+            },
+        ),
+        FunctionMessage(content="result for another", name="search_api"),
+        AIMessage(content="answer"),
+    ]
+
+    assert [*app.stream([HumanMessage(content="what is weather in sf")])] == [
+        {
+            "agent": AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+            )
+        },
+        {"action": FunctionMessage(content="result for query", name="search_api")},
+        {
+            "agent": AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"another"'}
+                },
+            )
+        },
+        {"action": FunctionMessage(content="result for another", name="search_api")},
+        {"agent": AIMessage(content="answer")},
+        {
+            "__end__": [
+                HumanMessage(content="what is weather in sf"),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {"name": "search_api", "arguments": '"query"'}
+                    },
+                ),
+                FunctionMessage(content="result for query", name="search_api"),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": '"another"',
+                        }
+                    },
+                ),
+                FunctionMessage(content="result for another", name="search_api"),
+                AIMessage(content="answer"),
+            ]
+        },
+    ]
+
+@deprecated("*")
 def test_prebuilt_chat() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
