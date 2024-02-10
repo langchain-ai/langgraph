@@ -1,7 +1,7 @@
 from collections import defaultdict
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Type
+from typing import Any, Optional, Sequence, Type
 
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.runnables.base import RunnableLike
@@ -34,8 +34,12 @@ class StateGraph(Graph):
             )
         return super().add_node(key, action)
 
-    def compile(self, checkpointer: Optional[BaseCheckpointSaver] = None) -> Pregel:
-        self.validate()
+    def compile(
+        self,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
+        interrupt_before: Optional[Sequence[str]] = None,
+    ) -> Pregel:
+        self.validate(interrupt=interrupt_before)
 
         state_keys = list(self.channels)
         state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
@@ -98,6 +102,9 @@ class StateGraph(Graph):
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
             checkpointer=checkpointer,
+            interrupt=[f"{node}:inbox" for node in interrupt_before]
+            if interrupt_before
+            else [],
         )
 
 
@@ -105,7 +112,7 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _dict_getter(allowed_keys: str, key: str, input: dict) -> Any:
+def _dict_getter(allowed_keys: list[str], key: str, input: dict) -> Any:
     if input is not None:
         if not isinstance(input, dict) or any(key not in allowed_keys for key in input):
             raise InvalidUpdateError(
