@@ -107,7 +107,6 @@ def _evaluate_expression(expression: str) -> str:
 
 
 def get_math_tool(llm: ChatOpenAI):
-
     prompt = ChatPromptTemplate.from_messages(
         [
             ("system", _SYSTEM_PROMPT),
