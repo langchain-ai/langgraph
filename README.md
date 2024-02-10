@@ -464,7 +464,7 @@ We also have a lot of examples highlighting how to slightly modify the base chat
 
 These examples demonstrate agent architectures that prompt the agent to generate a multi-step plan that can then be executed without having to prompt the agent LLM a second time.
 - [Plan-and-Execute](https://github.com/langchain-ai/langgraph/blob/main/examples/plan-and-execute/plan-and-execute.ipynb): create a basic multi-step plan based on the [Plan-and-solve](https://arxiv.org/abs/2305.04091) paper
-- [LLMCompiler](https://github.com/langchain-ai/langgraph/blob/main/examples/llm-compiler/LLMCompiler.ipynb): stream a plan in the form of a DAG, and execute each task once its dependencies are resolved. Based on the [LLMCompiler](https://arxiv.org/abs/2312.04511) paper.
+- [LLMCompiler](https://github.com/langchain-ai/langgraph/blob/main/examples/llm-compiler/LLMCompiler.ipynb): stream a plan in the form of a DAG, and execute each task once its dependencies are resolved. Based on the [paper](https://arxiv.org/abs/2312.04511) by Kim, et. al.
 
 
 ### Chatbot Evaluation via Simulation
