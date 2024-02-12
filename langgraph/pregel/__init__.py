@@ -789,7 +789,7 @@ def _prepare_next_tasks(
                 checkpoint["channel_versions"][chan] > seen[chan]
                 for chan in proc.triggers
             ):
-                # If all channels subscribed by this process have been initialized
+                # If all channels subscribed by this process are not empty
                 try:
                     val: Any = {
                         k: _read_channel(
@@ -819,9 +819,11 @@ def _prepare_next_tasks(
         elif isinstance(proc, ChannelBatch):
             # If the channel read by this process was updated
             if checkpoint["channel_versions"][proc.channel] > seen[proc.channel]:
-                # Here we don't catch EmptyChannelError because the channel
-                # must be intialized if the previous `if` condition is true
-                val = channels[proc.channel].get()
+                # If the channel subscribed by this process is not empty
+                try:
+                    val = channels[proc.channel].get()
+                except EmptyChannelError:
+                    continue
                 if proc.key is not None:
                     val = [{proc.key: v} for v in val]
 
