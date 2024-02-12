@@ -50,12 +50,15 @@ def create_function_calling_executor(model, tools):
         # Based on the continue condition
         # we know the last message involves a function call
         last_message = messages[-1]
+
+        tool_input = last_message.additional_kwargs["function_call"]["arguments"]
+        if isinstance(tool_input, str):
+            tool_input = json.loads(tool_input)
         # We construct an AgentAction from the function_call
+        
         return AgentAction(
             tool=last_message.additional_kwargs["function_call"]["name"],
-            tool_input=json.loads(
-                last_message.additional_kwargs["function_call"]["arguments"]
-            ),
+            tool_input=tool_input,
             log="",
         )
 
