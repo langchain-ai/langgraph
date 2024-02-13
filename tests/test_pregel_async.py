@@ -17,7 +17,6 @@ import pytest
 from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
 
-from langchain_core._api import deprecated
 from langgraph.channels.base import InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
@@ -1163,9 +1162,6 @@ async def test_prebuilt_tool_chat() -> None:
         tools,
     )
 
-    res = await app.ainvoke(
-        {"messages": [HumanMessage(content="what is weather in sf")]}
-    )
     assert await app.ainvoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
