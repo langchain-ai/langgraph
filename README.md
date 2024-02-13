@@ -152,7 +152,7 @@ def should_continue(state):
     messages = state['messages']
     last_message = messages[-1]
     # If there is no function call, then we finish
-    if "function_call" not in last_message.additional_kwargs:
+    if "tool_calls" not in last_message.additional_kwargs:
         return "end"
     # Otherwise if there is, we continue
     else:
@@ -171,10 +171,10 @@ def call_tool(state):
     # Based on the continue condition
     # we know the last message involves a function call
     last_message = messages[-1]
-    # We construct an ToolInvocation from the function_call
+    # We construct an ToolInvocation from the tool_calls
     action = ToolInvocation(
-        tool=last_message.additional_kwargs["function_call"]["name"],
-        tool_input=json.loads(last_message.additional_kwargs["function_call"]["arguments"]),
+        tool=last_message.additional_kwargs["tool_calls"][0]["function"]["name"],
+        tool_input=json.loads(last_message.additional_kwargs["tool_calls"][0]["function"]["arguments"]),
     )
     # We call the tool_executor and get back a response
     response = tool_executor.invoke(action)

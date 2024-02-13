@@ -3,7 +3,7 @@ import operator
 from typing import Annotated, Sequence, TypedDict
 
 from langchain_core.agents import AgentAction
-from langchain_core.messages import BaseMessage, FunctionMessage
+from langchain_core.messages import BaseMessage, FunctionMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
 from langchain_core.utils.function_calling import convert_to_openai_function, convert_to_openai_tool
 
@@ -139,7 +139,7 @@ def create_tool_calling_executor(model, tools):
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
-        if "tool_call" not in last_message.additional_kwargs:
+        if "tool_calls" not in last_message.additional_kwargs:
             return "end"
         # Otherwise if there is, we continue
         else:
@@ -170,7 +170,7 @@ def create_tool_calling_executor(model, tools):
             tool_input=json.loads(
                 last_message.additional_kwargs["tool_calls"][0]["function"]["arguments"]
             ),
-            log="",
+            log=last_message.additional_kwargs["tool_calls"][0]["id"],
         )
 
     def call_tool(state):
@@ -178,18 +178,18 @@ def create_tool_calling_executor(model, tools):
         # We call the tool_executor and get back a response
         response = tool_executor.invoke(action)
         # We use the response to create a FunctionMessage
-        function_message = FunctionMessage(content=str(response), name=action.tool)
+        tool_message = ToolMessage(content=str(response), tool_call_id=action.log)
         # We return a list, because this will get added to the existing list
-        return {"messages": [function_message]}
+        return {"messages": [tool_message]}
 
     async def acall_tool(state):
         action = _get_action(state)
         # We call the tool_executor and get back a response
         response = await tool_executor.ainvoke(action)
         # We use the response to create a FunctionMessage
-        function_message = FunctionMessage(content=str(response), name=action.tool)
+        tool_message = ToolMessage(content=str(response), tool_call_id=action.log)
         # We return a list, because this will get added to the existing list
-        return {"messages": [function_message]}
+        return {"messages": [tool_message]}
 
     # We create the AgentState that we will pass around
     # This simply involves a list of messages

@@ -26,7 +26,6 @@ from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.pregel import Channel, GraphRecursionError, Pregel
 from langgraph.pregel.reserved import ReservedChannels
 
-
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
@@ -1065,7 +1064,7 @@ def test_conditional_graph_state() -> None:
 def test_prebuilt_tool_chat() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
-    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -1112,7 +1111,7 @@ def test_prebuilt_tool_chat() -> None:
         ),
         tools,
     )
-
+    
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
@@ -1126,12 +1125,12 @@ def test_prebuilt_tool_chat() -> None:
                         "type": "function",
                         "function":{
                             "name": "search_api",
-                            "arguments": "query",
+                            "arguments": "\"query\"",
                         }
                     }]
                 },
             ),
-            FunctionMessage(content="result for query", name="search_api"),
+            ToolMessage(content="result for query", tool_call_id="tool_call123"),
             AIMessage(
                 content="",
                 additional_kwargs={
@@ -1140,12 +1139,12 @@ def test_prebuilt_tool_chat() -> None:
                         "type": "function",
                         "function":{
                             "name": "search_api",
-                            "arguments": "another",
+                            "arguments": "\"another\"",
                         }
                     }]
                },
             ),
-            FunctionMessage(content="result for another", name="search_api"),
+            ToolMessage(content="result for another", tool_call_id="tool_call234"),
             AIMessage(content="answer"),
         ]
     }
@@ -1164,7 +1163,7 @@ def test_prebuilt_tool_chat() -> None:
                                     "type": "function",
                                     "function":{
                                         "name": "search_api",
-                                        "arguments": "query",
+                                        "arguments": "\"query\"",
                                     }
                             }]
                         },
@@ -1175,7 +1174,7 @@ def test_prebuilt_tool_chat() -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for query", name="search_api")
+                    ToolMessage(content="result for query", tool_call_id="tool_call123")
                 ]
             }
         },
@@ -1190,7 +1189,7 @@ def test_prebuilt_tool_chat() -> None:
                                     "type": "function",
                                     "function":{
                                         "name": "search_api",
-                                        "arguments": "another",
+                                        "arguments": "\"another\"",
                                     }
                                 }]
                          },
@@ -1201,7 +1200,7 @@ def test_prebuilt_tool_chat() -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for another", name="search_api")
+                    ToolMessage(content="result for another", tool_call_id="tool_call234")
                 ]
             }
         },
@@ -1218,12 +1217,12 @@ def test_prebuilt_tool_chat() -> None:
                                     "type": "function",
                                     "function":{
                                         "name": "search_api",
-                                        "arguments": "query",
+                                        "arguments": "\"query\"",
                                     }
                             }]
                       },
                     ),
-                    FunctionMessage(content="result for query", name="search_api"),
+                    ToolMessage(content="result for query", tool_call_id="tool_call123"),
                     AIMessage(
                         content="",
                         additional_kwargs={
@@ -1232,12 +1231,12 @@ def test_prebuilt_tool_chat() -> None:
                                     "type": "function",
                                     "function":{
                                         "name": "search_api",
-                                        "arguments": "another",
+                                        "arguments": "\"another\"",
                                     }
                                 }]
                         },
                     ),
-                    FunctionMessage(content="result for another", name="search_api"),
+                    ToolMessage(content="result for another", tool_call_id="tool_call234"),
                     AIMessage(content="answer"),
                 ]
             }
@@ -1248,7 +1247,7 @@ def test_tool_message_graph() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
-    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+    from langchain_core.messages import AIMessage, ToolMessage, HumanMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -1315,12 +1314,12 @@ def test_tool_message_graph() -> None:
             tool_input=json.loads(
                 last_message.additional_kwargs["tool_calls"][0]["function"]["arguments"]
             ),
-            log="",
+            log=last_message.additional_kwargs["tool_calls"][0]["id"],
         )
         # We call the tool_executor and get back a response
         response = tool_executor.invoke(action)
-        # We use the response to create a FunctionMessage
-        return FunctionMessage(content=str(response), name=action.tool)
+        # We use the response to create a ToolMessage
+        return ToolMessage(content=str(response), tool_call_id=action.log)
 
     # Define a new graph
     workflow = MessageGraph()
@@ -1373,12 +1372,12 @@ def test_tool_message_graph() -> None:
                         "type": "function",
                         "function":{
                             "name": "search_api",
-                            "arguments": "query",
+                            "arguments": "\"query\"",
                         }
                 }]
             },
         ),
-        FunctionMessage(content="result for query", name="search_api"),
+        ToolMessage(content="result for query", tool_call_id="tool_call123"),
         AIMessage(
             content="",
             additional_kwargs={
@@ -1387,12 +1386,12 @@ def test_tool_message_graph() -> None:
                     "type": "function",
                     "function":{
                         "name": "search_api",
-                        "arguments": "another",
+                        "arguments": "\"another\"",
                     }
                 }]
             },
         ),
-        FunctionMessage(content="result for another", name="search_api"),
+        ToolMessage(content="result for another", tool_call_id="tool_call234"),
         AIMessage(content="answer"),
     ]
 
@@ -1406,13 +1405,13 @@ def test_tool_message_graph() -> None:
                             "type": "function",
                             "function":{
                                 "name": "search_api",
-                                "arguments": "query",
+                                "arguments": "\"query\"",
                             }
                     }]
                 },
             )
         },
-        {"action": FunctionMessage(content="result for query", name="search_api")},
+        {"action": ToolMessage(content="result for query", tool_call_id="tool_call123")},
         {
             "agent": AIMessage(
                 content="",
@@ -1422,13 +1421,13 @@ def test_tool_message_graph() -> None:
                         "type": "function",
                         "function":{
                             "name": "search_api",
-                            "arguments": "another",
+                            "arguments": "\"another\"",
                         }
                     }]
     },
             )
         },
-        {"action": FunctionMessage(content="result for another", name="search_api")},
+        {"action": ToolMessage(content="result for another", tool_call_id="tool_call234")},
         {"agent": AIMessage(content="answer")},
         {
             "__end__": [
@@ -1441,12 +1440,12 @@ def test_tool_message_graph() -> None:
                                 "type": "function",
                                 "function":{
                                     "name": "search_api",
-                                    "arguments": "query",
+                                    "arguments": "\"query\"",
                                 }
                         }]
                     },
                 ),
-                FunctionMessage(content="result for query", name="search_api"),
+                ToolMessage(content="result for query", tool_call_id="tool_call123"),
                 AIMessage(
                     content="",
                     additional_kwargs={
@@ -1455,18 +1454,17 @@ def test_tool_message_graph() -> None:
                             "type": "function",
                             "function":{
                                 "name": "search_api",
-                                "arguments": "another",
+                                "arguments": "\"another\"",
                             }
                         }]
             },
                 ),
-                FunctionMessage(content="result for another", name="search_api"),
+                ToolMessage(content="result for another", tool_call_id="tool_call234"),
                 AIMessage(content="answer"),
             ]
         },
     ]
 
-@deprecated("*")
 def test_prebuilt_chat() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
@@ -1611,7 +1609,6 @@ def test_prebuilt_chat() -> None:
         },
     ]
 
-@deprecated("*")
 def test_message_graph() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
