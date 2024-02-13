@@ -2,7 +2,7 @@ name: test
 
 on:
   push:
-    branches: [tool_call]
+    branches: [master]
   pull_request:
 
 env:
