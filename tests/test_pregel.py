@@ -1074,7 +1074,7 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
     ]
 
 
-def test_prebuilt_tool_chat() -> None:
+def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -1136,6 +1136,11 @@ def test_prebuilt_tool_chat() -> None:
         ),
         tools,
     )
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -1318,7 +1323,7 @@ def test_prebuilt_tool_chat() -> None:
     ]
 
 
-def test_prebuilt_chat() -> None:
+def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
@@ -1360,6 +1365,11 @@ def test_prebuilt_chat() -> None:
         ),
         tools,
     )
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -1463,7 +1473,7 @@ def test_prebuilt_chat() -> None:
     ]
 
 
-def test_message_graph() -> None:
+def test_message_graph(snapshot: SnapshotAssertion) -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
@@ -1573,6 +1583,11 @@ def test_message_graph() -> None:
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
         HumanMessage(content="what is weather in sf"),

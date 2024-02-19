@@ -78,13 +78,13 @@ class StateGraph(Graph):
         node_inboxes = {
             # we take any value written to channel because all writers
             # write the entire state as of that step, which is equal for all
-            f"{key}:inbox": AnyValue(Any)
-            for key in self.nodes
+            f"{key}:inbox": AnyValue(self.schema)
+            for key in list(self.nodes) + [START]
         }
         node_outboxes = {
             # we clear outbox channels after each step
             key: EphemeralValue(Any)
-            for key in self.nodes
+            for key in list(self.nodes) + [START]
         }
 
         for key in self.nodes:
@@ -114,7 +114,12 @@ class StateGraph(Graph):
         return CompiledGraph(
             graph=self,
             nodes=nodes,
-            channels={**self.channels, **node_inboxes, **node_outboxes},
+            channels={
+                **self.channels,
+                **node_inboxes,
+                **node_outboxes,
+                END: LastValue(self.schema),
+            },
             input=f"{START}:inbox",
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
