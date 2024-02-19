@@ -196,10 +196,10 @@ class Graph:
 class CompiledGraph(Pregel):
     graph: Graph
 
-    def get_graph(self, config: RunnableConfig | None = None) -> RunnableGraph:
+    def get_graph(self, config: Optional[RunnableConfig] = None) -> RunnableGraph:
         graph = RunnableGraph()
-        graph.add_node(self.get_input_schema(), "__start__")
-        graph.add_node(self.get_output_schema(), END)
+        graph.add_node(self.get_input_schema(config), "__start__")
+        graph.add_node(self.get_output_schema(config), END)
 
         for key, node in self.graph.nodes.items():
             graph.add_node(node, key)
