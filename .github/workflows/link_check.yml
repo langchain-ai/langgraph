@@ -8,32 +8,40 @@ on:
     branches:
       - main
   schedule:
-    - cron: '0 5 * * *'
+    - cron: "0 5 * * *"
   workflow_dispatch:
+
+env:
+  POETRY_VERSION: "1.7.1"
 
 jobs:
   markdown-link-check:
     runs-on: ubuntu-latest
     steps:
       - name: Checkout code
-        uses: actions/checkout@v2
+        uses: actions/checkout@v4
       - name: Check links in Markdown files
         uses: gaurav-nelson/github-action-markdown-link-check@v1
 
   notebook-link-check:
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v2
-      - name: Set up Python
-        uses: actions/setup-python@v4
+      - uses: actions/checkout@v4
+      - name: Set up Python 3.x + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
         with:
-          python-version: '3.x'
+          python-version: "3.x"
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: core
+
       - name: Install dependencies
+        shell: bash
         run: |
           python -m pip install --upgrade pip
-          pip install -U pytest pytest-check-links langsmith langchain GitPython
+          poetry install --with test
+          poetry pip install -U pytest pytest-check-links langsmith langchain GitPython
       - name: Check links in notebooks
         env:
           LANGCHAIN_API_KEY: test
-        run: pytest -o python_files=non_python_only --check-links --ignore="*.py" -k .ipynb --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" .
+          shell: bash
+          run: poetry run pytest -o python_files=non_python_only --check-links --ignore="*.py" -k .ipynb --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" .
