@@ -152,7 +152,7 @@ def should_continue(state):
     messages = state['messages']
     last_message = messages[-1]
     # If there is no function call, then we finish
-    if "tool_calls" not in last_message.additional_kwargs:
+    if "function_call" not in last_message.additional_kwargs:
         return "end"
     # Otherwise if there is, we continue
     else:
@@ -171,10 +171,10 @@ def call_tool(state):
     # Based on the continue condition
     # we know the last message involves a function call
     last_message = messages[-1]
-    # We construct an ToolInvocation from the tool_calls
+    # We construct an ToolInvocation from the function_call
     action = ToolInvocation(
-        tool=last_message.additional_kwargs["tool_calls"][0]["function"]["name"],
-        tool_input=json.loads(last_message.additional_kwargs["tool_calls"][0]["function"]["arguments"]),
+        tool=last_message.additional_kwargs["function_call"]["name"],
+        tool_input=json.loads(last_message.additional_kwargs["function_call"]["arguments"]),
     )
     # We call the tool_executor and get back a response
     response = tool_executor.invoke(action)
@@ -474,7 +474,6 @@ For a walkthrough on how to do that, see [this documentation](https://github.com
 LangGraph comes with built-in support for human-in-the-loop workflows. This is useful when you want to have a human review the current state before proceeding to a particular node.
 For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb)
 
-
 ### Planning Agent Examples
 
 The following notebooks implement agent architectures prototypical of the "plan-and-execute" style, where an LLM planner decomposes a user request into a program, an executor executes the program, and an LLM synthesizes a response (and/or dynamically replans) based on the program outputs.
@@ -482,7 +481,6 @@ The following notebooks implement agent architectures prototypical of the "plan-
 - [Plan-and-execute](https://github.com/langchain-ai/langgraph/blob/main/examples/plan-and-execute/plan-and-execute.ipynb): a simple agent with a **planner** that generates a multi-step task list, an **executor** that invokes the tools in the plan, and a **replanner** that responds or generates an updated plan. Based on the [Plan-and-solve](https://arxiv.org/abs/2305.04091) paper by Wang, et. al.
 - [Reasoning without Observation](https://github.com/langchain-ai/langgraph/blob/main/examples/rewoo/rewoo.ipynb): planner generates a task list whose observations are saved as **variables**. Variables can be used in subsequent tasks to reduce the need for further re-planning. Based on the [ReWOO](https://arxiv.org/abs/2305.18323) paper by Xu, et. al.
 - [LLMCompiler](https://github.com/langchain-ai/langgraph/blob/main/examples/llm-compiler/LLMCompiler.ipynb): planner generates a **DAG** of tasks with variable responses. Tasks are **streamed** and executed eagerly to minimize tool execution runtime. Based on the [paper](https://arxiv.org/abs/2312.04511) by Kim, et. al.
-
 
 ### Multi-agent Examples
 
