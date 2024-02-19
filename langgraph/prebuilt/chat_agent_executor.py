@@ -1,17 +1,23 @@
 import json
 import operator
-from typing import Annotated, Sequence, TypedDict
+from typing import Annotated, Sequence, TypedDict, Union
 
-from langchain_core.agents import AgentAction
+from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import BaseMessage, FunctionMessage, ToolMessage
 from langchain_core.runnables import RunnableLambda
-from langchain_core.utils.function_calling import convert_to_openai_function, convert_to_openai_tool
+from langchain_core.tools import BaseTool
+from langchain_core.utils.function_calling import (
+    convert_to_openai_function,
+    convert_to_openai_tool,
+)
 
 from langgraph.graph import END, StateGraph
-from langgraph.prebuilt.tool_executor import ToolExecutor
+from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 
 
-def create_function_calling_executor(model, tools):
+def create_function_calling_executor(
+    model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
+):
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
         tool_classes = tools.tools
@@ -20,8 +26,15 @@ def create_function_calling_executor(model, tools):
         tool_classes = tools
     model = model.bind(functions=[convert_to_openai_function(t) for t in tool_classes])
 
+    # We create the AgentState that we will pass around
+    # This simply involves a list of messages
+    # We want steps to return messages to append to the list
+    # So we annotate the messages attribute with operator.add
+    class AgentState(TypedDict):
+        messages: Annotated[Sequence[BaseMessage], operator.add]
+
     # Define the function that determines whether to continue or not
-    def should_continue(state):
+    def should_continue(state: AgentState):
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
@@ -32,34 +45,33 @@ def create_function_calling_executor(model, tools):
             return "continue"
 
     # Define the function that calls the model
-    def call_model(state):
+    def call_model(state: AgentState):
         messages = state["messages"]
         response = model.invoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state):
+    async def acall_model(state: AgentState):
         messages = state["messages"]
         response = await model.ainvoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
     # Define the function to execute tools
-    def _get_action(state):
+    def _get_action(state: AgentState):
         messages = state["messages"]
         # Based on the continue condition
         # we know the last message involves a function call
         last_message = messages[-1]
         # We construct an AgentAction from the function_call
-        return AgentAction(
+        return ToolInvocation(
             tool=last_message.additional_kwargs["function_call"]["name"],
             tool_input=json.loads(
                 last_message.additional_kwargs["function_call"]["arguments"]
             ),
-            log="",
         )
 
-    def call_tool(state):
+    def call_tool(state: AgentState):
         action = _get_action(state)
         # We call the tool_executor and get back a response
         response = tool_executor.invoke(action)
@@ -68,7 +80,7 @@ def create_function_calling_executor(model, tools):
         # We return a list, because this will get added to the existing list
         return {"messages": [function_message]}
 
-    async def acall_tool(state):
+    async def acall_tool(state: AgentState):
         action = _get_action(state)
         # We call the tool_executor and get back a response
         response = await tool_executor.ainvoke(action)
@@ -76,13 +88,6 @@ def create_function_calling_executor(model, tools):
         function_message = FunctionMessage(content=str(response), name=action.tool)
         # We return a list, because this will get added to the existing list
         return {"messages": [function_message]}
-
-    # We create the AgentState that we will pass around
-    # This simply involves a list of messages
-    # We want steps to return messages to append to the list
-    # So we annotate the messages attribute with operator.add
-    class AgentState(TypedDict):
-        messages: Annotated[Sequence[BaseMessage], operator.add]
 
     # Define a new graph
     workflow = StateGraph(AgentState)
@@ -125,17 +130,27 @@ def create_function_calling_executor(model, tools):
     # meaning you can use it as you would any other runnable
     return workflow.compile()
 
-def create_tool_calling_executor(model, tools):
+
+def create_tool_calling_executor(
+    model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
+):
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
         tool_classes = tools.tools
     else:
         tool_executor = ToolExecutor(tools)
         tool_classes = tools
-    model = model.bind(functions=[convert_to_openai_tool(t) for t in tool_classes])
+    model = model.bind(tools=[convert_to_openai_tool(t) for t in tool_classes])
+
+    # We create the AgentState that we will pass around
+    # This simply involves a list of messages
+    # We want steps to return messages to append to the list
+    # So we annotate the messages attribute with operator.add
+    class AgentState(TypedDict):
+        messages: Annotated[Sequence[BaseMessage], operator.add]
 
     # Define the function that determines whether to continue or not
-    def should_continue(state):
+    def should_continue(state: AgentState):
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
@@ -146,57 +161,62 @@ def create_tool_calling_executor(model, tools):
             return "continue"
 
     # Define the function that calls the model
-    def call_model(state):
+    def call_model(state: AgentState):
         messages = state["messages"]
         response = model.invoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state):
+    async def acall_model(state: AgentState):
         messages = state["messages"]
         response = await model.ainvoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
     # Define the function to execute tools
-    def _get_action(state):
+    def _get_actions(state: AgentState):
         messages = state["messages"]
         # Based on the continue condition
         # we know the last message involves a tool call
         last_message = messages[-1]
-        # We construct an AgentAction from the tool_calls
-        return AgentAction(
-            tool=last_message.additional_kwargs["tool_calls"][0]["function"]["name"],
-            tool_input=json.loads(
-                last_message.additional_kwargs["tool_calls"][0]["function"]["arguments"]
-            ),
-            log=last_message.additional_kwargs["tool_calls"][0]["id"],
+        # We construct an AgentAction from each of the tool_calls
+        return (
+            [
+                ToolInvocation(
+                    tool=tool_call["function"]["name"],
+                    tool_input=json.loads(tool_call["function"]["arguments"]),
+                )
+                for tool_call in last_message.additional_kwargs["tool_calls"]
+            ],
+            [
+                tool_call["id"]
+                for tool_call in last_message.additional_kwargs["tool_calls"]
+            ],
         )
 
-    def call_tool(state):
-        action = _get_action(state)
+    def call_tool(state: AgentState):
+        actions, ids = _get_actions(state)
         # We call the tool_executor and get back a response
-        response = tool_executor.invoke(action)
+        responses = tool_executor.batch(actions)
         # We use the response to create a FunctionMessage
-        tool_message = ToolMessage(content=str(response), tool_call_id=action.log)
+        tool_messages = [
+            ToolMessage(content=str(response), tool_call_id=id)
+            for response, id in zip(responses, ids)
+        ]
         # We return a list, because this will get added to the existing list
-        return {"messages": [tool_message]}
+        return {"messages": tool_messages}
 
-    async def acall_tool(state):
-        action = _get_action(state)
+    async def acall_tool(state: AgentState):
+        actions, ids = _get_actions(state)
         # We call the tool_executor and get back a response
-        response = await tool_executor.ainvoke(action)
+        responses = await tool_executor.abatch(actions)
         # We use the response to create a FunctionMessage
-        tool_message = ToolMessage(content=str(response), tool_call_id=action.log)
+        tool_messages = [
+            ToolMessage(content=str(response), tool_call_id=id)
+            for response, id in zip(responses, ids)
+        ]
         # We return a list, because this will get added to the existing list
-        return {"messages": [tool_message]}
-
-    # We create the AgentState that we will pass around
-    # This simply involves a list of messages
-    # We want steps to return messages to append to the list
-    # So we annotate the messages attribute with operator.add
-    class AgentState(TypedDict):
-        messages: Annotated[Sequence[BaseMessage], operator.add]
+        return {"messages": tool_messages}
 
     # Define a new graph
     workflow = StateGraph(AgentState)
