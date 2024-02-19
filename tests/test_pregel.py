@@ -9,6 +9,7 @@ from typing import Annotated, Generator, Optional, TypedDict, Union
 import pytest
 from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
+from syrupy import SnapshotAssertion
 
 from langgraph.channels.base import InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -659,7 +660,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     assert cleanup.call_count == 1, "Expected cleanup to be called once"
 
 
-def test_conditional_graph() -> None:
+def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     from copy import deepcopy
 
     from langchain.llms.fake import FakeStreamingListLLM
@@ -731,6 +732,9 @@ def test_conditional_graph() -> None:
     workflow.add_edge("tools", "agent")
 
     app = workflow.compile()
+
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -879,13 +883,13 @@ def test_conditional_graph() -> None:
     ]
 
 
-def test_conditional_graph_state() -> None:
+def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
     from langchain.llms.fake import FakeStreamingListLLM
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate
 
-    class AgentState(TypedDict):
+    class AgentState(TypedDict, total=False):
         input: str
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
@@ -958,6 +962,11 @@ def test_conditional_graph_state() -> None:
     workflow.add_edge("tools", "agent")
 
     app = workflow.compile()
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",

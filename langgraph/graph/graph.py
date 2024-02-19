@@ -9,6 +9,8 @@ from langchain_core.runnables.base import (
     RunnableLike,
     coerce_to_runnable,
 )
+from langchain_core.runnables.config import RunnableConfig
+from langchain_core.runnables.graph import Graph as RunnableGraph
 
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.pregel import Channel, Pregel
@@ -150,7 +152,7 @@ class Graph:
         checkpointer: Optional[BaseCheckpointSaver] = None,
         interrupt_before: Optional[Sequence[str]] = None,
         interrupt_after: Optional[Sequence[str]] = None,
-    ) -> Pregel:
+    ) -> "CompiledGraph":
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
         self.validate(interrupt=interrupt_before + interrupt_after)
@@ -177,7 +179,8 @@ class Graph:
                         branch.runnable, name=f"{key}_condition"
                     )
 
-        return Pregel(
+        return CompiledGraph(
+            graph=self,
             nodes=nodes,
             input=f"{self.entry_point}:inbox",
             output=END,
@@ -188,3 +191,32 @@ class Graph:
                 + [node for node in interrupt_after]
             ),
         )
+
+
+class CompiledGraph(Pregel):
+    graph: Graph
+
+    def get_graph(self, config: RunnableConfig | None = None) -> RunnableGraph:
+        graph = RunnableGraph()
+        graph.add_node(self.get_input_schema(), "__start__")
+        graph.add_node(self.get_output_schema(), END)
+
+        for key, node in self.graph.nodes.items():
+            graph.add_node(node, key)
+        for start, end in self.graph.edges:
+            graph.add_edge(graph.nodes[start], graph.nodes[end])
+        for start, branches in self.graph.branches.items():
+            for i, branch in enumerate(branches):
+                name = f"{start}_{branch.condition.__name__}"
+                if i > 0:
+                    name += f"_{i}"
+                graph.add_node(
+                    RunnableLambda(branch.runnable, name=branch.condition.__name__),
+                    name,
+                )
+                graph.add_edge(graph.nodes[start], graph.nodes[name])
+                for label, end in branch.ends.items():
+                    graph.add_edge(graph.nodes[name], graph.nodes[end], label)
+        graph.add_edge(graph.nodes["__start__"], graph.nodes[self.graph.entry_point])
+
+        return graph

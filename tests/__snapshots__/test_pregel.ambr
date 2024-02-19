@@ -1,0 +1,230 @@
+# serializer version: 1
+# name: test_conditional_graph
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": {
+          "title": "LangGraphInput"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": {
+          "title": "LangGraphOutput"
+        }
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableAssign"
+          ],
+          "name": "RunnableAssign<agent_outcome>"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "execute_tools"
+        }
+      },
+      {
+        "id": "agent_should_continue",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "tools",
+        "target": "agent",
+        "data": null
+      },
+      {
+        "source": "agent",
+        "target": "agent_should_continue",
+        "data": null
+      },
+      {
+        "source": "agent_should_continue",
+        "target": "tools",
+        "data": "continue"
+      },
+      {
+        "source": "agent_should_continue",
+        "target": "__end__",
+        "data": "exit"
+      },
+      {
+        "source": "__start__",
+        "target": "agent",
+        "data": null
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph.1
+  '''
+                      +-----------+            
+                      | __start__ |            
+                      +-----------+            
+                            *                  
+                            *                  
+                            *                  
+                        +-------+              
+                        | agent |              
+                       *+-------+*             
+                     **           ***          
+                   **                **        
+                 **                    **      
+  +-----------------------+              **    
+  | agent_should_continue |               *    
+  +-----------------------+               *    
+              *            ****           *    
+              *                *****      *    
+              *                     ***   *    
+         +---------+                 +-------+ 
+         | __end__ |                 | tools | 
+         +---------+                 +-------+ 
+  '''
+# ---
+# name: test_conditional_graph_state
+  '{"title": "LangGraphOutput"}'
+# ---
+# name: test_conditional_graph_state.1
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": {
+          "title": "LangGraphInput"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": {
+          "title": "LangGraphOutput"
+        }
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableSequence"
+          ],
+          "name": "RunnableSequence"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "execute_tools"
+        }
+      },
+      {
+        "id": "agent_should_continue",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "tools",
+        "target": "agent",
+        "data": null
+      },
+      {
+        "source": "agent",
+        "target": "agent_should_continue",
+        "data": null
+      },
+      {
+        "source": "agent_should_continue",
+        "target": "tools",
+        "data": "continue"
+      },
+      {
+        "source": "agent_should_continue",
+        "target": "__end__",
+        "data": "exit"
+      },
+      {
+        "source": "__start__",
+        "target": "agent",
+        "data": null
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph_state.2
+  '''
+                      +-----------+            
+                      | __start__ |            
+                      +-----------+            
+                            *                  
+                            *                  
+                            *                  
+                        +-------+              
+                        | agent |              
+                       *+-------+*             
+                     **           ***          
+                   **                **        
+                 **                    **      
+  +-----------------------+              **    
+  | agent_should_continue |               *    
+  +-----------------------+               *    
+              *            ****           *    
+              *                *****      *    
+              *                     ***   *    
+         +---------+                 +-------+ 
+         | __end__ |                 | tools | 
+         +---------+                 +-------+ 
+  '''
+# ---

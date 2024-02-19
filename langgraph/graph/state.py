@@ -12,8 +12,8 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.graph.graph import END, Graph
-from langgraph.pregel import Channel, Pregel
+from langgraph.graph.graph import END, CompiledGraph, Graph
+from langgraph.pregel import Channel
 from langgraph.pregel.read import ChannelRead
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite
 
@@ -41,7 +41,7 @@ class StateGraph(Graph):
         checkpointer: Optional[BaseCheckpointSaver] = None,
         interrupt_before: Optional[Sequence[str]] = None,
         interrupt_after: Optional[Sequence[str]] = None,
-    ) -> Pregel:
+    ) -> CompiledGraph:
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
         self.validate(interrupt=interrupt_before + interrupt_after)
@@ -111,7 +111,8 @@ class StateGraph(Graph):
             | Channel.write_to(f"{self.entry_point}:inbox")
         )
 
-        return Pregel(
+        return CompiledGraph(
+            graph=self,
             nodes=nodes,
             channels={**self.channels, **node_inboxes, **node_outboxes},
             input=f"{START}:inbox",
