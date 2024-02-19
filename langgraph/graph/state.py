@@ -6,8 +6,10 @@ from typing import Any, Optional, Sequence, Type
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.runnables.base import RunnableLike
 
+from langgraph.channels.any_value import AnyValue
 from langgraph.channels.base import BaseChannel, InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph.graph import END, Graph
@@ -73,6 +75,17 @@ class StateGraph(Graph):
             )
             for key, node in self.nodes.items()
         }
+        node_inboxes = {
+            # we take any value written to channel because all writers
+            # write the entire state as of that step, which is equal for all
+            f"{key}:inbox": AnyValue(Any)
+            for key in self.nodes
+        }
+        node_outboxes = {
+            # we clear outbox channels after each step
+            key: EphemeralValue(Any)
+            for key in self.nodes
+        }
 
         for key in self.nodes:
             outgoing = outgoing_edges[key]
@@ -100,7 +113,7 @@ class StateGraph(Graph):
 
         return Pregel(
             nodes=nodes,
-            channels=self.channels,
+            channels={**self.channels, **node_inboxes, **node_outboxes},
             input=f"{START}:inbox",
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
