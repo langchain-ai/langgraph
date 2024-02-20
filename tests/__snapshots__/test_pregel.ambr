@@ -60,13 +60,11 @@
     "edges": [
       {
         "source": "tools",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       },
       {
         "source": "agent",
-        "target": "agent_should_continue",
-        "data": null
+        "target": "agent_should_continue"
       },
       {
         "source": "agent_should_continue",
@@ -80,8 +78,7 @@
       },
       {
         "source": "__start__",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       }
     ]
   }
@@ -393,13 +390,11 @@
     "edges": [
       {
         "source": "tools",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       },
       {
         "source": "agent",
-        "target": "agent_should_continue",
-        "data": null
+        "target": "agent_should_continue"
       },
       {
         "source": "agent_should_continue",
@@ -413,8 +408,7 @@
       },
       {
         "source": "__start__",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       }
     ]
   }
@@ -1166,13 +1160,11 @@
     "edges": [
       {
         "source": "action",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       },
       {
         "source": "agent",
-        "target": "agent_should_continue",
-        "data": null
+        "target": "agent_should_continue"
       },
       {
         "source": "agent_should_continue",
@@ -1186,8 +1178,7 @@
       },
       {
         "source": "__start__",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       }
     ]
   }
@@ -1411,13 +1402,11 @@
     "edges": [
       {
         "source": "action",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       },
       {
         "source": "agent",
-        "target": "agent_should_continue",
-        "data": null
+        "target": "agent_should_continue"
       },
       {
         "source": "agent_should_continue",
@@ -1431,8 +1420,7 @@
       },
       {
         "source": "__start__",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       }
     ]
   }
@@ -1656,13 +1644,11 @@
     "edges": [
       {
         "source": "action",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       },
       {
         "source": "agent",
-        "target": "agent_should_continue",
-        "data": null
+        "target": "agent_should_continue"
       },
       {
         "source": "agent_should_continue",
@@ -1676,8 +1662,7 @@
       },
       {
         "source": "__start__",
-        "target": "agent",
-        "data": null
+        "target": "agent"
       }
     ]
   }
