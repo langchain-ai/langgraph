@@ -237,7 +237,6 @@ class Pregel(
         self, config: Optional[RunnableConfig] = None
     ) -> Type[BaseModel]:
         if isinstance(self.output, str):
-            print(self.output, self.channels[self.output].UpdateType)
             return super().get_output_schema(config)
         else:
             return create_model(  # type: ignore[call-overload]
