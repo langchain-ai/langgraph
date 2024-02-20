@@ -11,6 +11,7 @@ from typing import (
     Callable,
     Iterator,
     Mapping,
+    NamedTuple,
     Optional,
     Sequence,
     Type,
@@ -40,6 +41,7 @@ from langchain_core.runnables.utils import (
     get_unique_config_specs,
 )
 from langchain_core.tracers.log_stream import LogStreamCallbackHandler
+from langgraph.channels.any_value import AnyValue
 
 from langgraph.channels.base import (
     AsyncChannelsManager,
@@ -49,6 +51,7 @@ from langgraph.channels.base import (
     InvalidUpdateError,
     create_checkpoint,
 )
+from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -158,6 +161,13 @@ class Channel:
         )
 
 
+class StateSnapshot(NamedTuple):
+    values: dict[str, Any]
+    """Current values of channels"""
+    next: tuple[str]
+    """Nodes to execute in the next step, if any"""
+
+
 class Pregel(
     RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
 ):
@@ -245,6 +255,72 @@ class Pregel(
             return create_model(  # type: ignore[call-overload]
                 self.get_name("Output"),
                 **{k: (self.channels[k].ValueType, None) for k in self.output},
+            )
+
+    def get_state(self, config: RunnableConfig) -> StateSnapshot:
+        if not self.checkpointer:
+            raise ValueError("No checkpointer set")
+
+        checkpoint = self.checkpointer.get(config)
+        checkpoint = checkpoint or empty_checkpoint()
+        with ChannelsManager(self.channels, checkpoint) as channels:
+            next_tasks = _prepare_next_tasks(
+                checkpoint, self.nodes, channels, update_seen=False
+            )
+            return StateSnapshot(
+                {
+                    k: _read_channel(channels, k)
+                    for k in channels
+                    if k not in [k.value for k in ReservedChannels]
+                },
+                tuple(name for _, _, name in next_tasks),
+            )
+
+    async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
+        if not self.checkpointer:
+            raise ValueError("No checkpointer set")
+
+        checkpoint = await self.checkpointer.aget(config)
+        checkpoint = checkpoint or empty_checkpoint()
+        async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+            next_tasks = _prepare_next_tasks(
+                checkpoint, self.nodes, channels, update_seen=False
+            )
+            return StateSnapshot(
+                {
+                    k: _read_channel(channels, k)
+                    for k in channels
+                    if k not in [k.value for k in ReservedChannels]
+                },
+                tuple(name for _, _, name in next_tasks),
+            )
+
+    def update_state(self, config: RunnableConfig, values: dict[str, Any]) -> None:
+        if not self.checkpointer:
+            raise ValueError("No checkpointer set")
+
+        checkpoint = self.checkpointer.get(config)
+        checkpoint = checkpoint or empty_checkpoint()
+        with ChannelsManager(self.channels, checkpoint) as channels:
+            for k, v in values.items():
+                channels[k].update([v])
+                checkpoint["channel_versions"][k] += 1
+            self.checkpointer.put(config, create_checkpoint(checkpoint, channels))
+
+    async def aupdate_state(
+        self, config: RunnableConfig, values: dict[str, Any]
+    ) -> None:
+        if not self.checkpointer:
+            raise ValueError("No checkpointer set")
+
+        checkpoint = await self.checkpointer.aget(config)
+        checkpoint = checkpoint or empty_checkpoint()
+        async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+            for k, v in values.items():
+                channels[k].update([v])
+                checkpoint["channel_versions"][k] += 1
+            await self.checkpointer.aput(
+                config, create_checkpoint(checkpoint, channels)
             )
 
     def _transform(
@@ -768,7 +844,7 @@ def _apply_writes_from_view(
         if value == _read_channel(channels, chan):
             continue
 
-        assert isinstance(channels[chan], LastValue), (
+        assert isinstance(channels[chan], (LastValue, EphemeralValue, AnyValue)), (
             f"Can't modify channel {chan} of type "
             f"{channels[chan].__class__.__name__}"
         )
@@ -780,6 +856,7 @@ def _prepare_next_tasks(
     checkpoint: Checkpoint,
     processes: Mapping[str, Union[ChannelInvoke, ChannelBatch]],
     channels: Mapping[str, BaseChannel],
+    update_seen: bool = True,
 ) -> list[tuple[Runnable, Any, str]]:
     tasks: list[tuple[Runnable, Any, str]] = []
     # Check if any processes should be run in next step
@@ -814,12 +891,13 @@ def _prepare_next_tasks(
                     val = val[None]
 
                 # update seen versions
-                seen.update(
-                    {
-                        chan: checkpoint["channel_versions"][chan]
-                        for chan in proc.triggers
-                    }
-                )
+                if update_seen:
+                    seen.update(
+                        {
+                            chan: checkpoint["channel_versions"][chan]
+                            for chan in proc.triggers
+                        }
+                    )
 
                 # skip if condition is not met
                 if proc.when is None or proc.when(val):
@@ -836,7 +914,8 @@ def _prepare_next_tasks(
                     val = [{proc.key: v} for v in val]
 
                 tasks.append((proc, val, name))
-                seen[proc.channel] = checkpoint["channel_versions"][proc.channel]
+                if update_seen:
+                    seen[proc.channel] = checkpoint["channel_versions"][proc.channel]
 
     return tasks
 

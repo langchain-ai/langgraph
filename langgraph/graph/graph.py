@@ -11,9 +11,10 @@ from langchain_core.runnables.base import (
 )
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph as RunnableGraph
+from langgraph.channels.ephemeral_value import EphemeralValue
 
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.pregel import Channel, Pregel
+from langgraph.pregel import Channel, Pregel, StateSnapshot
 
 logger = logging.getLogger(__name__)
 
@@ -190,6 +191,11 @@ class Graph:
             key: (Channel.subscribe_to(f"{key}:inbox") | node | Channel.write_to(key))
             for key, node in self.nodes.items()
         }
+        node_outboxes = {
+            # we clear outbox channels after each step
+            key: EphemeralValue(Any)
+            for key in self.nodes
+        }
 
         for key in self.nodes:
             outgoing = outgoing_edges[key]
@@ -216,6 +222,7 @@ class Graph:
         return CompiledGraph(
             graph=self,
             nodes=nodes,
+            channels={**node_outboxes},
             input=f"{self.entry_point}:inbox" if self.entry_point else START,
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes],
@@ -272,3 +279,19 @@ class CompiledGraph(Pregel):
             graph.add_edge(graph.nodes[START], graph.nodes[self.graph.entry_point])
 
         return graph
+
+    def get_state(self, config: RunnableConfig) -> StateSnapshot:
+        snapshot = super().get_state(config)
+
+        return StateSnapshot(
+            values={k: v for k, v in snapshot.values.items() if k in self.graph.nodes},
+            next=snapshot.next,
+        )
+
+    async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
+        snapshot = await super().aget_state(config)
+
+        return StateSnapshot(
+            values={k: v for k, v in snapshot.values.items() if k in self.graph.nodes},
+            next=snapshot.next,
+        )

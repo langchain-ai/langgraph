@@ -55,6 +55,12 @@ exclude = ["notebooks", "examples", "example_data"]
 [tool.coverage.run]
 omit = ["tests/*"]
 
+[tool.pytest-watcher]
+now = true
+delay = 0.1
+runner_args = ["-x", "--ff", "-vv", "--snapshot-update"]
+patterns = ["*.py"]
+
 [build-system]
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"

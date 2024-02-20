@@ -1,10 +1,11 @@
 from collections import defaultdict
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type
+from typing import Any, Optional, Sequence, Type, Union
 
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import RunnableLike
+from langchain_core.runnables.config import RunnableConfig
 
 from langgraph.channels.any_value import AnyValue
 from langgraph.channels.base import BaseChannel, InvalidUpdateError
@@ -13,7 +14,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph.graph import END, START, CompiledGraph, Graph
-from langgraph.pregel import Channel
+from langgraph.pregel import Channel, StateSnapshot
 from langgraph.pregel.read import ChannelInvoke
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 
@@ -134,7 +135,7 @@ class StateGraph(Graph):
         else:
             raise ValueError("No entry point set")
 
-        return CompiledGraph(
+        return CompiledStateGraph(
             graph=self,
             nodes=nodes,
             channels={
@@ -204,3 +205,43 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
             ):
                 return BinaryOperatorAggregate(typ, meta[0])
     return None
+
+
+class CompiledStateGraph(CompiledGraph):
+    graph: StateGraph
+
+    def get_state(self, config: RunnableConfig) -> StateSnapshot:
+        snapshot = super(CompiledGraph, self).get_state(config)
+
+        return StateSnapshot(
+            values=snapshot.values.get("__root__")
+            if "__root__" in self.graph.channels
+            else {k: v for k, v in snapshot.values.items() if k in self.graph.channels},
+            next=snapshot.next,
+        )
+
+    async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
+        snapshot = await super(CompiledGraph, self).aget_state(config)
+
+        return StateSnapshot(
+            values=snapshot.values.get("__root__")
+            if "__root__" in self.graph.channels
+            else {k: v for k, v in snapshot.values.items() if k in self.graph.channels},
+            next=snapshot.next,
+        )
+
+    def update_state(
+        self, config: RunnableConfig, values: Union[Any, dict[str, Any]]
+    ) -> None:
+        return super(CompiledGraph, self).update_state(
+            config,
+            {"__root__": values} if "__root__" in self.graph.channels else values,
+        )
+
+    async def aupdate_state(
+        self, config: RunnableConfig, values: Union[Any, dict[str, Any]]
+    ) -> None:
+        return await super(CompiledGraph, self).aupdate_state(
+            config,
+            {"__root__": values} if "__root__" in self.graph.channels else values,
+        )
