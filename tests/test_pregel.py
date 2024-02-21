@@ -9,6 +9,7 @@ from typing import Annotated, Generator, Optional, TypedDict, Union
 import pytest
 from langchain_core.runnables import RunnablePassthrough
 from pytest_mock import MockerFixture
+from syrupy import SnapshotAssertion
 
 from langgraph.channels.base import InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -659,7 +660,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     assert cleanup.call_count == 1, "Expected cleanup to be called once"
 
 
-def test_conditional_graph() -> None:
+def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     from copy import deepcopy
 
     from langchain.llms.fake import FakeStreamingListLLM
@@ -731,6 +732,9 @@ def test_conditional_graph() -> None:
     workflow.add_edge("tools", "agent")
 
     app = workflow.compile()
+
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -879,13 +883,13 @@ def test_conditional_graph() -> None:
     ]
 
 
-def test_conditional_graph_state() -> None:
+def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
     from langchain.llms.fake import FakeStreamingListLLM
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate
 
-    class AgentState(TypedDict):
+    class AgentState(TypedDict, total=False):
         input: str
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
@@ -958,6 +962,11 @@ def test_conditional_graph_state() -> None:
     workflow.add_edge("tools", "agent")
 
     app = workflow.compile()
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1065,7 +1074,7 @@ def test_conditional_graph_state() -> None:
     ]
 
 
-def test_prebuilt_tool_chat() -> None:
+def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
@@ -1127,6 +1136,11 @@ def test_prebuilt_tool_chat() -> None:
         ),
         tools,
     )
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -1309,7 +1323,7 @@ def test_prebuilt_tool_chat() -> None:
     ]
 
 
-def test_prebuilt_chat() -> None:
+def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
@@ -1351,6 +1365,11 @@ def test_prebuilt_chat() -> None:
         ),
         tools,
     )
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -1454,7 +1473,7 @@ def test_prebuilt_chat() -> None:
     ]
 
 
-def test_message_graph() -> None:
+def test_message_graph(snapshot: SnapshotAssertion) -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
@@ -1564,6 +1583,11 @@ def test_message_graph() -> None:
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
         HumanMessage(content="what is weather in sf"),
