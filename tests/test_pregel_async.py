@@ -1114,6 +1114,92 @@ async def test_conditional_graph_state() -> None:
     ]
 
 
+async def test_conditional_entrypoint_graph() -> None:
+    async def left(data: str) -> str:
+        return data + "->left"
+
+    async def right(data: str) -> str:
+        return data + "->right"
+
+    def should_start(data: str) -> str:
+        # Logic to decide where to start
+        if len(data) > 10:
+            return "go-right"
+        else:
+            return "go-left"
+
+    # Define a new graph
+    workflow = Graph()
+
+    workflow.add_node("left", left)
+    workflow.add_node("right", right)
+
+    workflow.set_conditional_entry_point(
+        should_start, {"go-left": "left", "go-right": "right"}
+    )
+
+    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_edge("right", END)
+
+    app = workflow.compile()
+
+    assert await app.ainvoke("what is weather in sf") == "what is weather in sf->right"
+
+    assert [c async for c in app.astream("what is weather in sf")] == [
+        {"right": "what is weather in sf->right"},
+        {"__end__": "what is weather in sf->right"},
+    ]
+
+
+async def test_conditional_entrypoint_graph_state() -> None:
+    class AgentState(TypedDict, total=False):
+        input: str
+        output: str
+
+    async def left(data: AgentState) -> AgentState:
+        return {"output": data["input"] + "->left"}
+
+    async def right(data: AgentState) -> AgentState:
+        return {"output": data["input"] + "->right"}
+
+    def should_start(data: AgentState) -> str:
+        # Logic to decide where to start
+        if len(data["input"]) > 10:
+            return "go-right"
+        else:
+            return "go-left"
+
+    # Define a new graph
+    workflow = StateGraph(AgentState)
+
+    workflow.add_node("left", left)
+    workflow.add_node("right", right)
+
+    workflow.set_conditional_entry_point(
+        should_start, {"go-left": "left", "go-right": "right"}
+    )
+
+    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_edge("right", END)
+
+    app = workflow.compile()
+
+    assert await app.ainvoke({"input": "what is weather in sf"}) == {
+        "input": "what is weather in sf",
+        "output": "what is weather in sf->right",
+    }
+
+    assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
+        {"right": {"output": "what is weather in sf->right"}},
+        {
+            "__end__": {
+                "input": "what is weather in sf",
+                "output": "what is weather in sf->right",
+            }
+        },
+    ]
+
+
 async def test_prebuilt_tool_chat() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool

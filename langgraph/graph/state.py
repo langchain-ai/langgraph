@@ -12,12 +12,10 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.graph.graph import END, CompiledGraph, Graph
+from langgraph.graph.graph import END, START, CompiledGraph, Graph
 from langgraph.pregel import Channel
 from langgraph.pregel.read import ChannelRead
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite
-
-START = "__start__"
 
 
 class StateGraph(Graph):
@@ -105,11 +103,17 @@ class StateGraph(Graph):
         nodes[START] = Channel.subscribe_to(
             f"{START}:inbox", tags=["langsmith:hidden"]
         ) | ChannelWrite(channels=[(START, None, False)] + update_channels)
-        nodes[f"{START}:edges"] = (
-            Channel.subscribe_to(START, tags=["langsmith:hidden"])
-            | ChannelRead(state_keys_read)
-            | Channel.write_to(f"{self.entry_point}:inbox")
-        )
+        nodes[f"{START}:edges"] = Channel.subscribe_to(
+            START, tags=["langsmith:hidden"]
+        ) | ChannelRead(state_keys_read)
+        if self.entry_point:
+            nodes[f"{START}:edges"] |= Channel.write_to(f"{self.entry_point}:inbox")
+        elif self.entry_point_branch:
+            nodes[f"{START}:edges"] |= RunnableLambda(
+                self.entry_point_branch.runnable, name=f"{START}_condition"
+            )
+        else:
+            raise ValueError("No entry point set")
 
         return CompiledGraph(
             graph=self,
