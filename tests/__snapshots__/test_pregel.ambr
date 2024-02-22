@@ -1,4 +1,340 @@
 # serializer version: 1
+# name: test_conditional_entrypoint_graph
+  '{"title": "LangGraphInput"}'
+# ---
+# name: test_conditional_entrypoint_graph.1
+  '{"title": "LangGraphOutput"}'
+# ---
+# name: test_conditional_entrypoint_graph.2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": {
+          "title": "LangGraphInput"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": {
+          "title": "LangGraphOutput"
+        }
+      },
+      {
+        "id": "left",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "left"
+        }
+      },
+      {
+        "id": "right",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "right"
+        }
+      },
+      {
+        "id": "left_<lambda>",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "<lambda>"
+        }
+      },
+      {
+        "id": "__start___condition",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_start"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "right",
+        "target": "__end__"
+      },
+      {
+        "source": "left",
+        "target": "left_<lambda>"
+      },
+      {
+        "source": "left_<lambda>",
+        "target": "left",
+        "data": "left"
+      },
+      {
+        "source": "left_<lambda>",
+        "target": "right",
+        "data": "right"
+      },
+      {
+        "source": "__start__",
+        "target": "__start___condition"
+      },
+      {
+        "source": "__start___condition",
+        "target": "left",
+        "data": "go-left"
+      },
+      {
+        "source": "__start___condition",
+        "target": "right",
+        "data": "go-right"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_entrypoint_graph.3
+  '''
+                +-----------+      
+                | __start__ |      
+                +-----------+      
+                      *            
+                      *            
+                      *            
+          +---------------------+  
+          | __start___condition |  
+          +---------------------+  
+               ***         ***     
+              *               *    
+            **                 *** 
+      +------+                    *
+      | left |                    *
+      +------+                    *
+          *                       *
+          *                       *
+          *                       *
+  +---------------+               *
+  | left_<lambda> |            *** 
+  +---------------+           *    
+               ***         ***     
+                  *       *        
+                   **   **         
+                  +-------+        
+                  | right |        
+                  +-------+        
+                      *            
+                      *            
+                      *            
+                +---------+        
+                | __end__ |        
+                +---------+        
+  '''
+# ---
+# name: test_conditional_entrypoint_graph_state
+  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}}}}}'
+# ---
+# name: test_conditional_entrypoint_graph_state.1
+  '{"title": "LangGraphOutput", "$ref": "#/definitions/AgentState", "definitions": {"AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}}}}}'
+# ---
+# name: test_conditional_entrypoint_graph_state.2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": {
+          "title": "LangGraphInput",
+          "$ref": "#/definitions/AgentState",
+          "definitions": {
+            "AgentState": {
+              "title": "AgentState",
+              "type": "object",
+              "properties": {
+                "input": {
+                  "title": "Input",
+                  "type": "string"
+                },
+                "output": {
+                  "title": "Output",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": {
+          "title": "LangGraphOutput",
+          "$ref": "#/definitions/AgentState",
+          "definitions": {
+            "AgentState": {
+              "title": "AgentState",
+              "type": "object",
+              "properties": {
+                "input": {
+                  "title": "Input",
+                  "type": "string"
+                },
+                "output": {
+                  "title": "Output",
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "id": "left",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "left"
+        }
+      },
+      {
+        "id": "right",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "right"
+        }
+      },
+      {
+        "id": "left_<lambda>",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "<lambda>"
+        }
+      },
+      {
+        "id": "__start___condition",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_start"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "right",
+        "target": "__end__"
+      },
+      {
+        "source": "left",
+        "target": "left_<lambda>"
+      },
+      {
+        "source": "left_<lambda>",
+        "target": "left",
+        "data": "left"
+      },
+      {
+        "source": "left_<lambda>",
+        "target": "right",
+        "data": "right"
+      },
+      {
+        "source": "__start__",
+        "target": "__start___condition"
+      },
+      {
+        "source": "__start___condition",
+        "target": "left",
+        "data": "go-left"
+      },
+      {
+        "source": "__start___condition",
+        "target": "right",
+        "data": "go-right"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_entrypoint_graph_state.3
+  '''
+                +-----------+      
+                | __start__ |      
+                +-----------+      
+                      *            
+                      *            
+                      *            
+          +---------------------+  
+          | __start___condition |  
+          +---------------------+  
+               ***         ***     
+              *               *    
+            **                 *** 
+      +------+                    *
+      | left |                    *
+      +------+                    *
+          *                       *
+          *                       *
+          *                       *
+  +---------------+               *
+  | left_<lambda> |            *** 
+  +---------------+           *    
+               ***         ***     
+                  *       *        
+                   **   **         
+                  +-------+        
+                  | right |        
+                  +-------+        
+                      *            
+                      *            
+                      *            
+                +---------+        
+                | __end__ |        
+                +---------+        
+  '''
+# ---
 # name: test_conditional_graph
   '''
   {

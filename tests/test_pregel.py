@@ -1074,6 +1074,102 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
     ]
 
 
+def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
+    def left(data: str) -> str:
+        return data + "->left"
+
+    def right(data: str) -> str:
+        return data + "->right"
+
+    def should_start(data: str) -> str:
+        # Logic to decide where to start
+        if len(data) > 10:
+            return "go-right"
+        else:
+            return "go-left"
+
+    # Define a new graph
+    workflow = Graph()
+
+    workflow.add_node("left", left)
+    workflow.add_node("right", right)
+
+    workflow.set_conditional_entry_point(
+        should_start, {"go-left": "left", "go-right": "right"}
+    )
+
+    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_edge("right", END)
+
+    app = workflow.compile()
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
+
+    assert app.invoke("what is weather in sf") == "what is weather in sf->right"
+
+    assert [*app.stream("what is weather in sf")] == [
+        {"right": "what is weather in sf->right"},
+        {"__end__": "what is weather in sf->right"},
+    ]
+
+
+def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None:
+    class AgentState(TypedDict, total=False):
+        input: str
+        output: str
+
+    def left(data: AgentState) -> AgentState:
+        return {"output": data["input"] + "->left"}
+
+    def right(data: AgentState) -> AgentState:
+        return {"output": data["input"] + "->right"}
+
+    def should_start(data: AgentState) -> str:
+        # Logic to decide where to start
+        if len(data["input"]) > 10:
+            return "go-right"
+        else:
+            return "go-left"
+
+    # Define a new graph
+    workflow = StateGraph(AgentState)
+
+    workflow.add_node("left", left)
+    workflow.add_node("right", right)
+
+    workflow.set_conditional_entry_point(
+        should_start, {"go-left": "left", "go-right": "right"}
+    )
+
+    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_edge("right", END)
+
+    app = workflow.compile()
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
+
+    assert app.invoke({"input": "what is weather in sf"}) == {
+        "input": "what is weather in sf",
+        "output": "what is weather in sf->right",
+    }
+
+    assert [*app.stream({"input": "what is weather in sf"})] == [
+        {"right": {"output": "what is weather in sf->right"}},
+        {
+            "__end__": {
+                "input": "what is weather in sf",
+                "output": "what is weather in sf->right",
+            }
+        },
+    ]
+
+
 def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
