@@ -14,7 +14,7 @@ from langchain_core.runnables.graph import Graph as RunnableGraph
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.pregel import Channel, Pregel, StateSnapshot
+from langgraph.pregel import Channel, Pregel
 
 logger = logging.getLogger(__name__)
 

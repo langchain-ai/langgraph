@@ -1,11 +1,10 @@
 from collections import defaultdict
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union
+from typing import Any, Optional, Sequence, Type
 
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import RunnableLike
-from langchain_core.runnables.config import RunnableConfig
 
 from langgraph.channels.any_value import AnyValue
 from langgraph.channels.base import BaseChannel, InvalidUpdateError
@@ -14,7 +13,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph.graph import END, START, CompiledGraph, Graph
-from langgraph.pregel import Channel, StateSnapshot
+from langgraph.pregel import Channel
 from langgraph.pregel.read import ChannelInvoke
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 
