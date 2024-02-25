@@ -3,7 +3,7 @@ from functools import partial
 from inspect import signature
 from typing import Any, Optional, Sequence, Type
 
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import RunnableLike
 
 from langgraph.channels.any_value import AnyValue
@@ -14,8 +14,8 @@ from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph.graph import END, START, CompiledGraph, Graph
 from langgraph.pregel import Channel
-from langgraph.pregel.read import ChannelRead
-from langgraph.pregel.write import SKIP_WRITE, ChannelWrite
+from langgraph.pregel.read import ChannelInvoke
+from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 
 
 class StateGraph(Graph):
@@ -46,18 +46,25 @@ class StateGraph(Graph):
 
         state_keys = list(self.channels)
         state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
+        state_channels = (
+            {chan: chan for chan in state_keys}
+            if isinstance(state_keys_read, list)
+            else {None: state_keys_read}
+        )
         update_channels = (
-            [("__root__", None, True)]
+            [ChannelWriteEntry("__root__", None, True)]
             if not isinstance(state_keys_read, list)
             else [
-                (key, RunnableLambda(partial(_dict_getter, state_keys, key)), False)
+                ChannelWriteEntry(
+                    key, RunnableLambda(partial(_dict_getter, state_keys, key)), False
+                )
                 for key in state_keys_read
             ]
         )
         coerce_state = (
             partial(_coerce_state, self.schema)
             if isinstance(state_keys_read, list)
-            else RunnablePassthrough()
+            else None
         )
 
         outgoing_edges = defaultdict(list)
@@ -66,10 +73,15 @@ class StateGraph(Graph):
 
         nodes = {
             key: (
-                Channel.subscribe_to(f"{key}:inbox")
-                | coerce_state  # coerce/validate using schema
+                ChannelInvoke(
+                    triggers=[f"{key}:inbox"],
+                    channels=state_channels,
+                    mapper=coerce_state,
+                )
                 | node
-                | ChannelWrite(channels=[(key, None, False)] + update_channels)
+                | ChannelWrite(
+                    channels=[ChannelWriteEntry(key, None, False)] + update_channels
+                )
             )
             for key, node in self.nodes.items()
         }
@@ -89,11 +101,16 @@ class StateGraph(Graph):
             outgoing = outgoing_edges[key]
             edges_key = f"{key}:edges"
             if outgoing or key in self.branches:
-                nodes[edges_key] = Channel.subscribe_to(
-                    key, tags=["langsmith:hidden"]
-                ) | ChannelRead(state_keys_read)
+                nodes[edges_key] = ChannelInvoke(
+                    triggers=[key], tags=["langsmith:hidden"], channels=state_channels
+                )
             if outgoing:
-                nodes[edges_key] |= Channel.write_to(*[dest for dest in outgoing])
+                nodes[edges_key] |= ChannelWrite(
+                    channels=[
+                        ChannelWriteEntry(dest, None if dest == END else key, True)
+                        for dest in outgoing
+                    ]
+                )
             if key in self.branches:
                 for branch in self.branches[key]:
                     nodes[edges_key] |= RunnableLambda(
@@ -102,10 +119,12 @@ class StateGraph(Graph):
 
         nodes[START] = Channel.subscribe_to(
             f"{START}:inbox", tags=["langsmith:hidden"]
-        ) | ChannelWrite(channels=[(START, None, False)] + update_channels)
-        nodes[f"{START}:edges"] = Channel.subscribe_to(
-            START, tags=["langsmith:hidden"]
-        ) | ChannelRead(state_keys_read)
+        ) | ChannelWrite(
+            channels=[ChannelWriteEntry(START, None, False)] + update_channels
+        )
+        nodes[f"{START}:edges"] = ChannelInvoke(
+            triggers=[START], tags=["langsmith:hidden"], channels=state_channels
+        )
         if self.entry_point:
             nodes[f"{START}:edges"] |= Channel.write_to(f"{self.entry_point}:inbox")
         elif self.entry_point_branch:

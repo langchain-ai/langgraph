@@ -63,7 +63,7 @@ from langgraph.pregel.log import logger
 from langgraph.pregel.read import ChannelBatch, ChannelInvoke
 from langgraph.pregel.reserved import ReservedChannels
 from langgraph.pregel.validate import validate_graph, validate_keys
-from langgraph.pregel.write import ChannelWrite
+from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 
 WriteValue = Union[
     Runnable[Input, Output],
@@ -149,8 +149,11 @@ class Channel:
         """Writes to channels the result of the lambda, or None to skip writing."""
         return ChannelWrite(
             channels=(
-                [(c, None, False) for c in channels]
-                + [(k, _coerce_write_value(v), True) for k, v in kwargs.items()]
+                [ChannelWriteEntry(c, None, False) for c in channels]
+                + [
+                    ChannelWriteEntry(k, _coerce_write_value(v), True)
+                    for k, v in kwargs.items()
+                ]
             )
         )
 
@@ -789,7 +792,8 @@ def _prepare_next_tasks(
                 checkpoint["channel_versions"][chan] > seen[chan]
                 for chan in proc.triggers
             ):
-                # If all channels subscribed by this process are not empty
+                # If all trigger channels subscribed by this process are not empty
+                # then invoke the process with the values of all non-empty channels
                 try:
                     val: Any = {
                         k: _read_channel(
@@ -799,6 +803,10 @@ def _prepare_next_tasks(
                     }
                 except EmptyChannelError:
                     continue
+
+                # If the process has a mapper, apply it to the value
+                if proc.mapper is not None:
+                    val = proc.mapper(val)
 
                 # Processes that subscribe to a single keyless channel get
                 # the value directly, instead of a dict
