@@ -135,7 +135,7 @@ class StateGraph(Graph):
         else:
             raise ValueError("No entry point set")
 
-        return CompiledStateGraph(
+        return CompiledGraph(
             graph=self,
             nodes=nodes,
             channels={
@@ -205,7 +205,3 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
             ):
                 return BinaryOperatorAggregate(typ, meta[0])
     return None
-
-
-class CompiledStateGraph(CompiledGraph):
-    graph: StateGraph
