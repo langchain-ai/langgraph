@@ -16,7 +16,6 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
-from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, Graph
 from langgraph.graph.message import MessageGraph
@@ -26,8 +25,9 @@ from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
 )
 from langgraph.prebuilt.tool_executor import ToolExecutor
-from langgraph.pregel import Channel, GraphRecursionError, Pregel
+from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.reserved import ReservedChannels
+from tests.memory_assert import MemorySaverAssertImmutable
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -254,9 +254,11 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
-    memory = MemorySaver()
+    memory = MemorySaverAssertImmutable()
     app = Pregel(
-        nodes={"one": one, "two": two}, checkpointer=memory, interrupt=["inbox"]
+        nodes={"one": one, "two": two},
+        checkpointer=memory,
+        interrupt_after_nodes=["inbox"],
     )
 
     # start execution, stop at inbox
@@ -281,6 +283,22 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     # send a new value in, interrupting the previous execution
     assert app.invoke(3, {"configurable": {"thread_id": 1}}) is None
     assert app.invoke(None, {"configurable": {"thread_id": 1}}) == 5
+
+    # start execution again, stopping at inbox
+    assert app.invoke(20, {"configurable": {"thread_id": 2}}) is None
+
+    # inbox == 21
+    snapshot = app.get_state({"configurable": {"thread_id": 2}})
+    assert snapshot.values["inbox"] == 21
+    assert snapshot.next == ("two",)
+
+    # update the state, resume
+    app.update_state({"configurable": {"thread_id": 2}}, {"inbox": 25})
+    assert app.invoke(None, {"configurable": {"thread_id": 2}}) == 26
+
+    # no pending tasks
+    snapshot = app.get_state({"configurable": {"thread_id": 2}})
+    assert snapshot.next == ()
 
 
 def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
@@ -431,7 +449,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
         | raise_if_above_10
     )
 
-    memory = MemorySaver()
+    memory = MemorySaverAssertImmutable()
 
     app = Pregel(
         nodes={"one": one},
@@ -761,6 +779,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         ),
     }
 
+    # deepcopy because the nodes mutate the data
     assert [deepcopy(c) for c in app.stream({"input": "what is weather in sf"})] == [
         {
             "agent": {
@@ -880,6 +899,297 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             }
         },
+    ]
+
+    # test state get/update methods with interrupt_after
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["agent"]
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+    ] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        }
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            },
+            "tools": None,
+        },
+        next=("agent:edges",),
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+        },
+    )
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+            "tools": None,
+        },
+        next=("agent:edges",),
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "a really nice answer"},
+                    log="finish:a really nice answer",
+                ),
+            }
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "__end__": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "a really nice answer"},
+                    log="finish:a really nice answer",
+                ),
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        }
+    ]
+
+    # test state get/update methods with interrupt_before
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(), interrupt_before=["tools"]
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    llm.i = 0  # reset the llm
+
+    assert [
+        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+    ] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        }
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            },
+            "tools": None,
+        },
+        next=("agent:edges",),
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+        },
+    )
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+            "tools": None,
+        },
+        next=("agent:edges",),
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "a really nice answer"},
+                    log="finish:a really nice answer",
+                ),
+            }
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "__end__": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "a really nice answer"},
+                    log="finish:a really nice answer",
+                ),
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        }
     ]
 
 
@@ -1071,6 +1381,233 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
                 ),
             }
         },
+    ]
+
+    # test state get/update methods with interrupt_after
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["agent"]
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+    ] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        }
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [],
+        },
+        next=("agent:edges",),
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            )
+        },
+    )
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            ),
+            "intermediate_steps": [],
+        },
+        next=("agent:edges",),
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            )
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "__end__": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "a really nice answer"},
+                    log="finish:a really nice answer",
+                ),
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        }
+    ]
+
+    # test state get/update methods with interrupt_before
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(),
+        interrupt_before=["tools"],
+        debug=True,
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    llm.i = 0  # reset the llm
+
+    assert [
+        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+    ] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        }
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [],
+        },
+        next=("agent:edges",),
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            )
+        },
+    )
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            ),
+            "intermediate_steps": [],
+        },
+        next=("agent:edges",),
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            )
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "__end__": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "a really nice answer"},
+                    log="finish:a really nice answer",
+                ),
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:a different query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        }
     ]
 
 
@@ -1748,6 +2285,42 @@ def test_message_graph(snapshot: SnapshotAssertion) -> None:
             ]
         },
     ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["agent"]
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c
+        for c in app_w_interrupt.stream(
+            HumanMessage(content="what is weather in sf"), config
+        )
+    ] == [
+        {
+            "agent": AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+            )
+        }
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(content="what is weather in sf"),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+            ),
+        ],
+        next=("agent:edges",),
+    )
+
+    # TODO use update_state once we have message ids
 
 
 def test_in_one_fan_out_out_one_graph_state() -> None:

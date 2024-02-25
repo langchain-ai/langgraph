@@ -23,7 +23,7 @@ pytest-asyncio = "^0.20.3"
 pytest-mock  = "^3.10.0"
 syrupy = "^4.0.2"
 httpx = "^0.26.0"
-pytest-watcher = "^0.3.4"
+pytest-watcher = "^0.4.1"
 langchain = "^0.1.0"
 aiosqlite = "^0.19.0"
 grandalf = "^0.8"
@@ -54,6 +54,12 @@ exclude = ["notebooks", "examples", "example_data"]
 
 [tool.coverage.run]
 omit = ["tests/*"]
+
+[tool.pytest-watcher]
+now = true
+delay = 0.1
+runner_args = ["-x", "--ff", "-vv", "--snapshot-update"]
+patterns = ["*.py"]
 
 [build-system]
 requires = ["poetry-core>=1.0.0"]

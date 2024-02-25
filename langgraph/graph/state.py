@@ -39,6 +39,7 @@ class StateGraph(Graph):
         checkpointer: Optional[BaseCheckpointSaver] = None,
         interrupt_before: Optional[Sequence[str]] = None,
         interrupt_after: Optional[Sequence[str]] = None,
+        debug: bool = False,
     ) -> CompiledGraph:
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -146,11 +147,11 @@ class StateGraph(Graph):
             input=f"{START}:inbox",
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
+            snapshot_channels=state_keys_read,
             checkpointer=checkpointer,
-            interrupt=(
-                [f"{node}:inbox" for node in interrupt_before]
-                + [node for node in interrupt_after]
-            ),
+            interrupt_before_nodes=[f"{node}:inbox" for node in interrupt_before],
+            interrupt_after_nodes=interrupt_after,
+            debug=debug,
         )
 
 

@@ -12,6 +12,7 @@ from langchain_core.runnables.base import (
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import Graph as RunnableGraph
 
+from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.pregel import Channel, Pregel
 
@@ -177,6 +178,7 @@ class Graph:
         checkpointer: Optional[BaseCheckpointSaver] = None,
         interrupt_before: Optional[Sequence[str]] = None,
         interrupt_after: Optional[Sequence[str]] = None,
+        debug: bool = False,
     ) -> "CompiledGraph":
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -189,6 +191,11 @@ class Graph:
         nodes = {
             key: (Channel.subscribe_to(f"{key}:inbox") | node | Channel.write_to(key))
             for key, node in self.nodes.items()
+        }
+        node_outboxes = {
+            # we clear outbox channels after each step
+            key: EphemeralValue(Any)
+            for key in self.nodes
         }
 
         for key in self.nodes:
@@ -216,14 +223,15 @@ class Graph:
         return CompiledGraph(
             graph=self,
             nodes=nodes,
+            channels={**node_outboxes},
             input=f"{self.entry_point}:inbox" if self.entry_point else START,
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes],
+            snapshot_channels=list(self.nodes),
             checkpointer=checkpointer,
-            interrupt=(
-                [f"{node}:inbox" for node in interrupt_before]
-                + [node for node in interrupt_after]
-            ),
+            interrupt_before_nodes=[f"{node}:inbox" for node in interrupt_before],
+            interrupt_after_nodes=interrupt_after,
+            debug=debug,
         )
 
 
