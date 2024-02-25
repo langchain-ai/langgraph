@@ -370,11 +370,12 @@ class Pregel(
 
     def _defaults(
         self,
-        debug: Optional[bool] = None,
+        *,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
         interrupt_after_nodes: Optional[Sequence[str]] = None,
+        debug: Optional[bool] = None,
     ) -> tuple[
         bool,
         Union[str, Sequence[str]],
@@ -406,12 +407,7 @@ class Pregel(
         input: Iterator[Union[dict[str, Any], Any]],
         run_manager: CallbackManagerForChainRun,
         config: RunnableConfig,
-        *,
-        debug: Optional[bool] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        **kwargs: Any,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         try:
             if config["recursion_limit"] < 1:
@@ -423,13 +419,7 @@ class Pregel(
                 output_keys,
                 interrupt_before_nodes,
                 interrupt_after_nodes,
-            ) = self._defaults(
-                debug,
-                input_keys,
-                output_keys,
-                interrupt_before_nodes,
-                interrupt_after_nodes,
-            )
+            ) = self._defaults(**kwargs)
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
@@ -580,12 +570,7 @@ class Pregel(
         input: AsyncIterator[Union[dict[str, Any], Any]],
         run_manager: AsyncCallbackManagerForChainRun,
         config: RunnableConfig,
-        *,
-        debug: Optional[bool] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        **kwargs: Any,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         try:
             if config["recursion_limit"] < 1:
@@ -606,13 +591,7 @@ class Pregel(
                 output_keys,
                 interrupt_before_nodes,
                 interrupt_after_nodes,
-            ) = self._defaults(
-                debug,
-                input_keys,
-                output_keys,
-                interrupt_before_nodes,
-                interrupt_after_nodes,
-            )
+            ) = self._defaults(**kwargs)
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
@@ -772,6 +751,9 @@ class Pregel(
         *,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_before_nodes: Optional[Sequence[str]] = None,
+        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
         latest: Union[dict[str, Any], Any] = None
@@ -780,6 +762,9 @@ class Pregel(
             config,
             output_keys=output_keys if output_keys is not None else self.output,
             input_keys=input_keys,
+            interrupt_before_nodes=interrupt_before_nodes,
+            interrupt_after_nodes=interrupt_after_nodes,
+            debug=debug,
             **kwargs,
         ):
             latest = chunk
@@ -792,6 +777,9 @@ class Pregel(
         *,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_before_nodes: Optional[Sequence[str]] = None,
+        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         return self.transform(
@@ -799,6 +787,9 @@ class Pregel(
             config,
             output_keys=output_keys,
             input_keys=input_keys,
+            interrupt_before_nodes=interrupt_before_nodes,
+            interrupt_after_nodes=interrupt_after_nodes,
+            debug=debug,
             **kwargs,
         )
 
@@ -809,6 +800,9 @@ class Pregel(
         *,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_before_nodes: Optional[Sequence[str]] = None,
+        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         for chunk in self._transform_stream_with_config(
@@ -817,6 +811,9 @@ class Pregel(
             config,
             output_keys=output_keys,
             input_keys=input_keys,
+            interrupt_before_nodes=interrupt_before_nodes,
+            interrupt_after_nodes=interrupt_after_nodes,
+            debug=debug,
             **kwargs,
         ):
             yield chunk
@@ -828,6 +825,9 @@ class Pregel(
         *,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_before_nodes: Optional[Sequence[str]] = None,
+        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
         latest: Union[dict[str, Any], Any] = None
@@ -836,6 +836,9 @@ class Pregel(
             config,
             output_keys=output_keys if output_keys is not None else self.output,
             input_keys=input_keys,
+            interrupt_before_nodes=interrupt_before_nodes,
+            interrupt_after_nodes=interrupt_after_nodes,
+            debug=debug,
             **kwargs,
         ):
             latest = chunk
@@ -848,6 +851,9 @@ class Pregel(
         *,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_before_nodes: Optional[Sequence[str]] = None,
+        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         async def input_stream() -> AsyncIterator[Union[dict[str, Any], Any]]:
@@ -858,6 +864,9 @@ class Pregel(
             config,
             output_keys=output_keys,
             input_keys=input_keys,
+            interrupt_before_nodes=interrupt_before_nodes,
+            interrupt_after_nodes=interrupt_after_nodes,
+            debug=debug,
             **kwargs,
         ):
             yield chunk
@@ -869,6 +878,9 @@ class Pregel(
         *,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_before_nodes: Optional[Sequence[str]] = None,
+        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         async for chunk in self._atransform_stream_with_config(
@@ -877,6 +889,9 @@ class Pregel(
             config,
             output_keys=output_keys,
             input_keys=input_keys,
+            interrupt_before_nodes=interrupt_before_nodes,
+            interrupt_after_nodes=interrupt_after_nodes,
+            debug=debug,
             **kwargs,
         ):
             yield chunk
