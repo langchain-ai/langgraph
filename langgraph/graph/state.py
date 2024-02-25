@@ -40,6 +40,7 @@ class StateGraph(Graph):
         checkpointer: Optional[BaseCheckpointSaver] = None,
         interrupt_before: Optional[Sequence[str]] = None,
         interrupt_after: Optional[Sequence[str]] = None,
+        debug: bool = False,
     ) -> CompiledGraph:
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -147,11 +148,11 @@ class StateGraph(Graph):
             input=f"{START}:inbox",
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
+            snapshot_channels=state_keys_read,
             checkpointer=checkpointer,
-            interrupt=(
-                [f"{node}:inbox" for node in interrupt_before]
-                + [node for node in interrupt_after]
-            ),
+            interrupt_before_nodes=[f"{node}:inbox" for node in interrupt_before],
+            interrupt_after_nodes=interrupt_after,
+            debug=debug,
         )
 
 
@@ -209,39 +210,3 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
 
 class CompiledStateGraph(CompiledGraph):
     graph: StateGraph
-
-    def get_state(self, config: RunnableConfig) -> StateSnapshot:
-        snapshot = super(CompiledGraph, self).get_state(config)
-
-        return StateSnapshot(
-            values=snapshot.values.get("__root__")
-            if "__root__" in self.graph.channels
-            else {k: v for k, v in snapshot.values.items() if k in self.graph.channels},
-            next=snapshot.next,
-        )
-
-    async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
-        snapshot = await super(CompiledGraph, self).aget_state(config)
-
-        return StateSnapshot(
-            values=snapshot.values.get("__root__")
-            if "__root__" in self.graph.channels
-            else {k: v for k, v in snapshot.values.items() if k in self.graph.channels},
-            next=snapshot.next,
-        )
-
-    def update_state(
-        self, config: RunnableConfig, values: Union[Any, dict[str, Any]]
-    ) -> None:
-        return super(CompiledGraph, self).update_state(
-            config,
-            {"__root__": values} if "__root__" in self.graph.channels else values,
-        )
-
-    async def aupdate_state(
-        self, config: RunnableConfig, values: Union[Any, dict[str, Any]]
-    ) -> None:
-        return await super(CompiledGraph, self).aupdate_state(
-            config,
-            {"__root__": values} if "__root__" in self.graph.channels else values,
-        )

@@ -178,6 +178,7 @@ class Graph:
         checkpointer: Optional[BaseCheckpointSaver] = None,
         interrupt_before: Optional[Sequence[str]] = None,
         interrupt_after: Optional[Sequence[str]] = None,
+        debug: bool = False,
     ) -> "CompiledGraph":
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -226,11 +227,11 @@ class Graph:
             input=f"{self.entry_point}:inbox" if self.entry_point else START,
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes],
+            snapshot_channels=list(self.nodes),
             checkpointer=checkpointer,
-            interrupt=(
-                [f"{node}:inbox" for node in interrupt_before]
-                + [node for node in interrupt_after]
-            ),
+            interrupt_before_nodes=[f"{node}:inbox" for node in interrupt_before],
+            interrupt_after_nodes=interrupt_after,
+            debug=debug,
         )
 
 
@@ -279,19 +280,3 @@ class CompiledGraph(Pregel):
             graph.add_edge(graph.nodes[START], graph.nodes[self.graph.entry_point])
 
         return graph
-
-    def get_state(self, config: RunnableConfig) -> StateSnapshot:
-        snapshot = super().get_state(config)
-
-        return StateSnapshot(
-            values={k: v for k, v in snapshot.values.items() if k in self.graph.nodes},
-            next=snapshot.next,
-        )
-
-    async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
-        snapshot = await super().aget_state(config)
-
-        return StateSnapshot(
-            values={k: v for k, v in snapshot.values.items() if k in self.graph.nodes},
-            next=snapshot.next,
-        )
