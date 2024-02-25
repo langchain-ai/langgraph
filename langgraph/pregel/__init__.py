@@ -65,7 +65,7 @@ from langgraph.pregel.debug import print_checkpoint, print_step_start
 from langgraph.pregel.io import map_input, map_output
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import ChannelBatch, ChannelInvoke
-from langgraph.pregel.reserved import ReservedChannels
+from langgraph.pregel.reserved import AllReservedChannels, ReservedChannels
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 
@@ -274,7 +274,8 @@ class Pregel(
         return (
             [self.snapshot_channels]
             if isinstance(self.snapshot_channels, str)
-            else self.snapshot_channels or list(self.channels.keys())
+            else self.snapshot_channels
+            or [k for k in self.channels if k not in AllReservedChannels]
         )
 
     def get_state(self, config: RunnableConfig) -> StateSnapshot:
@@ -291,7 +292,6 @@ class Pregel(
                 k: _read_channel(channels, k)
                 for k in channels
                 if k in self.snapshot_channels_list
-                and k not in [k.value for k in ReservedChannels]
             }
             return StateSnapshot(
                 values[self.snapshot_channels]
@@ -314,7 +314,6 @@ class Pregel(
                 k: _read_channel(channels, k)
                 for k in channels
                 if k in self.snapshot_channels_list
-                and k not in [k.value for k in ReservedChannels]
             }
             return StateSnapshot(
                 values[self.snapshot_channels]
@@ -947,7 +946,7 @@ def _apply_writes(
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
     for chan, val in pending_writes:
-        if chan in [c.value for c in ReservedChannels]:
+        if chan in AllReservedChannels:
             raise ValueError(f"Can't write to reserved channel {chan}")
         pending_writes_by_channel[chan].append(val)
 
