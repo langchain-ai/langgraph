@@ -1,6 +1,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Optional, TypedDict
 
@@ -30,6 +31,16 @@ def empty_checkpoint() -> Checkpoint:
         channel_values={},
         channel_versions=defaultdict(int),
         versions_seen=defaultdict(_seen_dict),
+    )
+
+
+def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
+    return Checkpoint(
+        v=checkpoint["v"],
+        ts=checkpoint["ts"],
+        channel_values=checkpoint["channel_values"].copy(),
+        channel_versions=checkpoint["channel_versions"].copy(),
+        versions_seen=deepcopy(checkpoint["versions_seen"]),
     )
 
 

@@ -79,3 +79,9 @@ class SqliteSaver(BaseCheckpointSaver):
                     pickle.dumps(checkpoint),
                 ),
             )
+
+    async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
+        raise NotImplementedError
+
+    async def aput(self, config: RunnableConfig, checkpoint: Checkpoint) -> None:
+        raise NotImplementedError

@@ -79,6 +79,8 @@ class ChannelInvoke(RunnableBindingBase):
 
     triggers: list[str] = Field(default_factory=list)
 
+    mapper: Optional[Callable[[Any], Any]] = None
+
     when: Optional[Callable[[Any], bool]] = None
 
     bound: Runnable[Any, Any] = Field(default=default_bound)
@@ -89,6 +91,7 @@ class ChannelInvoke(RunnableBindingBase):
         self,
         channels: Mapping[None, str] | Mapping[str, str],
         triggers: Sequence[str],
+        mapper: Optional[Callable[[Any], Any]] = None,
         when: Optional[Callable[[Any], bool]] = None,
         tags: Optional[list[str]] = None,
         *,
@@ -100,6 +103,7 @@ class ChannelInvoke(RunnableBindingBase):
         super().__init__(
             channels=channels,
             triggers=triggers,
+            mapper=mapper,
             when=when,
             bound=bound or default_bound,
             kwargs=kwargs or {},
@@ -120,6 +124,7 @@ class ChannelInvoke(RunnableBindingBase):
                 **{chan: chan for chan in channels},
             },
             triggers=self.triggers,
+            mapper=self.mapper,
             when=self.when,
             bound=self.bound,
             kwargs=self.kwargs,
@@ -138,6 +143,7 @@ class ChannelInvoke(RunnableBindingBase):
             return ChannelInvoke(
                 channels=self.channels,
                 triggers=self.triggers,
+                mapper=self.mapper,
                 when=self.when,
                 bound=coerce_to_runnable(other),
                 kwargs=self.kwargs,
@@ -147,6 +153,7 @@ class ChannelInvoke(RunnableBindingBase):
             return ChannelInvoke(
                 channels=self.channels,
                 triggers=self.triggers,
+                mapper=self.mapper,
                 when=self.when,
                 # delegate to __or__ in self.bound
                 bound=self.bound | other,
