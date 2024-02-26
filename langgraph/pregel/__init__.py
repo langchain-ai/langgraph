@@ -25,7 +25,7 @@ from langchain_core.callbacks.manager import (
     CallbackManagerForChainRun,
 )
 from langchain_core.globals import get_debug
-from langchain_core.pydantic_v1 import BaseModel, Field, create_model, root_validator
+from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.runnables import (
     Runnable,
     RunnableSerializable,
@@ -38,6 +38,7 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
+    create_model,
     get_unique_config_specs,
 )
 from langchain_core.tracers.log_stream import LogStreamCallbackHandler
