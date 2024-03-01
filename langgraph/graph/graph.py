@@ -257,7 +257,10 @@ class CompiledGraph(Pregel):
                     name,
                 )
                 graph.add_edge(graph.nodes[start], graph.nodes[name])
-                ends = branch.ends or {k: k for k in self.graph.nodes}
+                ends = branch.ends or {
+                    **{k: k for k in self.graph.nodes},
+                    END: END,
+                }
                 for label, end in ends.items():
                     graph.add_edge(graph.nodes[name], graph.nodes[end], label)
         if self.graph.entry_point_branch:
