@@ -499,7 +499,7 @@ When output quality is a major concern, it's common to incorporate some combinat
 
 ### Web Research
 
-- [STORM](./examples/storm/storm.ipynb): writing system that generates Wikipedia-style articles on any topic, applying outline generation (planning) + multi-perspective question-answering for added breadth and reliability. Based on [STORM](https://arxiv.org/abs/2402.14207) by [Shao](https://twitter.com/EchoShao8899), et. al.
+- [STORM](./examples/storm/storm.ipynb): writing system that generates Wikipedia-style articles on any topic, applying outline generation (planning) + multi-perspective question-answering for added breadth and reliability. Based on [STORM](https://arxiv.org/abs/2402.14207) by Shao, et. al.
 
 ### Chatbot Evaluation via Simulation
 
