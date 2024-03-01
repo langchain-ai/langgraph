@@ -497,6 +497,10 @@ When output quality is a major concern, it's common to incorporate some combinat
 - [Multi-agent with supervisor](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/agent_supervisor.ipynb): how to orchestrate individual agents by using an LLM as a "supervisor" to distribute work
 - [Hierarchical agent teams](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/hierarchical_agent_teams.ipynb): how to orchestrate "teams" of agents as nested graphs that can collaborate to solve a problem
 
+### Web Research
+
+- [STORM](./examples/storm/storm.ipynb): writing system that generates Wikipedia-style articles on any topic, applying outline generation (planning) + multi-perspective question-answering for added breadth and reliability. Based on [STORM](https://arxiv.org/abs/2402.14207) by [Shao](https://twitter.com/EchoShao8899), et. al.
+
 ### Chatbot Evaluation via Simulation
 
 It can often be tough to evaluation chat bots in multi-turn situations. One way to do this is with simulations.
