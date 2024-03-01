@@ -1470,7 +1470,6 @@
         "type": "runnable",
         "data": {
           "id": [
-            "tests",
             "test_pregel",
             "FakeFuntionChatModel"
           ],
