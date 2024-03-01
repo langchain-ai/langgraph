@@ -753,6 +753,8 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
 
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
+    assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
+    assert app.get_graph(xray=True).draw_ascii() == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
