@@ -511,6 +511,11 @@ It can often be tough to evaluation chat bots in multi-turn situations. One way 
 
 - [WebVoyager](https://github.com/langchain-ai/langgraph/blob/main/examples/web-navigation/web_voyager.ipynb): vision-enabled web browsing agent that uses [Set-of-marks](https://som-gpt4v.github.io/) prompting to navigate a web browser and execute tasks
 
+### [Chain-of-Table](https://github.com/CYQIQ/MultiCoT)
+
+[Chain of Table](https://arxiv.org/abs/2401.04398) is a framework that elicits SOTA performance when answering questions over tabular data. [This implementation](https://github.com/CYQIQ/MultiCoT) by Github user [CYQIQ](https://github.com/CYQIQ) uses LangGraph to control the flow.
+
+
 ## Documentation
 
 There are only a few new APIs to use.
