@@ -760,7 +760,15 @@ for s in app.stream(inputs):
     print("----")
 ```
 
+<<<<<<< HEAD
+
 ### chat_agent_executor.create_tool_calling_executor
+
+=======
+
+### create_tool_calling_executor
+
+> > > > > > > b774d0b (cr)
 
 ```python
 from langgraph.prebuilt import chat_agent_executor
