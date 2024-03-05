@@ -3,7 +3,7 @@ name = "langgraph"
 version = "0.0.26"
 description = "langgraph"
 authors = []
-license = "LangGraph License"
+license = "MIT"
 readme = "README.md"
 repository = "https://www.github.com/langchain-ai/langgraph"
 
