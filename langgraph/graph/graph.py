@@ -10,7 +10,12 @@ from langchain_core.runnables.base import (
     coerce_to_runnable,
 )
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.runnables.graph import Graph as RunnableGraph
+from langchain_core.runnables.graph import (
+    Graph as RunnableGraph,
+)
+from langchain_core.runnables.graph import (
+    Node as RunnableGraphNode,
+)
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
@@ -238,45 +243,71 @@ class Graph:
 class CompiledGraph(Pregel):
     graph: Graph
 
-    def get_graph(self, config: Optional[RunnableConfig] = None) -> RunnableGraph:
+    def get_graph(
+        self, config: Optional[RunnableConfig] = None, *, xray: bool = False
+    ) -> RunnableGraph:
         graph = RunnableGraph()
-        graph.add_node(self.get_input_schema(config), START)
-        graph.add_node(self.get_output_schema(config), END)
+        start_nodes: dict[str, RunnableGraphNode] = {
+            START: graph.add_node(self.get_input_schema(config), START)
+        }
+        end_nodes: dict[str, RunnableGraphNode] = {
+            END: graph.add_node(self.get_output_schema(config), END)
+        }
 
         for key, node in self.graph.nodes.items():
-            graph.add_node(node, key)
+            if xray:
+                subgraph = (
+                    node.get_graph(config=config, xray=xray)
+                    if isinstance(node, CompiledGraph)
+                    else node.get_graph(config=config)
+                )
+                subgraph.trim_first_node()
+                subgraph.trim_last_node()
+                if len(subgraph.nodes) > 1:
+                    graph.extend(subgraph)
+                    start_nodes[key] = subgraph.last_node()
+                    end_nodes[key] = subgraph.first_node()
+                else:
+                    n = graph.add_node(node, key)
+                    start_nodes[key] = n
+                    end_nodes[key] = n
+            else:
+                n = graph.add_node(node, key)
+                start_nodes[key] = n
+                end_nodes[key] = n
         for start, end in self.graph.edges:
-            graph.add_edge(graph.nodes[start], graph.nodes[end])
+            graph.add_edge(start_nodes[start], end_nodes[end])
         for start, branches in self.graph.branches.items():
             for i, branch in enumerate(branches):
                 name = f"{start}_{branch.condition.__name__}"
                 if i > 0:
                     name += f"_{i}"
-                graph.add_node(
+                cond = graph.add_node(
                     RunnableLambda(branch.runnable, name=branch.condition.__name__),
                     name,
                 )
-                graph.add_edge(graph.nodes[start], graph.nodes[name])
-                ends = branch.ends or {k: k for k in self.graph.nodes}
+                graph.add_edge(start_nodes[start], cond)
+                ends = branch.ends or {
+                    **{k: k for k in self.graph.nodes},
+                    END: END,
+                }
                 for label, end in ends.items():
-                    graph.add_edge(graph.nodes[name], graph.nodes[end], label)
+                    graph.add_edge(cond, end_nodes[end], label)
         if self.graph.entry_point_branch:
-            graph.add_node(
+            cond = graph.add_node(
                 RunnableLambda(
                     self.graph.entry_point_branch.runnable,
                     name=self.graph.entry_point_branch.condition.__name__,
                 ),
                 f"{START}_condition",
             )
-            graph.add_edge(graph.nodes[START], graph.nodes[f"{START}_condition"])
+            graph.add_edge(start_nodes[START], cond)
             ends = self.graph.entry_point_branch.ends or {
                 k: k for k in self.graph.nodes
             }
             for label, end in ends.items():
-                graph.add_edge(
-                    graph.nodes[f"{START}_condition"], graph.nodes[end], label
-                )
+                graph.add_edge(cond, end_nodes[end], label)
         elif self.graph.entry_point:
-            graph.add_edge(graph.nodes[START], graph.nodes[self.graph.entry_point])
+            graph.add_edge(start_nodes[START], end_nodes[self.graph.entry_point])
 
         return graph

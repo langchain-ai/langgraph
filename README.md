@@ -417,6 +417,32 @@ If you need cycles.
 Langchain Expression Language allows you to easily define chains (DAGs) but does not have a good mechanism for adding in cycles.
 `langgraph` adds that syntax.
 
+
+## How-to Guides
+
+These guides show how to use LangGraph in particular ways.
+
+### Async
+
+If you are running LangGraph in async workflows, you may want to create the nodes to be async by default.
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb)
+
+### Streaming Tokens
+
+Sometimes language models take a while to respond and you may want to stream tokens to end users.
+For a guide on how to do this, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb)
+
+### Persistence
+
+LangGraph comes with built-in persistence, allowing you to save the state of the graph at point and resume from there.
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/persistence.ipynb)
+
+### Human-in-the-loop
+
+LangGraph comes with built-in support for human-in-the-loop workflows. This is useful when you want to have a human review the current state before proceeding to a particular node.
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb)
+
+
 ## Examples
 
 ### ChatAgentExecutor: with function calling
@@ -454,25 +480,6 @@ We also have a lot of examples highlighting how to slightly modify the base chat
 - [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
 - [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
 
-### Async
-
-If you are running LangGraph in async workflows, you may want to create the nodes to be async by default.
-For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb)
-
-### Streaming Tokens
-
-Sometimes language models take a while to respond and you may want to stream tokens to end users.
-For a guide on how to do this, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb)
-
-### Persistence
-
-LangGraph comes with built-in persistence, allowing you to save the state of the graph at point and resume from there.
-For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/persistence.ipynb)
-
-### Human-in-the-loop
-
-LangGraph comes with built-in support for human-in-the-loop workflows. This is useful when you want to have a human review the current state before proceeding to a particular node.
-For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb)
 
 ### Planning Agent Examples
 
@@ -497,6 +504,10 @@ When output quality is a major concern, it's common to incorporate some combinat
 - [Multi-agent with supervisor](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/agent_supervisor.ipynb): how to orchestrate individual agents by using an LLM as a "supervisor" to distribute work
 - [Hierarchical agent teams](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/hierarchical_agent_teams.ipynb): how to orchestrate "teams" of agents as nested graphs that can collaborate to solve a problem
 
+### Web Research
+
+- [STORM](./examples/storm/storm.ipynb): writing system that generates Wikipedia-style articles on any topic, applying outline generation (planning) + multi-perspective question-answering for added breadth and reliability. Based on [STORM](https://arxiv.org/abs/2402.14207) by Shao, et. al.
+
 ### Chatbot Evaluation via Simulation
 
 It can often be tough to evaluation chat bots in multi-turn situations. One way to do this is with simulations.
@@ -506,6 +517,11 @@ It can often be tough to evaluation chat bots in multi-turn situations. One way 
 ### Multimodal Examples
 
 - [WebVoyager](https://github.com/langchain-ai/langgraph/blob/main/examples/web-navigation/web_voyager.ipynb): vision-enabled web browsing agent that uses [Set-of-marks](https://som-gpt4v.github.io/) prompting to navigate a web browser and execute tasks
+
+### [Chain-of-Table](https://github.com/CYQIQ/MultiCoT)
+
+[Chain of Table](https://arxiv.org/abs/2401.04398) is a framework that elicits SOTA performance when answering questions over tabular data. [This implementation](https://github.com/CYQIQ/MultiCoT) by Github user [CYQIQ](https://github.com/CYQIQ) uses LangGraph to control the flow.
+
 
 ## Documentation
 
@@ -640,6 +656,23 @@ It only takes one argument:
 
 - `key`: The name of the node that should be called first.
 
+#### `.add_conditional_edges`
+
+```python
+    def set_conditional_entry_point(
+        self,
+        condition: Callable[..., str],
+        conditional_edge_mapping: Optional[Dict[str, str]] = None,
+    ) -> None:
+```
+
+This method adds a conditional entry point.
+What this means is that when the graph is called, it will call the `condition` Callable to decide what node to enter into first.
+
+- `condition`: A function to call to decide what to do next. The input will be the input to the graph. It should return a string that is present in `conditional_edge_mapping` and represents the edge to take.
+- `conditional_edge_mapping`: A mapping of string to string. The keys should be strings that may be returned by `condition`. The values should be the downstream node to call if that condition is returned.
+
+
 #### `.set_finish_point`
 
 ```python
@@ -719,6 +752,33 @@ tools = [TavilySearchResults(max_results=1)]
 model = ChatOpenAI()
 
 app = chat_agent_executor.create_function_calling_executor(model, tools)
+
+inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
+for s in app.stream(inputs):
+    print(list(s.values())[0])
+    print("----")
+```
+
+### create_tool_calling_executor
+
+```python
+from langgraph.prebuilt import chat_agent_executor
+```
+
+This is a helper function for creating a graph that works with a chat model that utilizes tool calling.
+Can be created by passing in a model and a list of tools.
+The model must be one that supports OpenAI tool calling.
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langgraph.prebuilt import chat_agent_executor
+from langchain_core.messages import HumanMessage
+
+tools = [TavilySearchResults(max_results=1)]
+model = ChatOpenAI()
+
+app = chat_agent_executor.create_tool_calling_executor(model, tools)
 
 inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
 for s in app.stream(inputs):
