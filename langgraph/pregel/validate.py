@@ -2,6 +2,7 @@ from typing import Any, Mapping, Sequence, Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.last_value import LastValue
+from langgraph.constants import INTERRUPT
 from langgraph.pregel.read import ChannelBatch, ChannelInvoke
 from langgraph.pregel.reserved import ReservedChannels
 
@@ -12,10 +13,13 @@ def validate_graph(
     input: Union[str, Sequence[str]],
     output: Union[str, Sequence[str]],
     hidden: Sequence[str],
-    interrupt: Sequence[str],
+    interrupt_after: Sequence[str],
+    interrupt_before: Sequence[str],
 ) -> None:
     subscribed_channels = set[str]()
-    for node in nodes.values():
+    for name, node in nodes.items():
+        if name == INTERRUPT:
+            raise ValueError(f"Node name {INTERRUPT} is reserved")
         if isinstance(node, ChannelInvoke):
             subscribed_channels.update(node.channels.values())
         elif isinstance(node, ChannelBatch):
@@ -56,7 +60,8 @@ def validate_graph(
             channels[chan] = LastValue(Any)  # type: ignore[arg-type]
 
     validate_keys(hidden, channels)
-    validate_keys(interrupt, channels)
+    validate_keys(interrupt_after, channels)
+    validate_keys(interrupt_before, channels)
 
 
 def validate_keys(

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, Optional, Sequence
+from typing import Any, Callable, NamedTuple, Optional, Sequence, Union
 
 from langchain_core.runnables import (
     Runnable,
@@ -18,21 +18,25 @@ TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
 SKIP_WRITE = object()
 
 
+class ChannelWriteEntry(NamedTuple):
+    channel: str
+    value: Optional[Union[Any, Runnable]]
+    skip_none: bool
+
+
 class ChannelWrite(RunnablePassthrough):
-    channels: Sequence[tuple[str, Optional[Runnable], bool]]
+    channels: Sequence[ChannelWriteEntry]
     """
-    Mapping of write channels to Runnables that return the value to be written,
-    or None to skip writing.
+    Sequence of write entries, each of which is a tuple of:
+    - channel name
+    - runnable to map input, or None to use the input, or any other value to use instead
+    - whether to skip writing if the mapped value is None
     """
 
     class Config:
         arbitrary_types_allowed = True
 
-    def __init__(
-        self,
-        *,
-        channels: Sequence[tuple[str, Optional[Runnable], bool]],
-    ):
+    def __init__(self, *, channels: Sequence[ChannelWriteEntry]):
         super().__init__(func=self._write, afunc=self._awrite, channels=channels)
         self.name = f"ChannelWrite<{','.join(chan for chan, _, _ in self.channels)}>"
 
@@ -53,7 +57,14 @@ class ChannelWrite(RunnablePassthrough):
 
     def _write(self, input: Any, config: RunnableConfig) -> None:
         values = [
-            (chan, r.invoke(input, config) if r else input)
+            (
+                chan,
+                r.invoke(input, config)
+                if isinstance(r, Runnable)
+                else r
+                if r is not None
+                else input,
+            )
             for chan, r, _ in self.channels
         ]
         values = [
@@ -67,7 +78,11 @@ class ChannelWrite(RunnablePassthrough):
     async def _awrite(self, input: Any, config: RunnableConfig) -> None:
         values = await asyncio.gather(
             *(
-                r.ainvoke(input, config) if r else _mk_future(input)
+                r.ainvoke(input, config)
+                if isinstance(r, Runnable)
+                else _mk_future(r)
+                if r is not None
+                else _mk_future(input)
                 for _, r, _ in self.channels
             )
         )

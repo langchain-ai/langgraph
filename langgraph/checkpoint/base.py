@@ -1,6 +1,7 @@
 import asyncio
 from abc import ABC, abstractmethod
 from collections import defaultdict
+from copy import deepcopy
 from datetime import datetime, timezone
 from typing import Any, Optional, TypedDict
 
@@ -33,6 +34,16 @@ def empty_checkpoint() -> Checkpoint:
     )
 
 
+def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
+    return Checkpoint(
+        v=checkpoint["v"],
+        ts=checkpoint["ts"],
+        channel_values=checkpoint["channel_values"].copy(),
+        channel_versions=checkpoint["channel_versions"].copy(),
+        versions_seen=deepcopy(checkpoint["versions_seen"]),
+    )
+
+
 class CheckpointAt(StrEnum):
     END_OF_STEP = "end_of_step"
     END_OF_RUN = "end_of_run"
@@ -46,12 +57,10 @@ class BaseCheckpointSaver(Serializable, ABC):
         return []
 
     @abstractmethod
-    def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
-        ...
+    def get(self, config: RunnableConfig) -> Optional[Checkpoint]: ...
 
     @abstractmethod
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> None:
-        ...
+    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> None: ...
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         return await asyncio.get_running_loop().run_in_executor(None, self.get, config)
