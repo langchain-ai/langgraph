@@ -513,6 +513,7 @@ When output quality is a major concern, it's common to incorporate some combinat
 It can often be tough to evaluation chat bots in multi-turn situations. One way to do this is with simulations.
 
 - [Chat bot evaluation as multi-agent simulation](https://github.com/langchain-ai/langgraph/blob/main/examples/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): how to simulate a dialogue between a "virtual user" and your chat bot
+- [Evaluating over a dataset](./examples/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): benchmark your assistant over a langsmith dataset using a red teaming exercise with a virtual customer.
 
 ### Multimodal Examples
 
