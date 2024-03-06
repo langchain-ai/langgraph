@@ -84,7 +84,7 @@ def create_chat_simulator(
     ),
     simulated_user: Runnable[Dict, AIMessage],
     *,
-    input_key: Optional[str] = None,
+    input_key: str,
     max_turns: int = 6,
     should_continue: Optional[Callable[[SimulationState], str]] = None,
 ):
@@ -93,6 +93,7 @@ def create_chat_simulator(
     Args:
         assistant: The chatbot assistant function or runnable object.
         simulated_user: The simulated user object.
+        input_key: The key for the input to the chat simulation.
         max_turns: The maximum number of turns in the chat simulation. Default is 6.
         should_continue: Optional function to determine if the simulation should continue.
             If not provided, a default function will be used.
@@ -130,14 +131,14 @@ def _prepare_example(inputs: dict[str, Any], input_key: Optional[str] = None):
     if input_key is not None:
         if input_key not in inputs:
             raise ValueError(
-                f"Dataset's example input must contain the provided input key: '{input_key}'.\nFound: {list(input.keys())}"
+                f"Dataset's example input must contain the provided input key: '{input_key}'.\nFound: {list(inputs.keys())}"
             )
         messages = [HumanMessage(content=inputs[input_key])]
         return {
             "inputs": {k: v for k, v in inputs.items() if k != input_key},
             "messages": messages,
         }
-    return {"inputs": inputs}
+    return {"inputs": inputs, "messages": []}
 
 
 def _invoke_simulated_user(state: SimulationState, simulated_user: Runnable):
@@ -152,14 +153,17 @@ def _invoke_simulated_user(state: SimulationState, simulated_user: Runnable):
     return runnable.invoke(inputs)
 
 
-def _swap_roles(messages: List[AnyMessage]):
+def _swap_roles(state: SimulationState):
     new_messages = []
-    for m in messages:
+    for m in state["messages"]:
         if isinstance(m, AIMessage):
             new_messages.append(HumanMessage(content=m.content))
         else:
             new_messages.append(AIMessage(content=m.content))
-    return new_messages
+    return {
+        "inputs": state.get("inputs", {}),
+        "messages": new_messages,
+    }
 
 
 @as_runnable
@@ -169,7 +173,7 @@ def _fetch_messages(state: SimulationState):
 
 
 def _convert_to_human_message(message: BaseMessage):
-    return HumanMessage(content=message.content)
+    return {"messages": [HumanMessage(content=message.content)]}
 
 
 def _create_simulated_user_node(simulated_user: Runnable):
@@ -183,9 +187,9 @@ def _create_simulated_user_node(simulated_user: Runnable):
 
 def _coerce_to_message(assistant_output: str | BaseMessage):
     if isinstance(assistant_output, str):
-        return AIMessage(content=assistant_output)
+        return {"messages": [AIMessage(content=assistant_output)]}
     else:
-        return assistant_output
+        return {"messages": [assistant_output]}
 
 
 def _should_continue(state: SimulationState, max_turns: int = 6):
