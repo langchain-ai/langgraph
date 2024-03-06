@@ -1,56 +1,57 @@
-# 🦜🕸️LangGraph
+# GigaGraph
 
-⚡ Building language agents as graphs ⚡
+⚡ Разработка языковых агентов в виде графов ⚡
 
-## Overview
+## Описание
 
-[LangGraph](https://github.com/langchain-ai/langgraph) is a library for building stateful, multi-actor applications with LLMs, built on top of (and intended to be used with) [LangChain](https://github.com/langchain-ai/langchain).
-It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation in a cyclic manner.
-It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
-The current interface exposed is one inspired by [NetworkX](https://networkx.org/documentation/latest/).
+GigaGraph — это библиотека, дающая возможность работать с LLM (большие языковые модели) для создания приложений, которые используют множество взаимодействующих цепочек (акторов) и сохраняют данные о состоянии.
+Так как в основе GigaGraph лежит [GigaChain](https://github.com/ai-forever/gigachain), предполагается совместное использование обоих библиотек.
 
-The main use is for adding **cycles** to your LLM application.
-Crucially, this is NOT a **DAG** framework.
-If you want to build a DAG, you should just use [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
+Основной сценарий использования GigaGraph — добавление циклов в приложения с LLM. Для этого библиотека добавляет в [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) возможность работать с множеством цепочек на каждой из итераций вычислительного цикла.
+Использование циклов позволяет реализовать поведение агента, когда приложению нужно многократно вызывать LLM и спрашивать, какое действие нужно выполнить следующим.
 
-Cycles are important for agent-like behaviors, where you call an LLM in a loop, asking it what action to take next.
+Следует отметить, что GigaGraph не предназначена для создания *DAG* (ориентированного ациклического графа).
+Для решения этой задачи используйте стандартные возможности LangChain Expression Language.
 
-## Installation
+## Установка
+
+Для установки используйте менеджер пакетов pip:
 
 ```shell
-pip install langgraph
+pip install gigagraph
 ```
 
-## Quick Start
+## Быстрый старт
 
-Here we will go over an example of creating a simple agent that uses chat models and function calling.
-This agent will represent all its state as a list of messages.
+Ниже приводится пример разработки агента, использующего несколько моделей и вызов функций.
+Агент отображает каждое свое состояние в виде отдельных сообщений в списке
 
-We will need to install some LangChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
+Для работы агента потребуется установить некоторые пакеты LangChain и использовать в качестве демонстрации сервис [Tavily](https://app.tavily.com/sign-in):
 
 ```shell
 pip install -U langchain langchain_openai tavily-python
 ```
 
-We also need to export some environment variables for OpenAI and Tavily API access.
+Также для доступа к OpenAI и Tavily API понадобится задать переменные среды:
 
 ```shell
 export OPENAI_API_KEY=sk-...
 export TAVILY_API_KEY=tvly-...
 ```
 
-Optionally, we can set up [LangSmith](https://docs.smith.langchain.com/) for best-in-class observability.
+При желании вы можете использовать [LangSmith](https://docs.smith.langchain.com/):
 
 ```shell
 export LANGCHAIN_TRACING_V2="true"
 export LANGCHAIN_API_KEY=ls__...
 ```
 
-### Set up the tools
+### Подготовьте инструменты
 
-We will first define the tools we want to use.
-For this simple example, we will use a built-in search tool via Tavily.
-However, it is really easy to create your own tools - see documentation [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools) on how to do that.
+В первую очередь определите инструменты (`tools`), которые будет использовать приложение.
+В качестве примера в этом разделе используется поиск, встроенный в Tavily, но вы также можете использовать собственные инструменты.
+Подробнее об том как создавать свои инструменты — в [документации](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
+
 
 ```python
 from langchain_community.tools.tavily_search import TavilySearchResults
@@ -58,9 +59,8 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 tools = [TavilySearchResults(max_results=1)]
 ```
 
-We can now wrap these tools in a simple LangGraph `ToolExecutor`.
-This is a simple class that receives `ToolInvocation` objects, calls that tool, and returns the output.
-`ToolInvocation` is any class with `tool` and `tool_input` attributes.
+Оберните инструменты в GigaGraph `ToolExecutor` — класс, который принимает объекты запуска инструмента `ToolInvocation`, вызывает инструмент и возвращает ответ.
+Объект `ToolInvocation` — произвольный класс с атрибутами `tool` и `tool_input`.
 
 ```python
 from langgraph.prebuilt import ToolExecutor
@@ -68,26 +68,25 @@ from langgraph.prebuilt import ToolExecutor
 tool_executor = ToolExecutor(tools)
 ```
 
-### Set up the model
+### Задайте модель
 
-Now we need to load the chat model we want to use.
-Importantly, this should satisfy two criteria:
+Подключите модель, которую будет использовать приложение.
+Для демонстрации в описываемом примере модель должна:
 
-1. It should work with lists of messages. We will represent all agent state in the form of messages, so it needs to be able to work well with them.
-2. It should work with the OpenAI function calling interface. This means it should either be an OpenAI model or a model that exposes a similar interface.
+* поддерживать списки сообщений. Каждое свое состояние агент будет возвращать в виде сообщений, поэтому модель должна хорошо работать со списками сообщений.
+* предоставлять интерфейсы вызова функций, аналогичные моделям OpenAI.
 
-Note: these model requirements are not requirements for using LangGraph - they are just requirements for this one example.
 
 ```python
 from langchain_openai import ChatOpenAI
 
-# We will set streaming=True so that we can stream tokens
-# See the streaming section for more information on this.
+# Параметр streaming=True включает потоковую передачу токенов
+# Подробнее в разделе Потоковая передача.
 model = ChatOpenAI(temperature=0, streaming=True)
 ```
 
-After we've done this, we should make sure the model knows that it has these tools available to call.
-We can do this by converting the LangChain tools into the format for OpenAI function calling, and then bind them to the model class.
+После подключения убедитесь, что модель знает, какие инструменты доступны ей.
+Для этого преобразуйте инструменты GigaGraph в формат OpenAI-функций и привяжите их к классу модели.
 
 ```python
 from langchain.tools.render import format_tool_to_openai_function
@@ -96,17 +95,18 @@ functions = [format_tool_to_openai_function(t) for t in tools]
 model = model.bind_functions(functions)
 ```
 
-### Define the agent state
+### Определите состояние агента
 
-The main type of graph in `langgraph` is the `StatefulGraph`.
-This graph is parameterized by a state object that it passes around to each node.
-Each node then returns operations to update that state.
-These operations can either SET specific attributes on the state (e.g. overwrite the existing values) or ADD to the existing attribute.
-Whether to set or add is denoted by annotating the state object you construct the graph with.
+Основным графом `gigagraph` является `StatefulGraph`.
+Этот граф параметризован объектом состояния, который он передает каждой вершине.
+В свою очередь каждая вершина возвращает операции для обновления состояния.
+Операции могут либо задавать (SET) определенные атрибуты состояния (например, переписывать существующие значения), либо добавлять ()ADD данные к существующим атрибутам.
+Будет операция задавать или добавлять данные, определяется аннотациями объекта состояния, который используется для создания графа.
 
-For this example, the state we will track will just be a list of messages.
-We want each node to just add messages to that list.
-Therefore, we will use a `TypedDict` with one key (`messages`) and annotate it so that the `messages` attribute is always added to.
+В приведенном примере отслеживаемое состояние представлено в виде списка сообщений.
+Поэтому нужно чтобы каждая вершина добавляла сообщения в список.
+
+Для этого используйте `TypedDict` с одним ключом (`messages`) и аннотацией, указывающей на то, что в атрибут `messages` можно только добавлять данные.
 
 ```python
 from typing import TypedDict, Annotated, Sequence
@@ -118,125 +118,122 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
 ```
 
-### Define the nodes
+### Определите вершины графа
 
-We now need to define a few different nodes in our graph.
-In `langgraph`, a node can be either a function or a [runnable](https://python.langchain.com/docs/expression_language/).
-There are two main nodes we need for this:
+Теперь нужно определить несколько разных вершин графа.
+В `langgraph` вершина может быть представлена в виде функции или [исполняемого интерфейса](https://python.langchain.com/docs/expression_language/).
+Для описываемого примера понадобятся две основных вершины:
 
-1. The agent: responsible for deciding what (if any) actions to take.
-2. A function to invoke tools: if the agent decides to take an action, this node will then execute that action.
+* Агент, который принимает решения когда и какие действия нужно выполнять.
+* Функция для вызова инструментов. Если агент решает совершить действие, эта вершина его выполнит.
 
-We will also need to define some edges.
-Some of these edges may be conditional.
-The reason they are conditional is that based on the output of a node, one of several paths may be taken.
-The path that is taken is not known until that node is run (the LLM decides).
+Также нужно определить ребра графа.
+Часть ребер могут зависеть от условий (*условные ребра*).
+Это связанно с тем, что в зависимости от вывода вершины могут быть реализованы различные пути развития событий.
+При этом неизвестно какой путь будет выбран до момента обращения к вершине.
+Какой путь выбрать LLM решает самостоятельно.
 
-1. Conditional Edge: after the agent is called, we should either:
+Разница между обычным и условным ребром графа:
 
-   a. If the agent said to take an action, then the function to invoke tools should be called
+* В случае условного ребра, после вызова агента:
 
-   b. If the agent said that it was finished, then it should finish
+  * если агент решает предпринять действие, нужно вызвать функцию для обращения к инструментам;
+  * если агент решает, что действие завершено, операции должны быть прекращены.
 
-2. Normal Edge: after the tools are invoked, it should always go back to the agent to decide what to do next
+* В случае обычного ребра после обращения к инструментам, нужно всегда возвращаться к агенту, чтобы он определил дальнейшие действия.
 
-Let's define the nodes, as well as a function to decide how what conditional edge to take.
+
+Определите вершины и функцию, которая будет решать какое из условных ребер выполнять.
 
 ```python
 from langgraph.prebuilt import ToolInvocation
 import json
 from langchain_core.messages import FunctionMessage
 
-# Define the function that determines whether to continue or not
+# Задайте функцию, которая определяет нужно продолжать или нет
 def should_continue(state):
     messages = state['messages']
     last_message = messages[-1]
-    # If there is no function call, then we finish
+    # Приложение останавливается, если нет вызова функции
     if "function_call" not in last_message.additional_kwargs:
         return "end"
-    # Otherwise if there is, we continue
+    # В противном случае выполнение продолжается
     else:
         return "continue"
 
-# Define the function that calls the model
+# Задайте функцию, которая будет обращаться к модели
 def call_model(state):
     messages = state['messages']
     response = model.invoke(messages)
-    # We return a list, because this will get added to the existing list
+    # Возвращается список, который будет добавлен к существующему списку сообщений
     return {"messages": [response]}
 
-# Define the function to execute tools
+# Задайте функцию, которая будет вызывать инструменты
 def call_tool(state):
     messages = state['messages']
-    # Based on the continue condition
-    # we know the last message involves a function call
+    # Благодаря условию continue
+    # приложение знает, что последнее сообщение содержит вызов функции
     last_message = messages[-1]
-    # We construct an ToolInvocation from the function_call
+    # Создание ToolInvocation из function_call
     action = ToolInvocation(
         tool=last_message.additional_kwargs["function_call"]["name"],
         tool_input=json.loads(last_message.additional_kwargs["function_call"]["arguments"]),
     )
-    # We call the tool_executor and get back a response
+    # Вызов tool_executor и получение ответа
     response = tool_executor.invoke(action)
-    # We use the response to create a FunctionMessage
+    # Использование ответа для создания сообщения FunctionMessage
     function_message = FunctionMessage(content=str(response), name=action.tool)
-    # We return a list, because this will get added to the existing list
+    # Возвращение списка, который будет добавлен к существующему списку сообщений
     return {"messages": [function_message]}
 ```
 
-### Define the graph
-
-We can now put it all together and define the graph!
+### Определите граф
 
 ```python
 from langgraph.graph import StateGraph, END
-# Define a new graph
+# Задайте новый граф
 workflow = StateGraph(AgentState)
 
-# Define the two nodes we will cycle between
+# Задайте две вершины, которые будут работать в цикле
 workflow.add_node("agent", call_model)
 workflow.add_node("action", call_tool)
 
-# Set the entrypoint as `agent`
-# This means that this node is the first one called
+# Задайте точку входа `agent`
+# Точка входа указывает вершину, котора будет вызвана в первую очередь
 workflow.set_entry_point("agent")
 
-# We now add a conditional edge
+# Создайте условное ребро
 workflow.add_conditional_edges(
-    # First, we define the start node. We use `agent`.
-    # This means these are the edges taken after the `agent` node is called.
+    # Определите начальную вершину. В этом примере используется вершина `agent`.
+    # Это задает ребра, которые будут использованы после вызова вершины `agent`.
     "agent",
-    # Next, we pass in the function that will determine which node is called next.
+    # Передайте функцию, которая определяет какую вершину вызвать дальше.
     should_continue,
-    # Finally we pass in a mapping.
-    # The keys are strings, and the values are other nodes.
-    # END is a special node marking that the graph should finish.
-    # What will happen is we will call `should_continue`, and then the output of that
-    # will be matched against the keys in this mapping.
-    # Based on which one it matches, that node will then be called.
+    # Передайте структуру (map), в которой ключами будут строки, а значениями другие вершины.
+    # END — зарезервированная вершна, указываящая на то, что граф должен завершиться.
+    # После вызова `should_continue` вывод функции сравнивается с ключами в структуре.
+    # После чего вызывается соотвествующая выводу вершина.
     {
         # If `tools`, then we call the tool node.
+        # Если значение `tools`, вызывается вершина, ответственная за обращение к интрсументам.
         "continue": "action",
-        # Otherwise we finish.
+        # В противном случае граф заканчивается.
         "end": END
     }
 )
 
-# We now add a normal edge from `tools` to `agent`.
-# This means that after `tools` is called, `agent` node is called next.
+# Добавьте обычное ребро, соединяющее вершины `tools` и `agent`.
+# Ребро задает путь при котором после вызова вершины `tools`, вызывается вершина `agent`.
 workflow.add_edge('action', 'agent')
 
-# Finally, we compile it!
-# This compiles it into a LangChain Runnable,
-# meaning you can use it as you would any other runnable
+# Скомпилируйте все предыдущие этапы в исполняемый интерфейс GigaChain.
+# Теперь граф можно использовать также, как и другие исполняемые интерфейсы.
 app = workflow.compile()
 ```
 
-### Use it!
+### Использование
 
-We can now use it!
-This now exposes the [same interface](https://python.langchain.com/docs/expression_language/) as all other LangChain runnables.
-This runnable accepts a list of messages.
+Скомпилированный исполняемый интерфейс принимает на вход список сообщений:
 
 ```python
 from langchain_core.messages import HumanMessage
@@ -245,21 +242,21 @@ inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
 app.invoke(inputs)
 ```
 
-This may take a little bit - it's making a few calls behind the scenes.
-In order to start seeing some intermediate results as they happen, we can use streaming - see below for more information on that.
+Работа интерфейса занимает некоторое время.
+Чтобы наблюдать за результатом работы в прямом эфире, вы можете включить потоковую передачу.
 
-## Streaming
+## Потоковая передача
 
-LangGraph has support for several different types of streaming.
+GigaGraph поддерживает несколько разных способов потоковой передачи.
 
-### Streaming Node Output
+### Потоковая передача вывода вершины
 
-One of the benefits of using LangGraph is that it is easy to stream output as it's produced by each node.
+GigaGraph предоставляет возможность потоковой передачи результата вызова каждой из вершин графа по мере обращения к ним.
 
 ```python
 inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
 for output in app.stream(inputs):
-    # stream() yields dictionaries with output keyed by node name
+    # stream() возвращает словари с парами `Вершина графа — вывод`
     for key, value in output.items():
         print(f"Output from node '{key}':")
         print("---")
@@ -293,11 +290,11 @@ Output from node '__end__':
 ---
 ```
 
-### Streaming LLM Tokens
+### Потоковая передача токенов модели
 
-You can also access the LLM tokens as they are produced by each node.
-In this case only the "agent" node produces LLM tokens.
-In order for this to work properly, you must be using an LLM that supports streaming as well as have set it when constructing the LLM (e.g. `ChatOpenAI(model="gpt-3.5-turbo-1106", streaming=True)`)
+Библиотека дает доступ к потоковой передачи токенов модели по мере их возникновения на каждой из вершин.
+В приведенном примере только вершина `agent` может возвращать токены модели.
+Для работы этой функциональность нужно чтобы модель поддерживала работу в режиме потоковой передачи токенов.
 
 ```python
 inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
@@ -408,15 +405,11 @@ content=').'
 content=''
 ```
 
-## When to Use
+## Область применения
 
-When should you use this versus [LangChain Expression Language](https://python.langchain.com/docs/expression_language/)?
+Используйте библиотеку если вам нужна поддержка циклов.
 
-If you need cycles.
-
-Langchain Expression Language allows you to easily define chains (DAGs) but does not have a good mechanism for adding in cycles.
-`langgraph` adds that syntax.
-
+Если обычной работы с цепочками для решения ваших задач достаточно, используйте основные возможности [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
 
 ## How-to Guides
 
@@ -443,42 +436,45 @@ LangGraph comes with built-in support for human-in-the-loop workflows. This is u
 For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb)
 
 
-## Examples
+## Примеры
 
 ### ChatAgentExecutor: with function calling
 
-This agent executor takes a list of messages as input and outputs a list of messages.
-All agent state is represented as a list of messages.
-This specifically uses OpenAI function calling.
-This is recommended agent executor for newer chat based models that support function calling.
+### Исполнитель чат-агента с возможностью вызывать функции
 
-- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb): Walks through creating this type of executor from scratch
-- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
+Пример приложения-исполнителя принимает на вход список сообщений и также возвращает список сообщений на выходе.
+Состояние агента также представлено в виде списка сообщений.
+Представленный пример использует вызов функций OpenAI.
 
-**Modifications**
+
+- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb). Базовый пример, демонстрирующий пошаговое создание приложения исполнителя агентов.
+- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/high-level.ipynb). Пример демонстрирует как можно использовать высокоуровневую точку входа для исполнителя чат-агента.
+
+**Вариации примеров**
 
 We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb) so it is recommended you start with that first.
 
-- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb): How to add a human-in-the-loop component
-- [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb): How to always call a specific tool first
-- [Respond in a specific format](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/respond-in-format.ipynb): How to force the agent to respond in a specific format
-- [Dynamically returning tool output directly](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb): How to dynamically let the agent choose whether to return the result of a tool directly to the user
-- [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
+- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb). Пример демонстрирует как реализовать подход «человек-в-цикле».
+- [Принудительный вызов инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb). Пример демонстрирует как всегда вызывать определенный инструмент в первую очередь.
+- [Ответ в заданном формате](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/respond-in-format.ipynb). Пример демонстрирует, как принудительно получить ответ агента в заданном формате.
+- [Динамический вывод результата использования инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb). Пример демонстрирует, как агент может самостоятельно решать возвращать результат использования инструмента пользователю или нет.
+- [Управление этапами работы агента](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb). Пример демонстрирует, как можно более детально управлять промежуточными этапами работы агента.
 
-### AgentExecutor
+### Исполнители агентов
 
-This agent executor uses existing LangChain agents.
+Примеры приложений-исполнителей, использующих агенты LangChain.
 
-- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb): Walks through creating this type of executor from scratch
-- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/high-level.ipynb): Walks through how to use the high level entrypoint for the chat agent executor.
+- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb). Базовый пример, демонстрирующий пошаговое создание приложения исполнителя агентов.
+- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/high-level.ipynb). Пример демонстрирует как можно использовать высокоуровневую точку входа для исполнителя чат-агента.
 
-**Modifications**
+**Вариации примеров**
 
-We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb) so it is recommended you start with that first.
+Примеры небольших изменений, которые можно сделать при разработке исполнителя чат-агента.
+Приведенные вариации основаны на примере [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb).
 
-- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/human-in-the-loop.ipynb): How to add a human-in-the-loop component
-- [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
-- [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
+- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/human-in-the-loop.ipynb). Пример демонстрирует как реализовать подход «человек-в-цикле».
+- [Принудительный вызов инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb). Пример демонстрирует как всегда вызывать определенный инструмент в первую очередь.
+- [Управление этапами работы агента](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb). Пример демонстрирует, как можно более детально управлять промежуточными этапами работы агента.
 
 
 ### Planning Agent Examples
@@ -499,45 +495,52 @@ When output quality is a major concern, it's common to incorporate some combinat
 - [Language Agent Tree Search](./examples/lats/lats.ipynb): execute multiple agents in parallel, using reflection and environmental rewards to drive a Monte Carlo Tree Search. Based on [LATS](https://arxiv.org/abs/2310.04406/LanguageAgentTreeSearch/), by Zhou, et. al.
 
 ### Multi-agent Examples
+### Примеры с несколькими агентами
 
-- [Multi-agent collaboration](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/multi-agent-collaboration.ipynb): how to create two agents that work together to accomplish a task
-- [Multi-agent with supervisor](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/agent_supervisor.ipynb): how to orchestrate individual agents by using an LLM as a "supervisor" to distribute work
-- [Hierarchical agent teams](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/hierarchical_agent_teams.ipynb): how to orchestrate "teams" of agents as nested graphs that can collaborate to solve a problem
+- [Совместная работа нескольких агентов](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/multi-agent-collaboration.ipynb). Пример демонстрирует как создать двух агентов, которые работают вместе для решения задачи.
+- [Несколько агентов с «руководителем»](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/agent_supervisor.ipynb). Пример демонстрирует как организовать работу агентов используя LLM в роли «руководителя», который решает как распределять работу.
+- [Иерархичные команды агентов](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/hierarchical_agent_teams.ipynb): пример демонстрирует как организовать «команды» агентов, которые будут взаимодействовать для решения задачи, в виде вложенных графов.
 
-### Web Research
+### Симуляция для оценки чат-бота
 
-- [STORM](./examples/storm/storm.ipynb): writing system that generates Wikipedia-style articles on any topic, applying outline generation (planning) + multi-perspective question-answering for added breadth and reliability. Based on [STORM](https://arxiv.org/abs/2402.14207) by Shao, et. al.
+Оценка работы чат-бота в многоэтапных сценариях может вызывать трудности. Для решения таких задач вы можете использовать симуляции.
 
-### Chatbot Evaluation via Simulation
+- [Оценка чат-бота с помощью симуляции взаимодействия нескольких агентов.](https://github.com/langchain-ai/langgraph/blob/main/examples/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb). В примере показано как симулировать диалог «виртуального пользователя» с чат-ботом.
 
-It can often be tough to evaluation chat bots in multi-turn situations. One way to do this is with simulations.
+### Асинхронная работа
 
-- [Chat bot evaluation as multi-agent simulation](https://github.com/langchain-ai/langgraph/blob/main/examples/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): how to simulate a dialogue between a "virtual user" and your chat bot
+При работе с асинхронными процессами вам может потребоваться создать с помощью GigaGraph граф с вершинами, которые будут асинхронными по умолчанию.
+[Пример](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb).
 
-### Multimodal Examples
+### Потоковая передача токенов
 
-- [WebVoyager](https://github.com/langchain-ai/langgraph/blob/main/examples/web-navigation/web_voyager.ipynb): vision-enabled web browsing agent that uses [Set-of-marks](https://som-gpt4v.github.io/) prompting to navigate a web browser and execute tasks
+Ответ модели может занимать продолжительное время и вам может потребоваться на лету отображать пользователям результат работы модели.
+[Пример](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb).
 
-### [Chain-of-Table](https://github.com/CYQIQ/MultiCoT)
+### Устойчивость
 
-[Chain of Table](https://arxiv.org/abs/2401.04398) is a framework that elicits SOTA performance when answering questions over tabular data. [This implementation](https://github.com/CYQIQ/MultiCoT) by Github user [CYQIQ](https://github.com/CYQIQ) uses LangGraph to control the flow.
+GigaGraph позволяет сохранять состояние графа в определенный момент времени и потом возобновлять работу с этого состояния.
+[Пример](https://github.com/langchain-ai/langgraph/blob/main/examples/persistence.ipynb).
 
+### Человек-в-цикле
 
-## Documentation
+GigaGraph поддерживает процесс, при котором необходимо участие человека, проверяющего текущее состояние графа перед переходом к следующей вершине.
+Пример такого подхода — в [документации](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb).
 
-There are only a few new APIs to use.
+## Справка
+
+GigaGraph предоставляет доступ к нескольким новым интерфейсам.
 
 ### StateGraph
 
-The main entrypoint is `StateGraph`.
+Основная точка входа — класс `StateGraph`.
 
 ```python
 from langgraph.graph import StateGraph
 ```
 
-This class is responsible for constructing the graph.
-It exposes an interface inspired by [NetworkX](https://networkx.org/documentation/latest/).
-This graph is parameterized by a state object that it passes around to each node.
+Класс ответственный за создание графа.
+Этот граф параметризован объектом состояния, который он передает каждой вершине.
 
 #### `__init__`
 
@@ -545,18 +548,18 @@ This graph is parameterized by a state object that it passes around to each node
     def __init__(self, schema: Type[Any]) -> None:
 ```
 
-When constructing the graph, you need to pass in a schema for a state.
-Each node then returns operations to update that state.
-These operations can either SET specific attributes on the state (e.g. overwrite the existing values) or ADD to the existing attribute.
-Whether to set or add is denoted by annotating the state object you construct the graph with.
+При создании графа нужно передать схему состояния.
+Каждая вершина будет возращать операции для обновления этого состояния.
+Операции могут либо задавать (SET) определенные атрибуты состояния (например, переписывать существующие значения), либо добавлять ()ADD данные к существующим атрибутам.
+Будет операция задавать или добавлять данные, определяется аннотациями объекта состояния, который используется для создания графа.
 
-The recommended way to specify the schema is with a typed dictionary: `from typing import TypedDict`
+Схему состояния рекомендуется задавать с помощью типизированного словаря: `from typing import TypedDict`
 
-You can then annotate the different attributes using `from typing imoport Annotated`.
-Currently, the only supported annotation is `import operator; operator.add`.
-This annotation will make it so that any node that returns this attribute ADDS that new result to the existing value.
+После создания схемы вы можете аннотировать атрибуты с помощью `from typing imoport Annotated`.
+Сейчас поддерживается только одна аннотация — `import operator; operator.add`.
+Аннотация указывает, что каждая вершина, которая возвращает этот атрибут добавляет новые данные к существующему значению.
 
-Let's take a look at an example:
+Пример состояния:
 
 ```python
 from typing import TypedDict, Annotated, Union
@@ -565,38 +568,40 @@ import operator
 
 
 class AgentState(TypedDict):
-   # The input string
+   # Входная строка
    input: str
    # The outcome of a given call to the agent
    # Needs `None` as a valid type, since this is what this will start as
+   # Результат вызова агента
+   # Должен принимать `None` в качестве валидного типа, так как это начальное значение
    agent_outcome: Union[AgentAction, AgentFinish, None]
-   # List of actions and corresponding observations
-   # Here we annotate this with `operator.add` to indicate that operations to
-   # this state should be ADDED to the existing values (not overwrite it)
+   # Список действий и соответвтующих шагов
+   # Аннотация `operator.add` указывает что состояние должно дополняться (ADD) новыми данными,
+   # а не перезаписываться
    intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
 
 ```
 
-We can then use this like:
+Пример использования:
 
 ```python
-# Initialize the StateGraph with this state
+# Инициализируйте StateGraph с помощью состояния AgentState
 graph = StateGraph(AgentState)
-# Create nodes and edges
+# Создайте вершины и ребра
 ...
-# Compile the graph
+# Скомпилируйте граф
 app = graph.compile()
 
-# The inputs should be a dictionary, because the state is a TypedDict
+# На вход должен передаваться словарь, так как состояние создано как TypedDict
 inputs = {
-   # Let's assume this the input
+   # Пример входный данныъ
    "input": "hi"
-   # Let's assume agent_outcome is set by the graph as some point
-   # It doesn't need to be provided, and it will be None by default
-   # Let's assume `intermediate_steps` is built up over time by the graph
-   # It doesn't need to provided, and it will be empty list by default
-   # The reason `intermediate_steps` is an empty list and not `None` is because
-   # it's annotated with `operator.add`
+   # Предположим, что `agent_outcome` задается графом как некоторая точка
+   # Передавать значение не нужно, по умолчанию оно будет None
+   # Предположим, что граф со временем наполняет `intermediate_steps`
+   # Передавать значение не нужно, по умолчанию список будет пустым
+   # Список `intermediate_steps` будет представлен в виде пустого списка, а не None потому,
+   # что он аннотирован с помощью `operator.add`
 }
 ```
 
@@ -607,10 +612,11 @@ inputs = {
 ```
 
 This method adds a node to the graph.
-It takes two arguments:
+Добавляет вершину графа.
+Принимает два параметра:
 
-- `key`: A string representing the name of the node. This must be unique.
-- `action`: The action to take when this node is called. This should either be a function or a runnable.
+* `key` — Уникальная строка с названием вершины.
+* `action` — действие, которое выполняется при вызове вершины. Выражается в виде функции или исполняемого интерфейса.
 
 #### `.add_edge`
 
@@ -618,12 +624,12 @@ It takes two arguments:
     def add_edge(self, start_key: str, end_key: str) -> None:
 ```
 
-Creates an edge from one node to the next.
-This means that output of the first node will be passed to the next node.
-It takes two arguments.
+Создает ребро графа, соединяющее начальную и конечную вершины.
+Вывод начальной вершины передается в конечную.
+Принимает два параметра:
 
-- `start_key`: A string representing the name of the start node. This key must have already been registered in the graph.
-- `end_key`: A string representing the name of the end node. This key must have already been registered in the graph.
+- `start_key` — строка с названием начальной вершины. Название вершины должно быть зарегистрировано в графе.
+- `end_key` — строка с названием конечной вершины. Название вершины должно быть зарегистрировано в графе.
 
 #### `.add_conditional_edges`
 
@@ -636,25 +642,24 @@ It takes two arguments.
     ) -> None:
 ```
 
-This method adds conditional edges.
-What this means is that only one of the downstream edges will be taken, and which one that is depends on the results of the start node.
-This takes three arguments:
+Создает условное ребро.
+Позволяет задавать пути развития событий в зависимости от результата вызова начальной вершины.
+Принимает три параметра:
 
-- `start_key`: A string representing the name of the start node. This key must have already been registered in the graph.
-- `condition`: A function to call to decide what to do next. The input will be the output of the start node. It should return a string that is present in `conditional_edge_mapping` and represents the edge to take.
-- `conditional_edge_mapping`: A mapping of string to string. The keys should be strings that may be returned by `condition`. The values should be the downstream node to call if that condition is returned.
+- `start_key` — строка с названием начальной вершины. Название вершины должно быть зарегистрировано в графе.
+- `condition` — функция, которая вызывается для определения пути развития событий. На вход принимает результат вызова начальной вершины. Возвращает строку, зарегистрированную в структуре `conditional_edge_mapping`, которая указывает в соответствии с каким ребром будут развиваться события.
+- `conditional_edge_mapping` — структура (map) строка-строка. В качестве ключа задается название ребра, которое может вернуть `condition`. В качестве значения задается вершина, которые будет вызваны если `condition` вернет соответствующее название ребра.
 
 #### `.set_entry_point`
 
 ```python
     def set_entry_point(self, key: str) -> None:
 ```
+Точка входа в граф.
+Задает вершину, которая будет вызвана в самом начале.
+Принимает один параметр:
 
-The entrypoint to the graph.
-This is the node that is first called.
-It only takes one argument:
-
-- `key`: The name of the node that should be called first.
+- `key` — название вершины, которую нужно вызывать в первую очередь.
 
 #### `.add_conditional_edges`
 
@@ -683,9 +688,13 @@ This is the exit point of the graph.
 When this node is called, the results will be the final result from the graph.
 It only has one argument:
 
-- `key`: The name of the node that, when called, will return the results of calling it as the final output
+Точка выхода из графа.
+При вызове заданной вершины, результат ее работы будет итоговым для графа.
+Принимает один параметр:
 
-Note: This does not need to be called if at any point you previously created an edge (conditional or normal) to `END`
+- `key` — название вершины, результат вызова который будет считаться итоговым результатом работы графа.
+
+Вершину не нужно вызывать если на предыдущих шагах графа было создано ребро (условное или обычное) ведущее к зарезервированной вершине `END`.
 
 ### Graph
 
@@ -695,8 +704,8 @@ from langgraph.graph import Graph
 graph = Graph()
 ```
 
-This has the same interface as `StateGraph` with the exception that it doesn't update a state object over time, and rather relies on passing around the full state from each step.
-This means that whatever is returned from one node is the input to the next as is.
+Класс предоставляет доступ к интерфейсу `StateGraph`, но отличается тем, что объект состояния не обновляется со временем, а класс передает все состояние целиком на каждом этапе.
+Это означает, что данные, которые возвращаются в результате работы одной вершины, передаются на вход при вызове другой вершины в исходном состоянии.
 
 ### `END`
 
@@ -708,12 +717,16 @@ This is a special node representing the end of the graph.
 This means that anything passed to this node will be the final output of the graph.
 It can be used in two places:
 
-- As the `end_key` in `add_edge`
-- As a value in `conditional_edge_mapping` as passed to `add_conditional_edges`
+Зарезервированная вершина указывающая на завершение работы графа.
+Все данные, которые передаются вершине при вызове будут считаться результатом работы графа.
+Вершину можно использовать в двух случая:
 
-## Prebuilt Examples
+- В качестве ключа `end_key` в `add_edge`.
+- В качестве значения в структуре `conditional_edge_mapping`, передаваемой `add_conditional_edges`.
 
-There are also a few methods we've added to make it easy to use common, prebuilt graphs and components.
+## Готовые примеры
+
+Представленные примеры содержат несколько методов, облегчающих работу с распространенными, готовыми графами и компонентами.
 
 ### ToolExecutor
 
@@ -721,16 +734,16 @@ There are also a few methods we've added to make it easy to use common, prebuilt
 from langgraph.prebuilt import ToolExecutor
 ```
 
-This is a simple helper class to help with calling tools.
-It is parameterized by a list of tools:
+Вспомогательный класс для вызова инструментов.
+В качестве параметров класс принимает список инструментов.
 
 ```python
 tools = [...]
 tool_executor = ToolExecutor(tools)
 ```
 
-It then exposes a [runnable interface](https://python.langchain.com/docs/expression_language/interface).
-It can be used to call tools: you can pass in an [AgentAction](https://python.langchain.com/docs/modules/agents/concepts#agentaction) and it will look up the relevant tool and call it with the appropriate input.
+После инициализации класс дает доступ к [исполняемому интерфейсу](https://python.langchain.com/docs/expression_language/interface).
+Используйте класс для вызова инструментов. Передайте [AgentAction](https://python.langchain.com/docs/modules/agents/concepts#agentaction) для автоматического определения подходящего инструмента и входных данных.
 
 ### chat_agent_executor.create_function_calling_executor
 
@@ -738,9 +751,9 @@ It can be used to call tools: you can pass in an [AgentAction](https://python.la
 from langgraph.prebuilt import chat_agent_executor
 ```
 
-This is a helper function for creating a graph that works with a chat model that utilizes function calling.
-Can be created by passing in a model and a list of tools.
-The model must be one that supports OpenAI function calling.
+Вспомогательная функция для создания графа, который работает с генеративной моделью и может вызывать функции.
+Для использования функции передайте на вход модель и список инструментов.
+Модель должна поддерживать интерфейс вызова функций аналогичный OpenAI.
 
 ```python
 from langchain_openai import ChatOpenAI
@@ -753,7 +766,7 @@ model = ChatOpenAI()
 
 app = chat_agent_executor.create_function_calling_executor(model, tools)
 
-inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
+inputs = {"messages": [HumanMessage(content="какая погода в саратове")]}
 for s in app.stream(inputs):
     print(list(s.values())[0])
     print("----")
@@ -792,8 +805,8 @@ for s in app.stream(inputs):
 from langgraph.prebuilt import create_agent_executor
 ```
 
-This is a helper function for creating a graph that works with [LangChain Agents](https://python.langchain.com/docs/modules/agents/).
-Can be created by passing in an agent and a list of tools.
+Вспомогательная функция для работы с [агентами LangChain](https://python.langchain.com/docs/modules/agents/).
+Для использования функции передайте на вход агента и список инструментов.
 
 ```python
 from langgraph.prebuilt import create_agent_executor
@@ -804,13 +817,13 @@ from langchain_community.tools.tavily_search import TavilySearchResults
 
 tools = [TavilySearchResults(max_results=1)]
 
-# Get the prompt to use - you can modify this!
+# Подключите шаблон промпта. Вы можете выбрать любой шаблон
 prompt = hub.pull("hwchase17/openai-functions-agent")
 
-# Choose the LLM that will drive the agent
+# Выберите модель, с которой будет работать агент
 llm = ChatOpenAI(model="gpt-3.5-turbo-1106")
 
-# Construct the OpenAI Functions agent
+# Создайте агента OpenAI Functions
 agent_runnable = create_openai_functions_agent(llm, tools, prompt)
 
 app = create_agent_executor(agent_runnable, tools)
