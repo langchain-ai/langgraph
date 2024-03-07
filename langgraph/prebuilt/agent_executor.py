@@ -72,12 +72,26 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
     def execute_tools(data):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
+        if isinstance(agent_action, list):
+            output = tool_executor.batch(agent_action, return_exceptions=True)
+            return {
+                "intermediate_steps": [
+                    (action, str(out)) for action, out in zip(agent_action, output)
+                ]
+            }
         output = tool_executor.invoke(agent_action)
         return {"intermediate_steps": [(agent_action, str(output))]}
 
     async def aexecute_tools(data):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
+        if isinstance(agent_action, list):
+            output = await tool_executor.abatch(agent_action, return_exceptions=True)
+            return {
+                "intermediate_steps": [
+                    (action, str(out)) for action, out in zip(agent_action, output)
+                ]
+            }
         output = await tool_executor.ainvoke(agent_action)
         return {"intermediate_steps": [(agent_action, str(output))]}
 
