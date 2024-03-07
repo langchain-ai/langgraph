@@ -663,7 +663,7 @@ It only takes one argument:
 
 - `key`: The name of the node that should be called first.
 
-#### `.add_conditional_edges`
+#### `.set_conditional_entry_point`
 
 ```python
     def set_conditional_entry_point(
