@@ -766,7 +766,7 @@ for s in app.stream(inputs):
     print("----")
 ```
 
-### create_tool_calling_executor
+### chat_agent_executor.create_tool_calling_executor
 
 ```python
 from langgraph.prebuilt import chat_agent_executor
