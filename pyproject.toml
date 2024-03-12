@@ -10,6 +10,7 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
 langchain-core = "^0.1.25"
+langchain-openai = "0.0.2.post1"
 
 
 [tool.poetry.group.test.dependencies]
@@ -42,6 +43,7 @@ jupyter = "^1.0.0"
 langchain = "^0.1.0"
 langchainhub = "^0.1.14"
 langchain-openai = "^0.0.2"
+ipykernel = "^6.29.3"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]
