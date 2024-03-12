@@ -340,7 +340,7 @@ class Pregel(
             for k, v in values.items():
                 channels[k].update([v])
                 checkpoint["channel_versions"][k] += 1
-            for k in self.snapshot_channels or self.channels:
+            for k in self.snapshot_channels_list:
                 version = checkpoint["channel_versions"][k]
                 checkpoint["versions_seen"][INTERRUPT][k] = version
             self.checkpointer.put(config, create_checkpoint(checkpoint, channels))
@@ -444,6 +444,13 @@ class Pregel(
                         config,
                         0,
                     )
+                else:
+                    # if received no input, take that as signal to proceed
+                    # past previous interrupt, if any
+                    checkpoint = copy_checkpoint(checkpoint)
+                    for k in self.snapshot_channels_list:
+                        version = checkpoint["channel_versions"][k]
+                        checkpoint["versions_seen"][INTERRUPT][k] = version
 
                 read = partial(_read_channel, channels)
 
@@ -616,6 +623,13 @@ class Pregel(
                         config,
                         0,
                     )
+                else:
+                    # if received no input, take that as signal to proceed
+                    # past previous interrupt, if any
+                    checkpoint = copy_checkpoint(checkpoint)
+                    for k in self.snapshot_channels_list:
+                        version = checkpoint["channel_versions"][k]
+                        checkpoint["versions_seen"][INTERRUPT][k] = version
 
                 read = partial(_read_channel, channels)
 

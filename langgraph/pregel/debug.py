@@ -10,7 +10,7 @@ from langgraph.channels.base import BaseChannel, EmptyChannelError
 def print_step_start(step: int, next_tasks: list[tuple[Runnable, Any, str]]) -> None:
     n_tasks = len(next_tasks)
     print(
-        f"{get_colored_text('[pregel/step]', color='blue')} "
+        f"{get_colored_text('[langgraph/step]', color='blue')} "
         + get_bolded_text(
             f"Starting step {step} with {n_tasks} task{'s' if n_tasks > 1 else ''}. Next tasks:\n"
         )
@@ -20,9 +20,9 @@ def print_step_start(step: int, next_tasks: list[tuple[Runnable, Any, str]]) -> 
 
 def print_checkpoint(step: int, channels: Mapping[str, BaseChannel]) -> None:
     print(
-        f"{get_colored_text('[pregel/checkpoint]', color='blue')} "
+        f"{get_colored_text('[langgraph/checkpoint]', color='blue')} "
         + get_bolded_text(f"Finishing step {step}. Channel values:\n")
-        + pformat({name: val for name, val in _read_channels(channels)}, depth=1)
+        + pformat({name: val for name, val in _read_channels(channels)}, depth=2)
     )
 
 
