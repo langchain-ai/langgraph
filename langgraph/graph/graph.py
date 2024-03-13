@@ -20,6 +20,7 @@ from langchain_core.runnables.graph import (
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.pregel import Channel, Pregel
+from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 
 logger = logging.getLogger(__name__)
 
@@ -30,6 +31,7 @@ END = "__end__"
 class Branch(NamedTuple):
     condition: Callable[..., str]
     ends: Optional[dict[str, str]]
+    value: Optional[str] = None
 
     def runnable(self, input: Any) -> Runnable:
         result = self.condition(input)
@@ -37,7 +39,13 @@ class Branch(NamedTuple):
             destination = self.ends[result]
         else:
             destination = result
-        return Channel.write_to(f"{destination}:inbox" if destination != END else END)
+        destination_channel = f"{destination}:inbox" if destination != END else END
+        if self.value is not None and destination_channel != END:
+            return ChannelWrite(
+                channels=[ChannelWriteEntry(destination_channel, self.value)]
+            )
+        else:
+            return ChannelWrite(channels=[ChannelWriteEntry(destination_channel, None)])
 
 
 class Graph:
@@ -228,7 +236,7 @@ class Graph:
         return CompiledGraph(
             graph=self,
             nodes=nodes,
-            channels={**node_outboxes},
+            channels={**node_outboxes, END: EphemeralValue(Any)},
             input=f"{self.entry_point}:inbox" if self.entry_point else START,
             output=END,
             hidden=[f"{node}:inbox" for node in self.nodes],

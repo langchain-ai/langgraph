@@ -1,7 +1,8 @@
+from asyncio import iscoroutinefunction
 from collections import defaultdict
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type
+from typing import Any, Callable, Dict, Optional, Sequence, Type
 
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import RunnableLike
@@ -12,7 +13,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.graph.graph import END, START, CompiledGraph, Graph
+from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, logger
 from langgraph.pregel import Channel
 from langgraph.pregel.read import ChannelInvoke
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
@@ -33,6 +34,35 @@ class StateGraph(Graph):
                 "(a.k.a. a channel), cannot also be used as a node name."
             )
         return super().add_node(key, action)
+
+    def add_conditional_edges(
+        self,
+        start_key: str,
+        condition: Callable[..., str],
+        conditional_edge_mapping: Optional[Dict[str, str]] = None,
+    ) -> None:
+        if self.compiled:
+            logger.warning(
+                "Adding an edge to a graph that has already been compiled. This will "
+                "not be reflected in the compiled graph."
+            )
+        if start_key not in self.nodes:
+            raise ValueError(f"Need to add_node `{start_key}` first")
+        if iscoroutinefunction(condition):
+            raise ValueError("Condition cannot be a coroutine function")
+        if conditional_edge_mapping and set(
+            conditional_edge_mapping.values()
+        ).difference([END]).difference(self.nodes):
+            raise ValueError(
+                f"Missing nodes which are in conditional edge mapping. Mapping "
+                f"contains possible destinations: "
+                f"{list(conditional_edge_mapping.values())}. Possible nodes are "
+                f"{list(self.nodes.keys())}."
+            )
+
+        self.branches[start_key].append(
+            Branch(condition, conditional_edge_mapping, start_key)
+        )
 
     def compile(
         self,
@@ -57,7 +87,7 @@ class StateGraph(Graph):
             if not isinstance(state_keys_read, list)
             else [
                 ChannelWriteEntry(
-                    key, RunnableLambda(partial(_dict_getter, state_keys, key)), False
+                    key, RunnableLambda(partial(_dict_getter, state_keys, key))
                 )
                 for key in state_keys_read
             ]
@@ -81,7 +111,7 @@ class StateGraph(Graph):
                 )
                 | node
                 | ChannelWrite(
-                    channels=[ChannelWriteEntry(key, None, False)] + update_channels
+                    channels=[ChannelWriteEntry(key, None)] + update_channels
                 )
             )
             for key, node in self.nodes.items()
@@ -120,9 +150,7 @@ class StateGraph(Graph):
 
         nodes[START] = Channel.subscribe_to(
             f"{START}:inbox", tags=["langsmith:hidden"]
-        ) | ChannelWrite(
-            channels=[ChannelWriteEntry(START, None, False)] + update_channels
-        )
+        ) | ChannelWrite(channels=[ChannelWriteEntry(START, None)] + update_channels)
         nodes[f"{START}:edges"] = ChannelInvoke(
             triggers=[START], tags=["langsmith:hidden"], channels=state_channels
         )
@@ -142,7 +170,7 @@ class StateGraph(Graph):
                 **self.channels,
                 **node_inboxes,
                 **node_outboxes,
-                END: LastValue(self.schema),
+                END: EphemeralValue(self.schema),
             },
             input=f"{START}:inbox",
             output=END,
