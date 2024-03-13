@@ -10,12 +10,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnableSerializable,
 )
-from langchain_core.runnables.base import (
-    Other,
-    RunnableBindingBase,
-    RunnableEach,
-    coerce_to_runnable,
-)
+from langchain_core.runnables.base import Other, RunnableBindingBase, coerce_to_runnable
 from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
@@ -167,59 +162,6 @@ class ChannelInvoke(RunnableBindingBase):
             Runnable[Other, Any],
             Callable[[Any], Other],
             Mapping[str, Union[Runnable[Other, Any], Callable[[Other], Any]]],
-        ],
-    ) -> RunnableSerializable:
-        raise NotImplementedError()
-
-
-class ChannelBatch(RunnableEach):
-    channel: str
-
-    key: Optional[str]
-
-    bound: Runnable[Any, Any] = Field(default=default_bound)
-
-    def join(self, channels: Sequence[str]) -> ChannelBatch:
-        if self.key is None:
-            raise ValueError(
-                "Cannot join() additional channels without a key."
-                " Pass a key arg to Channel.subscribe_to_each()."
-            )
-
-        joiner = RunnablePassthrough.assign(
-            **{chan: ChannelRead(chan) for chan in channels}
-        )
-        if self.bound is default_bound:
-            return ChannelBatch(channel=self.channel, key=self.key, bound=joiner)
-        else:
-            return ChannelBatch(
-                channel=self.channel, key=self.key, bound=self.bound | joiner
-            )
-
-    def __or__(  # type: ignore[override]
-        self,
-        other: Union[
-            Runnable[Any, Other],
-            Callable[[Any], Other],
-            Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
-        ],
-    ) -> ChannelBatch:
-        if self.bound is default_bound:
-            return ChannelBatch(
-                channel=self.channel, key=self.key, bound=coerce_to_runnable(other)
-            )
-        else:
-            # delegate to __or__ in self.bound
-            return ChannelBatch(
-                channel=self.channel, key=self.key, bound=self.bound | other
-            )
-
-    def __ror__(
-        self,
-        other: Union[
-            Runnable[Other, Any],
-            Callable[[Any], Other],
-            Mapping[str, Runnable[Other, Any] | Callable[[Other], Any]],
         ],
     ) -> RunnableSerializable:
         raise NotImplementedError()

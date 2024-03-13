@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from typing import Annotated, Generator, Optional, TypedDict, Union
 
 import pytest
-from langchain_core.runnables import RunnablePassthrough
+from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
@@ -304,7 +304,11 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
 def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    two = Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
+    two = (
+        Channel.subscribe_to("inbox")
+        | RunnableLambda(add_one).batch
+        | Channel.write_to("output").batch
+    )
 
     app = Pregel(
         nodes={"one": one, "two": two},
@@ -653,7 +657,11 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    two = Channel.subscribe_to_each("inbox") | add_one | Channel.write_to("output")
+    two = (
+        Channel.subscribe_to("inbox")
+        | RunnableLambda(add_one).batch
+        | Channel.write_to("output").batch
+    )
 
     app = Pregel(
         nodes={"one": one, "two": two},

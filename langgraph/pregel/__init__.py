@@ -65,7 +65,7 @@ from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND, INTERRUPT
 from langgraph.pregel.debug import print_checkpoint, print_step_start
 from langgraph.pregel.io import map_input, map_output
 from langgraph.pregel.log import logger
-from langgraph.pregel.read import ChannelBatch, ChannelInvoke
+from langgraph.pregel.read import ChannelInvoke
 from langgraph.pregel.reserved import AllReservedChannels, ReservedChannels
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
@@ -141,11 +141,6 @@ class Channel:
         )
 
     @classmethod
-    def subscribe_to_each(cls, inbox: str, key: Optional[str] = None) -> ChannelBatch:
-        """Runs process.batch() with the content of inbox each time it is updated."""
-        return ChannelBatch(channel=inbox, key=key)
-
-    @classmethod
     def write_to(
         cls,
         *channels: str,
@@ -173,7 +168,7 @@ class StateSnapshot(NamedTuple):
 class Pregel(
     RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
 ):
-    nodes: Mapping[str, Union[ChannelInvoke, ChannelBatch]]
+    nodes: Mapping[str, ChannelInvoke]
 
     channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
 
@@ -1023,7 +1018,7 @@ def _apply_writes_from_view(
 
 def _prepare_next_tasks(
     checkpoint: Checkpoint,
-    processes: Mapping[str, Union[ChannelInvoke, ChannelBatch]],
+    processes: Mapping[str, ChannelInvoke],
     channels: Mapping[str, BaseChannel],
     update_seen: bool = True,
 ) -> tuple[Checkpoint, list[tuple[Runnable, Any, str]]]:
@@ -1033,59 +1028,41 @@ def _prepare_next_tasks(
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
         seen = checkpoint["versions_seen"][name]
-        if isinstance(proc, ChannelInvoke):
-            # If any of the channels read by this process were updated
-            if any(
-                checkpoint["channel_versions"][chan] > seen[chan]
-                for chan in proc.triggers
-            ):
-                # If all trigger channels subscribed by this process are not empty
-                # then invoke the process with the values of all non-empty channels
-                try:
-                    val: Any = {
-                        k: _read_channel(
-                            channels, chan, catch=chan not in proc.triggers
-                        )
-                        for k, chan in proc.channels.items()
+        # If any of the channels read by this process were updated
+        if any(
+            checkpoint["channel_versions"][chan] > seen[chan] for chan in proc.triggers
+        ):
+            # If all trigger channels subscribed by this process are not empty
+            # then invoke the process with the values of all non-empty channels
+            try:
+                val: Any = {
+                    k: _read_channel(channels, chan, catch=chan not in proc.triggers)
+                    for k, chan in proc.channels.items()
+                }
+            except EmptyChannelError:
+                continue
+
+            # If the process has a mapper, apply it to the value
+            if proc.mapper is not None:
+                val = proc.mapper(val)
+
+            # Processes that subscribe to a single keyless channel get
+            # the value directly, instead of a dict
+            if list(proc.channels.keys()) == [None]:
+                val = val[None]
+
+            # update seen versions
+            if update_seen:
+                seen.update(
+                    {
+                        chan: checkpoint["channel_versions"][chan]
+                        for chan in proc.triggers
                     }
-                except EmptyChannelError:
-                    continue
+                )
 
-                # If the process has a mapper, apply it to the value
-                if proc.mapper is not None:
-                    val = proc.mapper(val)
-
-                # Processes that subscribe to a single keyless channel get
-                # the value directly, instead of a dict
-                if list(proc.channels.keys()) == [None]:
-                    val = val[None]
-
-                # update seen versions
-                if update_seen:
-                    seen.update(
-                        {
-                            chan: checkpoint["channel_versions"][chan]
-                            for chan in proc.triggers
-                        }
-                    )
-
-                # skip if condition is not met
-                if proc.when is None or proc.when(val):
-                    tasks.append((proc, val, name))
-        elif isinstance(proc, ChannelBatch):
-            # If the channel read by this process was updated
-            if checkpoint["channel_versions"][proc.channel] > seen[proc.channel]:
-                # If the channel subscribed by this process is not empty
-                try:
-                    val = channels[proc.channel].get()
-                except EmptyChannelError:
-                    continue
-                if proc.key is not None:
-                    val = [{proc.key: v} for v in val]
-
+            # skip if condition is not met
+            if proc.when is None or proc.when(val):
                 tasks.append((proc, val, name))
-                if update_seen:
-                    seen[proc.channel] = checkpoint["channel_versions"][proc.channel]
     return checkpoint, tasks
 
 
