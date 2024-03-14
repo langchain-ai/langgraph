@@ -606,6 +606,12 @@ class Pregel(
                     ):
                         break
 
+                # ensure do_interrupt_before is defined
+                try:
+                    do_interrupt_before
+                except UnboundLocalError:
+                    do_interrupt_before = False
+
                 # save end of run checkpoint
                 if (
                     self.checkpointer is not None
@@ -791,6 +797,12 @@ class Pregel(
                         pending_writes,
                     ):
                         break
+
+                # ensure do_interrupt_before is defined
+                try:
+                    do_interrupt_before
+                except UnboundLocalError:
+                    do_interrupt_before = False
 
                 # save end of run checkpoint
                 if (
