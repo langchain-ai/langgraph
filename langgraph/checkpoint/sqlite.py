@@ -119,14 +119,14 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         }
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        raise NotImplementedError
+        raise NotImplementedError("Use AsyncSqliteSaver instead")
 
     async def alist(
         self, config: RunnableConfig
     ) -> AsyncIterator[tuple[RunnableConfig, Checkpoint]]:
-        raise NotImplementedError
+        raise NotImplementedError("Use AsyncSqliteSaver instead")
 
     async def aput(
         self, config: RunnableConfig, checkpoint: Checkpoint
     ) -> RunnableConfig:
-        raise NotImplementedError
+        raise NotImplementedError("Use AsyncSqliteSaver instead")
