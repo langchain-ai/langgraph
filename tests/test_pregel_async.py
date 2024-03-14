@@ -502,7 +502,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     assert checkpoint["channel_values"].get("total") == 5
 
 
-async def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
+async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
     def raise_if_above_10(input: int) -> int:
@@ -517,42 +517,86 @@ async def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         | raise_if_above_10
     )
 
-    memory = AsyncSqliteSaver.from_conn_string(":memory:")
+    async with AsyncSqliteSaver.from_conn_string(":memory:") as memory:
+        app = Pregel(
+            nodes={"one": one},
+            channels={"total": BinaryOperatorAggregate(int, operator.add)},
+            checkpointer=memory,
+            debug=True,
+        )
 
-    app = Pregel(
-        nodes={"one": one},
-        channels={"total": BinaryOperatorAggregate(int, operator.add)},
-        checkpointer=memory,
-        debug=True,
-    )
+        thread_1 = {"configurable": {"thread_id": "1"}}
+        # total starts out as 0, so output is 0+2=2
+        assert await app.ainvoke(2, thread_1) == 2
+        state = await app.aget_state(thread_1)
+        assert state is not None
+        assert state.values.get("total") == 2
+        assert (
+            state.config["configurable"]["thread_ts"]
+            == (await memory.aget(thread_1))["ts"]
+        )
+        # total is now 2, so output is 2+3=5
+        assert await app.ainvoke(3, thread_1) == 5
+        state = await app.aget_state(thread_1)
+        assert state is not None
+        assert state.values.get("total") == 7
+        assert (
+            state.config["configurable"]["thread_ts"]
+            == (await memory.aget(thread_1))["ts"]
+        )
+        # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
+        with pytest.raises(ValueError):
+            await app.ainvoke(4, thread_1)
+        # checkpoint is not updated
+        state = await app.aget_state(thread_1)
+        assert state is not None
+        assert state.values.get("total") == 7
 
-    # total starts out as 0, so output is 0+2=2
-    assert await app.ainvoke(2, {"configurable": {"thread_id": "1"}}) == 2
-    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
-    assert checkpoint is not None
-    assert checkpoint["channel_values"].get("total") == 2
-    # total is now 2, so output is 2+3=5
-    assert await app.ainvoke(3, {"configurable": {"thread_id": "1"}}) == 5
-    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
-    assert checkpoint is not None
-    assert checkpoint["channel_values"].get("total") == 7
-    # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
-    with pytest.raises(ValueError):
-        await app.ainvoke(4, {"configurable": {"thread_id": "1"}})
-    # checkpoint is not updated
-    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
-    assert checkpoint is not None
-    assert checkpoint["channel_values"].get("total") == 7
-    # on a new thread, total starts out as 0, so output is 0+5=5
-    assert await app.ainvoke(5, {"configurable": {"thread_id": "2"}}) == 5
-    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
-    assert checkpoint is not None
-    assert checkpoint["channel_values"].get("total") == 7
-    checkpoint = await memory.aget({"configurable": {"thread_id": "2"}})
-    assert checkpoint is not None
-    assert checkpoint["channel_values"].get("total") == 5
+        thread_2 = {"configurable": {"thread_id": "2"}}
+        # on a new thread, total starts out as 0, so output is 0+5=5
+        assert await app.ainvoke(5, thread_2) == 5
+        state = await app.aget_state({"configurable": {"thread_id": "1"}})
+        assert state is not None
+        assert state.values.get("total") == 7
+        state = await app.aget_state(thread_2)
+        assert state is not None
+        assert state.values.get("total") == 5
 
-    await memory.conn.close()
+        # list all checkpoints for thread 1
+        thread_1_history = [c async for c in app.aget_state_history(thread_1)]
+        # there are 2: one for each successful ainvoke()
+        assert len(thread_1_history) == 2
+        # sorted descending
+        assert (
+            thread_1_history[0].config["configurable"]["thread_ts"]
+            > thread_1_history[1].config["configurable"]["thread_ts"]
+        )
+        # the second checkpoint
+        assert thread_1_history[0].values["total"] == 7
+        # the first checkpoint
+        assert thread_1_history[1].values["total"] == 2
+        # can get each checkpoint using aget with config
+        assert (await memory.aget(thread_1_history[0].config))[
+            "ts"
+        ] == thread_1_history[0].config["configurable"]["thread_ts"]
+        assert (await memory.aget(thread_1_history[1].config))[
+            "ts"
+        ] == thread_1_history[1].config["configurable"]["thread_ts"]
+
+        thread_1_next_config = await app.aupdate_state(
+            thread_1_history[1].config, {"total": 10}
+        )
+        # update creates a new checkpoint
+        assert (
+            thread_1_next_config["configurable"]["thread_ts"]
+            > thread_1_history[0].config["configurable"]["thread_ts"]
+        )
+        # 1 more checkpoint in history
+        assert len([h async for h in app.aget_state_history(thread_1)]) == 3
+        # the latest checkpoint is the updated one
+        assert await app.aget_state(thread_1) == await app.aget_state(
+            thread_1_next_config
+        )
 
 
 async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:
@@ -988,6 +1032,7 @@ async def test_conditional_graph() -> None:
             "tools": None,
         },
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1017,6 +1062,7 @@ async def test_conditional_graph() -> None:
             "tools": None,
         },
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1137,6 +1183,7 @@ async def test_conditional_graph() -> None:
             "tools": None,
         },
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1166,6 +1213,7 @@ async def test_conditional_graph() -> None:
             "tools": None,
         },
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1286,6 +1334,7 @@ async def test_conditional_graph() -> None:
             "tools": None,
         },
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1621,6 +1670,7 @@ async def test_conditional_graph_state() -> None:
             "intermediate_steps": [],
         },
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1645,6 +1695,7 @@ async def test_conditional_graph_state() -> None:
             "intermediate_steps": [],
         },
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1737,6 +1788,7 @@ async def test_conditional_graph_state() -> None:
             "intermediate_steps": [],
         },
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1761,6 +1813,7 @@ async def test_conditional_graph_state() -> None:
             "intermediate_steps": [],
         },
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2512,6 +2565,7 @@ async def test_message_graph() -> None:
             ),
         ],
         next=("agent:edges",),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     # TODO use update_state once we have message ids

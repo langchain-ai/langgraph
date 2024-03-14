@@ -163,6 +163,8 @@ class StateSnapshot(NamedTuple):
     """Current values of channels"""
     next: tuple[str]
     """Nodes to execute in the next step, if any"""
+    config: RunnableConfig
+    """Config used to fetch this snapshot"""
 
 
 class Pregel(
@@ -278,8 +280,9 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        checkpoint = self.checkpointer.get(config)
-        checkpoint = checkpoint or empty_checkpoint()
+        saved = self.checkpointer.get_tuple(config)
+        checkpoint = saved.checkpoint if saved else empty_checkpoint()
+        config = saved.config if saved else config
         with ChannelsManager(self.channels, checkpoint) as channels:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint, self.nodes, channels, update_seen=False
@@ -294,14 +297,16 @@ class Pregel(
                 if isinstance(self.snapshot_channels, str)
                 else values,
                 tuple(name for _, _, name in next_tasks),
+                config,
             )
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        checkpoint = await self.checkpointer.aget(config)
-        checkpoint = checkpoint or empty_checkpoint()
+        saved = await self.checkpointer.aget_tuple(config)
+        checkpoint = saved.checkpoint if saved else empty_checkpoint()
+        config = saved.config if saved else config
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint, self.nodes, channels, update_seen=False
@@ -316,11 +321,58 @@ class Pregel(
                 if isinstance(self.snapshot_channels, str)
                 else values,
                 tuple(name for _, _, name in next_tasks),
+                config,
             )
+
+    def get_state_history(self, config: RunnableConfig) -> Iterator[StateSnapshot]:
+        if not self.checkpointer:
+            raise ValueError("No checkpointer set")
+
+        for config, checkpoint in self.checkpointer.list(config):
+            with ChannelsManager(self.channels, checkpoint) as channels:
+                _, next_tasks = _prepare_next_tasks(
+                    checkpoint, self.nodes, channels, update_seen=False
+                )
+                values = {
+                    k: _read_channel(channels, k)
+                    for k in channels
+                    if k in self.snapshot_channels_list
+                }
+                yield StateSnapshot(
+                    values[self.snapshot_channels]
+                    if isinstance(self.snapshot_channels, str)
+                    else values,
+                    tuple(name for _, _, name in next_tasks),
+                    config,
+                )
+
+    async def aget_state_history(
+        self, config: RunnableConfig
+    ) -> AsyncIterator[StateSnapshot]:
+        if not self.checkpointer:
+            raise ValueError("No checkpointer set")
+
+        async for config, checkpoint in self.checkpointer.alist(config):
+            async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+                _, next_tasks = _prepare_next_tasks(
+                    checkpoint, self.nodes, channels, update_seen=False
+                )
+                values = {
+                    k: _read_channel(channels, k)
+                    for k in channels
+                    if k in self.snapshot_channels_list
+                }
+                yield StateSnapshot(
+                    values[self.snapshot_channels]
+                    if isinstance(self.snapshot_channels, str)
+                    else values,
+                    tuple(name for _, _, name in next_tasks),
+                    config,
+                )
 
     def update_state(
         self, config: RunnableConfig, values: dict[str, Any] | Any
-    ) -> None:
+    ) -> RunnableConfig:
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -338,11 +390,13 @@ class Pregel(
             for k in self.snapshot_channels_list:
                 version = checkpoint["channel_versions"][k]
                 checkpoint["versions_seen"][INTERRUPT][k] = version
-            self.checkpointer.put(config, create_checkpoint(checkpoint, channels))
+            return self.checkpointer.put(
+                config, create_checkpoint(checkpoint, channels)
+            )
 
     async def aupdate_state(
         self, config: RunnableConfig, values: dict[str, Any] | Any
-    ) -> None:
+    ) -> RunnableConfig:
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -360,7 +414,7 @@ class Pregel(
             for k in self.snapshot_channels or self.channels:
                 version = checkpoint["channel_versions"][k]
                 checkpoint["versions_seen"][INTERRUPT][k] = version
-            await self.checkpointer.aput(
+            return await self.checkpointer.aput(
                 config, create_checkpoint(checkpoint, channels)
             )
 
