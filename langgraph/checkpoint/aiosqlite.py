@@ -1,11 +1,12 @@
 import pickle
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
-from typing import AsyncIterator, Optional, Self
+from typing import AsyncIterator, Optional
 
 import aiosqlite
 from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, CheckpointTuple
 

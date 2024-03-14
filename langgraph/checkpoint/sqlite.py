@@ -2,10 +2,11 @@ import pickle
 import sqlite3
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
-from typing import AsyncIterator, Iterator, Optional, Self
+from typing import AsyncIterator, Iterator, Optional
 
 from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import Self
 
 from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, CheckpointTuple
 
