@@ -63,6 +63,13 @@ class Graph:
 
         self.nodes[key] = coerce_to_runnable(action)
 
+    def register_node(self, action: RunnableLike) -> RunnableLike:
+        key = action.__name__
+        if key in self.nodes:
+            raise ValueError(f"Node `{key}` is already present.")
+        self.nodes[key] = coerce_to_runnable(action)
+        return action
+
     def add_edge(self, start_key: str, end_key: str) -> None:
         if self.compiled:
             logger.warning(

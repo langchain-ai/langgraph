@@ -81,9 +81,9 @@ def test_invoke_single_process_in_out_implicit_channels(mocker: MockerFixture) -
 def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = (
-        Channel.subscribe_to("input")
-        | add_one
-        | Channel.write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
+            Channel.subscribe_to("input")
+            | add_one
+            | Channel.write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
     )
 
     app = Pregel(nodes={"one": chain}, output=["output", "fixed", "output_plus_one"])
@@ -105,9 +105,9 @@ def test_invoke_single_process_in_out_reserved_is_last(mocker: MockerFixture) ->
     add_one = mocker.Mock(side_effect=lambda x: {**x, "input": x["input"] + 1})
 
     chain = (
-        Channel.subscribe_to(["input"]).join([ReservedChannels.is_last_step])
-        | add_one
-        | Channel.write_to("output")
+            Channel.subscribe_to(["input"]).join([ReservedChannels.is_last_step])
+            | add_one
+            | Channel.write_to("output")
     )
 
     app = Pregel(nodes={"one": chain})
@@ -305,9 +305,9 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = (
-        Channel.subscribe_to("inbox")
-        | RunnableLambda(add_one).batch
-        | Channel.write_to("output").batch
+            Channel.subscribe_to("inbox")
+            | RunnableLambda(add_one).batch
+            | Channel.write_to("output").batch
     )
 
     app = Pregel(
@@ -363,7 +363,7 @@ def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
     nodes = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
     for i in range(test_size - 2):
         nodes[str(i)] = (
-            Channel.subscribe_to(str(i - 1)) | add_one | Channel.write_to(str(i))
+                Channel.subscribe_to(str(i - 1)) | add_one | Channel.write_to(str(i))
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
@@ -374,8 +374,8 @@ def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
 
     with ThreadPoolExecutor() as executor:
         assert [
-            *executor.map(app.invoke, [2] * 10, [{"recursion_limit": test_size}] * 10)
-        ] == [2 + test_size] * 10
+                   *executor.map(app.invoke, [2] * 10, [{"recursion_limit": test_size}] * 10)
+               ] == [2 + test_size] * 10
 
 
 def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
@@ -385,7 +385,7 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
     nodes = {"-1": Channel.subscribe_to("input") | add_one | Channel.write_to("-1")}
     for i in range(test_size - 2):
         nodes[str(i)] = (
-            Channel.subscribe_to(str(i - 1)) | add_one | Channel.write_to(str(i))
+                Channel.subscribe_to(str(i - 1)) | add_one | Channel.write_to(str(i))
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
@@ -402,12 +402,12 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
 
     with ThreadPoolExecutor() as executor:
         assert [
-            *executor.map(
-                app.batch, [[2, 1, 3, 4, 5]] * 3, [{"recursion_limit": test_size}] * 3
-            )
-        ] == [
-            [2 + test_size, 1 + test_size, 3 + test_size, 4 + test_size, 5 + test_size]
-        ] * 3
+                   *executor.map(
+                       app.batch, [[2, 1, 3, 4, 5]] * 3, [{"recursion_limit": test_size}] * 3
+                   )
+               ] == [
+                   [2 + test_size, 1 + test_size, 3 + test_size, 4 + test_size, 5 + test_size]
+               ] * 3
 
 
 def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> None:
@@ -447,10 +447,10 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
         return input
 
     one = (
-        Channel.subscribe_to(["input"]).join(["total"])
-        | add_one
-        | Channel.write_to("output", "total")
-        | raise_if_above_10
+            Channel.subscribe_to(["input"]).join(["total"])
+            | add_one
+            | Channel.write_to("output", "total")
+            | raise_if_above_10
     )
 
     memory = MemorySaverAssertImmutable()
@@ -497,10 +497,10 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         return input
 
     one = (
-        Channel.subscribe_to(["input"]).join(["total"])
-        | add_one
-        | Channel.write_to("output", "total")
-        | raise_if_above_10
+            Channel.subscribe_to(["input"]).join(["total"])
+            | add_one
+            | Channel.write_to("output", "total")
+            | raise_if_above_10
     )
 
     with SqliteSaver.from_conn_string(":memory:") as memory:
@@ -547,8 +547,8 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         assert len(thread_1_history) == 2
         # sorted descending
         assert (
-            thread_1_history[0].config["configurable"]["thread_ts"]
-            > thread_1_history[1].config["configurable"]["thread_ts"]
+                thread_1_history[0].config["configurable"]["thread_ts"]
+                > thread_1_history[1].config["configurable"]["thread_ts"]
         )
         # the second checkpoint
         assert thread_1_history[0].values["total"] == 7
@@ -556,12 +556,12 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         assert thread_1_history[1].values["total"] == 2
         # can get each checkpoint using aget with config
         assert (
-            memory.get(thread_1_history[0].config)["ts"]
-            == thread_1_history[0].config["configurable"]["thread_ts"]
+                memory.get(thread_1_history[0].config)["ts"]
+                == thread_1_history[0].config["configurable"]["thread_ts"]
         )
         assert (
-            memory.get(thread_1_history[1].config)["ts"]
-            == thread_1_history[1].config["configurable"]["thread_ts"]
+                memory.get(thread_1_history[1].config)["ts"]
+                == thread_1_history[1].config["configurable"]["thread_ts"]
         )
 
         thread_1_next_config = app.update_state(
@@ -569,8 +569,8 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         )
         # update creates a new checkpoint
         assert (
-            thread_1_next_config["configurable"]["thread_ts"]
-            > thread_1_history[0].config["configurable"]["thread_ts"]
+                thread_1_next_config["configurable"]["thread_ts"]
+                > thread_1_history[0].config["configurable"]["thread_ts"]
         )
         # 1 more checkpoint in history
         assert len(list(app.get_state_history(thread_1))) == 3
@@ -585,7 +585,7 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     chain_three = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     chain_four = (
-        Channel.subscribe_to("inbox") | add_10_each | Channel.write_to("output")
+            Channel.subscribe_to("inbox") | add_10_each | Channel.write_to("output")
     )
 
     app = Pregel(
@@ -618,15 +618,15 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
     )
 
     one = (
-        Channel.subscribe_to("input")
-        | add_10_each
-        | Channel.write_to("inbox_one").map()
+            Channel.subscribe_to("input")
+            | add_10_each
+            | Channel.write_to("inbox_one").map()
     )
     two = (
-        Channel.subscribe_to("inbox_one")
-        | inner_app.map()
-        | sorted
-        | Channel.write_to("outbox_one")
+            Channel.subscribe_to("inbox_one")
+            | inner_app.map()
+            | sorted
+            | Channel.write_to("outbox_one")
     )
     chain_three = Channel.subscribe_to("outbox_one") | sum | Channel.write_to("output")
 
@@ -650,9 +650,9 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     one = (
-        Channel.subscribe_to("input")
-        | add_one
-        | Channel.write_to(output=RunnablePassthrough(), between=RunnablePassthrough())
+            Channel.subscribe_to("input")
+            | add_one
+            | Channel.write_to(output=RunnablePassthrough(), between=RunnablePassthrough())
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
@@ -698,9 +698,9 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = (
-        Channel.subscribe_to("inbox")
-        | RunnableLambda(add_one).batch
-        | Channel.write_to("output").batch
+            Channel.subscribe_to("inbox")
+            | RunnableLambda(add_one).batch
+            | Channel.write_to("output").batch
     )
 
     app = Pregel(
@@ -959,17 +959,17 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     config = {"configurable": {"thread_id": "1"}}
 
     assert [
-        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
-    ] == [
-        {
-            "agent": {
-                "input": "what is weather in sf",
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-            }
-        }
-    ]
+               c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+           ] == [
+               {
+                   "agent": {
+                       "input": "what is weather in sf",
+                       "agent_outcome": AgentAction(
+                           tool="search_api", tool_input="query", log="tool:search_api:query"
+                       ),
+                   }
+               }
+           ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -985,10 +985,10 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
     assert (
-        app_w_interrupt.checkpointer.get_tuple(config).config["configurable"][
-            "thread_ts"
-        ]
-        is not None
+            app_w_interrupt.checkpointer.get_tuple(config).config["configurable"][
+                "thread_ts"
+            ]
+            is not None
     )
 
     app_w_interrupt.update_state(
@@ -1113,17 +1113,17 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     llm.i = 0  # reset the llm
 
     assert [
-        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
-    ] == [
-        {
-            "agent": {
-                "input": "what is weather in sf",
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-            }
-        }
-    ]
+               c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+           ] == [
+               {
+                   "agent": {
+                       "input": "what is weather in sf",
+                       "agent_outcome": AgentAction(
+                           tool="search_api", tool_input="query", log="tool:search_api:query"
+                       ),
+                   }
+               }
+           ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -1261,17 +1261,17 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     llm.i = 0  # reset the llm
 
     assert [
-        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
-    ] == [
-        {
-            "agent": {
-                "input": "what is weather in sf",
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-            }
-        }
-    ]
+               c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+           ] == [
+               {
+                   "agent": {
+                       "input": "what is weather in sf",
+                       "agent_outcome": AgentAction(
+                           tool="search_api", tool_input="query", log="tool:search_api:query"
+                       ),
+                   }
+               }
+           ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -1602,16 +1602,16 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
     config = {"configurable": {"thread_id": "1"}}
 
     assert [
-        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
-    ] == [
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-            }
-        }
-    ]
+               c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+           ] == [
+               {
+                   "agent": {
+                       "agent_outcome": AgentAction(
+                           tool="search_api", tool_input="query", log="tool:search_api:query"
+                       ),
+                   }
+               }
+           ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -1719,16 +1719,16 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
     llm.i = 0  # reset the llm
 
     assert [
-        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
-    ] == [
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-            }
-        }
-    ]
+               c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+           ] == [
+               {
+                   "agent": {
+                       "agent_outcome": AgentAction(
+                           tool="search_api", tool_input="query", log="tool:search_api:query"
+                       ),
+                   }
+               }
+           ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -1993,182 +1993,182 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
-        "messages": [
-            HumanMessage(content="what is weather in sf"),
-            AIMessage(
-                content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call123",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            },
-                        }
-                    ]
-                },
-            ),
-            ToolMessage(content="result for query", tool_call_id="tool_call123"),
-            AIMessage(
-                content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call234",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            },
-                        },
-                        {
-                            "id": "tool_call567",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"a third one"',
-                            },
-                        },
-                    ]
-                },
-            ),
-            ToolMessage(content="result for another", tool_call_id="tool_call234"),
-            ToolMessage(content="result for a third one", tool_call_id="tool_call567"),
-            AIMessage(content="answer"),
-        ]
-    }
+               "messages": [
+                   HumanMessage(content="what is weather in sf"),
+                   AIMessage(
+                       content="",
+                       additional_kwargs={
+                           "tool_calls": [
+                               {
+                                   "id": "tool_call123",
+                                   "type": "function",
+                                   "function": {
+                                       "name": "search_api",
+                                       "arguments": '"query"',
+                                   },
+                               }
+                           ]
+                       },
+                   ),
+                   ToolMessage(content="result for query", tool_call_id="tool_call123"),
+                   AIMessage(
+                       content="",
+                       additional_kwargs={
+                           "tool_calls": [
+                               {
+                                   "id": "tool_call234",
+                                   "type": "function",
+                                   "function": {
+                                       "name": "search_api",
+                                       "arguments": '"another"',
+                                   },
+                               },
+                               {
+                                   "id": "tool_call567",
+                                   "type": "function",
+                                   "function": {
+                                       "name": "search_api",
+                                       "arguments": '"a third one"',
+                                   },
+                               },
+                           ]
+                       },
+                   ),
+                   ToolMessage(content="result for another", tool_call_id="tool_call234"),
+                   ToolMessage(content="result for a third one", tool_call_id="tool_call567"),
+                   AIMessage(content="answer"),
+               ]
+           }
 
     assert [
-        *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
-    ] == [
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call123",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"query"',
-                                    },
-                                }
-                            ]
-                        },
-                    )
-                ]
-            }
-        },
-        {
-            "action": {
-                "messages": [
-                    ToolMessage(content="result for query", tool_call_id="tool_call123")
-                ]
-            }
-        },
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call234",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"another"',
-                                    },
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"a third one"',
-                                    },
-                                },
-                            ]
-                        },
-                    )
-                ]
-            }
-        },
-        {
-            "action": {
-                "messages": [
-                    ToolMessage(
-                        content="result for another", tool_call_id="tool_call234"
-                    ),
-                    ToolMessage(
-                        content="result for a third one", tool_call_id="tool_call567"
-                    ),
-                ]
-            }
-        },
-        {"agent": {"messages": [AIMessage(content="answer")]}},
-        {
-            "__end__": {
-                "messages": [
-                    HumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call123",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"query"',
-                                    },
-                                }
-                            ]
-                        },
-                    ),
-                    ToolMessage(
-                        content="result for query", tool_call_id="tool_call123"
-                    ),
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call234",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"another"',
-                                    },
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"a third one"',
-                                    },
-                                },
-                            ]
-                        },
-                    ),
-                    ToolMessage(
-                        content="result for another", tool_call_id="tool_call234"
-                    ),
-                    ToolMessage(
-                        content="result for a third one", tool_call_id="tool_call567"
-                    ),
-                    AIMessage(content="answer"),
-                ]
-            }
-        },
-    ]
+               *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
+           ] == [
+               {
+                   "agent": {
+                       "messages": [
+                           AIMessage(
+                               content="",
+                               additional_kwargs={
+                                   "tool_calls": [
+                                       {
+                                           "id": "tool_call123",
+                                           "type": "function",
+                                           "function": {
+                                               "name": "search_api",
+                                               "arguments": '"query"',
+                                           },
+                                       }
+                                   ]
+                               },
+                           )
+                       ]
+                   }
+               },
+               {
+                   "action": {
+                       "messages": [
+                           ToolMessage(content="result for query", tool_call_id="tool_call123")
+                       ]
+                   }
+               },
+               {
+                   "agent": {
+                       "messages": [
+                           AIMessage(
+                               content="",
+                               additional_kwargs={
+                                   "tool_calls": [
+                                       {
+                                           "id": "tool_call234",
+                                           "type": "function",
+                                           "function": {
+                                               "name": "search_api",
+                                               "arguments": '"another"',
+                                           },
+                                       },
+                                       {
+                                           "id": "tool_call567",
+                                           "type": "function",
+                                           "function": {
+                                               "name": "search_api",
+                                               "arguments": '"a third one"',
+                                           },
+                                       },
+                                   ]
+                               },
+                           )
+                       ]
+                   }
+               },
+               {
+                   "action": {
+                       "messages": [
+                           ToolMessage(
+                               content="result for another", tool_call_id="tool_call234"
+                           ),
+                           ToolMessage(
+                               content="result for a third one", tool_call_id="tool_call567"
+                           ),
+                       ]
+                   }
+               },
+               {"agent": {"messages": [AIMessage(content="answer")]}},
+               {
+                   "__end__": {
+                       "messages": [
+                           HumanMessage(content="what is weather in sf"),
+                           AIMessage(
+                               content="",
+                               additional_kwargs={
+                                   "tool_calls": [
+                                       {
+                                           "id": "tool_call123",
+                                           "type": "function",
+                                           "function": {
+                                               "name": "search_api",
+                                               "arguments": '"query"',
+                                           },
+                                       }
+                                   ]
+                               },
+                           ),
+                           ToolMessage(
+                               content="result for query", tool_call_id="tool_call123"
+                           ),
+                           AIMessage(
+                               content="",
+                               additional_kwargs={
+                                   "tool_calls": [
+                                       {
+                                           "id": "tool_call234",
+                                           "type": "function",
+                                           "function": {
+                                               "name": "search_api",
+                                               "arguments": '"another"',
+                                           },
+                                       },
+                                       {
+                                           "id": "tool_call567",
+                                           "type": "function",
+                                           "function": {
+                                               "name": "search_api",
+                                               "arguments": '"a third one"',
+                                           },
+                                       },
+                                   ]
+                               },
+                           ),
+                           ToolMessage(
+                               content="result for another", tool_call_id="tool_call234"
+                           ),
+                           ToolMessage(
+                               content="result for a third one", tool_call_id="tool_call567"
+                           ),
+                           AIMessage(content="answer"),
+                       ]
+                   }
+               },
+           ]
 
 
 def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
@@ -2222,103 +2222,103 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
-        "messages": [
-            HumanMessage(content="what is weather in sf"),
-            AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
-            ),
-            FunctionMessage(content="result for query", name="search_api"),
-            AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
-            ),
-            FunctionMessage(content="result for another", name="search_api"),
-            AIMessage(content="answer"),
-        ]
-    }
+               "messages": [
+                   HumanMessage(content="what is weather in sf"),
+                   AIMessage(
+                       content="",
+                       additional_kwargs={
+                           "function_call": {"name": "search_api", "arguments": '"query"'}
+                       },
+                   ),
+                   FunctionMessage(content="result for query", name="search_api"),
+                   AIMessage(
+                       content="",
+                       additional_kwargs={
+                           "function_call": {"name": "search_api", "arguments": '"another"'}
+                       },
+                   ),
+                   FunctionMessage(content="result for another", name="search_api"),
+                   AIMessage(content="answer"),
+               ]
+           }
 
     assert [
-        *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
-    ] == [
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            }
-                        },
-                    )
-                ]
-            }
-        },
-        {
-            "action": {
-                "messages": [
-                    FunctionMessage(content="result for query", name="search_api")
-                ]
-            }
-        },
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            }
-                        },
-                    )
-                ]
-            }
-        },
-        {
-            "action": {
-                "messages": [
-                    FunctionMessage(content="result for another", name="search_api")
-                ]
-            }
-        },
-        {"agent": {"messages": [AIMessage(content="answer")]}},
-        {
-            "__end__": {
-                "messages": [
-                    HumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            }
-                        },
-                    ),
-                    FunctionMessage(content="result for query", name="search_api"),
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            }
-                        },
-                    ),
-                    FunctionMessage(content="result for another", name="search_api"),
-                    AIMessage(content="answer"),
-                ]
-            }
-        },
-    ]
+               *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
+           ] == [
+               {
+                   "agent": {
+                       "messages": [
+                           AIMessage(
+                               content="",
+                               additional_kwargs={
+                                   "function_call": {
+                                       "name": "search_api",
+                                       "arguments": '"query"',
+                                   }
+                               },
+                           )
+                       ]
+                   }
+               },
+               {
+                   "action": {
+                       "messages": [
+                           FunctionMessage(content="result for query", name="search_api")
+                       ]
+                   }
+               },
+               {
+                   "agent": {
+                       "messages": [
+                           AIMessage(
+                               content="",
+                               additional_kwargs={
+                                   "function_call": {
+                                       "name": "search_api",
+                                       "arguments": '"another"',
+                                   }
+                               },
+                           )
+                       ]
+                   }
+               },
+               {
+                   "action": {
+                       "messages": [
+                           FunctionMessage(content="result for another", name="search_api")
+                       ]
+                   }
+               },
+               {"agent": {"messages": [AIMessage(content="answer")]}},
+               {
+                   "__end__": {
+                       "messages": [
+                           HumanMessage(content="what is weather in sf"),
+                           AIMessage(
+                               content="",
+                               additional_kwargs={
+                                   "function_call": {
+                                       "name": "search_api",
+                                       "arguments": '"query"',
+                                   }
+                               },
+                           ),
+                           FunctionMessage(content="result for query", name="search_api"),
+                           AIMessage(
+                               content="",
+                               additional_kwargs={
+                                   "function_call": {
+                                       "name": "search_api",
+                                       "arguments": '"another"',
+                                   }
+                               },
+                           ),
+                           FunctionMessage(content="result for another", name="search_api"),
+                           AIMessage(content="answer"),
+                       ]
+                   }
+               },
+           ]
 
 
 def test_message_graph(snapshot: SnapshotAssertion) -> None:
@@ -2507,20 +2507,20 @@ def test_message_graph(snapshot: SnapshotAssertion) -> None:
     config = {"configurable": {"thread_id": "1"}}
 
     assert [
-        c
-        for c in app_w_interrupt.stream(
+               c
+               for c in app_w_interrupt.stream(
             HumanMessage(content="what is weather in sf"), config
         )
-    ] == [
-        {
-            "agent": AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
-            )
-        }
-    ]
+           ] == [
+               {
+                   "agent": AIMessage(
+                       content="",
+                       additional_kwargs={
+                           "function_call": {"name": "search_api", "arguments": '"query"'}
+                       },
+                   )
+               }
+           ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
@@ -2597,3 +2597,22 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
             }
         },
     ]
+
+
+def test_register_node() -> None:
+    class AgentState(TypedDict, total=False):
+        pass
+
+    # Define a new graph
+    workflow = StateGraph(AgentState)
+
+    @workflow.register_node
+    def left(data: AgentState) -> AgentState:
+        return {}
+
+    @workflow.register_node
+    def right(data: AgentState) -> AgentState:
+        return {}
+
+    assert 'left' in workflow.nodes.keys()
+    assert 'right' in workflow.nodes.keys()
