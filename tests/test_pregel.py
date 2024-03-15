@@ -2597,3 +2597,22 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
             }
         },
     ]
+
+
+def test_register_node() -> None:
+    class AgentState(TypedDict, total=False):
+        pass
+
+    # Define a new graph
+    workflow = StateGraph(AgentState)
+
+    @workflow.register_node
+    def left(data: AgentState) -> AgentState:
+        return {}
+
+    @workflow.register_node
+    def right(data: AgentState) -> AgentState:
+        return {}
+
+    assert 'left' in workflow.nodes.keys()
+    assert 'right' in workflow.nodes.keys()
