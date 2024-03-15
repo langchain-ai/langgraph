@@ -417,7 +417,6 @@ If you need cycles.
 Langchain Expression Language allows you to easily define chains (DAGs) but does not have a good mechanism for adding in cycles.
 `langgraph` adds that syntax.
 
-
 ## How-to Guides
 
 These guides show how to use LangGraph in particular ways.
@@ -447,6 +446,12 @@ For a walkthrough on how to do that, see [this documentation](https://github.com
 Agents you create with LangGraph can be complex. In order to make it easier to understand what is happening under the hood, we've added methods to print out and visualize the graph.
 This can create both ascii art as well as pngs.
 For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/visualization.ipynb)
+
+### "Time Travel"
+
+With "time travel" functionality you can jump to any point in the graph execution, modify the state, and rerun from there.
+This is useful for both debugging workflows, as well as end user-facing workflows to allow them to correct the state.
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/time-travel.ipynb)
 
 
 ## Examples
@@ -486,7 +491,6 @@ We also have a lot of examples highlighting how to slightly modify the base chat
 - [Force calling a tool first](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb): How to always call a specific tool first
 - [Managing agent steps](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb): How to more explicitly manage intermediate steps that an agent takes
 
-
 ### Planning Agent Examples
 
 The following notebooks implement agent architectures prototypical of the "plan-and-execute" style, where an LLM planner decomposes a user request into a program, an executor executes the program, and an LLM synthesizes a response (and/or dynamically replans) based on the program outputs.
@@ -494,7 +498,6 @@ The following notebooks implement agent architectures prototypical of the "plan-
 - [Plan-and-execute](https://github.com/langchain-ai/langgraph/blob/main/examples/plan-and-execute/plan-and-execute.ipynb): a simple agent with a **planner** that generates a multi-step task list, an **executor** that invokes the tools in the plan, and a **replanner** that responds or generates an updated plan. Based on the [Plan-and-solve](https://arxiv.org/abs/2305.04091) paper by Wang, et. al.
 - [Reasoning without Observation](https://github.com/langchain-ai/langgraph/blob/main/examples/rewoo/rewoo.ipynb): planner generates a task list whose observations are saved as **variables**. Variables can be used in subsequent tasks to reduce the need for further re-planning. Based on the [ReWOO](https://arxiv.org/abs/2305.18323) paper by Xu, et. al.
 - [LLMCompiler](https://github.com/langchain-ai/langgraph/blob/main/examples/llm-compiler/LLMCompiler.ipynb): planner generates a **DAG** of tasks with variable responses. Tasks are **streamed** and executed eagerly to minimize tool execution runtime. Based on the [paper](https://arxiv.org/abs/2312.04511) by Kim, et. al.
-
 
 ### Reflection / Self-Critique
 
@@ -528,7 +531,6 @@ It can often be tough to evaluation chat bots in multi-turn situations. One way 
 ### [Chain-of-Table](https://github.com/CYQIQ/MultiCoT)
 
 [Chain of Table](https://arxiv.org/abs/2401.04398) is a framework that elicits SOTA performance when answering questions over tabular data. [This implementation](https://github.com/CYQIQ/MultiCoT) by Github user [CYQIQ](https://github.com/CYQIQ) uses LangGraph to control the flow.
-
 
 ## Documentation
 
@@ -678,7 +680,6 @@ What this means is that when the graph is called, it will call the `condition` C
 
 - `condition`: A function to call to decide what to do next. The input will be the input to the graph. It should return a string that is present in `conditional_edge_mapping` and represents the edge to take.
 - `conditional_edge_mapping`: A mapping of string to string. The keys should be strings that may be returned by `condition`. The values should be the downstream node to call if that condition is returned.
-
 
 #### `.set_finish_point`
 
