@@ -447,6 +447,13 @@ Agents you create with LangGraph can be complex. In order to make it easier to u
 This can create both ascii art as well as pngs.
 For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/visualization.ipynb)
 
+### "Time Travel"
+
+With "time travel" functionality you can jump to any point in the graph execution, modify the state, and rerun from there.
+This is useful for both debugging workflows, as well as end user-facing workflows to allow them to correct the state.
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/time-travel.ipynb)
+
+
 ## Examples
 
 ### ChatAgentExecutor: with function calling
