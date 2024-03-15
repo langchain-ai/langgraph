@@ -581,7 +581,7 @@ class Pregel(
                             _apply_writes_from_view(checkpoint, channels, step_output)
 
                     # with previous step's checkpoint
-                    if do_interrupt_before := _should_interrupt(
+                    if _should_interrupt(
                         checkpoint,
                         interrupt_before_nodes,
                         self.snapshot_channels_list,
@@ -610,7 +610,7 @@ class Pregel(
                 if (
                     self.checkpointer is not None
                     and self.checkpointer.at == CheckpointAt.END_OF_RUN
-                    and not do_interrupt_before
+                    and not interrupt_before_nodes
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
                     self.checkpointer.put(config, checkpoint)
@@ -767,7 +767,7 @@ class Pregel(
                             _apply_writes_from_view(checkpoint, channels, step_output)
 
                     # with previous step's checkpoint
-                    if do_interrupt_before := _should_interrupt(
+                    if _should_interrupt(
                         checkpoint,
                         interrupt_before_nodes,
                         self.snapshot_channels_list,
@@ -776,9 +776,9 @@ class Pregel(
                         break
 
                     # save end of step checkpoint
-                    if (
-                        self.checkpointer is not None
-                        and self.checkpointer.at == CheckpointAt.END_OF_STEP
+                    if self.checkpointer is not None and (
+                        self.checkpointer.at == CheckpointAt.END_OF_STEP
+                        or interrupt_before_nodes
                     ):
                         checkpoint = create_checkpoint(checkpoint, channels)
                         await self.checkpointer.aput(config, checkpoint)
@@ -796,7 +796,7 @@ class Pregel(
                 if (
                     self.checkpointer is not None
                     and self.checkpointer.at == CheckpointAt.END_OF_RUN
-                    and not do_interrupt_before
+                    and not interrupt_before_nodes
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
                     await self.checkpointer.aput(config, checkpoint)
