@@ -68,7 +68,7 @@ class Graph:
         if not isinstance(key, str):
             raise ValueError("Key must be a str")
         if action is None:
-            raise ValueError(f"Action cannot be none.")
+            raise ValueError("Action cannot be none.")
         if key in self.nodes:
             raise ValueError(f"Node `{key}` already present.")
         if key == END:
