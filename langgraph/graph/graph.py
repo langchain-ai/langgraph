@@ -56,9 +56,9 @@ class Graph:
                 "Adding a node to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
-        # position parameters
+        # position parameters will overwrite the key-word parameters if provided
         if len(args) > 0:
-            if callable(args[0]):
+            if callable(args[0]):  # use as a decorator
                 action = args[0]
                 key = action.__name__
             elif isinstance(args[0], str):
