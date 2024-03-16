@@ -3,12 +3,12 @@ from typing import Any, Mapping, Sequence, Union
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.last_value import LastValue
 from langgraph.constants import INTERRUPT
-from langgraph.pregel.read import ChannelBatch, ChannelInvoke
+from langgraph.pregel.read import ChannelInvoke
 from langgraph.pregel.reserved import ReservedChannels
 
 
 def validate_graph(
-    nodes: Mapping[str, Union[ChannelInvoke, ChannelBatch]],
+    nodes: Mapping[str, ChannelInvoke],
     channels: dict[str, BaseChannel],
     input: Union[str, Sequence[str]],
     output: Union[str, Sequence[str]],
@@ -22,11 +22,9 @@ def validate_graph(
             raise ValueError(f"Node name {INTERRUPT} is reserved")
         if isinstance(node, ChannelInvoke):
             subscribed_channels.update(node.channels.values())
-        elif isinstance(node, ChannelBatch):
-            subscribed_channels.add(node.channel)
         else:
             raise TypeError(
-                f"Invalid node type {type(node)}, expected Channel.subscribe_to() or Channel.subscribe_to_each()"
+                f"Invalid node type {type(node)}, expected Channel.subscribe_to()"
             )
 
     for chan in subscribed_channels:

@@ -65,7 +65,7 @@ from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND, INTERRUPT
 from langgraph.pregel.debug import print_checkpoint, print_step_start
 from langgraph.pregel.io import map_input, map_output
 from langgraph.pregel.log import logger
-from langgraph.pregel.read import ChannelBatch, ChannelInvoke
+from langgraph.pregel.read import ChannelInvoke
 from langgraph.pregel.reserved import AllReservedChannels, ReservedChannels
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
@@ -141,11 +141,6 @@ class Channel:
         )
 
     @classmethod
-    def subscribe_to_each(cls, inbox: str, key: Optional[str] = None) -> ChannelBatch:
-        """Runs process.batch() with the content of inbox each time it is updated."""
-        return ChannelBatch(channel=inbox, key=key)
-
-    @classmethod
     def write_to(
         cls,
         *channels: str,
@@ -168,12 +163,14 @@ class StateSnapshot(NamedTuple):
     """Current values of channels"""
     next: tuple[str]
     """Nodes to execute in the next step, if any"""
+    config: RunnableConfig
+    """Config used to fetch this snapshot"""
 
 
 class Pregel(
     RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
 ):
-    nodes: Mapping[str, Union[ChannelInvoke, ChannelBatch]]
+    nodes: Mapping[str, ChannelInvoke]
 
     channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
 
@@ -283,8 +280,9 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        checkpoint = self.checkpointer.get(config)
-        checkpoint = checkpoint or empty_checkpoint()
+        saved = self.checkpointer.get_tuple(config)
+        checkpoint = saved.checkpoint if saved else empty_checkpoint()
+        config = saved.config if saved else config
         with ChannelsManager(self.channels, checkpoint) as channels:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint, self.nodes, channels, update_seen=False
@@ -299,14 +297,16 @@ class Pregel(
                 if isinstance(self.snapshot_channels, str)
                 else values,
                 tuple(name for _, _, name in next_tasks),
+                config,
             )
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        checkpoint = await self.checkpointer.aget(config)
-        checkpoint = checkpoint or empty_checkpoint()
+        saved = await self.checkpointer.aget_tuple(config)
+        checkpoint = saved.checkpoint if saved else empty_checkpoint()
+        config = saved.config if saved else config
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint, self.nodes, channels, update_seen=False
@@ -321,11 +321,58 @@ class Pregel(
                 if isinstance(self.snapshot_channels, str)
                 else values,
                 tuple(name for _, _, name in next_tasks),
+                config,
             )
+
+    def get_state_history(self, config: RunnableConfig) -> Iterator[StateSnapshot]:
+        if not self.checkpointer:
+            raise ValueError("No checkpointer set")
+
+        for config, checkpoint in self.checkpointer.list(config):
+            with ChannelsManager(self.channels, checkpoint) as channels:
+                _, next_tasks = _prepare_next_tasks(
+                    checkpoint, self.nodes, channels, update_seen=False
+                )
+                values = {
+                    k: _read_channel(channels, k)
+                    for k in channels
+                    if k in self.snapshot_channels_list
+                }
+                yield StateSnapshot(
+                    values[self.snapshot_channels]
+                    if isinstance(self.snapshot_channels, str)
+                    else values,
+                    tuple(name for _, _, name in next_tasks),
+                    config,
+                )
+
+    async def aget_state_history(
+        self, config: RunnableConfig
+    ) -> AsyncIterator[StateSnapshot]:
+        if not self.checkpointer:
+            raise ValueError("No checkpointer set")
+
+        async for config, checkpoint in self.checkpointer.alist(config):
+            async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+                _, next_tasks = _prepare_next_tasks(
+                    checkpoint, self.nodes, channels, update_seen=False
+                )
+                values = {
+                    k: _read_channel(channels, k)
+                    for k in channels
+                    if k in self.snapshot_channels_list
+                }
+                yield StateSnapshot(
+                    values[self.snapshot_channels]
+                    if isinstance(self.snapshot_channels, str)
+                    else values,
+                    tuple(name for _, _, name in next_tasks),
+                    config,
+                )
 
     def update_state(
         self, config: RunnableConfig, values: dict[str, Any] | Any
-    ) -> None:
+    ) -> RunnableConfig:
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -340,14 +387,16 @@ class Pregel(
             for k, v in values.items():
                 channels[k].update([v])
                 checkpoint["channel_versions"][k] += 1
-            for k in self.snapshot_channels or self.channels:
+            for k in self.snapshot_channels_list:
                 version = checkpoint["channel_versions"][k]
                 checkpoint["versions_seen"][INTERRUPT][k] = version
-            self.checkpointer.put(config, create_checkpoint(checkpoint, channels))
+            return self.checkpointer.put(
+                config, create_checkpoint(checkpoint, channels)
+            )
 
     async def aupdate_state(
         self, config: RunnableConfig, values: dict[str, Any] | Any
-    ) -> None:
+    ) -> RunnableConfig:
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -365,7 +414,7 @@ class Pregel(
             for k in self.snapshot_channels or self.channels:
                 version = checkpoint["channel_versions"][k]
                 checkpoint["versions_seen"][INTERRUPT][k] = version
-            await self.checkpointer.aput(
+            return await self.checkpointer.aput(
                 config, create_checkpoint(checkpoint, channels)
             )
 
@@ -444,6 +493,13 @@ class Pregel(
                         config,
                         0,
                     )
+                else:
+                    # if received no input, take that as signal to proceed
+                    # past previous interrupt, if any
+                    checkpoint = copy_checkpoint(checkpoint)
+                    for k in self.snapshot_channels_list:
+                        version = checkpoint["channel_versions"][k]
+                        checkpoint["versions_seen"][INTERRUPT][k] = version
 
                 read = partial(_read_channel, channels)
 
@@ -525,7 +581,7 @@ class Pregel(
                             _apply_writes_from_view(checkpoint, channels, step_output)
 
                     # with previous step's checkpoint
-                    if do_interrupt_before := _should_interrupt(
+                    if _should_interrupt(
                         checkpoint,
                         interrupt_before_nodes,
                         self.snapshot_channels_list,
@@ -554,7 +610,7 @@ class Pregel(
                 if (
                     self.checkpointer is not None
                     and self.checkpointer.at == CheckpointAt.END_OF_RUN
-                    and not do_interrupt_before
+                    and not interrupt_before_nodes
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
                     self.checkpointer.put(config, checkpoint)
@@ -616,6 +672,13 @@ class Pregel(
                         config,
                         0,
                     )
+                else:
+                    # if received no input, take that as signal to proceed
+                    # past previous interrupt, if any
+                    checkpoint = copy_checkpoint(checkpoint)
+                    for k in self.snapshot_channels_list:
+                        version = checkpoint["channel_versions"][k]
+                        checkpoint["versions_seen"][INTERRUPT][k] = version
 
                 read = partial(_read_channel, channels)
 
@@ -704,7 +767,7 @@ class Pregel(
                             _apply_writes_from_view(checkpoint, channels, step_output)
 
                     # with previous step's checkpoint
-                    if do_interrupt_before := _should_interrupt(
+                    if _should_interrupt(
                         checkpoint,
                         interrupt_before_nodes,
                         self.snapshot_channels_list,
@@ -713,9 +776,9 @@ class Pregel(
                         break
 
                     # save end of step checkpoint
-                    if (
-                        self.checkpointer is not None
-                        and self.checkpointer.at == CheckpointAt.END_OF_STEP
+                    if self.checkpointer is not None and (
+                        self.checkpointer.at == CheckpointAt.END_OF_STEP
+                        or interrupt_before_nodes
                     ):
                         checkpoint = create_checkpoint(checkpoint, channels)
                         await self.checkpointer.aput(config, checkpoint)
@@ -733,7 +796,7 @@ class Pregel(
                 if (
                     self.checkpointer is not None
                     and self.checkpointer.at == CheckpointAt.END_OF_RUN
-                    and not do_interrupt_before
+                    and not interrupt_before_nodes
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
                     await self.checkpointer.aput(config, checkpoint)
@@ -1009,7 +1072,7 @@ def _apply_writes_from_view(
 
 def _prepare_next_tasks(
     checkpoint: Checkpoint,
-    processes: Mapping[str, Union[ChannelInvoke, ChannelBatch]],
+    processes: Mapping[str, ChannelInvoke],
     channels: Mapping[str, BaseChannel],
     update_seen: bool = True,
 ) -> tuple[Checkpoint, list[tuple[Runnable, Any, str]]]:
@@ -1019,59 +1082,41 @@ def _prepare_next_tasks(
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
         seen = checkpoint["versions_seen"][name]
-        if isinstance(proc, ChannelInvoke):
-            # If any of the channels read by this process were updated
-            if any(
-                checkpoint["channel_versions"][chan] > seen[chan]
-                for chan in proc.triggers
-            ):
-                # If all trigger channels subscribed by this process are not empty
-                # then invoke the process with the values of all non-empty channels
-                try:
-                    val: Any = {
-                        k: _read_channel(
-                            channels, chan, catch=chan not in proc.triggers
-                        )
-                        for k, chan in proc.channels.items()
+        # If any of the channels read by this process were updated
+        if any(
+            checkpoint["channel_versions"][chan] > seen[chan] for chan in proc.triggers
+        ):
+            # If all trigger channels subscribed by this process are not empty
+            # then invoke the process with the values of all non-empty channels
+            try:
+                val: Any = {
+                    k: _read_channel(channels, chan, catch=chan not in proc.triggers)
+                    for k, chan in proc.channels.items()
+                }
+            except EmptyChannelError:
+                continue
+
+            # If the process has a mapper, apply it to the value
+            if proc.mapper is not None:
+                val = proc.mapper(val)
+
+            # Processes that subscribe to a single keyless channel get
+            # the value directly, instead of a dict
+            if list(proc.channels.keys()) == [None]:
+                val = val[None]
+
+            # update seen versions
+            if update_seen:
+                seen.update(
+                    {
+                        chan: checkpoint["channel_versions"][chan]
+                        for chan in proc.triggers
                     }
-                except EmptyChannelError:
-                    continue
+                )
 
-                # If the process has a mapper, apply it to the value
-                if proc.mapper is not None:
-                    val = proc.mapper(val)
-
-                # Processes that subscribe to a single keyless channel get
-                # the value directly, instead of a dict
-                if list(proc.channels.keys()) == [None]:
-                    val = val[None]
-
-                # update seen versions
-                if update_seen:
-                    seen.update(
-                        {
-                            chan: checkpoint["channel_versions"][chan]
-                            for chan in proc.triggers
-                        }
-                    )
-
-                # skip if condition is not met
-                if proc.when is None or proc.when(val):
-                    tasks.append((proc, val, name))
-        elif isinstance(proc, ChannelBatch):
-            # If the channel read by this process was updated
-            if checkpoint["channel_versions"][proc.channel] > seen[proc.channel]:
-                # If the channel subscribed by this process is not empty
-                try:
-                    val = channels[proc.channel].get()
-                except EmptyChannelError:
-                    continue
-                if proc.key is not None:
-                    val = [{proc.key: v} for v in val]
-
+            # skip if condition is not met
+            if proc.when is None or proc.when(val):
                 tasks.append((proc, val, name))
-                if update_seen:
-                    seen[proc.channel] = checkpoint["channel_versions"][proc.channel]
     return checkpoint, tasks
 
 
