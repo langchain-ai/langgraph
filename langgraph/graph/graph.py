@@ -50,7 +50,7 @@ class Graph:
         self.entry_point: Optional[str] = None
         self.entry_point_branch: Optional[Branch] = None
 
-    def add_node(self, *args, key: str = None, action: RunnableLike = None):
+    def add_node(self, *args, key: str = None, action: RunnableLike = None) -> None:
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "
