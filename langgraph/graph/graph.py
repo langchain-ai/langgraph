@@ -89,17 +89,17 @@ class Graph:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
         if not self.support_multiple_edges and start_key in set(
-                start for start, _ in self.edges
+            start for start, _ in self.edges
         ):
             raise ValueError(f"Already found path for {start_key}")
 
         self.edges.add((start_key, end_key))
 
     def add_conditional_edges(
-            self,
-            start_key: str,
-            condition: Callable[..., str],
-            conditional_edge_mapping: Optional[Dict[str, str]] = None,
+        self,
+        start_key: str,
+        condition: Callable[..., str],
+        conditional_edge_mapping: Optional[Dict[str, str]] = None,
     ) -> None:
         if self.compiled:
             logger.warning(
@@ -111,7 +111,7 @@ class Graph:
         if iscoroutinefunction(condition):
             raise ValueError("Condition cannot be a coroutine function")
         if conditional_edge_mapping and set(
-                conditional_edge_mapping.values()
+            conditional_edge_mapping.values()
         ).difference([END]).difference(self.nodes):
             raise ValueError(
                 f"Missing nodes which are in conditional edge mapping. Mapping "
@@ -133,9 +133,9 @@ class Graph:
         self.entry_point = key
 
     def set_conditional_entry_point(
-            self,
-            condition: Callable[..., str],
-            conditional_edge_mapping: Optional[Dict[str, str]] = None,
+        self,
+        condition: Callable[..., str],
+        conditional_edge_mapping: Optional[Dict[str, str]] = None,
     ) -> None:
         if self.compiled:
             logger.warning(
@@ -145,7 +145,7 @@ class Graph:
         if iscoroutinefunction(condition):
             raise ValueError("Condition cannot be a coroutine function")
         if conditional_edge_mapping and set(
-                conditional_edge_mapping.values()
+            conditional_edge_mapping.values()
         ).difference([END]).difference(self.nodes):
             raise ValueError(
                 f"Missing nodes which are in conditional edge mapping. Mapping "
@@ -191,11 +191,11 @@ class Graph:
         self.compiled = True
 
     def compile(
-            self,
-            checkpointer: Optional[BaseCheckpointSaver] = None,
-            interrupt_before: Optional[Sequence[str]] = None,
-            interrupt_after: Optional[Sequence[str]] = None,
-            debug: bool = False,
+        self,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
+        interrupt_before: Optional[Sequence[str]] = None,
+        interrupt_after: Optional[Sequence[str]] = None,
+        debug: bool = False,
     ) -> "CompiledGraph":
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -256,7 +256,7 @@ class CompiledGraph(Pregel):
     graph: Graph
 
     def get_graph(
-            self, config: Optional[RunnableConfig] = None, *, xray: bool = False
+        self, config: Optional[RunnableConfig] = None, *, xray: bool = False
     ) -> RunnableGraph:
         graph = RunnableGraph()
         start_nodes: dict[str, RunnableGraphNode] = {
