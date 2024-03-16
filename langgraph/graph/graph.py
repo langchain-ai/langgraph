@@ -50,25 +50,30 @@ class Graph:
         self.entry_point: Optional[str] = None
         self.entry_point_branch: Optional[Branch] = None
 
-    def add_node(self, key: str, action: RunnableLike) -> None:
+    def add_node(self, *args, key: str = None, action: RunnableLike = None):
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
+        # position parameters
+        if len(args) > 0:
+            if callable(args[0]):
+                action = args[0]
+                key = action.__name__
+            elif isinstance(args[0], str):
+                key = args[0]
+                action = args[1]
+
+        if not isinstance(key, str):
+            raise ValueError("Key must be a str")
+        if action is None:
+            raise ValueError(f"Action cannot be none.")
         if key in self.nodes:
             raise ValueError(f"Node `{key}` already present.")
         if key == END:
             raise ValueError(f"Node `{key}` is reserved.")
-
         self.nodes[key] = coerce_to_runnable(action)
-
-    def register_node(self, action: RunnableLike) -> RunnableLike:
-        key = action.__name__
-        if key in self.nodes:
-            raise ValueError(f"Node `{key}` is already present.")
-        self.nodes[key] = coerce_to_runnable(action)
-        return action
 
     def add_edge(self, start_key: str, end_key: str) -> None:
         if self.compiled:
@@ -84,17 +89,17 @@ class Graph:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
         if not self.support_multiple_edges and start_key in set(
-            start for start, _ in self.edges
+                start for start, _ in self.edges
         ):
             raise ValueError(f"Already found path for {start_key}")
 
         self.edges.add((start_key, end_key))
 
     def add_conditional_edges(
-        self,
-        start_key: str,
-        condition: Callable[..., str],
-        conditional_edge_mapping: Optional[Dict[str, str]] = None,
+            self,
+            start_key: str,
+            condition: Callable[..., str],
+            conditional_edge_mapping: Optional[Dict[str, str]] = None,
     ) -> None:
         if self.compiled:
             logger.warning(
@@ -106,7 +111,7 @@ class Graph:
         if iscoroutinefunction(condition):
             raise ValueError("Condition cannot be a coroutine function")
         if conditional_edge_mapping and set(
-            conditional_edge_mapping.values()
+                conditional_edge_mapping.values()
         ).difference([END]).difference(self.nodes):
             raise ValueError(
                 f"Missing nodes which are in conditional edge mapping. Mapping "
@@ -128,9 +133,9 @@ class Graph:
         self.entry_point = key
 
     def set_conditional_entry_point(
-        self,
-        condition: Callable[..., str],
-        conditional_edge_mapping: Optional[Dict[str, str]] = None,
+            self,
+            condition: Callable[..., str],
+            conditional_edge_mapping: Optional[Dict[str, str]] = None,
     ) -> None:
         if self.compiled:
             logger.warning(
@@ -140,7 +145,7 @@ class Graph:
         if iscoroutinefunction(condition):
             raise ValueError("Condition cannot be a coroutine function")
         if conditional_edge_mapping and set(
-            conditional_edge_mapping.values()
+                conditional_edge_mapping.values()
         ).difference([END]).difference(self.nodes):
             raise ValueError(
                 f"Missing nodes which are in conditional edge mapping. Mapping "
@@ -186,11 +191,11 @@ class Graph:
         self.compiled = True
 
     def compile(
-        self,
-        checkpointer: Optional[BaseCheckpointSaver] = None,
-        interrupt_before: Optional[Sequence[str]] = None,
-        interrupt_after: Optional[Sequence[str]] = None,
-        debug: bool = False,
+            self,
+            checkpointer: Optional[BaseCheckpointSaver] = None,
+            interrupt_before: Optional[Sequence[str]] = None,
+            interrupt_after: Optional[Sequence[str]] = None,
+            debug: bool = False,
     ) -> "CompiledGraph":
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -251,7 +256,7 @@ class CompiledGraph(Pregel):
     graph: Graph
 
     def get_graph(
-        self, config: Optional[RunnableConfig] = None, *, xray: bool = False
+            self, config: Optional[RunnableConfig] = None, *, xray: bool = False
     ) -> RunnableGraph:
         graph = RunnableGraph()
         start_nodes: dict[str, RunnableGraphNode] = {
