@@ -2623,8 +2623,7 @@ def test_register_node() -> None:
     workflow.add_node("up", up)
     workflow.add_node(key="down", action=down)
 
-    assert 'left' in workflow.nodes.keys()
-    assert 'right' in workflow.nodes.keys()
-    assert 'up' in workflow.nodes.keys()
-    assert 'down' in workflow.nodes.keys()
-
+    assert "left" in workflow.nodes.keys()
+    assert "right" in workflow.nodes.keys()
+    assert "up" in workflow.nodes.keys()
+    assert "down" in workflow.nodes.keys()

@@ -26,7 +26,12 @@ class StateGraph(Graph):
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
 
-    def add_node(self, *args, key: str = None,  action: RunnableLike = None,) -> None:
+    def add_node(
+        self,
+        *args,
+        key: str = None,
+        action: RunnableLike = None,
+    ) -> None:
         if key in self.channels:
             raise ValueError(
                 f"'{key}' is already being used as a state attribute "
