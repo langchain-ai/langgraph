@@ -23,7 +23,7 @@ pip install langgraph
 
 ## Quick start
 
-One of the central concepts of LangGraph is state. Each graph execution creates a state that is passed between nodes in the graph as they execute, and each node updates this internal state after it executes.
+One of the central concepts of LangGraph is state. Each graph execution creates a state that is passed between nodes in the graph as they execute, and each node updates this internal state with its return value after it executes. The way that the graph updates its internal state is defined by either the type of graph chosen or a custom function.
 
 State in LangGraph can be pretty general, but to keep things simpler to start, we'll show off an example where the graph's state is limited to a list of chat messages using the built-in `MessageGraph` class. This is convenient when using LangGraph with LangChain chat models because we can return chat model output directly.
 
@@ -55,7 +55,7 @@ graph = MessageGraph()
 def invoke_model(state: List[BaseMessage]):
     return model.invoke(state)
 
-graph.add_node("oracle", model)
+graph.add_node("oracle", invoke_model)
 graph.add_edge("oracle", END)
 
 graph.set_entry_point("oracle")
@@ -89,6 +89,37 @@ Then, when we execute the graph:
 4. Execution progresses to the special `END` value and outputs the final state.
 
 And as a result, we get a list of two chat messages as output.
+
+### Interaction with LCEL
+
+As an aside for those already familiar with LangChain - `add_node` actually takes any runnable as input. In the above example, the passed function is automatically converted, but we could also have passed the model directly:
+
+```python
+graph.add_node("oracle", model)
+```
+
+In which case the `.invoke()` method will be called when the graph executes.
+
+Just make sure you are mindful of the fact that the input to the runnable is the entire current state. So this will fail:
+
+```python
+# This will not work with MessageGraph!
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+prompt = ChatPromptTemplate.from_messages([
+    ["system", "You are a helpful assistant who always speaks in pirate dialect"],
+    MessagesPlaceholder(variable_name="messages"),
+])
+
+chain = prompt | model
+
+# State is a list of messages, but our chain expects a dict input:
+#
+# { "messages": [] }
+#
+# Therefore, the graph will throw an exception when it executes here.
+graph.add_node("oracle", chain)
+```
 
 ## Conditional edges
 
@@ -276,7 +307,7 @@ Whether to set or add is denoted by annotating the state object you construct th
 
 For this example, the state we will track will just be a list of messages.
 We want each node to just add messages to that list.
-Therefore, we will use a `TypedDict` with one key (`messages`) and annotate it so that the `messages` attribute is always added to.
+Therefore, we will use a `TypedDict` with one key (`messages`) and annotate it so that the `messages` attribute is always added to with the second parameter (`operator.add`).
 
 ```python
 from typing import TypedDict, Annotated, Sequence
@@ -287,6 +318,9 @@ from langchain_core.messages import BaseMessage
 class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], operator.add]
 ```
+
+You can think of the `MessageGraph` used in the initial example as a preconfigured version of this graph, where the state is directly an array of messages,
+and the update step is always to append the returned values of a node to the internal state.
 
 ### Define the nodes
 
@@ -731,7 +765,7 @@ Whether to set or add is denoted by annotating the state object you construct th
 
 The recommended way to specify the schema is with a typed dictionary: `from typing import TypedDict`
 
-You can then annotate the different attributes using `from typing imoport Annotated`.
+You can then annotate the different attributes using `from typing import Annotated`.
 Currently, the only supported annotation is `import operator; operator.add`.
 This annotation will make it so that any node that returns this attribute ADDS that new result to the existing value.
 
