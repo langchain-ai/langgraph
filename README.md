@@ -107,7 +107,7 @@ Just make sure you are mindful of the fact that the input to the runnable is the
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 prompt = ChatPromptTemplate.from_messages([
-    ["system", "You are a helpful assistant who always speaks in pirate dialect"],
+    ("system", "You are a helpful assistant who always speaks in pirate dialect"),
     MessagesPlaceholder(variable_name="messages"),
 ])
 
