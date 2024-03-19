@@ -10,7 +10,7 @@ It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache B
 The current interface exposed is one inspired by [NetworkX](https://networkx.org/documentation/latest/).
 
 The main use is for adding **cycles** to your LLM application.
-Crucially, this is NOT a **DAG** framework.
+Crucially, LangGraph is NOT optimized for only **DAG** workflows.
 If you want to build a DAG, you should just use [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
 
 Cycles are important for agent-like behaviors, where you call an LLM in a loop, asking it what action to take next.
@@ -21,9 +21,184 @@ Cycles are important for agent-like behaviors, where you call an LLM in a loop, 
 pip install langgraph
 ```
 
-## Quick Start
+## Quick start
 
-Here we will go over an example of creating a simple agent that uses chat models and function calling.
+One of the central concepts of LangGraph is state. Each graph execution creates a state that is passed between nodes in the graph as they execute, and each node updates this internal state after it executes.
+
+State in LangGraph can be pretty general, but to keep things simpler to start, we'll show off an example where the graph's state is limited to a list of chat messages using the built-in `MessageGraph` class. This is convenient when using LangGraph with LangChain chat models because we can return chat model output directly.
+
+First, install the LangChain OpenAI integration package:
+
+```python
+pip install langchain_openai
+```
+
+We also need to export some environment variables:
+
+```shell
+export OPENAI_API_KEY=sk-...
+```
+
+And now we're ready! The graph below contains a single node called `"oracle"` that executes a chat model, then returns the result:
+
+```python
+from typing import List
+
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import BaseMessage, HumanMessage
+from langgraph.graph import END, MessageGraph
+
+model = ChatOpenAI(temperature=0)
+
+graph = MessageGraph()
+
+def invoke_model(state: List[BaseMessage]):
+    return model.invoke(state)
+
+graph.add_node("oracle", model)
+graph.add_edge("oracle", END)
+
+graph.set_entry_point("oracle")
+
+runnable = graph.compile()
+```
+
+Let's run it!
+
+```python
+runnable.invoke(HumanMessage("What is 1 + 1?"))
+```
+
+```
+[HumanMessage(content='What is 1 + 1?'), AIMessage(content='1 + 1 equals 2.')]
+```
+
+So what did we do here? Let's break it down step by step:
+
+1. First, we initialize our model and a `MessageGraph`.
+2. Next, we add a single node to the graph, called `"oracle"`, which simply calls the model with the given input.
+3. We add an edge from this `"oracle"` node to the special value `END`. This means that execution will end after current node.
+4. We set `"oracle"` as the entrypoint to the graph.
+5. We compile the graph, ensuring that no more modifications to it can be made.
+
+Then, when we execute the graph:
+
+1. LangGraph adds the input message to the internal state, then passes the state to the entrypoint node, `"oracle"`.
+2. The `"oracle"` node executes, invoking the chat model.
+3. The chat model returns an `AIMessage`. LangGraph adds this to the state.
+4. Execution progresses to the special `END` value and outputs the final state.
+
+And as a result, we get a list of two chat messages as output.
+
+## Conditional edges
+
+Now, let's move onto something a little bit less trivial. Because math can be difficult for LLMs, let's allow the LLM to conditionally call a `"multiply"` node using tool calling.
+
+We'll recreate our graph with an additional `"multiply"` that will take the result of the most recent message, if it is a tool call, and calculate the result.
+We'll also bind the calculator to the OpenAI model as a tool to allow the model to optionally use the tool necessary to respond to the current state:
+
+```python
+import json
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import tool
+from langchain_core.utils.function_calling import convert_to_openai_tool
+
+@tool
+def multiply(first_number: int, second_number: int):
+    """Multiplies two numbers together."""
+    return first_number * second_number
+
+model = ChatOpenAI(temperature=0)
+model_with_tools = model.bind(tools=[convert_to_openai_tool(multiply)])
+
+graph = MessageGraph()
+
+def invoke_model(state: List[BaseMessage]):
+    return model_with_tools.invoke(state)
+
+graph.add_node("oracle", invoke_model)
+
+def invoke_tool(state: List[BaseMessage]):
+    tool_calls = state[-1].additional_kwargs.get("tool_calls", [])
+    multiply_call = None
+
+    for tool_call in tool_calls:
+        if tool_call.get("function").get("name") == "multiply":
+            multiply_call = tool_call
+
+    if multiply_call is None:
+        raise Exception("No adder input found.")
+
+    res = multiply.invoke(
+        json.loads(multiply_call.get("function").get("arguments"))
+    )
+
+    return ToolMessage(
+        tool_call_id=multiply_call.get("id"),
+        content=res
+    )
+
+graph.add_node("multiply", invoke_tool)
+
+graph.add_edge("multiply", END)
+
+graph.set_entry_point("oracle")
+```
+
+Now let's think - what do we want to have happen?
+
+- If the `"oracle"` node returns a message expecting a tool call, we want to execute the `"multiply"` node
+- If not, we can just end execution
+
+We can achieve this using **conditional edges**, which routes execution to a node based on the current state using a function.
+
+Here's what that looks like:
+
+```python
+def router(state: List[BaseMessage]):
+    tool_calls = state[-1].additional_kwargs.get("tool_calls", [])
+    if len(tool_calls):
+        return "multiply"
+    else:
+        return "end"
+
+graph.add_conditional_edges("oracle", router, {
+    "multiply": "multiply",
+    "end": END,
+})
+```
+
+If the model output contains a tool call, we move to the `"multiply"` node. Otherwise, we end.
+
+Great! Now all that's left is to compile the graph and try it out. Math-related questions are routed to the calculator tool:
+
+```python
+runnable = graph.compile()
+
+runnable.invoke(HumanMessage("What is 123 * 456?"))
+```
+
+```
+
+[HumanMessage(content='What is 123 * 456?'),
+ AIMessage(content='', additional_kwargs={'tool_calls': [{'id': 'call_OPbdlm8Ih1mNOObGf3tMcNgb', 'function': {'arguments': '{"first_number":123,"second_number":456}', 'name': 'multiply'}, 'type': 'function'}]}),
+ ToolMessage(content='56088', tool_call_id='call_OPbdlm8Ih1mNOObGf3tMcNgb')]
+```
+
+While conversational responses are outputted directly:
+
+```python
+runnable.invoke(HumanMessage("What is your name?"))
+```
+
+```
+[HumanMessage(content='What is your name?'),
+ AIMessage(content='My name is Assistant. How can I assist you today?')]
+```
+
+## Cycles
+
+Now, let's go over a more general example with a cycle. We will recreate the `AgentExecutor` class from LangChain. The agent itself will use chat models and function calling.
 This agent will represent all its state as a list of messages.
 
 We will need to install some LangChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
@@ -32,7 +207,7 @@ We will need to install some LangChain packages, as well as [Tavily](https://app
 pip install -U langchain langchain_openai tavily-python
 ```
 
-We also need to export some environment variables for OpenAI and Tavily API access.
+We also need to export some additional environment variables for OpenAI and Tavily API access.
 
 ```shell
 export OPENAI_API_KEY=sk-...
@@ -48,7 +223,7 @@ export LANGCHAIN_API_KEY=ls__...
 
 ### Set up the tools
 
-We will first define the tools we want to use.
+As above, we will first define the tools we want to use.
 For this simple example, we will use a built-in search tool via Tavily.
 However, it is really easy to create your own tools - see documentation [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools) on how to do that.
 
@@ -59,7 +234,7 @@ tools = [TavilySearchResults(max_results=1)]
 ```
 
 We can now wrap these tools in a simple LangGraph `ToolExecutor`.
-This is a simple class that receives `ToolInvocation` objects, calls that tool, and returns the output.
+This class receives `ToolInvocation` objects, calls that tool, and returns the output.
 `ToolInvocation` is any class with `tool` and `tool_input` attributes.
 
 ```python
@@ -71,12 +246,7 @@ tool_executor = ToolExecutor(tools)
 ### Set up the model
 
 Now we need to load the chat model we want to use.
-Importantly, this should satisfy two criteria:
-
-1. It should work with lists of messages. We will represent all agent state in the form of messages, so it needs to be able to work well with them.
-2. It should work with the OpenAI function calling interface. This means it should either be an OpenAI model or a model that exposes a similar interface.
-
-Note: these model requirements are not requirements for using LangGraph - they are just requirements for this one example.
+This time, we'll use the older function calling interface. This walkthrough will use OpenAI, but we can choose any model that supports OpenAI function calling.
 
 ```python
 from langchain_openai import ChatOpenAI
@@ -98,9 +268,9 @@ model = model.bind_functions(functions)
 
 ### Define the agent state
 
-The main type of graph in `langgraph` is the `StatefulGraph`.
+This time, we'll use the more general `StateGraph`.
 This graph is parameterized by a state object that it passes around to each node.
-Each node then returns operations to update that state.
+Remember that each node then returns operations to update that state.
 These operations can either SET specific attributes on the state (e.g. overwrite the existing values) or ADD to the existing attribute.
 Whether to set or add is denoted by annotating the state object you construct the graph with.
 
