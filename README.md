@@ -100,11 +100,10 @@ graph.add_node("oracle", model)
 
 In which case the `.invoke()` method will be called when the graph executes.
 
-Just make sure you are mindful of the fact that the input to the runnable is the entire chain. So this will fail:
+Just make sure you are mindful of the fact that the input to the runnable is the entire current state. So this will fail:
 
 ```python
-# This will not work!
-
+# This will not work with MessageGraph!
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 prompt = ChatPromptTemplate.from_messages([
@@ -114,7 +113,11 @@ prompt = ChatPromptTemplate.from_messages([
 
 chain = prompt | model
 
-# Input here is a list of messages, but our chain expects a dict { "messages": [] }
+# State is a list of messages, but our chain expects a dict input:
+#
+# { "messages": [] }
+#
+# Therefore, the graph will throw an exception when it executes here.
 graph.add_node("oracle", chain)
 ```
 
