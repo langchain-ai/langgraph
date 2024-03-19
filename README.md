@@ -90,7 +90,7 @@ Then, when we execute the graph:
 
 And as a result, we get a list of two chat messages as output.
 
-### Using with LCEL
+### Interaction with LCEL
 
 As an aside for those already familiar with LangChain - `add_node` actually takes any runnable as input. In the above example, the passed function is automatically converted, but we could also have passed the model directly:
 
@@ -99,6 +99,24 @@ graph.add_node("oracle", model)
 ```
 
 In which case the `.invoke()` method will be called when the graph executes.
+
+Just make sure you are mindful of the fact that the input to the runnable is the entire chain. So this will fail:
+
+```python
+# This will not work!
+
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+prompt = ChatPromptTemplate.from_messages([
+    ["system", "You are a helpful assistant who always speaks in pirate dialect"],
+    MessagesPlaceholder(variable_name="messages"),
+])
+
+chain = prompt | model
+
+# Input here is a list of messages, but our chain expects a dict { "messages": [] }
+graph.add_node("oracle", chain)
+```
 
 ## Conditional edges
 
