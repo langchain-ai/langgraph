@@ -165,6 +165,8 @@ class StateSnapshot(NamedTuple):
     """Nodes to execute in the next step, if any"""
     config: RunnableConfig
     """Config used to fetch this snapshot"""
+    parent_config: Optional[RunnableConfig] = None
+    """Config used to fetch the parent snapshot, if any"""
 
 
 class Pregel(
@@ -328,7 +330,7 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        for config, checkpoint in self.checkpointer.list(config):
+        for config, checkpoint, parent_config in self.checkpointer.list(config):
             with ChannelsManager(self.channels, checkpoint) as channels:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint, self.nodes, channels, update_seen=False
@@ -344,6 +346,7 @@ class Pregel(
                     else values,
                     tuple(name for _, _, name in next_tasks),
                     config,
+                    parent_config,
                 )
 
     async def aget_state_history(
@@ -352,7 +355,7 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        async for config, checkpoint in self.checkpointer.alist(config):
+        async for config, checkpoint, parent_config in self.checkpointer.alist(config):
             async with AsyncChannelsManager(self.channels, checkpoint) as channels:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint, self.nodes, channels, update_seen=False
@@ -368,6 +371,7 @@ class Pregel(
                     else values,
                     tuple(name for _, _, name in next_tasks),
                     config,
+                    parent_config,
                 )
 
     def update_state(
@@ -473,7 +477,10 @@ class Pregel(
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
-            checkpoint = self.checkpointer.get(config) if self.checkpointer else None
+            checkpoint_config = config
+            checkpoint = (
+                self.checkpointer.get(checkpoint_config) if self.checkpointer else None
+            )
             checkpoint = checkpoint or empty_checkpoint()
             # create channels from checkpoint
             with ChannelsManager(
@@ -595,7 +602,9 @@ class Pregel(
                         or interrupt_before_nodes
                     ):
                         checkpoint = create_checkpoint(checkpoint, channels)
-                        self.checkpointer.put(config, checkpoint)
+                        checkpoint_config = self.checkpointer.put(
+                            checkpoint_config, checkpoint
+                        )
 
                     # with this step's checkpoint,
                     if _should_interrupt(
@@ -613,7 +622,7 @@ class Pregel(
                     and not interrupt_before_nodes
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
-                    self.checkpointer.put(config, checkpoint)
+                    self.checkpointer.put(checkpoint_config, checkpoint)
         finally:
             # cancel any pending tasks when generator is interrupted
             try:
@@ -652,8 +661,11 @@ class Pregel(
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
+            checkpoint_config = config
             checkpoint = (
-                await self.checkpointer.aget(config) if self.checkpointer else None
+                await self.checkpointer.aget(checkpoint_config)
+                if self.checkpointer
+                else None
             )
             checkpoint = checkpoint or empty_checkpoint()
             # create channels from checkpoint
@@ -781,7 +793,9 @@ class Pregel(
                         or interrupt_before_nodes
                     ):
                         checkpoint = create_checkpoint(checkpoint, channels)
-                        await self.checkpointer.aput(config, checkpoint)
+                        checkpoint_config = await self.checkpointer.aput(
+                            checkpoint_config, checkpoint
+                        )
 
                     # with this step's checkpoint
                     if _should_interrupt(
@@ -799,7 +813,7 @@ class Pregel(
                     and not interrupt_before_nodes
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
-                    await self.checkpointer.aput(config, checkpoint)
+                    await self.checkpointer.aput(checkpoint_config, checkpoint)
         finally:
             # cancel any pending tasks when generator is interrupted
             try:

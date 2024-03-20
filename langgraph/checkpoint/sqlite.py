@@ -43,6 +43,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             CREATE TABLE IF NOT EXISTS checkpoints (
                 thread_id TEXT NOT NULL,
                 thread_ts TEXT NOT NULL,
+                parent_ts TEXT,
                 checkpoint BLOB,
                 PRIMARY KEY (thread_id, thread_ts)
             );
@@ -66,17 +67,28 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         with self.cursor(transaction=False) as cur:
             if config["configurable"].get("thread_ts"):
                 cur.execute(
-                    "SELECT checkpoint FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
+                    "SELECT checkpoint, parent_ts FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
                     (
                         config["configurable"]["thread_id"],
                         config["configurable"]["thread_ts"],
                     ),
                 )
                 if value := cur.fetchone():
-                    return CheckpointTuple(config, pickle.loads(value[0]))
+                    return CheckpointTuple(
+                        config,
+                        pickle.loads(value[0]),
+                        {
+                            "configurable": {
+                                "thread_id": config["configurable"]["thread_id"],
+                                "thread_ts": value[1],
+                            }
+                        }
+                        if value[1]
+                        else None,
+                    )
             else:
                 cur.execute(
-                    "SELECT thread_id, thread_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
+                    "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
                     (config["configurable"]["thread_id"],),
                 )
                 if value := cur.fetchone():
@@ -87,28 +99,45 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                                 "thread_ts": value[1],
                             }
                         },
-                        pickle.loads(value[2]),
+                        pickle.loads(value[3]),
+                        {
+                            "configurable": {
+                                "thread_id": value[0],
+                                "thread_ts": value[2],
+                            }
+                        }
+                        if value[2]
+                        else None,
                     )
 
     def list(self, config: RunnableConfig) -> Iterator[CheckpointTuple]:
         with self.cursor(transaction=False) as cur:
             cur.execute(
-                "SELECT thread_id, thread_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC",
+                "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC",
                 (config["configurable"]["thread_id"],),
             )
-            for thread_id, thread_ts, value in cur:
+            for thread_id, thread_ts, parent_ts, value in cur:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     pickle.loads(value),
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "thread_ts": parent_ts,
+                        }
+                    }
+                    if parent_ts
+                    else None,
                 )
 
     def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
         with self.cursor() as cur:
             cur.execute(
-                "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, checkpoint) VALUES (?, ?, ?)",
+                "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint) VALUES (?, ?, ?, ?)",
                 (
                     config["configurable"]["thread_id"],
                     checkpoint["ts"],
+                    config["configurable"].get("thread_ts"),
                     pickle.dumps(checkpoint),
                 ),
             )

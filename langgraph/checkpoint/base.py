@@ -52,6 +52,7 @@ class CheckpointAt(StrEnum):
 class CheckpointTuple(NamedTuple):
     config: RunnableConfig
     checkpoint: Checkpoint
+    parent_config: Optional[RunnableConfig] = None
 
 
 CheckpointThreadId = ConfigurableFieldSpec(

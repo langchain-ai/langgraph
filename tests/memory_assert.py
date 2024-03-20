@@ -22,4 +22,4 @@ class MemorySaverAssertImmutable(MemorySaver):
             checkpoint
         )
         # call super to write checkpoint
-        super().put(config, checkpoint)
+        return super().put(config, checkpoint)
