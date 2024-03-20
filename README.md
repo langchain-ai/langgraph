@@ -46,20 +46,15 @@ export OPENAI_API_KEY=sk-...
 And now we're ready! The graph below contains a single node called `"oracle"` that executes a chat model, then returns the result:
 
 ```python
-from typing import List
-
 from langchain_openai import ChatOpenAI
-from langchain_core.messages import BaseMessage, HumanMessage
+from langchain_core.messages import HumanMessage
 from langgraph.graph import END, MessageGraph
 
 model = ChatOpenAI(temperature=0)
 
 graph = MessageGraph()
 
-def invoke_model(state: List[BaseMessage]):
-    return model.invoke(state)
-
-graph.add_node("oracle", invoke_model)
+graph.add_node("oracle", model)
 graph.add_edge("oracle", END)
 
 graph.set_entry_point("oracle")
@@ -81,7 +76,7 @@ So what did we do here? Let's break it down step by step:
 
 1. First, we initialize our model and a `MessageGraph`.
 2. Next, we add a single node to the graph, called `"oracle"`, which simply calls the model with the given input.
-3. We add an edge from this `"oracle"` node to the special value `END`. This means that execution will end after current node.
+3. We add an edge from this `"oracle"` node to the special string `END`. This means that execution will end after current node.
 4. We set `"oracle"` as the entrypoint to the graph.
 5. We compile the graph, ensuring that no more modifications to it can be made.
 
@@ -96,22 +91,23 @@ And as a result, we get a list of two chat messages as output.
 
 ### Interaction with LCEL
 
-As an aside for those already familiar with LangChain - `add_node` actually takes any runnable as input. In the above example, the passed function is automatically converted, but we could also have passed the model directly:
+As an aside for those already familiar with LangChain - `add_node` actually takes any function or runnable as input. In the above example, the model is used "as-is", but we could also have passed in a function:
 
 ```python
-graph.add_node("oracle", model)
+def call_oracle(messages: list):
+    return model.invoke(message)
+
+graph.add_node("oracle", call_oracle)
 ```
 
-In which case the `.invoke()` method will be called when the graph executes.
-
-Just make sure you are mindful of the fact that the input to the runnable is the entire current state. So this will fail:
+Just make sure you are mindful of the fact that the input to the runnable is the **entire current state**. So this will fail:
 
 ```python
 # This will not work with MessageGraph!
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 
 prompt = ChatPromptTemplate.from_messages([
-    ("system", "You are a helpful assistant who always speaks in pirate dialect"),
+    ("system", "You are a helpful assistant named {name} who always speaks in pirate dialect"),
     MessagesPlaceholder(variable_name="messages"),
 ])
 
@@ -119,7 +115,7 @@ chain = prompt | model
 
 # State is a list of messages, but our chain expects a dict input:
 #
-# { "messages": [] }
+# { "name": some_string, "messages": [] }
 #
 # Therefore, the graph will throw an exception when it executes here.
 graph.add_node("oracle", chain)
