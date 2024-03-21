@@ -3069,7 +3069,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
     async def decider(data: State) -> None:
         return None
 
-    async def decider_cond(data: State) -> str:
+    def decider_cond(data: State) -> str:
         if data["query"].count("analyzed") > 1:
             return "qa"
         else:
