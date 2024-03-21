@@ -4,7 +4,7 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Annotated, Generator, Optional, TypedDict, Union
+from typing import Annotated, Any, Generator, Optional, TypedDict, Union
 
 import pytest
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
@@ -2324,14 +2324,38 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
 def test_message_graph(
     snapshot: SnapshotAssertion, deterministic_uuids: MockerFixture
 ) -> None:
+    from copy import deepcopy
+
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
-    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+    from langchain_core.callbacks import CallbackManagerForLLMRun
+    from langchain_core.messages import (
+        AIMessage,
+        BaseMessage,
+        FunctionMessage,
+        HumanMessage,
+    )
+    from langchain_core.outputs import ChatGeneration, ChatResult
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
             return self
+
+        def _generate(
+            self,
+            messages: list[BaseMessage],
+            stop: Optional[list[str]] = None,
+            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            **kwargs: Any,
+        ) -> ChatResult:
+            response = deepcopy(self.responses[self.i])
+            if self.i < len(self.responses) - 1:
+                self.i += 1
+            else:
+                self.i = 0
+            generation = ChatGeneration(message=response)
+            return ChatResult(generations=[generation])
 
     @tool()
     def search_api(query: str) -> str:
@@ -2588,7 +2612,7 @@ def test_message_graph(
     # modify ai message
     last_message = app_w_interrupt.get_state(config).values[-1]
     last_message.additional_kwargs["function_call"]["arguments"] = '"a different query"'
-    app_w_interrupt.update_state(config, last_message)
+    next_config = app_w_interrupt.update_state(config, last_message)
 
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -2609,7 +2633,7 @@ def test_message_graph(
             ),
         ],
         next=("agent:edges",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=next_config,
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2718,6 +2742,186 @@ def test_message_graph(
                     content="result for a different query",
                     name="search_api",
                     id="00000000-0000-4000-8000-000000000081",
+                ),
+                AIMessage(content="answer", id="ai2"),
+            ]
+        }
+    ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(), interrupt_before=["action"]
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    model.i = 0  # reset the llm
+
+    assert [
+        c
+        for c in app_w_interrupt.stream(
+            HumanMessage(content="what is weather in sf"), config
+        )
+    ] == [
+        {
+            "agent": AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+                id="ai1",
+            )
+        }
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000091",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+                id="ai1",
+            ),
+        ],
+        next=("agent:edges",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    # modify ai message
+    last_message = app_w_interrupt.get_state(config).values[-1]
+    last_message.additional_kwargs["function_call"]["arguments"] = '"a different query"'
+    app_w_interrupt.update_state(config, last_message)
+
+    # message was replaced instead of appended
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000091",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": '"a different query"',
+                    }
+                },
+                id="ai1",
+            ),
+        ],
+        next=("agent:edges",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "action": FunctionMessage(
+                content="result for a different query",
+                name="search_api",
+                id="00000000-0000-4000-8000-000000000106",
+            )
+        },
+        {
+            "agent": AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"another"'}
+                },
+                id="ai2",
+            )
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000091",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": '"a different query"',
+                    }
+                },
+                id="ai1",
+            ),
+            FunctionMessage(
+                content="result for a different query",
+                name="search_api",
+                id="00000000-0000-4000-8000-000000000106",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"another"'}
+                },
+                id="ai2",
+            ),
+        ],
+        next=("agent:edges",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        AIMessage(content="answer", id="ai2"),
+    )
+
+    # replaces message even if object identity is different, as long as id is the same
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000091",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": '"a different query"',
+                    }
+                },
+                id="ai1",
+            ),
+            FunctionMessage(
+                content="result for a different query",
+                name="search_api",
+                id="00000000-0000-4000-8000-000000000106",
+            ),
+            AIMessage(content="answer", id="ai2"),
+        ],
+        next=("agent:edges",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "__end__": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id="00000000-0000-4000-8000-000000000091",
+                ),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": '"a different query"',
+                        }
+                    },
+                    id="ai1",
+                ),
+                FunctionMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    id="00000000-0000-4000-8000-000000000106",
                 ),
                 AIMessage(content="answer", id="ai2"),
             ]
