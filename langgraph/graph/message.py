@@ -1,7 +1,7 @@
 import uuid
 from typing import Annotated, Union
 
-from langchain_core.messages import AnyMessage
+from langchain_core.messages import AnyMessage, message_chunk_to_message
 
 from langgraph.graph.state import StateGraph
 
@@ -11,9 +11,13 @@ Messages = Union[list[AnyMessage], AnyMessage]
 def add_messages(left: Messages, right: Messages) -> Messages:
     # coerce to list
     if not isinstance(left, list):
-        left = [left]
+        left = [message_chunk_to_message(left)]
+    else:
+        left = [message_chunk_to_message(m) for m in left]
     if not isinstance(right, list):
-        right = [right]
+        right = [message_chunk_to_message(right)]
+    else:
+        right = [message_chunk_to_message(m) for m in right]
     # assign missing ids
     for m in left:
         if m.id is None:
