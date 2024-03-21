@@ -31,6 +31,12 @@ class StateGraph(Graph):
             self.support_multiple_edges = True
         self.w_edges: set[tuple[tuple[str, ...], str]] = set()
 
+    @property
+    def _all_edges(self) -> set[tuple[str, str]]:
+        return self.edges | {
+            (start, end) for starts, end in self.w_edges for start in starts
+        }
+
     def add_node(self, key: str, action: RunnableLike) -> None:
         if key in self.channels:
             raise ValueError(
@@ -66,12 +72,7 @@ class StateGraph(Graph):
     ) -> CompiledGraph:
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
-        self.validate(
-            interrupt=interrupt_before + interrupt_after,
-            additional_edges={
-                (start, end) for starts, end in self.w_edges for start in starts
-            },
-        )
+        self.validate(interrupt=interrupt_before + interrupt_after)
 
         state_keys = list(self.channels)
         state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys

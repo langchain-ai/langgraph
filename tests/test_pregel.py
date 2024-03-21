@@ -2832,6 +2832,42 @@ def test_in_one_fan_out_state_graph_waiting_edge() -> None:
 
     app = workflow.compile()
 
+    assert app.get_graph().draw_ascii() == (
+        """              +-----------+              
+              | __start__ |              
+              +-----------+              
+                    *                    
+                    *                    
+                    *                    
+            +---------------+            
+            | rewrite_query |            
+            +---------------+            
+             ***         ***             
+            *               *            
+          **                 ***         
++--------------+                *        
+| analyzer_one |                *        
++--------------+                *        
+        *                       *        
+        *                       *        
+        *                       *        
++---------------+      +---------------+ 
+| retriever_one |      | retriever_two | 
++---------------+      +---------------+ 
+             ***         ***             
+                *       *                
+                 **   **                 
+                 +----+                  
+                 | qa |                  
+                 +----+                  
+                    *                    
+                    *                    
+                    *                    
+              +---------+                
+              | __end__ |                
+              +---------+                """
+    )
+
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
         "docs": ["doc1", "doc2", "doc3", "doc4"],

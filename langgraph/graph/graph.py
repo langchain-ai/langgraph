@@ -50,6 +50,10 @@ class Graph:
         self.entry_point: Optional[str] = None
         self.entry_point_branch: Optional[Branch] = None
 
+    @property
+    def _all_edges(self) -> set[tuple[str, str]]:
+        return self.edges
+
     def add_node(self, key: str, action: RunnableLike) -> None:
         if self.compiled:
             logger.warning(
@@ -149,9 +153,8 @@ class Graph:
     def validate(
         self,
         interrupt: Optional[Sequence[str]] = None,
-        additional_edges: Optional[set[tuple[str, str]]] = None,
     ) -> None:
-        edges = self.edges.union(additional_edges or [])
+        edges = self._all_edges
         all_starts = {src for src, _ in edges} | {src for src in self.branches}
         for node in self.nodes:
             if node not in all_starts:
@@ -280,7 +283,7 @@ class CompiledGraph(Pregel):
                 n = graph.add_node(node, key)
                 start_nodes[key] = n
                 end_nodes[key] = n
-        for start, end in self.graph.edges:
+        for start, end in self.graph._all_edges:
             graph.add_edge(start_nodes[start], end_nodes[end])
         for start, branches in self.graph.branches.items():
             for i, branch in enumerate(branches):
