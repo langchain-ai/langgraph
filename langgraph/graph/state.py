@@ -188,7 +188,10 @@ class StateGraph(Graph):
             },
             input=f"{START}:inbox",
             output=END,
-            hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
+            hidden=[f"{node}:inbox" for node in self.nodes]
+            + [START]
+            + state_keys
+            + [key for key, _, _ in waiting_edges],
             snapshot_channels=state_keys_read,
             checkpointer=checkpointer,
             interrupt_before_nodes=[f"{node}:inbox" for node in interrupt_before],

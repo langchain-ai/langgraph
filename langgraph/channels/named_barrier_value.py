@@ -33,14 +33,12 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def empty(self, checkpoint: Optional[Value] = None) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ, self.names)
         if checkpoint is not None:
-            empty.value = checkpoint
+            empty.seen = checkpoint
+
         try:
             yield empty
         finally:
-            try:
-                del empty.value
-            except AttributeError:
-                pass
+            pass
 
     def update(self, values: Sequence[Value]) -> None:
         if self.seen == self.names:
