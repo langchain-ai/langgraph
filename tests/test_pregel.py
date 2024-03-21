@@ -2847,7 +2847,7 @@ def test_in_one_fan_out_waiting_edge_graph_state() -> None:
         {"('retriever_one', 'retriever_two'):qa": None},
         {"retriever_one": {"docs": ["doc1", "doc2"]}, "qa": {"answer": "doc3,doc4"}},
         {
-            "('retriever_on', 'retriever_two'):qa": None,
+            "('retriever_one', 'retriever_two'):qa": None,
             "__end__": {
                 "query": "analyzed: query: what is weather in sf",
                 "answer": "doc3,doc4",
