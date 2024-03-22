@@ -435,6 +435,12 @@ For a walkthrough on how to do that, see [this documentation](https://github.com
 LangGraph comes with built-in support for human-in-the-loop workflows. This is useful when you want to have a human review the current state before proceeding to a particular node.
 For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb)
 
+### Visualizing the graph
+
+Agents you create with LangGraph can be complex. In order to make it easier to understand what is happening under the hood, we've added methods to print out and visualize the graph.
+This can create both ascii art as well as pngs.
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/visualization.ipynb)
+
 
 ## Примеры
 
@@ -512,7 +518,8 @@ When output quality is a major concern, it's common to incorporate some combinat
 При работе с асинхронными процессами вам может потребоваться создать с помощью GigaGraph граф с вершинами, которые будут асинхронными по умолчанию.
 [Пример](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb).
 
-### Потоковая передача токенов
+- [Chat bot evaluation as multi-agent simulation](https://github.com/langchain-ai/langgraph/blob/main/examples/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): how to simulate a dialogue between a "virtual user" and your chat bot
+- [Evaluating over a dataset](./examples/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): benchmark your assistant over a LangSmith dataset, which tasks a simulated customer to red-team your chat bot.
 
 Ответ модели может занимать продолжительное время и вам может потребоваться на лету отображать пользователям результат работы модели.
 [Пример](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb).
@@ -661,7 +668,7 @@ This method adds a node to the graph.
 
 - `key` — название вершины, которую нужно вызывать в первую очередь.
 
-#### `.add_conditional_edges`
+#### `.set_conditional_entry_point`
 
 ```python
     def set_conditional_entry_point(
@@ -772,7 +779,7 @@ for s in app.stream(inputs):
     print("----")
 ```
 
-### create_tool_calling_executor
+### chat_agent_executor.create_tool_calling_executor
 
 ```python
 from langgraph.prebuilt import chat_agent_executor
