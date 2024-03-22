@@ -2827,7 +2827,7 @@ def test_in_one_fan_out_state_graph_waiting_edge() -> None:
     workflow.add_edge("rewrite_query", "analyzer_one")
     workflow.add_edge("analyzer_one", "retriever_one")
     workflow.add_edge("rewrite_query", "retriever_two")
-    workflow.add_waiting_edge(["retriever_one", "retriever_two"], "qa")
+    workflow.add_edge(["retriever_one", "retriever_two"], "qa")
     workflow.set_finish_point("qa")
 
     app = workflow.compile()
@@ -2961,7 +2961,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
     workflow.add_edge("rewrite_query", "analyzer_one")
     workflow.add_edge("analyzer_one", "retriever_one")
     workflow.add_edge("rewrite_query", "retriever_two")
-    workflow.add_waiting_edge(["retriever_one", "retriever_two"], "qa")
+    workflow.add_edge(["retriever_one", "retriever_two"], "qa")
     workflow.set_finish_point("qa")
 
     # silly edge, to make sure having been triggered before doesn't break
@@ -3089,7 +3089,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
     workflow.add_edge("rewrite_query", "analyzer_one")
     workflow.add_edge("analyzer_one", "retriever_one")
     workflow.add_edge("rewrite_query", "retriever_two")
-    workflow.add_waiting_edge(["retriever_one", "retriever_two"], "decider")
+    workflow.add_edge(["retriever_one", "retriever_two"], "decider")
     workflow.add_conditional_edges("decider", decider_cond)
     workflow.set_finish_point("qa")
 

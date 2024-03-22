@@ -2,7 +2,7 @@ import logging
 from collections import defaultdict
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type
+from typing import Any, Optional, Sequence, Type, Union
 
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import RunnableLike
@@ -45,23 +45,26 @@ class StateGraph(Graph):
             )
         return super().add_node(key, action)
 
-    def add_waiting_edge(self, starts: Sequence[str], end: str) -> None:
+    def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
+        if isinstance(start_key, str):
+            return super().add_edge(start_key, end_key)
+
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
-        for start in starts:
+        for start in start_key:
             if start == END:
                 raise ValueError("END cannot be a start node")
             if start not in self.nodes:
                 raise ValueError(f"Need to add_node `{start}` first")
-        if end == END:
+        if end_key == END:
             raise ValueError("END cannot be an end node")
-        if end not in self.nodes:
-            raise ValueError(f"Need to add_node `{end}` first")
+        if end_key not in self.nodes:
+            raise ValueError(f"Need to add_node `{end_key}` first")
 
-        self.w_edges.add((tuple(starts), end))
+        self.w_edges.add((tuple(start_key), end_key))
 
     def compile(
         self,
