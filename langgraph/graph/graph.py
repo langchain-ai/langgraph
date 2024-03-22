@@ -150,12 +150,10 @@ class Graph:
     def set_finish_point(self, key: str) -> None:
         return self.add_edge(key, END)
 
-    def validate(
-        self,
-        interrupt: Optional[Sequence[str]] = None,
-    ) -> None:
-        edges = self._all_edges
-        all_starts = {src for src, _ in edges} | {src for src in self.branches}
+    def validate(self, interrupt: Optional[Sequence[str]] = None) -> None:
+        all_starts = {src for src, _ in self._all_edges} | {
+            src for src in self.branches
+        }
         for node in self.nodes:
             if node not in all_starts:
                 raise ValueError(f"Node `{node}` is a dead-end")
@@ -166,7 +164,7 @@ class Graph:
         if self.entry_point_branch is not None:
             branches.append(self.entry_point_branch)
 
-        all_hard_ends = {end for _, end in edges}
+        all_hard_ends = {end for _, end in self._all_edges}
         if self.entry_point is not None:
             all_hard_ends.add(self.entry_point)
 
