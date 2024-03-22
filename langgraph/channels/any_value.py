@@ -38,6 +38,10 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     def update(self, values: Sequence[Value]) -> None:
         if len(values) == 0:
+            try:
+                del self.value
+            except AttributeError:
+                pass
             return
 
         self.value = values[-1]
