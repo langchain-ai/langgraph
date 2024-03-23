@@ -1,8 +1,10 @@
-from typing import Any, Sequence, Union
+import json
+from typing import Any, List, Optional, Sequence, Union
 
 from langchain_core.load.serializable import Serializable
 from langchain_core.runnables import RunnableBinding, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
+from langchain_core.messages import AIMessage
 
 INVALID_TOOL_MSG_TEMPLATE = (
     "{requested_tool_name} is not a valid tool, "
@@ -24,6 +26,31 @@ class ToolInvocation(Serializable):
     """The name of the Tool to execute."""
     tool_input: Union[str, dict]
     """The input to pass in to the Tool."""
+    id: Optional[str] = None
+    """The tool invocation ID"""
+
+
+def create_tool_invocations(message: AIMessage) -> List[ToolInvocation]:
+    if message.additional_kwargs.get("function_call"):
+        return [
+            ToolInvocation(
+                tool=message.additional_kwargs["function_call"]["name"],
+                tool_input=json.loads(
+                    message.additional_kwargs["function_call"]["arguments"]
+                ),
+            )
+        ]
+    if message.additional_kwargs.get("tool_calls"):
+        return [
+            ToolInvocation(
+                tool=tool["function"]["name"],
+                tool_input=json.loads(tool["function"]["arguments"]),
+                id=tool["id"],
+            )
+            for tool in message.additional_kwargs.get("tool_calls")
+            if tool["type"] == "function"
+        ]
+    return []
 
 
 class ToolExecutor(RunnableBinding):
