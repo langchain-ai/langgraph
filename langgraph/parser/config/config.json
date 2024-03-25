@@ -1,0 +1,11 @@
+{
+    "mermaid": {
+        "icons": {
+            "start": "fa:fa-play-circle",
+            "end": "fa:fa-stop-circle",
+            "agent": "fa:fa-user",
+            "action": "fa:fa-toolbox",
+            "agent_reason": "fa:fa-brain"
+        }
+    }
+}
