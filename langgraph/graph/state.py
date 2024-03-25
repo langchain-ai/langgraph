@@ -1,7 +1,8 @@
+import logging
 from collections import defaultdict
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type
+from typing import Any, Optional, Sequence, Type, Union
 
 from langchain_core.runnables import RunnableLambda
 from langchain_core.runnables.base import RunnableLike
@@ -11,11 +12,14 @@ from langgraph.channels.base import BaseChannel, InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
+from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph.graph import END, START, CompiledGraph, Graph
 from langgraph.pregel import Channel
 from langgraph.pregel.read import ChannelInvoke
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
+
+logger = logging.getLogger(__name__)
 
 
 class StateGraph(Graph):
@@ -25,6 +29,13 @@ class StateGraph(Graph):
         self.channels = _get_channels(schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
+        self.w_edges: set[tuple[tuple[str, ...], str]] = set()
+
+    @property
+    def _all_edges(self) -> set[tuple[str, str]]:
+        return self.edges | {
+            (start, end) for starts, end in self.w_edges for start in starts
+        }
 
     def add_node(self, key: str, action: RunnableLike) -> None:
         if key in self.channels:
@@ -33,6 +44,27 @@ class StateGraph(Graph):
                 "(a.k.a. a channel), cannot also be used as a node name."
             )
         return super().add_node(key, action)
+
+    def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
+        if isinstance(start_key, str):
+            return super().add_edge(start_key, end_key)
+
+        if self.compiled:
+            logger.warning(
+                "Adding an edge to a graph that has already been compiled. This will "
+                "not be reflected in the compiled graph."
+            )
+        for start in start_key:
+            if start == END:
+                raise ValueError("END cannot be a start node")
+            if start not in self.nodes:
+                raise ValueError(f"Need to add_node `{start}` first")
+        if end_key == END:
+            raise ValueError("END cannot be an end node")
+        if end_key not in self.nodes:
+            raise ValueError(f"Need to add_node `{end_key}` first")
+
+        self.w_edges.add((tuple(start_key), end_key))
 
     def compile(
         self,
@@ -68,14 +100,27 @@ class StateGraph(Graph):
             else None
         )
 
+        waiting_edges = {
+            (f"{starts}:{end}", starts, end) for starts, end in self.w_edges
+        }
+        waiting_edge_channels = {
+            key: NamedBarrierValue(str, set(starts)) for key, starts, _ in waiting_edges
+        }
+
         outgoing_edges = defaultdict(list)
         for start, end in self.edges:
             outgoing_edges[start].append(f"{end}:inbox" if end != END else END)
+        for key, starts, end in waiting_edges:
+            for start in starts:
+                outgoing_edges[start].append(key)
 
         nodes = {
             key: (
                 ChannelInvoke(
-                    triggers=[f"{key}:inbox"],
+                    triggers=[
+                        f"{key}:inbox",
+                        *[chan for chan, _, end in waiting_edges if end == key],
+                    ],
                     channels=state_channels,
                     mapper=coerce_state,
                 )
@@ -142,11 +187,15 @@ class StateGraph(Graph):
                 **self.channels,
                 **node_inboxes,
                 **node_outboxes,
+                **waiting_edge_channels,
                 END: LastValue(self.schema),
             },
             input=f"{START}:inbox",
             output=END,
-            hidden=[f"{node}:inbox" for node in self.nodes] + [START] + state_keys,
+            hidden=[f"{node}:inbox" for node in self.nodes]
+            + [START]
+            + state_keys
+            + [key for key, _, _ in waiting_edges],
             snapshot_channels=state_keys_read,
             checkpointer=checkpointer,
             interrupt_before_nodes=[f"{node}:inbox" for node in interrupt_before],

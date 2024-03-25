@@ -1,7 +1,19 @@
 from typing import Any, Iterator, Mapping, Optional, Sequence, Union
 
-from langgraph.channels.base import BaseChannel
+from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.pregel.log import logger
+
+
+def _read_channel(
+    channels: Mapping[str, BaseChannel], chan: str, catch: bool = True
+) -> Any:
+    try:
+        return channels[chan].get()
+    except EmptyChannelError:
+        if catch:
+            return None
+        else:
+            raise
 
 
 def map_input(
@@ -31,8 +43,8 @@ def map_output(
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
         if any(chan == output_channels for chan, _ in pending_writes):
-            return channels[output_channels].get()
+            return _read_channel(channels, output_channels)
     else:
         if updated := {c for c, _ in pending_writes if c in output_channels}:
-            return {chan: channels[chan].get() for chan in updated}
+            return {chan: _read_channel(channels, chan) for chan in updated}
     return None

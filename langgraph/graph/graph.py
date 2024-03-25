@@ -50,6 +50,10 @@ class Graph:
         self.entry_point: Optional[str] = None
         self.entry_point_branch: Optional[Branch] = None
 
+    @property
+    def _all_edges(self) -> set[tuple[str, str]]:
+        return self.edges
+
     def add_node(self, key: str, action: RunnableLike) -> None:
         if self.compiled:
             logger.warning(
@@ -147,7 +151,9 @@ class Graph:
         return self.add_edge(key, END)
 
     def validate(self, interrupt: Optional[Sequence[str]] = None) -> None:
-        all_starts = {src for src, _ in self.edges} | {src for src in self.branches}
+        all_starts = {src for src, _ in self._all_edges} | {
+            src for src in self.branches
+        }
         for node in self.nodes:
             if node not in all_starts:
                 raise ValueError(f"Node `{node}` is a dead-end")
@@ -158,7 +164,7 @@ class Graph:
         if self.entry_point_branch is not None:
             branches.append(self.entry_point_branch)
 
-        all_hard_ends = {end for _, end in self.edges}
+        all_hard_ends = {end for _, end in self._all_edges}
         if self.entry_point is not None:
             all_hard_ends.add(self.entry_point)
 
@@ -275,7 +281,7 @@ class CompiledGraph(Pregel):
                 n = graph.add_node(node, key)
                 start_nodes[key] = n
                 end_nodes[key] = n
-        for start, end in self.graph.edges:
+        for start, end in self.graph._all_edges:
             graph.add_edge(start_nodes[start], end_nodes[end])
         for start, branches in self.graph.branches.items():
             for i, branch in enumerate(branches):

@@ -4,7 +4,7 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Annotated, Generator, Optional, TypedDict, Union
+from typing import Annotated, Any, Generator, Optional, TypedDict, Union
 
 import pytest
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
@@ -2324,14 +2324,38 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
 def test_message_graph(
     snapshot: SnapshotAssertion, deterministic_uuids: MockerFixture
 ) -> None:
+    from copy import deepcopy
+
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
-    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+    from langchain_core.callbacks import CallbackManagerForLLMRun
+    from langchain_core.messages import (
+        AIMessage,
+        BaseMessage,
+        FunctionMessage,
+        HumanMessage,
+    )
+    from langchain_core.outputs import ChatGeneration, ChatResult
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
             return self
+
+        def _generate(
+            self,
+            messages: list[BaseMessage],
+            stop: Optional[list[str]] = None,
+            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            **kwargs: Any,
+        ) -> ChatResult:
+            response = deepcopy(self.responses[self.i])
+            if self.i < len(self.responses) - 1:
+                self.i += 1
+            else:
+                self.i = 0
+            generation = ChatGeneration(message=response)
+            return ChatResult(generations=[generation])
 
     @tool()
     def search_api(query: str) -> str:
@@ -2588,7 +2612,7 @@ def test_message_graph(
     # modify ai message
     last_message = app_w_interrupt.get_state(config).values[-1]
     last_message.additional_kwargs["function_call"]["arguments"] = '"a different query"'
-    app_w_interrupt.update_state(config, last_message)
+    next_config = app_w_interrupt.update_state(config, last_message)
 
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -2609,7 +2633,7 @@ def test_message_graph(
             ),
         ],
         next=("agent:edges",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=next_config,
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2724,6 +2748,186 @@ def test_message_graph(
         }
     ]
 
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(), interrupt_before=["action"]
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    model.i = 0  # reset the llm
+
+    assert [
+        c
+        for c in app_w_interrupt.stream(
+            HumanMessage(content="what is weather in sf"), config
+        )
+    ] == [
+        {
+            "agent": AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+                id="ai1",
+            )
+        }
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000091",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"query"'}
+                },
+                id="ai1",
+            ),
+        ],
+        next=("agent:edges",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    # modify ai message
+    last_message = app_w_interrupt.get_state(config).values[-1]
+    last_message.additional_kwargs["function_call"]["arguments"] = '"a different query"'
+    app_w_interrupt.update_state(config, last_message)
+
+    # message was replaced instead of appended
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000091",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": '"a different query"',
+                    }
+                },
+                id="ai1",
+            ),
+        ],
+        next=("agent:edges",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "action": FunctionMessage(
+                content="result for a different query",
+                name="search_api",
+                id="00000000-0000-4000-8000-000000000106",
+            )
+        },
+        {
+            "agent": AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"another"'}
+                },
+                id="ai2",
+            )
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000091",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": '"a different query"',
+                    }
+                },
+                id="ai1",
+            ),
+            FunctionMessage(
+                content="result for a different query",
+                name="search_api",
+                id="00000000-0000-4000-8000-000000000106",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {"name": "search_api", "arguments": '"another"'}
+                },
+                id="ai2",
+            ),
+        ],
+        next=("agent:edges",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        AIMessage(content="answer", id="ai2"),
+    )
+
+    # replaces message even if object identity is different, as long as id is the same
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000091",
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": '"a different query"',
+                    }
+                },
+                id="ai1",
+            ),
+            FunctionMessage(
+                content="result for a different query",
+                name="search_api",
+                id="00000000-0000-4000-8000-000000000106",
+            ),
+            AIMessage(content="answer", id="ai2"),
+        ],
+        next=("agent:edges",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "__end__": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id="00000000-0000-4000-8000-000000000091",
+                ),
+                AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": '"a different query"',
+                        }
+                    },
+                    id="ai1",
+                ),
+                FunctionMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    id="00000000-0000-4000-8000-000000000106",
+                ),
+                AIMessage(content="answer", id="ai2"),
+            ]
+        }
+    ]
+
 
 def test_in_one_fan_out_out_one_graph_state() -> None:
     def sorted_add(x: list[str], y: list[str]) -> list[str]:
@@ -2780,6 +2984,361 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "query": "query: what is weather in sf",
                 "answer": "doc1,doc2,doc3,doc4",
                 "docs": ["doc1", "doc2", "doc3", "doc4"],
+            }
+        },
+    ]
+
+
+def test_in_one_fan_out_state_graph_waiting_edge() -> None:
+    def sorted_add(
+        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+    ) -> list[str]:
+        if isinstance(y[0], tuple):
+            for rem, _ in y:
+                x.remove(rem)
+            y = [t[1] for t in y]
+        return sorted(operator.add(x, y))
+
+    class State(TypedDict, total=False):
+        query: str
+        answer: str
+        docs: Annotated[list[str], sorted_add]
+
+    def rewrite_query(data: State) -> State:
+        return {"query": f'query: {data["query"]}'}
+
+    def analyzer_one(data: State) -> State:
+        return {"query": f'analyzed: {data["query"]}'}
+
+    def retriever_one(data: State) -> State:
+        return {"docs": ["doc1", "doc2"]}
+
+    def retriever_two(data: State) -> State:
+        return {"docs": ["doc3", "doc4"]}
+
+    def qa(data: State) -> State:
+        return {"answer": ",".join(data["docs"])}
+
+    workflow = StateGraph(State)
+
+    workflow.add_node("rewrite_query", rewrite_query)
+    workflow.add_node("analyzer_one", analyzer_one)
+    workflow.add_node("retriever_one", retriever_one)
+    workflow.add_node("retriever_two", retriever_two)
+    workflow.add_node("qa", qa)
+
+    workflow.set_entry_point("rewrite_query")
+    workflow.add_edge("rewrite_query", "analyzer_one")
+    workflow.add_edge("analyzer_one", "retriever_one")
+    workflow.add_edge("rewrite_query", "retriever_two")
+    workflow.add_edge(["retriever_one", "retriever_two"], "qa")
+    workflow.set_finish_point("qa")
+
+    app = workflow.compile()
+
+    assert app.get_graph().draw_ascii() == (
+        """              +-----------+              
+              | __start__ |              
+              +-----------+              
+                    *                    
+                    *                    
+                    *                    
+            +---------------+            
+            | rewrite_query |            
+            +---------------+            
+             ***         ***             
+            *               *            
+          **                 ***         
++--------------+                *        
+| analyzer_one |                *        
++--------------+                *        
+        *                       *        
+        *                       *        
+        *                       *        
++---------------+      +---------------+ 
+| retriever_one |      | retriever_two | 
++---------------+      +---------------+ 
+             ***         ***             
+                *       *                
+                 **   **                 
+                 +----+                  
+                 | qa |                  
+                 +----+                  
+                    *                    
+                    *                    
+                    *                    
+              +---------+                
+              | __end__ |                
+              +---------+                """
+    )
+
+    assert app.invoke({"query": "what is weather in sf"}) == {
+        "query": "analyzed: query: what is weather in sf",
+        "docs": ["doc1", "doc2", "doc3", "doc4"],
+        "answer": "doc1,doc2,doc3,doc4",
+    }
+
+    assert [*app.stream({"query": "what is weather in sf"})] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        {
+            "__end__": {
+                "query": "analyzed: query: what is weather in sf",
+                "answer": "doc1,doc2,doc3,doc4",
+                "docs": ["doc1", "doc2", "doc3", "doc4"],
+            }
+        },
+    ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["retriever_one"]
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
+    ] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+    ]
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        {
+            "__end__": {
+                "query": "analyzed: query: what is weather in sf",
+                "answer": "doc1,doc2,doc3,doc4",
+                "docs": ["doc1", "doc2", "doc3", "doc4"],
+            }
+        },
+    ]
+
+
+def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
+    def sorted_add(
+        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+    ) -> list[str]:
+        if isinstance(y[0], tuple):
+            for rem, _ in y:
+                x.remove(rem)
+            y = [t[1] for t in y]
+        return sorted(operator.add(x, y))
+
+    class State(TypedDict, total=False):
+        query: str
+        answer: str
+        docs: Annotated[list[str], sorted_add]
+
+    def rewrite_query(data: State) -> State:
+        return {"query": f'query: {data["query"]}'}
+
+    def analyzer_one(data: State) -> State:
+        return {"query": f'analyzed: {data["query"]}'}
+
+    def retriever_one(data: State) -> State:
+        return {"docs": ["doc1", "doc2"]}
+
+    def retriever_two(data: State) -> State:
+        return {"docs": ["doc3", "doc4"]}
+
+    def qa(data: State) -> State:
+        return {"answer": ",".join(data["docs"])}
+
+    workflow = StateGraph(State)
+
+    workflow.add_node("rewrite_query", rewrite_query)
+    workflow.add_node("analyzer_one", analyzer_one)
+    workflow.add_node("retriever_one", retriever_one)
+    workflow.add_node("retriever_two", retriever_two)
+    workflow.add_node("qa", qa)
+
+    workflow.set_entry_point("rewrite_query")
+    workflow.add_edge("rewrite_query", "analyzer_one")
+    workflow.add_edge("analyzer_one", "retriever_one")
+    workflow.add_edge("rewrite_query", "retriever_two")
+    workflow.add_edge(["retriever_one", "retriever_two"], "qa")
+    workflow.set_finish_point("qa")
+
+    # silly edge, to make sure having been triggered before doesn't break
+    # semantics of named barrier (== waiting edges)
+    workflow.add_edge("rewrite_query", "qa")
+
+    app = workflow.compile()
+
+    assert app.invoke({"query": "what is weather in sf"}) == {
+        "query": "analyzed: query: what is weather in sf",
+        "docs": ["doc1", "doc2", "doc3", "doc4"],
+        "answer": "doc1,doc2,doc3,doc4",
+    }
+
+    assert [*app.stream({"query": "what is weather in sf"})] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+            "qa": {"answer": ""},
+        },
+        {
+            "__end__": {
+                "answer": "",
+                "docs": ["doc3", "doc4"],
+                "query": "analyzed: query: what is weather in sf",
+            }
+        },
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        {
+            "__end__": {
+                "query": "analyzed: query: what is weather in sf",
+                "answer": "doc1,doc2,doc3,doc4",
+                "docs": ["doc1", "doc2", "doc3", "doc4"],
+            }
+        },
+    ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["retriever_one"]
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
+    ] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+            "qa": {"answer": ""},
+        },
+        {
+            "__end__": {
+                "answer": "",
+                "docs": ["doc3", "doc4"],
+                "query": "analyzed: query: what is weather in sf",
+            }
+        },
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+    ]
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        {
+            "__end__": {
+                "query": "analyzed: query: what is weather in sf",
+                "answer": "doc1,doc2,doc3,doc4",
+                "docs": ["doc1", "doc2", "doc3", "doc4"],
+            }
+        },
+    ]
+
+
+def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
+    def sorted_add(
+        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+    ) -> list[str]:
+        if isinstance(y[0], tuple):
+            for rem, _ in y:
+                x.remove(rem)
+            y = [t[1] for t in y]
+        return sorted(operator.add(x, y))
+
+    class State(TypedDict, total=False):
+        query: str
+        answer: str
+        docs: Annotated[list[str], sorted_add]
+
+    def rewrite_query(data: State) -> State:
+        return {"query": f'query: {data["query"]}'}
+
+    def analyzer_one(data: State) -> State:
+        return {"query": f'analyzed: {data["query"]}'}
+
+    def retriever_one(data: State) -> State:
+        return {"docs": ["doc1", "doc2"]}
+
+    def retriever_two(data: State) -> State:
+        return {"docs": ["doc3", "doc4"]}
+
+    def qa(data: State) -> State:
+        return {"answer": ",".join(data["docs"])}
+
+    def decider(data: State) -> None:
+        return None
+
+    def decider_cond(data: State) -> str:
+        if data["query"].count("analyzed") > 1:
+            return "qa"
+        else:
+            return "rewrite_query"
+
+    workflow = StateGraph(State)
+
+    workflow.add_node("rewrite_query", rewrite_query)
+    workflow.add_node("analyzer_one", analyzer_one)
+    workflow.add_node("retriever_one", retriever_one)
+    workflow.add_node("retriever_two", retriever_two)
+    workflow.add_node("decider", decider)
+    workflow.add_node("qa", qa)
+
+    workflow.set_entry_point("rewrite_query")
+    workflow.add_edge("rewrite_query", "analyzer_one")
+    workflow.add_edge("analyzer_one", "retriever_one")
+    workflow.add_edge("rewrite_query", "retriever_two")
+    workflow.add_edge(["retriever_one", "retriever_two"], "decider")
+    workflow.add_conditional_edges("decider", decider_cond)
+    workflow.set_finish_point("qa")
+
+    app = workflow.compile()
+
+    assert app.invoke({"query": "what is weather in sf"}) == {
+        "query": "analyzed: query: analyzed: query: what is weather in sf",
+        "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
+        "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
+    }
+
+    assert [*app.stream({"query": "what is weather in sf"})] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"decider": None},
+        {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
+        {
+            "analyzer_one": {
+                "query": "analyzed: query: analyzed: query: what is weather in sf"
+            },
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {
+            "retriever_one": {"docs": ["doc1", "doc2"]},
+        },
+        {"decider": None},
+        {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
+        {
+            "__end__": {
+                "query": "analyzed: query: analyzed: query: what is weather in sf",
+                "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
+                "docs": [
+                    "doc1",
+                    "doc1",
+                    "doc2",
+                    "doc2",
+                    "doc3",
+                    "doc3",
+                    "doc4",
+                    "doc4",
+                ],
             }
         },
     ]

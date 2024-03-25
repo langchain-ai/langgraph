@@ -1018,12 +1018,18 @@ def _should_interrupt(
 
 
 def _read_channel(
-    channels: Mapping[str, BaseChannel], chan: str, catch: bool = True
+    channels: Mapping[str, BaseChannel],
+    chan: str,
+    *,
+    catch: bool = True,
+    return_exception: bool = False,
 ) -> Any:
     try:
         return channels[chan].get()
-    except EmptyChannelError:
-        if catch:
+    except EmptyChannelError as exc:
+        if return_exception:
+            return exc
+        elif catch:
             return None
         else:
             raise
@@ -1090,7 +1096,7 @@ def _prepare_next_tasks(
     channels: Mapping[str, BaseChannel],
     update_seen: bool = True,
 ) -> tuple[Checkpoint, list[tuple[Runnable, Any, str]]]:
-    checkpoint = copy_checkpoint(checkpoint) if update_seen else checkpoint
+    checkpoint = copy_checkpoint(checkpoint)
     tasks: list[tuple[Runnable, Any, str]] = []
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
@@ -1098,7 +1104,11 @@ def _prepare_next_tasks(
         seen = checkpoint["versions_seen"][name]
         # If any of the channels read by this process were updated
         if any(
-            checkpoint["channel_versions"][chan] > seen[chan] for chan in proc.triggers
+            checkpoint["channel_versions"][chan] > seen[chan]
+            for chan in proc.triggers
+            if not isinstance(
+                _read_channel(channels, chan, return_exception=True), EmptyChannelError
+            )
         ):
             # If all trigger channels subscribed by this process are not empty
             # then invoke the process with the values of all non-empty channels
