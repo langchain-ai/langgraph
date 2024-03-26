@@ -1,6 +1,7 @@
 import logging
-from asyncio import iscoroutinefunction
+from asyncio import get_running_loop, iscoroutinefunction
 from collections import defaultdict
+from functools import partial
 from typing import Any, Callable, Dict, NamedTuple, Optional, Sequence
 
 from langchain_core.runnables import Runnable
@@ -31,8 +32,29 @@ class Branch(NamedTuple):
     condition: Callable[..., str]
     ends: Optional[dict[str, str]]
 
+    def is_coroutine(self):
+        return iscoroutinefunction(self.condition)
+
     def runnable(self, input: Any) -> Runnable:
+        if self.is_coroutine():
+            raise ValueError(
+                "All conditions must be sync when invoking graphs synchronously."
+            )
         result = self.condition(input)
+        if self.ends:
+            destination = self.ends[result]
+        else:
+            destination = result
+        return Channel.write_to(f"{destination}:inbox" if destination != END else END)
+
+    async def arunnable(self, input: Any) -> Runnable:
+        if self.is_coroutine():
+            result = await self.condition(input)
+        else:
+            result = await get_running_loop().run_in_executor(
+                None,
+                partial(self.condition, input),
+            )
         if self.ends:
             destination = self.ends[result]
         else:
@@ -100,8 +122,6 @@ class Graph:
             )
         if start_key not in self.nodes:
             raise ValueError(f"Need to add_node `{start_key}` first")
-        if iscoroutinefunction(condition):
-            raise ValueError("Condition cannot be a coroutine function")
         if conditional_edge_mapping and set(
             conditional_edge_mapping.values()
         ).difference([END]).difference(self.nodes):
@@ -134,8 +154,6 @@ class Graph:
                 "Setting the entry point of a graph that has already been compiled. "
                 "This will not be reflected in the compiled graph."
             )
-        if iscoroutinefunction(condition):
-            raise ValueError("Condition cannot be a coroutine function")
         if conditional_edge_mapping and set(
             conditional_edge_mapping.values()
         ).difference([END]).difference(self.nodes):
@@ -219,14 +237,18 @@ class Graph:
             if key in self.branches:
                 for branch in self.branches[key]:
                     nodes[edges_key] |= RunnableLambda(
-                        branch.runnable, name=f"{key}_condition"
+                        branch.arunnable if branch.is_coroutine() else branch.runnable,
+                        name=f"{key}_condition",
                     )
 
         if self.entry_point_branch:
             nodes[f"{START}:edges"] = Channel.subscribe_to(
                 START, tags=["langsmith:hidden"]
             ) | RunnableLambda(
-                self.entry_point_branch.runnable, name=f"{START}_condition"
+                self.entry_point_branch.arunnable
+                if self.entry_point_branch.is_coroutine()
+                else self.entry_point_branch.runnable,
+                name=f"{START}_condition",
             )
         elif self.entry_point is None:
             raise ValueError("No entry point set")
@@ -289,7 +311,10 @@ class CompiledGraph(Pregel):
                 if i > 0:
                     name += f"_{i}"
                 cond = graph.add_node(
-                    RunnableLambda(branch.runnable, name=branch.condition.__name__),
+                    RunnableLambda(
+                        branch.arunnable if branch.is_coroutine() else branch.runnable,
+                        name=branch.condition.__name__,
+                    ),
                     name,
                 )
                 graph.add_edge(start_nodes[start], cond)
@@ -302,7 +327,9 @@ class CompiledGraph(Pregel):
         if self.graph.entry_point_branch:
             cond = graph.add_node(
                 RunnableLambda(
-                    self.graph.entry_point_branch.runnable,
+                    self.graph.entry_point_branch.arunnable
+                    if self.graph.entry_point_branch.is_coroutine()
+                    else self.graph.entry_point_branch.runnable,
                     name=self.graph.entry_point_branch.condition.__name__,
                 ),
                 f"{START}_condition",

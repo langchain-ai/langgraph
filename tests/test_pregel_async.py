@@ -820,7 +820,7 @@ async def test_conditional_graph() -> None:
         return data
 
     # Define decision-making logic
-    def should_continue(data: dict) -> str:
+    async def should_continue(data: dict) -> str:
         # Logic to decide whether to continue in the loop or exit
         if isinstance(data["agent_outcome"], AgentFinish):
             return "exit"
