@@ -1,7 +1,6 @@
 import logging
-from asyncio import get_running_loop, iscoroutinefunction
+from asyncio import iscoroutinefunction
 from collections import defaultdict
-from functools import partial
 from typing import Any, Callable, Dict, NamedTuple, Optional, Sequence
 
 from langchain_core.runnables import Runnable
@@ -32,14 +31,14 @@ class Branch(NamedTuple):
     condition: Callable[..., str]
     ends: Optional[dict[str, str]]
 
-    def is_coroutine(self):
-        return iscoroutinefunction(self.condition)
+    @property
+    def runnable(self):
+        if iscoroutinefunction(self.condition):
+            return self._arunnable
+        else:
+            return self._runnable
 
-    def runnable(self, input: Any) -> Runnable:
-        if self.is_coroutine():
-            raise ValueError(
-                "All conditions must be sync when invoking graphs synchronously."
-            )
+    def _runnable(self, input: Any) -> Runnable:
         result = self.condition(input)
         if self.ends:
             destination = self.ends[result]
@@ -47,14 +46,8 @@ class Branch(NamedTuple):
             destination = result
         return Channel.write_to(f"{destination}:inbox" if destination != END else END)
 
-    async def arunnable(self, input: Any) -> Runnable:
-        if self.is_coroutine():
-            result = await self.condition(input)
-        else:
-            result = await get_running_loop().run_in_executor(
-                None,
-                partial(self.condition, input),
-            )
+    async def _arunnable(self, input: Any) -> Runnable:
+        result = await self.condition(input)
         if self.ends:
             destination = self.ends[result]
         else:
@@ -237,7 +230,7 @@ class Graph:
             if key in self.branches:
                 for branch in self.branches[key]:
                     nodes[edges_key] |= RunnableLambda(
-                        branch.arunnable if branch.is_coroutine() else branch.runnable,
+                        branch.runnable,
                         name=f"{key}_condition",
                     )
 
@@ -245,9 +238,7 @@ class Graph:
             nodes[f"{START}:edges"] = Channel.subscribe_to(
                 START, tags=["langsmith:hidden"]
             ) | RunnableLambda(
-                self.entry_point_branch.arunnable
-                if self.entry_point_branch.is_coroutine()
-                else self.entry_point_branch.runnable,
+                self.entry_point_branch.runnable,
                 name=f"{START}_condition",
             )
         elif self.entry_point is None:
@@ -312,7 +303,7 @@ class CompiledGraph(Pregel):
                     name += f"_{i}"
                 cond = graph.add_node(
                     RunnableLambda(
-                        branch.arunnable if branch.is_coroutine() else branch.runnable,
+                        branch.runnable,
                         name=branch.condition.__name__,
                     ),
                     name,
@@ -327,9 +318,7 @@ class CompiledGraph(Pregel):
         if self.graph.entry_point_branch:
             cond = graph.add_node(
                 RunnableLambda(
-                    self.graph.entry_point_branch.arunnable
-                    if self.graph.entry_point_branch.is_coroutine()
-                    else self.graph.entry_point_branch.runnable,
+                    self.graph.entry_point_branch.runnable,
                     name=self.graph.entry_point_branch.condition.__name__,
                 ),
                 f"{START}_condition",

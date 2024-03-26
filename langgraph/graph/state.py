@@ -160,7 +160,7 @@ class StateGraph(Graph):
             if key in self.branches:
                 for branch in self.branches[key]:
                     nodes[edges_key] |= RunnableLambda(
-                        branch.arunnable if branch.is_coroutine() else branch.runnable,
+                        branch.runnable,
                         name=f"{key}_condition",
                     )
 
