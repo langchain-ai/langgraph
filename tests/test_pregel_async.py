@@ -2483,7 +2483,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         FunctionMessage(
             content="result for query",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000014",
+            id="00000000-0000-4000-8000-000000000015",
         ),
         AIMessage(
             content="",
@@ -2495,7 +2495,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         FunctionMessage(
             content="result for another",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000026",
+            id="00000000-0000-4000-8000-000000000028",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -2516,7 +2516,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             "action": FunctionMessage(
                 content="result for query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000047",
+                id="00000000-0000-4000-8000-000000000051",
             )
         },
         {
@@ -2532,7 +2532,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             "action": FunctionMessage(
                 content="result for another",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000059",
+                id="00000000-0000-4000-8000-000000000064",
             )
         },
         {"agent": AIMessage(content="answer", id="ai3")},
@@ -2540,7 +2540,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             "__end__": [
                 HumanMessage(
                     content="what is weather in sf",
-                    id="00000000-0000-4000-8000-000000000035",
+                    id="00000000-0000-4000-8000-000000000038",
                 ),
                 AIMessage(
                     content="",
@@ -2552,7 +2552,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
                 FunctionMessage(
                     content="result for query",
                     name="search_api",
-                    id="00000000-0000-4000-8000-000000000047",
+                    id="00000000-0000-4000-8000-000000000051",
                 ),
                 AIMessage(
                     content="",
@@ -2567,7 +2567,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
                 FunctionMessage(
                     content="result for another",
                     name="search_api",
-                    id="00000000-0000-4000-8000-000000000059",
+                    id="00000000-0000-4000-8000-000000000064",
                 ),
                 AIMessage(content="answer", id="ai3"),
             ]
@@ -2600,7 +2600,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000068",
+                id="00000000-0000-4000-8000-000000000074",
             ),
             AIMessage(
                 content="",
@@ -2624,7 +2624,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000068",
+                id="00000000-0000-4000-8000-000000000074",
             ),
             AIMessage(
                 content="",
@@ -2646,7 +2646,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             "action": FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000081",
+                id="00000000-0000-4000-8000-000000000088",
             )
         },
         {
@@ -2664,7 +2664,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000068",
+                id="00000000-0000-4000-8000-000000000074",
             ),
             AIMessage(
                 content="",
@@ -2679,7 +2679,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000081",
+                id="00000000-0000-4000-8000-000000000088",
             ),
             AIMessage(
                 content="",
@@ -2703,7 +2703,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000068",
+                id="00000000-0000-4000-8000-000000000074",
             ),
             AIMessage(
                 content="",
@@ -2718,7 +2718,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000081",
+                id="00000000-0000-4000-8000-000000000088",
             ),
             AIMessage(content="answer", id="ai2"),
         ],
@@ -2731,7 +2731,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             "__end__": [
                 HumanMessage(
                     content="what is weather in sf",
-                    id="00000000-0000-4000-8000-000000000068",
+                    id="00000000-0000-4000-8000-000000000074",
                 ),
                 AIMessage(
                     content="",
@@ -2746,7 +2746,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
                 FunctionMessage(
                     content="result for a different query",
                     name="search_api",
-                    id="00000000-0000-4000-8000-000000000081",
+                    id="00000000-0000-4000-8000-000000000088",
                 ),
                 AIMessage(content="answer", id="ai2"),
             ]
