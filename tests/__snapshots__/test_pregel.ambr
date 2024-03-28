@@ -50,7 +50,7 @@
         }
       },
       {
-        "id": "left_<lambda>",
+        "id": "left__route",
         "type": "runnable",
         "data": {
           "id": [
@@ -59,7 +59,7 @@
             "base",
             "RunnableLambda"
           ],
-          "name": "<lambda>"
+          "name": "_route"
         }
       },
       {
@@ -83,20 +83,20 @@
       },
       {
         "source": "left",
-        "target": "left_<lambda>"
+        "target": "left__route"
       },
       {
-        "source": "left_<lambda>",
+        "source": "left__route",
         "target": "left",
         "data": "left"
       },
       {
-        "source": "left_<lambda>",
+        "source": "left__route",
         "target": "right",
         "data": "right"
       },
       {
-        "source": "left_<lambda>",
+        "source": "left__route",
         "target": "__end__",
         "data": "__end__"
       },
@@ -120,39 +120,39 @@
 # ---
 # name: test_conditional_entrypoint_graph.3
   '''
-                +-----------+          
-                | __start__ |          
-                +-----------+          
-                      *                
-                      *                
-                      *                
-          +---------------------+      
-          | __start___condition |      
-          +---------------------+      
-               ***         ***         
-              *               *        
-            **                 ***     
-      +------+                    *    
-      | left |                    *    
-      +------+                    *    
-          *                       *    
-          *                       *    
-          *                       *    
-  +---------------+               *    
-  | left_<lambda> |               *    
-  +---------------+*              *    
-          *         *****         *    
-          *              ***      *    
-          *                 ***   *    
-          **                 +-------+ 
-            *                | right | 
-             ***             +-------+ 
-                *          ***         
-                 ***      *            
-                    *   **             
-                +---------+            
-                | __end__ |            
-                +---------+            
+              +-----------+           
+              | __start__ |           
+              +-----------+           
+                    *                 
+                    *                 
+                    *                 
+         +---------------------+      
+         | __start___condition |      
+         +---------------------+      
+              ***        ***          
+             *              *         
+           **                ***      
+      +------+                  *     
+      | left |                  *     
+      +------+                  *     
+          *                     *     
+          *                     *     
+          *                     *     
+  +-------------+               *     
+  | left__route |               *     
+  +-------------+**             *     
+          *        ****         *     
+          *            ****     *     
+          *                **   *     
+          *                +-------+  
+           **              | right |  
+             **            +-------+  
+               **        ***          
+                 **     *             
+                   *  **              
+               +---------+            
+               | __end__ |            
+               +---------+            
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
@@ -240,7 +240,7 @@
         }
       },
       {
-        "id": "left_<lambda>",
+        "id": "left__route",
         "type": "runnable",
         "data": {
           "id": [
@@ -249,7 +249,7 @@
             "base",
             "RunnableLambda"
           ],
-          "name": "<lambda>"
+          "name": "_route"
         }
       },
       {
@@ -273,20 +273,20 @@
       },
       {
         "source": "left",
-        "target": "left_<lambda>"
+        "target": "left__route"
       },
       {
-        "source": "left_<lambda>",
+        "source": "left__route",
         "target": "left",
         "data": "left"
       },
       {
-        "source": "left_<lambda>",
+        "source": "left__route",
         "target": "right",
         "data": "right"
       },
       {
-        "source": "left_<lambda>",
+        "source": "left__route",
         "target": "__end__",
         "data": "__end__"
       },
@@ -310,39 +310,39 @@
 # ---
 # name: test_conditional_entrypoint_graph_state.3
   '''
-                +-----------+          
-                | __start__ |          
-                +-----------+          
-                      *                
-                      *                
-                      *                
-          +---------------------+      
-          | __start___condition |      
-          +---------------------+      
-               ***         ***         
-              *               *        
-            **                 ***     
-      +------+                    *    
-      | left |                    *    
-      +------+                    *    
-          *                       *    
-          *                       *    
-          *                       *    
-  +---------------+               *    
-  | left_<lambda> |               *    
-  +---------------+*              *    
-          *         *****         *    
-          *              ***      *    
-          *                 ***   *    
-          **                 +-------+ 
-            *                | right | 
-             ***             +-------+ 
-                *          ***         
-                 ***      *            
-                    *   **             
-                +---------+            
-                | __end__ |            
-                +---------+            
+              +-----------+           
+              | __start__ |           
+              +-----------+           
+                    *                 
+                    *                 
+                    *                 
+         +---------------------+      
+         | __start___condition |      
+         +---------------------+      
+              ***        ***          
+             *              *         
+           **                ***      
+      +------+                  *     
+      | left |                  *     
+      +------+                  *     
+          *                     *     
+          *                     *     
+          *                     *     
+  +-------------+               *     
+  | left__route |               *     
+  +-------------+**             *     
+          *        ****         *     
+          *            ****     *     
+          *                **   *     
+          *                +-------+  
+           **              | right |  
+             **            +-------+  
+               **        ***          
+                 **     *             
+                   *  **              
+               +---------+            
+               | __end__ |            
+               +---------+            
   '''
 # ---
 # name: test_conditional_graph

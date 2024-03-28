@@ -159,9 +159,7 @@ class StateGraph(Graph):
                 )
             if key in self.branches:
                 for branch in self.branches[key]:
-                    nodes[edges_key] |= RunnableLambda(
-                        branch.runnable, name=f"{key}_condition"
-                    )
+                    nodes[edges_key] |= branch.runnable
 
         nodes[START] = Channel.subscribe_to(
             f"{START}:inbox", tags=["langsmith:hidden"]
@@ -174,9 +172,7 @@ class StateGraph(Graph):
         if self.entry_point:
             nodes[f"{START}:edges"] |= Channel.write_to(f"{self.entry_point}:inbox")
         elif self.entry_point_branch:
-            nodes[f"{START}:edges"] |= RunnableLambda(
-                self.entry_point_branch.runnable, name=f"{START}_condition"
-            )
+            nodes[f"{START}:edges"] |= self.entry_point_branch.runnable
         else:
             raise ValueError("No entry point set")
 
