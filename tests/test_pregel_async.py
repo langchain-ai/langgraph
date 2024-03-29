@@ -23,6 +23,7 @@ from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+from langgraph.checkpoint.aiopostgresql import AsyncPostgresqlSaver
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -518,6 +519,103 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
     )
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as memory:
+        app = Pregel(
+            nodes={"one": one},
+            channels={"total": BinaryOperatorAggregate(int, operator.add)},
+            checkpointer=memory,
+            debug=True,
+        )
+
+        thread_1 = {"configurable": {"thread_id": "1"}}
+        # total starts out as 0, so output is 0+2=2
+        assert await app.ainvoke(2, thread_1) == 2
+        state = await app.aget_state(thread_1)
+        assert state is not None
+        assert state.values.get("total") == 2
+        assert (
+            state.config["configurable"]["thread_ts"]
+            == (await memory.aget(thread_1))["ts"]
+        )
+        # total is now 2, so output is 2+3=5
+        assert await app.ainvoke(3, thread_1) == 5
+        state = await app.aget_state(thread_1)
+        assert state is not None
+        assert state.values.get("total") == 7
+        assert (
+            state.config["configurable"]["thread_ts"]
+            == (await memory.aget(thread_1))["ts"]
+        )
+        # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
+        with pytest.raises(ValueError):
+            await app.ainvoke(4, thread_1)
+        # checkpoint is not updated
+        state = await app.aget_state(thread_1)
+        assert state is not None
+        assert state.values.get("total") == 7
+
+        thread_2 = {"configurable": {"thread_id": "2"}}
+        # on a new thread, total starts out as 0, so output is 0+5=5
+        assert await app.ainvoke(5, thread_2) == 5
+        state = await app.aget_state({"configurable": {"thread_id": "1"}})
+        assert state is not None
+        assert state.values.get("total") == 7
+        state = await app.aget_state(thread_2)
+        assert state is not None
+        assert state.values.get("total") == 5
+
+        # list all checkpoints for thread 1
+        thread_1_history = [c async for c in app.aget_state_history(thread_1)]
+        # there are 2: one for each successful ainvoke()
+        assert len(thread_1_history) == 2
+        # sorted descending
+        assert (
+            thread_1_history[0].config["configurable"]["thread_ts"]
+            > thread_1_history[1].config["configurable"]["thread_ts"]
+        )
+        # the second checkpoint
+        assert thread_1_history[0].values["total"] == 7
+        # the first checkpoint
+        assert thread_1_history[1].values["total"] == 2
+        # can get each checkpoint using aget with config
+        assert (await memory.aget(thread_1_history[0].config))[
+            "ts"
+        ] == thread_1_history[0].config["configurable"]["thread_ts"]
+        assert (await memory.aget(thread_1_history[1].config))[
+            "ts"
+        ] == thread_1_history[1].config["configurable"]["thread_ts"]
+
+        thread_1_next_config = await app.aupdate_state(
+            thread_1_history[1].config, {"total": 10}
+        )
+        # update creates a new checkpoint
+        assert (
+            thread_1_next_config["configurable"]["thread_ts"]
+            > thread_1_history[0].config["configurable"]["thread_ts"]
+        )
+        # 1 more checkpoint in history
+        assert len([h async for h in app.aget_state_history(thread_1)]) == 3
+        # the latest checkpoint is the updated one
+        assert await app.aget_state(thread_1) == await app.aget_state(
+            thread_1_next_config
+        )
+
+
+async def test_invoke_checkpoint_aiopostgresql(mocker: MockerFixture) -> None:
+    add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
+
+    def raise_if_above_10(input: int) -> int:
+        if input > 10:
+            raise ValueError("Input is too large")
+        return input
+
+    one = (
+        Channel.subscribe_to(["input"]).join(["total"])
+        | add_one
+        | Channel.write_to("output", "total")
+        | raise_if_above_10
+    )
+
+    async with await AsyncPostgresqlSaver.from_conn_string("postgresql://localhost:5432") as memory:
         app = Pregel(
             nodes={"one": one},
             channels={"total": BinaryOperatorAggregate(int, operator.add)},

@@ -27,6 +27,7 @@ pytest-watcher = "^0.4.1"
 langchain = "^0.1.0"
 aiosqlite = "^0.19.0"
 grandalf = "^0.8"
+psycopg = "^3.1.18"
 
 [tool.poetry.group.lint.dependencies]
 ruff = "^0.1.4"
