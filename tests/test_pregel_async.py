@@ -22,8 +22,8 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
-from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
 from langgraph.checkpoint.aiopostgresql import AsyncPostgresqlSaver
+from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -615,7 +615,9 @@ async def test_invoke_checkpoint_aiopostgresql(mocker: MockerFixture) -> None:
         | raise_if_above_10
     )
 
-    async with await AsyncPostgresqlSaver.from_conn_string("postgresql://localhost:5432") as memory:
+    async with await AsyncPostgresqlSaver.from_conn_string(
+        "postgresql://localhost:5432"
+    ) as memory:
         app = Pregel(
             nodes={"one": one},
             channels={"total": BinaryOperatorAggregate(int, operator.add)},

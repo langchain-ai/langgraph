@@ -21,7 +21,9 @@ class AsyncPostgresqlSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
     @classmethod
     async def from_conn_string(cls, conn_string: str) -> "AsyncPostgresqlSaver":
-        return AsyncPostgresqlSaver(conn=await psycopg.AsyncConnection.connect(conn_string))
+        return AsyncPostgresqlSaver(
+            conn=await psycopg.AsyncConnection.connect(conn_string)
+        )
 
     async def __aenter__(self) -> Self:
         return self
@@ -136,7 +138,7 @@ class AsyncPostgresqlSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 )
 
     async def aput(
-            self, config: RunnableConfig, checkpoint: Checkpoint
+        self, config: RunnableConfig, checkpoint: Checkpoint
     ) -> RunnableConfig:
         await self.setup()
         async with self.conn.cursor() as acur:

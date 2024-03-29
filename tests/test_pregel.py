@@ -16,9 +16,8 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
-from langgraph.checkpoint.sqlite import SqliteSaver
-
 from langgraph.checkpoint.postgresql import PostgresqlSaver
+from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, Graph
 from langgraph.graph.message import MessageGraph
 from langgraph.graph.state import StateGraph
@@ -639,8 +638,8 @@ def test_invoke_checkpoint_postgresql(mocker: MockerFixture) -> None:
         assert len(thread_1_history) == 2
         # sorted descending
         assert (
-                thread_1_history[0].config["configurable"]["thread_ts"]
-                > thread_1_history[1].config["configurable"]["thread_ts"]
+            thread_1_history[0].config["configurable"]["thread_ts"]
+            > thread_1_history[1].config["configurable"]["thread_ts"]
         )
         # the second checkpoint
         assert thread_1_history[0].values["total"] == 7
@@ -648,12 +647,12 @@ def test_invoke_checkpoint_postgresql(mocker: MockerFixture) -> None:
         assert thread_1_history[1].values["total"] == 2
         # can get each checkpoint using aget with config
         assert (
-                memory.get(thread_1_history[0].config)["ts"]
-                == thread_1_history[0].config["configurable"]["thread_ts"]
+            memory.get(thread_1_history[0].config)["ts"]
+            == thread_1_history[0].config["configurable"]["thread_ts"]
         )
         assert (
-                memory.get(thread_1_history[1].config)["ts"]
-                == thread_1_history[1].config["configurable"]["thread_ts"]
+            memory.get(thread_1_history[1].config)["ts"]
+            == thread_1_history[1].config["configurable"]["thread_ts"]
         )
 
         thread_1_next_config = app.update_state(
@@ -661,13 +660,14 @@ def test_invoke_checkpoint_postgresql(mocker: MockerFixture) -> None:
         )
         # update creates a new checkpoint
         assert (
-                thread_1_next_config["configurable"]["thread_ts"]
-                > thread_1_history[0].config["configurable"]["thread_ts"]
+            thread_1_next_config["configurable"]["thread_ts"]
+            > thread_1_history[0].config["configurable"]["thread_ts"]
         )
         # 1 more checkpoint in history
         assert len(list(app.get_state_history(thread_1))) == 3
         # the latest checkpoint is the updated one
         assert app.get_state(thread_1) == app.get_state(thread_1_next_config)
+
 
 def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)

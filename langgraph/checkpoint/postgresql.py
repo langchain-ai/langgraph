@@ -27,10 +27,10 @@ class PostgresqlSaver(BaseCheckpointSaver, AbstractContextManager):
         return self
 
     def __exit__(
-            self,
-            __exc_type: Optional[type[BaseException]],
-            __exc_value: Optional[BaseException],
-            __traceback: Optional[TracebackType],
+        self,
+        __exc_type: Optional[type[BaseException]],
+        __exc_value: Optional[BaseException],
+        __traceback: Optional[TracebackType],
     ) -> Optional[bool]:
         return self.conn.close()
 
@@ -76,7 +76,7 @@ class PostgresqlSaver(BaseCheckpointSaver, AbstractContextManager):
                     """,
                     (
                         config["configurable"]["thread_id"],
-                        config["configurable"]["thread_ts"]
+                        config["configurable"]["thread_ts"],
                     ),
                 )
                 if value := cur.fetchone():
@@ -174,11 +174,11 @@ class PostgresqlSaver(BaseCheckpointSaver, AbstractContextManager):
         raise NotImplementedError("Use AsyncPostgresqlSaver instead")
 
     async def alist(
-            self, config: RunnableConfig
+        self, config: RunnableConfig
     ) -> AsyncIterator[tuple[RunnableConfig, Checkpoint]]:
         raise NotImplementedError("Use AsyncPostgresqlSaver instead")
 
     async def aput(
-            self, config: RunnableConfig, checkpoint: Checkpoint
+        self, config: RunnableConfig, checkpoint: Checkpoint
     ) -> RunnableConfig:
         raise NotImplementedError("Use AsyncPostgresqlSaver instead")
