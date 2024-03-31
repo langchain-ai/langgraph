@@ -42,8 +42,8 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
             "input": LastValue(int),
             "output": LastValue(int),
         },
-        input="input",
-        output="output",
+        input_channels="input",
+        output_channels="output",
     )
     graph = Graph()
     graph.add_node("add_one", add_one)
@@ -86,7 +86,9 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
         | Channel.write_to("output", fixed=5, output_plus_one=lambda x: x + 1)
     )
 
-    app = Pregel(nodes={"one": chain}, output=["output", "fixed", "output_plus_one"])
+    app = Pregel(
+        nodes={"one": chain}, output_channels=["output", "fixed", "output_plus_one"]
+    )
 
     assert app.input_schema.schema() == {"title": "LangGraphInput"}
     assert app.output_schema.schema() == {
@@ -126,7 +128,7 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         nodes={
             "one": chain,
         },
-        output=["output"],
+        output_channels=["output"],
     )
 
     assert app.input_schema.schema() == {"title": "LangGraphInput"}
@@ -146,8 +148,8 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
         nodes={
             "one": chain,
         },
-        input=["input"],
-        output=["output"],
+        input_channels=["input"],
+        output_channels=["output"],
     )
 
     assert app.input_schema.schema() == {
@@ -198,13 +200,9 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             assert values == {
                 "add_one_more": 4,
             }
-        elif step == 3:
-            assert values == {
-                "__end__": 4,
-            }
         else:
             assert 0, f"{step}:{values}"
-    assert step == 3
+    assert step == 2
 
 
 def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
@@ -271,13 +269,27 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     app = Pregel(
         nodes={"one": one, "two": two},
         channels={"inbox": Topic(int)},
-        input=["input", "inbox"],
+        input_channels=["input", "inbox"],
     )
 
+    # [12 + 1, 2 + 1 + 1]
+    assert [
+        *app.stream(
+            {"input": 2, "inbox": 12}, output_keys="output", stream_mode="updates"
+        )
+    ] == [
+        {"two": 13},
+        {"two": 4},
+    ]
     assert [*app.stream({"input": 2, "inbox": 12}, output_keys="output")] == [
         13,
         4,
-    ]  # [12 + 1, 2 + 1 + 1]
+    ]
+
+    assert [*app.stream({"input": 2, "inbox": 12}, stream_mode="updates")] == [
+        {"one": {"inbox": 3}, "two": {"output": 13}},
+        {"two": {"output": 4}},
+    ]
     assert [*app.stream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
         {"output": 4},
@@ -616,6 +628,10 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
 
     app = Pregel(nodes={"one": one, "two": two})
 
+    assert [c for c in app.stream(2, stream_mode="updates")] == [
+        {"one": {"between": 3, "output": 3}},
+        {"two": {"output": 4}},
+    ]
     assert [c for c in app.stream(2)] == [{"between": 3, "output": 3}, {"output": 4}]
 
 
@@ -667,7 +683,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             "inbox": Topic(int),
             "ctx": Context(an_int, typ=int),
         },
-        output=["inbox", "output"],
+        output_channels=["inbox", "output"],
     )
 
     assert setup.call_count == 0
@@ -881,32 +897,6 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             }
         },
-        {
-            "__end__": {
-                "input": "what is weather in sf",
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:query",
-                        ),
-                        "result for query",
-                    ),
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="another",
-                            log="tool:search_api:another",
-                        ),
-                        "result for another",
-                    ),
-                ],
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "answer"}, log="finish:answer"
-                ),
-            }
-        },
     ]
 
     # test state get/update methods with interrupt_after
@@ -1040,27 +1030,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         },
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
-        {
-            "__end__": {
-                "input": "what is weather in sf",
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "a really nice answer"},
-                    log="finish:a really nice answer",
-                ),
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:a different query",
-                        ),
-                        "result for query",
-                    )
-                ],
-            }
-        }
-    ]
+    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
     # test state get/update methods with interrupt_before
 
@@ -1188,27 +1158,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         },
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
-        {
-            "__end__": {
-                "input": "what is weather in sf",
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "a really nice answer"},
-                    log="finish:a really nice answer",
-                ),
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:a different query",
-                        ),
-                        "result for query",
-                    )
-                ],
-            }
-        }
-    ]
+    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
     # test re-invoke to continue with interrupt_before
 
@@ -1309,32 +1259,6 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         },
         {
             "agent": {
-                "input": "what is weather in sf",
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:query",
-                        ),
-                        "result for query",
-                    ),
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="another",
-                            log="tool:search_api:another",
-                        ),
-                        "result for another",
-                    ),
-                ],
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "answer"}, log="finish:answer"
-                ),
-            }
-        },
-        {
-            "__end__": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
                     (
@@ -1473,6 +1397,7 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
     }
 
     assert [*app.stream({"input": "what is weather in sf"})] == [
+        {"__start__": {"input": "what is weather in sf"}},
         {
             "agent": {
                 "agent_outcome": AgentAction(
@@ -1519,32 +1444,6 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
         },
         {
             "agent": {
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "answer"}, log="finish:answer"
-                ),
-            }
-        },
-        {
-            "__end__": {
-                "input": "what is weather in sf",
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:query",
-                        ),
-                        "result for query",
-                    ),
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="another",
-                            log="tool:search_api:another",
-                        ),
-                        "result for another",
-                    ),
-                ],
                 "agent_outcome": AgentFinish(
                     return_values={"answer": "answer"}, log="finish:answer"
                 ),
@@ -1562,13 +1461,14 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
     ] == [
+        {"__start__": {"input": "what is weather in sf"}},
         {
             "agent": {
                 "agent_outcome": AgentAction(
                     tool="search_api", tool_input="query", log="tool:search_api:query"
                 ),
             }
-        }
+        },
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -1644,27 +1544,7 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
         },
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
-        {
-            "__end__": {
-                "input": "what is weather in sf",
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "a really nice answer"},
-                    log="finish:a really nice answer",
-                ),
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:a different query",
-                        ),
-                        "result for query",
-                    )
-                ],
-            }
-        }
-    ]
+    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
     # test state get/update methods with interrupt_before
 
@@ -1679,13 +1559,14 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
     ] == [
+        {"__start__": {"input": "what is weather in sf"}},
         {
             "agent": {
                 "agent_outcome": AgentAction(
                     tool="search_api", tool_input="query", log="tool:search_api:query"
                 ),
             }
-        }
+        },
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -1761,27 +1642,7 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
         },
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
-        {
-            "__end__": {
-                "input": "what is weather in sf",
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "a really nice answer"},
-                    log="finish:a really nice answer",
-                ),
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:a different query",
-                        ),
-                        "result for query",
-                    )
-                ],
-            }
-        }
-    ]
+    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
 
 def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
@@ -1822,7 +1683,6 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
 
     assert [*app.stream("what is weather in sf")] == [
         {"right": "what is weather in sf->right"},
-        {"__end__": "what is weather in sf->right"},
     ]
 
 
@@ -1870,13 +1730,8 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
     }
 
     assert [*app.stream({"input": "what is weather in sf"})] == [
+        {"__start__": {"input": "what is weather in sf"}},
         {"right": {"output": "what is weather in sf->right"}},
-        {
-            "__end__": {
-                "input": "what is weather in sf",
-                "output": "what is weather in sf->right",
-            }
-        },
     ]
 
 
@@ -2001,6 +1856,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     assert [
         *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
     ] == [
+        {"__start__": {"messages": [HumanMessage(content="what is weather in sf")]}},
         {
             "agent": {
                 "messages": [
@@ -2071,61 +1927,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             }
         },
         {"agent": {"messages": [AIMessage(content="answer")]}},
-        {
-            "__end__": {
-                "messages": [
-                    HumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call123",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"query"',
-                                    },
-                                }
-                            ]
-                        },
-                    ),
-                    ToolMessage(
-                        content="result for query", tool_call_id="tool_call123"
-                    ),
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call234",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"another"',
-                                    },
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"a third one"',
-                                    },
-                                },
-                            ]
-                        },
-                    ),
-                    ToolMessage(
-                        content="result for another", tool_call_id="tool_call234"
-                    ),
-                    ToolMessage(
-                        content="result for a third one", tool_call_id="tool_call567"
-                    ),
-                    AIMessage(content="answer"),
-                ]
-            }
-        },
     ]
 
 
@@ -2203,6 +2004,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     assert [
         *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
     ] == [
+        {"__start__": {"messages": [HumanMessage(content="what is weather in sf")]}},
         {
             "agent": {
                 "messages": [
@@ -2248,34 +2050,6 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
             }
         },
         {"agent": {"messages": [AIMessage(content="answer")]}},
-        {
-            "__end__": {
-                "messages": [
-                    HumanMessage(content="what is weather in sf"),
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            }
-                        },
-                    ),
-                    FunctionMessage(content="result for query", name="search_api"),
-                    AIMessage(
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            }
-                        },
-                    ),
-                    FunctionMessage(content="result for another", name="search_api"),
-                    AIMessage(content="answer"),
-                ]
-            }
-        },
     ]
 
 
@@ -2457,6 +2231,14 @@ def test_message_graph(
 
     assert [*app.stream([HumanMessage(content="what is weather in sf")])] == [
         {
+            "__start__": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id="00000000-0000-4000-8000-000000000038",
+                )
+            ]
+        },
+        {
             "agent": AIMessage(
                 content="",
                 additional_kwargs={
@@ -2489,42 +2271,6 @@ def test_message_graph(
             )
         },
         {"agent": AIMessage(content="answer", id="ai3")},
-        {
-            "__end__": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id="00000000-0000-4000-8000-000000000038",
-                ),
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {"name": "search_api", "arguments": '"query"'}
-                    },
-                    id="ai1",
-                ),
-                FunctionMessage(
-                    content="result for query",
-                    name="search_api",
-                    id="00000000-0000-4000-8000-000000000051",
-                ),
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"another"',
-                        }
-                    },
-                    id="ai2",
-                ),
-                FunctionMessage(
-                    content="result for another",
-                    name="search_api",
-                    id="00000000-0000-4000-8000-000000000064",
-                ),
-                AIMessage(content="answer", id="ai3"),
-            ]
-        },
     ]
 
     app_w_interrupt = workflow.compile(
@@ -2539,6 +2285,12 @@ def test_message_graph(
         )
     ] == [
         {
+            "__start__": HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000074",
+            )
+        },
+        {
             "agent": AIMessage(
                 content="",
                 additional_kwargs={
@@ -2546,7 +2298,7 @@ def test_message_graph(
                 },
                 id="ai1",
             )
-        }
+        },
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -2679,32 +2431,7 @@ def test_message_graph(
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
-        {
-            "__end__": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id="00000000-0000-4000-8000-000000000074",
-                ),
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"a different query"',
-                        }
-                    },
-                    id="ai1",
-                ),
-                FunctionMessage(
-                    content="result for a different query",
-                    name="search_api",
-                    id="00000000-0000-4000-8000-000000000088",
-                ),
-                AIMessage(content="answer", id="ai2"),
-            ]
-        }
-    ]
+    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
     app_w_interrupt = workflow.compile(
         checkpointer=MemorySaverAssertImmutable(), interrupt_before=["action"]
@@ -2719,6 +2446,12 @@ def test_message_graph(
         )
     ] == [
         {
+            "__start__": HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000099",
+            )
+        },
+        {
             "agent": AIMessage(
                 content="",
                 additional_kwargs={
@@ -2726,7 +2459,7 @@ def test_message_graph(
                 },
                 id="ai1",
             )
-        }
+        },
     ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -2859,32 +2592,7 @@ def test_message_graph(
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
-        {
-            "__end__": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id="00000000-0000-4000-8000-000000000099",
-                ),
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"a different query"',
-                        }
-                    },
-                    id="ai1",
-                ),
-                FunctionMessage(
-                    content="result for a different query",
-                    name="search_api",
-                    id="00000000-0000-4000-8000-000000000116",
-                ),
-                AIMessage(content="answer", id="ai2"),
-            ]
-        }
-    ]
+    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
 
 def test_in_one_fan_out_out_one_graph_state() -> None:
@@ -2931,19 +2639,20 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
     }
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
+        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "retriever_two": {"docs": ["doc3", "doc4"]},
             "retriever_one": {"docs": ["doc1", "doc2"]},
         },
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        {
-            "__end__": {
-                "query": "query: what is weather in sf",
-                "answer": "doc1,doc2,doc3,doc4",
-                "docs": ["doc1", "doc2", "doc3", "doc4"],
-            }
-        },
+    ]
+
+    assert [*app.stream({"query": "what is weather in sf"}, stream_mode="values")] == [
+        {"query": "what is weather in sf"},
+        {"query": "query: what is weather in sf"},
+        {"docs": ["doc1", "doc2", "doc3", "doc4"]},
+        {"answer": "doc1,doc2,doc3,doc4"},
     ]
 
 
@@ -3037,6 +2746,7 @@ def test_in_one_fan_out_state_graph_waiting_edge() -> None:
     }
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
+        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
@@ -3044,13 +2754,6 @@ def test_in_one_fan_out_state_graph_waiting_edge() -> None:
         },
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        {
-            "__end__": {
-                "query": "analyzed: query: what is weather in sf",
-                "answer": "doc1,doc2,doc3,doc4",
-                "docs": ["doc1", "doc2", "doc3", "doc4"],
-            }
-        },
     ]
 
     app_w_interrupt = workflow.compile(
@@ -3061,6 +2764,7 @@ def test_in_one_fan_out_state_graph_waiting_edge() -> None:
     assert [
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
+        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
@@ -3071,13 +2775,6 @@ def test_in_one_fan_out_state_graph_waiting_edge() -> None:
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        {
-            "__end__": {
-                "query": "analyzed: query: what is weather in sf",
-                "answer": "doc1,doc2,doc3,doc4",
-                "docs": ["doc1", "doc2", "doc3", "doc4"],
-            }
-        },
     ]
 
 
@@ -3139,28 +2836,15 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
     }
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
+        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
             "retriever_two": {"docs": ["doc3", "doc4"]},
             "qa": {"answer": ""},
         },
-        {
-            "__end__": {
-                "answer": "",
-                "docs": ["doc3", "doc4"],
-                "query": "analyzed: query: what is weather in sf",
-            }
-        },
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        {
-            "__end__": {
-                "query": "analyzed: query: what is weather in sf",
-                "answer": "doc1,doc2,doc3,doc4",
-                "docs": ["doc1", "doc2", "doc3", "doc4"],
-            }
-        },
     ]
 
     app_w_interrupt = workflow.compile(
@@ -3171,31 +2855,18 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
     assert [
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
+        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
             "retriever_two": {"docs": ["doc3", "doc4"]},
             "qa": {"answer": ""},
         },
-        {
-            "__end__": {
-                "answer": "",
-                "docs": ["doc3", "doc4"],
-                "query": "analyzed: query: what is weather in sf",
-            }
-        },
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
     ]
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-        {
-            "__end__": {
-                "query": "analyzed: query: what is weather in sf",
-                "answer": "doc1,doc2,doc3,doc4",
-                "docs": ["doc1", "doc2", "doc3", "doc4"],
-            }
-        },
     ]
 
 
@@ -3264,13 +2935,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
     }
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
+        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
             "retriever_two": {"docs": ["doc3", "doc4"]},
         },
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"decider": None},
         {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
         {
             "analyzer_one": {
@@ -3281,22 +2952,5 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         {
             "retriever_one": {"docs": ["doc1", "doc2"]},
         },
-        {"decider": None},
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
-        {
-            "__end__": {
-                "query": "analyzed: query: analyzed: query: what is weather in sf",
-                "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
-                "docs": [
-                    "doc1",
-                    "doc1",
-                    "doc2",
-                    "doc2",
-                    "doc3",
-                    "doc3",
-                    "doc4",
-                    "doc4",
-                ],
-            }
-        },
     ]

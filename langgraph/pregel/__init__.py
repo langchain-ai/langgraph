@@ -61,7 +61,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_SEND, INTERRUPT
 from langgraph.pregel.debug import print_checkpoint, print_step_start
-from langgraph.pregel.io import map_input, map_output
+from langgraph.pregel.io import map_input, map_output_updates, map_output_values
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import ChannelInvoke
 from langgraph.pregel.reserved import AllReservedChannels, ReservedChannels
@@ -156,6 +156,9 @@ class Channel:
         )
 
 
+StreamMode = Literal["values", "updates"]
+
+
 class StateSnapshot(NamedTuple):
     values: dict[str, Any] | Any
     """Current values of channels"""
@@ -174,20 +177,19 @@ class Pregel(
 
     channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
 
-    # TODO Rename to `output_channels`
-    output: Union[str, Sequence[str]] = "output"
+    stream_mode: StreamMode = "values"
 
-    # TODO Replace with `stream_channels`
-    hidden: Sequence[str] = Field(default_factory=list)
+    output_channels: Union[str, Sequence[str]] = "output"
+    """Channels to output, defaults to channel named 'output'."""
 
-    snapshot_channels: Union[str, Sequence[str]] = Field(default_factory=list)
+    stream_channels: Optional[Union[str, Sequence[str]]] = None
+    """Channels to stream, defaults to all channels not in reserved channels"""
 
     interrupt_after_nodes: Sequence[str] = Field(default_factory=list)
 
     interrupt_before_nodes: Sequence[str] = Field(default_factory=list)
 
-    # TODO Rename to `input_channels`
-    input: Union[str, Sequence[str]] = "input"
+    input_channels: Union[str, Sequence[str]] = "input"
 
     step_timeout: Optional[float] = None
 
@@ -205,9 +207,9 @@ class Pregel(
         validate_graph(
             values["nodes"],
             values["channels"],
-            values["input"],
-            values["output"],
-            values["hidden"],
+            values["input_channels"],
+            values["output_channels"],
+            values["stream_channels"],
             values["interrupt_after_nodes"],
             values["interrupt_before_nodes"],
         )
@@ -234,45 +236,45 @@ class Pregel(
 
     @property
     def InputType(self) -> Any:
-        if isinstance(self.input, str):
-            return self.channels[self.input].UpdateType
+        if isinstance(self.input_channels, str):
+            return self.channels[self.input_channels].UpdateType
 
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> Type[BaseModel]:
-        if isinstance(self.input, str):
+        if isinstance(self.input_channels, str):
             return super().get_input_schema(config)
         else:
             return create_model(  # type: ignore[call-overload]
                 self.get_name("Input"),
                 **{
                     k: (self.channels[k].UpdateType, None)
-                    for k in self.input or self.channels.keys()
+                    for k in self.input_channels or self.channels.keys()
                 },
             )
 
     @property
     def OutputType(self) -> Any:
-        if isinstance(self.output, str):
-            return self.channels[self.output].ValueType
+        if isinstance(self.output_channels, str):
+            return self.channels[self.output_channels].ValueType
 
     def get_output_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> Type[BaseModel]:
-        if isinstance(self.output, str):
+        if isinstance(self.output_channels, str):
             return super().get_output_schema(config)
         else:
             return create_model(  # type: ignore[call-overload]
                 self.get_name("Output"),
-                **{k: (self.channels[k].ValueType, None) for k in self.output},
+                **{k: (self.channels[k].ValueType, None) for k in self.output_channels},
             )
 
     @property
     def snapshot_channels_list(self) -> Sequence[str]:
         return (
-            [self.snapshot_channels]
-            if isinstance(self.snapshot_channels, str)
-            else self.snapshot_channels
+            [self.stream_channels]
+            if isinstance(self.stream_channels, str)
+            else self.stream_channels
             or [k for k in self.channels if k not in AllReservedChannels]
         )
 
@@ -293,8 +295,8 @@ class Pregel(
                 if k in self.snapshot_channels_list
             }
             return StateSnapshot(
-                values[self.snapshot_channels]
-                if isinstance(self.snapshot_channels, str)
+                values[self.stream_channels]
+                if isinstance(self.stream_channels, str)
                 else values,
                 tuple(name for _, _, name in next_tasks),
                 config,
@@ -317,8 +319,8 @@ class Pregel(
                 if k in self.snapshot_channels_list
             }
             return StateSnapshot(
-                values[self.snapshot_channels]
-                if isinstance(self.snapshot_channels, str)
+                values[self.stream_channels]
+                if isinstance(self.stream_channels, str)
                 else values,
                 tuple(name for _, _, name in next_tasks),
                 config,
@@ -339,8 +341,8 @@ class Pregel(
                     if k in self.snapshot_channels_list
                 }
                 yield StateSnapshot(
-                    values[self.snapshot_channels]
-                    if isinstance(self.snapshot_channels, str)
+                    values[self.stream_channels]
+                    if isinstance(self.stream_channels, str)
                     else values,
                     tuple(name for _, _, name in next_tasks),
                     config,
@@ -364,8 +366,8 @@ class Pregel(
                     if k in self.snapshot_channels_list
                 }
                 yield StateSnapshot(
-                    values[self.snapshot_channels]
-                    if isinstance(self.snapshot_channels, str)
+                    values[self.stream_channels]
+                    if isinstance(self.stream_channels, str)
                     else values,
                     tuple(name for _, _, name in next_tasks),
                     config,
@@ -379,8 +381,8 @@ class Pregel(
             raise ValueError("No checkpointer set")
 
         values = (
-            {self.snapshot_channels: values}
-            if isinstance(self.snapshot_channels, str)
+            {self.stream_channels: values}
+            if isinstance(self.stream_channels, str)
             else values
         )
         checkpoint = self.checkpointer.get(config)
@@ -403,8 +405,8 @@ class Pregel(
             raise ValueError("No checkpointer set")
 
         values = (
-            {self.snapshot_channels: values}
-            if isinstance(self.snapshot_channels, str)
+            {self.stream_channels: values}
+            if isinstance(self.stream_channels, str)
             else values
         )
         checkpoint = await self.checkpointer.aget(config)
@@ -413,7 +415,7 @@ class Pregel(
             for k, v in values.items():
                 channels[k].update([v])
                 checkpoint["channel_versions"][k] += 1
-            for k in self.snapshot_channels or self.channels:
+            for k in self.stream_channels or self.channels:
                 version = checkpoint["channel_versions"][k]
                 checkpoint["versions_seen"][INTERRUPT][k] = version
             return await self.checkpointer.aput(
@@ -423,6 +425,7 @@ class Pregel(
     def _defaults(
         self,
         *,
+        stream_mode: Optional[StreamMode] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
@@ -430,6 +433,7 @@ class Pregel(
         debug: Optional[bool] = None,
     ) -> tuple[
         bool,
+        StreamMode,
         Union[str, Sequence[str]],
         Union[str, Sequence[str]],
         Optional[Sequence[str]],
@@ -437,17 +441,22 @@ class Pregel(
     ]:
         debug = debug if debug is not None else self.debug
         if output_keys is None:
-            output_keys = [chan for chan in self.channels if chan not in self.hidden]
+            output_keys = (
+                [chan for chan in self.channels]
+                if self.stream_channels is None
+                else self.stream_channels
+            )
         else:
             validate_keys(output_keys, self.channels)
         if input_keys is None:
-            input_keys = self.input
+            input_keys = self.input_channels
         else:
             validate_keys(input_keys, self.channels)
         interrupt_before_nodes = interrupt_before_nodes or self.interrupt_before_nodes
         interrupt_after_nodes = interrupt_after_nodes or self.interrupt_after_nodes
         return (
             debug,
+            stream_mode if stream_mode is not None else self.stream_mode,
             input_keys,
             output_keys,
             interrupt_before_nodes,
@@ -467,6 +476,7 @@ class Pregel(
             # assign defaults
             (
                 debug,
+                stream_mode,
                 input_keys,
                 output_keys,
                 interrupt_before_nodes,
@@ -584,9 +594,15 @@ class Pregel(
                     if debug:
                         print_checkpoint(step, channels)
 
-                    # yield current value and checkpoint view
-                    if step_output := map_output(output_keys, pending_writes, channels):
-                        yield step_output
+                    # yield current value or updates
+                    if stream_mode == "values":
+                        if step_output := map_output_values(
+                            output_keys, pending_writes, channels
+                        ):
+                            yield step_output
+                    else:
+                        if step_output := map_output_updates(output_keys, next_tasks):
+                            yield step_output
 
                     # with previous step's checkpoint
                     if _should_interrupt(
@@ -654,6 +670,7 @@ class Pregel(
             # assign defaults
             (
                 debug,
+                stream_mode,
                 input_keys,
                 output_keys,
                 interrupt_before_nodes,
@@ -775,9 +792,15 @@ class Pregel(
                     if debug:
                         print_checkpoint(step, channels)
 
-                    # yield current value and checkpoint view
-                    if step_output := map_output(output_keys, pending_writes, channels):
-                        yield step_output
+                    # yield current value or updates
+                    if stream_mode == "values":
+                        if step_output := map_output_values(
+                            output_keys, pending_writes, channels
+                        ):
+                            yield step_output
+                    else:
+                        if step_output := map_output_updates(output_keys, next_tasks):
+                            yield step_output
 
                     # with previous step's checkpoint
                     if _should_interrupt(
@@ -835,18 +858,21 @@ class Pregel(
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
-        latest: Union[dict[str, Any], Any] = None
+        output_keys = output_keys if output_keys is not None else self.output_channels
+        output_is_dict = not isinstance(output_keys, str)
+        latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
         for chunk in self.stream(
             input,
             config,
-            output_keys=output_keys if output_keys is not None else self.output,
+            stream_mode="values",
+            output_keys=output_keys,
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,
             interrupt_after_nodes=interrupt_after_nodes,
             debug=debug,
             **kwargs,
         ):
-            latest = chunk
+            latest = {**latest, **chunk} if output_is_dict else chunk
         return latest
 
     def stream(
@@ -854,6 +880,7 @@ class Pregel(
         input: Union[dict[str, Any], Any],
         config: Optional[RunnableConfig] = None,
         *,
+        stream_mode: Optional[StreamMode] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
@@ -864,6 +891,7 @@ class Pregel(
         return self.transform(
             iter([input]),
             config,
+            stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,
@@ -877,6 +905,7 @@ class Pregel(
         input: Iterator[Union[dict[str, Any], Any]],
         config: Optional[RunnableConfig] = None,
         *,
+        stream_mode: Optional[StreamMode] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
@@ -888,6 +917,7 @@ class Pregel(
             input,
             self._transform,
             config,
+            stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,
@@ -909,18 +939,21 @@ class Pregel(
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
-        latest: Union[dict[str, Any], Any] = None
+        output_keys = output_keys if output_keys is not None else self.output_channels
+        output_is_dict = not isinstance(output_keys, str)
+        latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
         async for chunk in self.astream(
             input,
             config,
-            output_keys=output_keys if output_keys is not None else self.output,
+            stream_mode="values",
+            output_keys=output_keys,
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,
             interrupt_after_nodes=interrupt_after_nodes,
             debug=debug,
             **kwargs,
         ):
-            latest = chunk
+            latest = {**latest, **chunk} if output_is_dict else chunk
         return latest
 
     async def astream(
@@ -928,6 +961,7 @@ class Pregel(
         input: Union[dict[str, Any], Any],
         config: Optional[RunnableConfig] = None,
         *,
+        stream_mode: Optional[StreamMode] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
@@ -941,6 +975,7 @@ class Pregel(
         async for chunk in self.atransform(
             input_stream(),
             config,
+            stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,
@@ -955,6 +990,7 @@ class Pregel(
         input: AsyncIterator[Union[dict[str, Any], Any]],
         config: Optional[RunnableConfig] = None,
         *,
+        stream_mode: Optional[StreamMode] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
@@ -966,6 +1002,7 @@ class Pregel(
             input,
             self._atransform,
             config,
+            stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,

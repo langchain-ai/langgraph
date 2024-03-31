@@ -1,4 +1,7 @@
+from collections import deque
 from typing import Any, Iterator, Mapping, Optional, Sequence, Union
+
+from langchain_core.runnables import Runnable
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.pregel.log import logger
@@ -35,7 +38,7 @@ def map_input(
                 logger.warning(f"Input channel {k} not found in {input_channels}")
 
 
-def map_output(
+def map_output_values(
     output_channels: Union[str, Sequence[str]],
     pending_writes: Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
@@ -47,4 +50,27 @@ def map_output(
     else:
         if updated := {c for c, _ in pending_writes if c in output_channels}:
             return {chan: _read_channel(channels, chan) for chan in updated}
+    return None
+
+
+def map_output_updates(
+    output_channels: Union[str, Sequence[str]],
+    next_tasks: list[tuple[Runnable, Any, str, deque[tuple[str, Any]]]],
+) -> Optional[dict[str, Union[Any, dict[str, Any]]]]:
+    """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
+    if isinstance(output_channels, str):
+        if updated := {
+            node: value
+            for _, _, node, writes in next_tasks
+            for chan, value in writes
+            if chan == output_channels
+        }:
+            return updated
+    else:
+        if updated := {
+            node: {chan: value for chan, value in writes if chan in output_channels}
+            for _, _, node, writes in next_tasks
+            if any(chan in output_channels for chan, _ in writes)
+        }:
+            return updated
     return None
