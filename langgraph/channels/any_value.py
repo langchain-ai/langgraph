@@ -23,8 +23,16 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
+    def checkpoint(self) -> Value:
+        try:
+            return self.value
+        except AttributeError:
+            raise EmptyChannelError()
+
     @contextmanager
-    def empty(self, checkpoint: Optional[Value] = None) -> Generator[Self, None, None]:
+    def from_checkpoint(
+        self, checkpoint: Optional[Value] = None
+    ) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
             empty.value = checkpoint
@@ -47,12 +55,6 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
         self.value = values[-1]
 
     def get(self) -> Value:
-        try:
-            return self.value
-        except AttributeError:
-            raise EmptyChannelError()
-
-    def checkpoint(self) -> Value:
         try:
             return self.value
         except AttributeError:

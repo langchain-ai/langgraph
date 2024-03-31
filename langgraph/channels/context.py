@@ -65,8 +65,11 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
         """The type of the update received by the channel."""
         raise InvalidUpdateError()
 
+    def checkpoint(self) -> None:
+        raise EmptyChannelError()
+
     @contextmanager
-    def empty(self, checkpoint: None = None) -> Generator[Self, None, None]:
+    def from_checkpoint(self, checkpoint: None = None) -> Generator[Self, None, None]:
         if self.ctx is None:
             raise ValueError("Cannot enter sync context manager.")
 
@@ -80,7 +83,7 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
             ctx.__exit__(None, None, None)
 
     @asynccontextmanager
-    async def aempty(
+    async def afrom_checkpoint(
         self, checkpoint: Optional[str] = None
     ) -> AsyncGenerator[Self, None]:
         if self.actx is not None:
@@ -93,7 +96,7 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
             finally:
                 await actx.__aexit__(None, None, None)
         else:
-            with self.empty() as empty:
+            with self.from_checkpoint() as empty:
                 yield empty
 
     def update(self, values: Sequence[None]) -> None:
@@ -105,6 +108,3 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
             return self.value
         except AttributeError:
             raise EmptyChannelError()
-
-    def checkpoint(self) -> None:
-        raise EmptyChannelError()
