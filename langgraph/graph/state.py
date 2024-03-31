@@ -109,7 +109,8 @@ class StateGraph(Graph):
 
         outgoing_edges = defaultdict(list)
         for start, end in self.edges:
-            outgoing_edges[start].append(f"{end}:inbox" if end != END else END)
+            if end != END:
+                outgoing_edges[start].append(f"{end}:inbox")
         for key, starts, end in waiting_edges:
             for start in starts:
                 outgoing_edges[start].append(key)
@@ -143,6 +144,12 @@ class StateGraph(Graph):
             for key in list(self.nodes) + [START]
         }
 
+        def branch_writer(src: str, dest: str) -> Optional[ChannelWrite]:
+            if dest != END:
+                return ChannelWrite(
+                    channels=[ChannelWriteEntry(f"{dest}:inbox", src, False)]
+                )
+
         for key in self.nodes:
             outgoing = outgoing_edges[key]
             edges_key = f"{key}:edges"
@@ -152,14 +159,11 @@ class StateGraph(Graph):
                 )
             if outgoing:
                 nodes[edges_key] |= ChannelWrite(
-                    channels=[
-                        ChannelWriteEntry(dest, None if dest == END else key, True)
-                        for dest in outgoing
-                    ]
+                    channels=[ChannelWriteEntry(dest, key, True) for dest in outgoing]
                 )
             if key in self.branches:
                 for branch in self.branches[key]:
-                    nodes[edges_key] |= branch.runnable
+                    nodes[edges_key] |= branch.run(partial(branch_writer, key))
 
         nodes[START] = Channel.subscribe_to(
             f"{START}:inbox", tags=["langsmith:hidden"]
@@ -172,7 +176,9 @@ class StateGraph(Graph):
         if self.entry_point:
             nodes[f"{START}:edges"] |= Channel.write_to(f"{self.entry_point}:inbox")
         elif self.entry_point_branch:
-            nodes[f"{START}:edges"] |= self.entry_point_branch.runnable
+            nodes[f"{START}:edges"] |= self.entry_point_branch.run(
+                partial(branch_writer, START)
+            )
         else:
             raise ValueError("No entry point set")
 
@@ -184,11 +190,10 @@ class StateGraph(Graph):
                 **node_inboxes,
                 **node_outboxes,
                 **waiting_edge_channels,
-                END: LastValue(self.schema),
             },
             input_channels=f"{START}:inbox",
             stream_mode="updates",
-            output_channels=END,
+            output_channels=state_keys_read,
             stream_channels=state_keys_read,
             checkpointer=checkpointer,
             interrupt_before_nodes=[f"{node}:inbox" for node in interrupt_before],
