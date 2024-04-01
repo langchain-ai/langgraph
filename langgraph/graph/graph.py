@@ -136,7 +136,7 @@ class Graph:
         if not isinstance(condition, Runnable):
             condition = RunnableLambda(condition)
         if condition.name is None:
-            condition.name = f"{start_key}_condition"
+            condition.name = "condition"
         if condition.name in self.branches[start_key]:
             raise ValueError(
                 f"Branch with name `{condition.name}` already exists for node "

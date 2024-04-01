@@ -63,7 +63,7 @@
         }
       },
       {
-        "id": "left_left_condition",
+        "id": "left_condition",
         "type": "runnable",
         "data": {
           "id": [
@@ -72,7 +72,7 @@
             "base",
             "RunnableLambda"
           ],
-          "name": "left_condition"
+          "name": "condition"
         }
       }
     ],
@@ -97,20 +97,20 @@
       },
       {
         "source": "left",
-        "target": "left_left_condition"
+        "target": "left_condition"
       },
       {
-        "source": "left_left_condition",
+        "source": "left_condition",
         "target": "left",
         "data": "left"
       },
       {
-        "source": "left_left_condition",
+        "source": "left_condition",
         "target": "right",
         "data": "right"
       },
       {
-        "source": "left_left_condition",
+        "source": "left_condition",
         "target": "__end__",
         "data": "__end__"
       }
@@ -120,39 +120,39 @@
 # ---
 # name: test_conditional_entrypoint_graph.3
   '''
-                    +-----------+             
-                    | __start__ |             
-                    +-----------+             
-                          *                   
-                          *                   
-                          *                   
-              +------------------------+      
-              | __start___should_start |      
-              +------------------------+      
-                   ***           **           
-                  *                **         
-                **                   **       
-          +------+                     **     
-          | left |                      *     
-          +------+                      *     
-              *                         *     
-              *                         *     
-              *                         *     
-  +---------------------+               *     
-  | left_left_condition |               *     
-  +---------------------+               *     
-              *          *****          *     
-              *               ****      *     
-              *                   ***   *     
-              **                   +-------+  
-                *                  | right |  
-                 ***               +-------+  
-                    *           ***           
-                     ***       *              
-                        *    **               
-                     +---------+              
-                     | __end__ |              
-                     +---------+              
+                +-----------+            
+                | __start__ |            
+                +-----------+            
+                       *                 
+                       *                 
+                       *                 
+          +------------------------+     
+          | __start___should_start |     
+          +------------------------+     
+                ***         **           
+               *              **         
+             **                 **       
+       +------+                   *      
+       | left |                   *      
+       +------+                   *      
+           *                      *      
+           *                      *      
+           *                      *      
+  +----------------+              *      
+  | left_condition |              *      
+  +----------------+*             *      
+           *         *****        *      
+           *              ***     *      
+           *                 ***  *      
+           **                 +-------+  
+             *                | right |  
+              ***             +-------+  
+                 *          ***          
+                  ***      *             
+                     *   **              
+                 +---------+             
+                 | __end__ |             
+                 +---------+             
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
@@ -247,7 +247,7 @@
         }
       },
       {
-        "id": "left_left_condition",
+        "id": "left_condition",
         "type": "runnable",
         "data": {
           "id": [
@@ -256,7 +256,7 @@
             "base",
             "RunnableLambda"
           ],
-          "name": "left_condition"
+          "name": "condition"
         }
       }
     ],
@@ -281,20 +281,20 @@
       },
       {
         "source": "left",
-        "target": "left_left_condition"
+        "target": "left_condition"
       },
       {
-        "source": "left_left_condition",
+        "source": "left_condition",
         "target": "left",
         "data": "left"
       },
       {
-        "source": "left_left_condition",
+        "source": "left_condition",
         "target": "right",
         "data": "right"
       },
       {
-        "source": "left_left_condition",
+        "source": "left_condition",
         "target": "__end__",
         "data": "__end__"
       }
@@ -304,39 +304,39 @@
 # ---
 # name: test_conditional_entrypoint_graph_state.3
   '''
-                    +-----------+             
-                    | __start__ |             
-                    +-----------+             
-                          *                   
-                          *                   
-                          *                   
-              +------------------------+      
-              | __start___should_start |      
-              +------------------------+      
-                   ***           **           
-                  *                **         
-                **                   **       
-          +------+                     **     
-          | left |                      *     
-          +------+                      *     
-              *                         *     
-              *                         *     
-              *                         *     
-  +---------------------+               *     
-  | left_left_condition |               *     
-  +---------------------+               *     
-              *          *****          *     
-              *               ****      *     
-              *                   ***   *     
-              **                   +-------+  
-                *                  | right |  
-                 ***               +-------+  
-                    *           ***           
-                     ***       *              
-                        *    **               
-                     +---------+              
-                     | __end__ |              
-                     +---------+              
+                +-----------+            
+                | __start__ |            
+                +-----------+            
+                       *                 
+                       *                 
+                       *                 
+          +------------------------+     
+          | __start___should_start |     
+          +------------------------+     
+                ***         **           
+               *              **         
+             **                 **       
+       +------+                   *      
+       | left |                   *      
+       +------+                   *      
+           *                      *      
+           *                      *      
+           *                      *      
+  +----------------+              *      
+  | left_condition |              *      
+  +----------------+*             *      
+           *         *****        *      
+           *              ***     *      
+           *                 ***  *      
+           **                 +-------+  
+             *                | right |  
+              ***             +-------+  
+                 *          ***          
+                  ***      *             
+                     *   **              
+                 +---------+             
+                 | __end__ |             
+                 +---------+             
   '''
 # ---
 # name: test_conditional_graph
@@ -399,11 +399,11 @@
     ],
     "edges": [
       {
-        "source": "__start__",
+        "source": "tools",
         "target": "agent"
       },
       {
-        "source": "tools",
+        "source": "__start__",
         "target": "agent"
       },
       {
@@ -670,11 +670,11 @@
         "target": 3
       },
       {
-        "source": "__start__",
+        "source": "tools",
         "target": 2
       },
       {
-        "source": "tools",
+        "source": "__start__",
         "target": 2
       },
       {
@@ -1020,11 +1020,11 @@
     ],
     "edges": [
       {
-        "source": "__start__",
+        "source": "tools",
         "target": "agent"
       },
       {
-        "source": "tools",
+        "source": "__start__",
         "target": "agent"
       },
       {
