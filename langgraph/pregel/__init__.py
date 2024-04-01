@@ -14,7 +14,6 @@ from typing import (
     Mapping,
     NamedTuple,
     Optional,
-    Self,
     Sequence,
     Type,
     Union,
@@ -45,6 +44,7 @@ from langchain_core.runnables.utils import (
     get_unique_config_specs,
 )
 from langchain_core.tracers.log_stream import LogStreamCallbackHandler
+from typing_extensions import Self
 
 from langgraph.channels.base import (
     AsyncChannelsManager,
