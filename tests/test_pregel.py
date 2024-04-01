@@ -2820,6 +2820,130 @@ def test_in_one_fan_out_state_graph_waiting_edge() -> None:
     ]
 
 
+def test_in_one_fan_out_state_graph_waiting_edge_via_branch() -> None:
+    def sorted_add(
+        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+    ) -> list[str]:
+        if isinstance(y[0], tuple):
+            for rem, _ in y:
+                x.remove(rem)
+            y = [t[1] for t in y]
+        return sorted(operator.add(x, y))
+
+    class State(TypedDict, total=False):
+        query: str
+        answer: str
+        docs: Annotated[list[str], sorted_add]
+
+    def rewrite_query(data: State) -> State:
+        return {"query": f'query: {data["query"]}'}
+
+    def analyzer_one(data: State) -> State:
+        return {"query": f'analyzed: {data["query"]}'}
+
+    def retriever_one(data: State) -> State:
+        return {"docs": ["doc1", "doc2"]}
+
+    def retriever_two(data: State) -> State:
+        return {"docs": ["doc3", "doc4"]}
+
+    def qa(data: State) -> State:
+        return {"answer": ",".join(data["docs"])}
+
+    workflow = StateGraph(State)
+
+    workflow.add_node("rewrite_query", rewrite_query)
+    workflow.add_node("analyzer_one", analyzer_one)
+    workflow.add_node("retriever_one", retriever_one)
+    workflow.add_node("retriever_two", retriever_two)
+    workflow.add_node("qa", qa)
+
+    workflow.set_entry_point("rewrite_query")
+    workflow.add_edge("rewrite_query", "analyzer_one")
+    workflow.add_edge("analyzer_one", "retriever_one")
+    workflow.add_conditional_edges(
+        "rewrite_query", lambda _: "retriever_two", {"retriever_two": "retriever_two"}
+    )
+    workflow.add_edge(["retriever_one", "retriever_two"], "qa")
+    workflow.set_finish_point("qa")
+
+    app = workflow.compile()
+
+    assert app.get_graph().draw_ascii() == (
+        """                +-----------+                       
+                | __start__ |                       
+                +-----------+                       
+                      *                             
+                      *                             
+                      *                             
+              +---------------+                     
+              | rewrite_query |                     
+              +---------------+                     
+               **            **                     
+             **                **                   
+           **                    **                 
++--------------+      +-------------------------+   
+| analyzer_one |      | rewrite_query_condition |   
++--------------+      +-------------------------+   
+        *                           *               
+        *                           *               
+        *                           *               
++---------------+           +---------------+       
+| retriever_one |           | retriever_two |       
++---------------+           +---------------+       
+               **            **                     
+                 **        **                       
+                   **    **                         
+                   +----+                           
+                   | qa |                           
+                   +----+                           
+                      *                             
+                      *                             
+                      *                             
+                 +---------+                        
+                 | __end__ |                        
+                 +---------+                        """
+    )
+
+    assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
+        "query": "analyzed: query: what is weather in sf",
+        "docs": ["doc1", "doc2", "doc3", "doc4"],
+        "answer": "doc1,doc2,doc3,doc4",
+    }
+
+    assert [*app.stream({"query": "what is weather in sf"})] == [
+        {"__start__": {"query": "what is weather in sf"}},
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["retriever_one"]
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
+    ] == [
+        {"__start__": {"query": "what is weather in sf"}},
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+    ]
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+
+
 def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
