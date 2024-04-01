@@ -1455,7 +1455,6 @@ async def test_conditional_graph_state() -> None:
     }
 
     assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
-        {"__start__": {"input": "what is weather in sf"}},
         {
             "agent": {
                 "agent_outcome": AgentAction(
@@ -1522,7 +1521,6 @@ async def test_conditional_graph_state() -> None:
             {"input": "what is weather in sf"}, config
         )
     ] == [
-        {"__start__": {"input": "what is weather in sf"}},
         {
             "agent": {
                 "agent_outcome": AgentAction(
@@ -1643,7 +1641,6 @@ async def test_conditional_graph_state() -> None:
             {"input": "what is weather in sf"}, config
         )
     ] == [
-        {"__start__": {"input": "what is weather in sf"}},
         {
             "agent": {
                 "agent_outcome": AgentAction(
@@ -1824,7 +1821,6 @@ async def test_conditional_entrypoint_graph_state() -> None:
     }
 
     assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
-        {"__start__": {"input": "what is weather in sf"}},
         {"right": {"output": "what is weather in sf->right"}},
     ]
 
@@ -1948,7 +1944,6 @@ async def test_prebuilt_tool_chat() -> None:
             {"messages": [HumanMessage(content="what is weather in sf")]}
         )
     ] == [
-        {"__start__": {"messages": [HumanMessage(content="what is weather in sf")]}},
         {
             "agent": {
                 "messages": [
@@ -2094,7 +2089,6 @@ async def test_prebuilt_chat() -> None:
             {"messages": [HumanMessage(content="what is weather in sf")]}
         )
     ] == [
-        {"__start__": {"messages": [HumanMessage(content="what is weather in sf")]}},
         {
             "agent": {
                 "messages": [
@@ -2280,7 +2274,6 @@ async def test_message_graph() -> None:
     assert [
         c async for c in app.astream([HumanMessage(content="what is weather in sf")])
     ] == [
-        {"__start__": [HumanMessage(content="what is weather in sf", id=AnyStr())]},
         {
             "agent": AIMessage(
                 content="",
@@ -2323,12 +2316,6 @@ async def test_message_graph() -> None:
             HumanMessage(content="what is weather in sf"), config
         )
     ] == [
-        {
-            "__start__": HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            )
-        },
         {
             "agent": AIMessage(
                 content="",
@@ -2515,7 +2502,6 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
     }
 
     assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
-        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "retriever_two": {"docs": ["doc3", "doc4"]},
@@ -2579,7 +2565,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge() -> None:
     }
 
     assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
-        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
@@ -2600,7 +2585,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge() -> None:
             {"query": "what is weather in sf"}, config
         )
     ] == [
-        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
@@ -2706,7 +2690,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch() -> None:
     }
 
     assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
-        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
@@ -2727,7 +2710,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch() -> None:
             {"query": "what is weather in sf"}, config
         )
     ] == [
-        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
@@ -2799,7 +2781,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
     }
 
     assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
-        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
@@ -2821,7 +2802,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
             {"query": "what is weather in sf"}, config
         )
     ] == [
-        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
@@ -2901,7 +2881,6 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
     }
 
     assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
-        {"__start__": {"query": "what is weather in sf"}},
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {
             "analyzer_one": {"query": "analyzed: query: what is weather in sf"},

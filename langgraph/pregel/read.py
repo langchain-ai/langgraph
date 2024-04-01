@@ -8,6 +8,7 @@ from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
     RunnablePassthrough,
+    RunnableSequence,
     RunnableSerializable,
 )
 from langchain_core.runnables.base import Other, RunnableBindingBase, coerce_to_runnable
@@ -79,6 +80,46 @@ class ChannelInvoke(RunnableBindingBase):
     bound: Runnable[Any, Any] = Field(default=default_bound)
 
     kwargs: Mapping[str, Any] = Field(default_factory=dict)
+
+    def get_writers(self) -> list[Runnable]:
+        """Get writers with optimizations applied."""
+        writers = self.writers.copy()
+        while writers and isinstance(writers[-1], ChannelRead):
+            # we can avoid reads if no writers would be called after them
+            writers.pop()
+        while (
+            len(writers) > 1
+            and isinstance(writers[-1], ChannelWrite)
+            and all(
+                write.value is not None and not isinstance(write.value, Runnable)
+                for write in writers[-1].writes
+            )
+            and isinstance(writers[-2], ChannelRead)
+        ):
+            # we can avoid reads if all subsequent write values don't use the input
+            writers.pop(-2)
+        while (
+            len(writers) > 1
+            and isinstance(writers[-1], ChannelWrite)
+            and isinstance(writers[-2], ChannelWrite)
+        ):
+            # we can combine writes if they are consecutive
+            writers[-2].writes += writers[-1].writes
+            writers.pop()
+        return writers
+
+    def get_node(self) -> Optional[Runnable[Any, Any]]:
+        writers = self.get_writers()
+        if self.bound is default_bound and not writers:
+            return None
+        elif self.bound is default_bound and len(writers) == 1:
+            return writers[0]
+        elif self.bound is default_bound:
+            return RunnableSequence(*writers)
+        elif writers:
+            return RunnableSequence(self.bound, *writers)
+        else:
+            return self.bound
 
     def __init__(
         self,

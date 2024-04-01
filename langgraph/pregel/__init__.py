@@ -12,7 +12,6 @@ from typing import (
     Iterator,
     Literal,
     Mapping,
-    NamedTuple,
     Optional,
     Sequence,
     Type,
@@ -21,11 +20,8 @@ from typing import (
     overload,
 )
 
-from langchain_core.callbacks.manager import (
-    AsyncCallbackManagerForChainRun,
-    CallbackManagerForChainRun,
-)
 from langchain_core.globals import get_debug
+from langchain_core.load.dump import dumpd
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.runnables import (
     Runnable,
@@ -35,7 +31,11 @@ from langchain_core.runnables import (
 from langchain_core.runnables.base import Input, Output, coerce_to_runnable
 from langchain_core.runnables.config import (
     RunnableConfig,
+    ensure_config,
+    get_async_callback_manager_for_config,
+    get_callback_manager_for_config,
     get_executor_for_config,
+    merge_configs,
     patch_config,
 )
 from langchain_core.runnables.utils import (
@@ -68,9 +68,20 @@ from langgraph.constants import (
     INTERRUPT,
 )
 from langgraph.pregel.debug import print_checkpoint, print_step_start
-from langgraph.pregel.io import map_input, map_output_updates, map_output_values
+from langgraph.pregel.io import (
+    map_input,
+    map_output_updates,
+    map_output_values,
+    read_channel,
+    read_channels,
+)
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import ChannelInvoke
+from langgraph.pregel.types import (
+    PregelExecutableTask,
+    PregelTaskDescription,
+    StateSnapshot,
+)
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 
@@ -150,7 +161,7 @@ class Channel:
     ) -> ChannelWrite:
         """Writes to channels the result of the lambda, or None to skip writing."""
         return ChannelWrite(
-            [ChannelWriteEntry(c, None, False) for c in channels]
+            [ChannelWriteEntry(c) for c in channels]
             + [
                 ChannelWriteEntry(k, _coerce_write_value(v), True)
                 for k, v in kwargs.items()
@@ -159,17 +170,6 @@ class Channel:
 
 
 StreamMode = Literal["values", "updates"]
-
-
-class StateSnapshot(NamedTuple):
-    values: dict[str, Any] | Any
-    """Current values of channels"""
-    next: tuple[str]
-    """Nodes to execute in the next step, if any"""
-    config: RunnableConfig
-    """Config used to fetch this snapshot"""
-    parent_config: Optional[RunnableConfig] = None
-    """Config used to fetch the parent snapshot, if any"""
 
 
 class Pregel(
@@ -295,7 +295,7 @@ class Pregel(
             )
 
     @property
-    def snapshot_channels_list(self) -> Sequence[str]:
+    def stream_channels_list(self) -> Sequence[str]:
         return (
             [self.stream_channels]
             if isinstance(self.stream_channels, str)
@@ -313,19 +313,12 @@ class Pregel(
             _, next_tasks = _prepare_next_tasks(
                 checkpoint, self.nodes, channels, for_execution=False
             )
-            values = {
-                k: _read_channel(channels, k, return_exception=True)
-                for k in channels
-                if k in self.snapshot_channels_list
-            }
-            values = {
-                k: v for k, v in values.items() if not isinstance(v, EmptyChannelError)
-            }
+            values = read_channels(channels, self.stream_channels_list)
             return StateSnapshot(
                 values[self.stream_channels]
                 if isinstance(self.stream_channels, str)
                 else values,
-                tuple(name for _, _, name in next_tasks),
+                tuple(name for name, _ in next_tasks),
                 config,
             )
 
@@ -340,19 +333,12 @@ class Pregel(
             _, next_tasks = _prepare_next_tasks(
                 checkpoint, self.nodes, channels, for_execution=False
             )
-            values = {
-                k: _read_channel(channels, k, return_exception=True)
-                for k in channels
-                if k in self.snapshot_channels_list
-            }
-            values = {
-                k: v for k, v in values.items() if not isinstance(v, EmptyChannelError)
-            }
+            values = read_channels(channels, self.stream_channels_list)
             return StateSnapshot(
                 values[self.stream_channels]
                 if isinstance(self.stream_channels, str)
                 else values,
-                tuple(name for _, _, name in next_tasks),
+                tuple(name for name, _ in next_tasks),
                 config,
             )
 
@@ -365,21 +351,12 @@ class Pregel(
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint, self.nodes, channels, for_execution=False
                 )
-                values = {
-                    k: _read_channel(channels, k, return_exception=True)
-                    for k in channels
-                    if k in self.snapshot_channels_list
-                }
-                values = {
-                    k: v
-                    for k, v in values.items()
-                    if not isinstance(v, EmptyChannelError)
-                }
+                values = read_channels(channels, self.stream_channels_list)
                 yield StateSnapshot(
                     values[self.stream_channels]
                     if isinstance(self.stream_channels, str)
                     else values,
-                    tuple(name for _, _, name in next_tasks),
+                    tuple(name for name, _ in next_tasks),
                     config,
                     parent_config,
                 )
@@ -395,21 +372,12 @@ class Pregel(
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint, self.nodes, channels, for_execution=False
                 )
-                values = {
-                    k: _read_channel(channels, k, return_exception=True)
-                    for k in channels
-                    if k in self.snapshot_channels_list
-                }
-                values = {
-                    k: v
-                    for k, v in values.items()
-                    if not isinstance(v, EmptyChannelError)
-                }
+                values = read_channels(channels, self.stream_channels_list)
                 yield StateSnapshot(
                     values[self.stream_channels]
                     if isinstance(self.stream_channels, str)
                     else values,
-                    tuple(name for _, _, name in next_tasks),
+                    tuple(name for name, _ in next_tasks),
                     config,
                     parent_config,
                 )
@@ -446,12 +414,13 @@ class Pregel(
         # update channels
         with ChannelsManager(self.channels, checkpoint) as channels:
             # create task to run all writers of the chosen node
+            writers = self.nodes[as_node].get_writers()
+            if not writers:
+                raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
-                RunnableSequence(*self.nodes[as_node].writers)
-                if len(self.nodes[as_node].writers) > 1
-                else self.nodes[as_node].writers[0],
-                values,
                 as_node,
+                values,
+                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                 deque(),
             )
             # execute task
@@ -502,12 +471,13 @@ class Pregel(
         # update channels, acting as the chosen node
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
             # create task to run all writers of the chosen node
+            writers = self.nodes[as_node].get_writers()
+            if not writers:
+                raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
-                RunnableSequence(*self.nodes[as_node].writers)
-                if len(self.nodes[as_node].writers) > 1
-                else self.nodes[as_node].writers[0],
-                values,
                 as_node,
+                values,
+                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                 deque(),
             )
             # execute task
@@ -571,13 +541,23 @@ class Pregel(
             interrupt_after_nodes,
         )
 
-    def _transform(
+    def stream(
         self,
-        input: Iterator[Union[dict[str, Any], Any]],
-        run_manager: CallbackManagerForChainRun,
-        config: RunnableConfig,
-        **kwargs: Any,
+        input: Union[dict[str, Any], Any],
+        config: Optional[RunnableConfig] = None,
+        *,
+        stream_mode: Optional[StreamMode] = None,
+        output_keys: Optional[Union[str, Sequence[str]]] = None,
+        input_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_before_nodes: Optional[Sequence[str]] = None,
+        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        debug: Optional[bool] = None,
     ) -> Iterator[Union[dict[str, Any], Any]]:
+        config = ensure_config(config)
+        callback_manager = get_callback_manager_for_config(config)
+        run_manager = callback_manager.on_chain_start(
+            dumpd(self), input, name=config.get("run_name", self.get_name())
+        )
         try:
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
@@ -589,7 +569,14 @@ class Pregel(
                 output_keys,
                 interrupt_before_nodes,
                 interrupt_after_nodes,
-            ) = self._defaults(**kwargs)
+            ) = self._defaults(
+                stream_mode=stream_mode,
+                input_keys=input_keys,
+                output_keys=output_keys,
+                interrupt_before_nodes=interrupt_before_nodes,
+                interrupt_after_nodes=interrupt_after_nodes,
+                debug=debug,
+            )
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
@@ -603,9 +590,7 @@ class Pregel(
                 self.channels, checkpoint
             ) as channels, get_executor_for_config(config) as executor:
                 # map inputs to channel updates
-                if input_writes := deque(
-                    w for c in input for w in map_input(input_keys, c)
-                ):
+                if input_writes := deque(map_input(input_keys, input)):
                     # discard any unfinished tasks from previous checkpoint
                     checkpoint, _ = _prepare_next_tasks(
                         checkpoint, processes, channels, for_execution=True
@@ -616,7 +601,7 @@ class Pregel(
                     # if received no input, take that as signal to proceed
                     # past previous interrupt, if any
                     checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.snapshot_channels_list:
+                    for k in self.stream_channels_list:
                         version = checkpoint["channel_versions"][k]
                         checkpoint["versions_seen"][INTERRUPT][k] = version
 
@@ -647,7 +632,7 @@ class Pregel(
                     if _should_interrupt(
                         checkpoint,
                         interrupt_before_nodes,
-                        self.snapshot_channels_list,
+                        self.stream_channels_list,
                         next_tasks,
                     ):
                         break
@@ -661,7 +646,7 @@ class Pregel(
                             proc,
                             input,
                             patch_config(
-                                config,
+                                merge_configs(config, proc_config),
                                 run_name=name,
                                 callbacks=run_manager.get_child(f"graph:step:{step}"),
                                 configurable={
@@ -673,7 +658,7 @@ class Pregel(
                                 },
                             ),
                         )
-                        for proc, input, name, writes in next_tasks
+                        for name, input, proc, writes, proc_config in next_tasks
                     ]
 
                     futures = [
@@ -694,7 +679,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes in next_tasks:
+                    for _, _, _, writes, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     # apply writes to channels
@@ -726,10 +711,13 @@ class Pregel(
                     if _should_interrupt(
                         checkpoint,
                         interrupt_after_nodes,
-                        self.snapshot_channels_list,
+                        self.stream_channels_list,
                         next_tasks,
                     ):
                         break
+
+                # set final channel values as run output
+                run_manager.on_chain_end(read_channels(channels, output_keys))
 
                 # save end of run checkpoint
                 if (
@@ -738,6 +726,9 @@ class Pregel(
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
                     self.checkpointer.put(checkpoint_config, checkpoint)
+        except BaseException as e:
+            run_manager.on_chain_error(e)
+            raise
         finally:
             # cancel any pending tasks when generator is interrupted
             try:
@@ -746,25 +737,35 @@ class Pregel(
             except NameError:
                 pass
 
-    async def _atransform(
+    async def astream(
         self,
-        input: AsyncIterator[Union[dict[str, Any], Any]],
-        run_manager: AsyncCallbackManagerForChainRun,
-        config: RunnableConfig,
-        **kwargs: Any,
+        input: Union[dict[str, Any], Any],
+        config: Optional[RunnableConfig] = None,
+        *,
+        stream_mode: Optional[StreamMode] = None,
+        output_keys: Optional[Union[str, Sequence[str]]] = None,
+        input_keys: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_before_nodes: Optional[Sequence[str]] = None,
+        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        debug: Optional[bool] = None,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+        config = ensure_config(config)
+        callback_manager = get_async_callback_manager_for_config(config)
+        run_manager = await callback_manager.on_chain_start(
+            dumpd(self), input, name=config.get("run_name", self.get_name())
+        )
+        # if running from astream_log() run each proc with streaming
+        do_stream = next(
+            (
+                h
+                for h in run_manager.handlers
+                if isinstance(h, LogStreamCallbackHandler)
+            ),
+            None,
+        )
         try:
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
-            # if running from astream_log() run each proc with streaming
-            do_stream = next(
-                (
-                    h
-                    for h in run_manager.handlers
-                    if isinstance(h, LogStreamCallbackHandler)
-                ),
-                None,
-            )
             # assign defaults
             (
                 debug,
@@ -773,7 +774,14 @@ class Pregel(
                 output_keys,
                 interrupt_before_nodes,
                 interrupt_after_nodes,
-            ) = self._defaults(**kwargs)
+            ) = self._defaults(
+                stream_mode=stream_mode,
+                input_keys=input_keys,
+                output_keys=output_keys,
+                interrupt_before_nodes=interrupt_before_nodes,
+                interrupt_after_nodes=interrupt_after_nodes,
+                debug=debug,
+            )
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
@@ -787,9 +795,7 @@ class Pregel(
             # create channels from checkpoint
             async with AsyncChannelsManager(self.channels, checkpoint) as channels:
                 # map inputs to channel updates
-                if input_writes := deque(
-                    [w async for c in input for w in map_input(input_keys, c)]
-                ):
+                if input_writes := deque(map_input(input_keys, input)):
                     # discard any unfinished tasks from previous checkpoint
                     checkpoint, _ = _prepare_next_tasks(
                         checkpoint, processes, channels, for_execution=True
@@ -800,7 +806,7 @@ class Pregel(
                     # if received no input, take that as signal to proceed
                     # past previous interrupt, if any
                     checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.snapshot_channels_list:
+                    for k in self.stream_channels_list:
                         version = checkpoint["channel_versions"][k]
                         checkpoint["versions_seen"][INTERRUPT][k] = version
 
@@ -831,7 +837,7 @@ class Pregel(
                     if _should_interrupt(
                         checkpoint,
                         interrupt_before_nodes,
-                        self.snapshot_channels_list,
+                        self.stream_channels_list,
                         next_tasks,
                     ):
                         break
@@ -845,7 +851,7 @@ class Pregel(
                             proc,
                             input,
                             patch_config(
-                                config,
+                                merge_configs(config, proc_config),
                                 run_name=name,
                                 callbacks=run_manager.get_child(f"graph:step:{step}"),
                                 configurable={
@@ -857,7 +863,7 @@ class Pregel(
                                 },
                             ),
                         )
-                        for proc, input, name, writes in next_tasks
+                        for name, input, proc, writes, proc_config in next_tasks
                     ]
 
                     futures = (
@@ -885,7 +891,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes in next_tasks:
+                    for _, _, _, writes, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     # apply writes to channels
@@ -917,10 +923,13 @@ class Pregel(
                     if _should_interrupt(
                         checkpoint,
                         interrupt_after_nodes,
-                        self.snapshot_channels_list,
+                        self.stream_channels_list,
                         next_tasks,
                     ):
                         break
+
+                # set final channel values as run output
+                await run_manager.on_chain_end(read_channels(channels, output_keys))
 
                 # save end of run checkpoint
                 if (
@@ -929,6 +938,9 @@ class Pregel(
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
                     await self.checkpointer.aput(checkpoint_config, checkpoint)
+        except BaseException as e:
+            await run_manager.on_chain_error(e)
+            raise
         finally:
             # cancel any pending tasks when generator is interrupted
             try:
@@ -952,9 +964,8 @@ class Pregel(
         output_keys = output_keys if output_keys is not None else self.output_channels
         output_is_dict = not isinstance(output_keys, str)
         latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
-        for chunk in self._transform_stream_with_config(
-            iter([input]),
-            self._transform,
+        for chunk in self.stream(
+            input,
             config,
             stream_mode="values",
             output_keys=output_keys,
@@ -966,58 +977,6 @@ class Pregel(
         ):
             latest = {**latest, **chunk} if output_is_dict else chunk
         return latest
-
-    def stream(
-        self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
-        *,
-        stream_mode: Optional[StreamMode] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
-        debug: Optional[bool] = None,
-        **kwargs: Any,
-    ) -> Iterator[Union[dict[str, Any], Any]]:
-        return self._transform_stream_with_config(
-            iter([input]),
-            self._transform,
-            config,
-            stream_mode=stream_mode,
-            output_keys=output_keys,
-            input_keys=input_keys,
-            interrupt_before_nodes=interrupt_before_nodes,
-            interrupt_after_nodes=interrupt_after_nodes,
-            debug=debug,
-            **kwargs,
-        )
-
-    def transform(
-        self,
-        input: Iterator[Union[dict[str, Any], Any]],
-        config: Optional[RunnableConfig] = None,
-        *,
-        stream_mode: Optional[StreamMode] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
-        debug: Optional[bool] = None,
-        **kwargs: Any,
-    ) -> Iterator[Union[dict[str, Any], Any]]:
-        return self._transform_stream_with_config(
-            input,
-            self._transform,
-            config,
-            stream_mode=stream_mode,
-            output_keys=output_keys,
-            input_keys=input_keys,
-            interrupt_before_nodes=interrupt_before_nodes,
-            interrupt_after_nodes=interrupt_after_nodes,
-            debug=debug,
-            **kwargs,
-        )
 
     async def ainvoke(
         self,
@@ -1031,15 +990,11 @@ class Pregel(
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
-        async def input_stream() -> AsyncIterator[Union[dict[str, Any], Any]]:
-            yield input
-
         output_keys = output_keys if output_keys is not None else self.output_channels
         output_is_dict = not isinstance(output_keys, str)
         latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
-        async for chunk in self._atransform_stream_with_config(
-            input_stream(),
-            self._atransform,
+        async for chunk in self.astream(
+            input,
             config,
             stream_mode="values",
             output_keys=output_keys,
@@ -1051,61 +1006,6 @@ class Pregel(
         ):
             latest = {**latest, **chunk} if output_is_dict else chunk
         return latest
-
-    def astream(
-        self,
-        input: Union[dict[str, Any], Any],
-        config: Optional[RunnableConfig] = None,
-        *,
-        stream_mode: Optional[StreamMode] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
-        debug: Optional[bool] = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[Union[dict[str, Any], Any]]:
-        async def input_stream() -> AsyncIterator[Union[dict[str, Any], Any]]:
-            yield input
-
-        return self._atransform_stream_with_config(
-            input_stream(),
-            self._atransform,
-            config,
-            stream_mode=stream_mode,
-            output_keys=output_keys,
-            input_keys=input_keys,
-            interrupt_before_nodes=interrupt_before_nodes,
-            interrupt_after_nodes=interrupt_after_nodes,
-            debug=debug,
-            **kwargs,
-        )
-
-    def atransform(
-        self,
-        input: AsyncIterator[Union[dict[str, Any], Any]],
-        config: Optional[RunnableConfig] = None,
-        *,
-        stream_mode: Optional[StreamMode] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
-        debug: Optional[bool] = None,
-        **kwargs: Any,
-    ) -> AsyncIterator[Union[dict[str, Any], Any]]:
-        return self._atransform_stream_with_config(
-            input,
-            self._atransform,
-            config,
-            stream_mode=stream_mode,
-            output_keys=output_keys,
-            input_keys=input_keys,
-            interrupt_before_nodes=interrupt_before_nodes,
-            interrupt_after_nodes=interrupt_after_nodes,
-            debug=debug,
-            **kwargs,
-        )
 
 
 def _panic_or_proceed(
@@ -1146,7 +1046,7 @@ def _should_interrupt(
             for chan in snapshot_channels
         )
         # and any channel written to is in interrupt_nodes list
-        and any(node for _, _, node, _ in tasks if node in interrupt_nodes)
+        and any(node for node, _, _, _, _ in tasks if node in interrupt_nodes)
     )
 
 
@@ -1161,33 +1061,9 @@ def _local_read(
         checkpoint = create_checkpoint(checkpoint, channels)
         with ChannelsManager(channels, checkpoint) as channels:
             _apply_writes(copy_checkpoint(checkpoint), channels, writes)
-            if isinstance(select, str):
-                return _read_channel(channels, select)
-            else:
-                return {k: _read_channel(channels, k) for k in select}
+            return read_channels(channels, select)
     else:
-        if isinstance(select, str):
-            return _read_channel(channels, select)
-        else:
-            return {k: _read_channel(channels, k) for k in select}
-
-
-def _read_channel(
-    channels: Mapping[str, BaseChannel],
-    chan: str,
-    *,
-    catch: bool = True,
-    return_exception: bool = False,
-) -> Any:
-    try:
-        return channels[chan].get()
-    except EmptyChannelError as exc:
-        if return_exception:
-            return exc
-        elif catch:
-            return None
-        else:
-            raise
+        return read_channels(channels, select)
 
 
 def _apply_writes(
@@ -1226,26 +1102,13 @@ def _apply_writes(
             channels[chan].update([])
 
 
-class PregelTask(NamedTuple):
-    proc: Runnable
-    input: Any
-    name: str
-
-
-class PregelExecutableTask(NamedTuple):
-    proc: Runnable
-    input: Any
-    name: str
-    writes: deque[tuple[str, Any]]
-
-
 @overload
 def _prepare_next_tasks(
     checkpoint: Checkpoint,
     processes: Mapping[str, ChannelInvoke],
     channels: Mapping[str, BaseChannel],
     for_execution: Literal[False],
-) -> tuple[Checkpoint, list[PregelTask]]:
+) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
 
 
@@ -1265,9 +1128,9 @@ def _prepare_next_tasks(
     channels: Mapping[str, BaseChannel],
     *,
     for_execution: bool,
-) -> tuple[Checkpoint, Union[list[PregelTask], list[PregelExecutableTask]]]:
+) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
-    tasks: Union[list[PregelTask], list[PregelExecutableTask]] = []
+    tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
@@ -1277,7 +1140,7 @@ def _prepare_next_tasks(
             checkpoint["channel_versions"][chan] > seen[chan]
             for chan in proc.triggers
             if not isinstance(
-                _read_channel(channels, chan, return_exception=True), EmptyChannelError
+                read_channel(channels, chan, return_exception=True), EmptyChannelError
             )
         ):
             # If all trigger channels subscribed by this process are not empty
@@ -1285,9 +1148,7 @@ def _prepare_next_tasks(
             if isinstance(proc.channels, dict):
                 try:
                     val: Any = {
-                        k: _read_channel(
-                            channels, chan, catch=chan not in proc.triggers
-                        )
+                        k: read_channel(channels, chan, catch=chan not in proc.triggers)
                         for k, chan in proc.channels.items()
                     }
                 except EmptyChannelError:
@@ -1295,7 +1156,7 @@ def _prepare_next_tasks(
             elif isinstance(proc.channels, list):
                 for chan in proc.channels:
                     try:
-                        val = _read_channel(channels, chan, catch=False)
+                        val = read_channel(channels, chan, catch=False)
                         break
                     except EmptyChannelError:
                         pass
@@ -1320,18 +1181,12 @@ def _prepare_next_tasks(
                 )
 
             if for_execution:
-                tasks.append(
-                    PregelExecutableTask(
-                        RunnableSequence(proc, *proc.writers, name=name)
-                        if proc.writers
-                        else proc,
-                        val,
-                        name,
-                        deque(),
+                if node := proc.get_node():
+                    tasks.append(
+                        PregelExecutableTask(name, val, node, deque(), proc.config)
                     )
-                )
             else:
-                tasks.append(PregelTask(proc, val, name))
+                tasks.append(PregelTaskDescription(name, val))
     return checkpoint, tasks
 
 

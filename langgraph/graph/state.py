@@ -144,7 +144,7 @@ class CompiledStateGraph(CompiledGraph):
         if key == START:
             self.nodes[key] = Channel.subscribe_to(
                 START, tags=["langsmith:hidden"]
-            ).pipe(ChannelWrite(channels=state_write_entries))
+            ).pipe(ChannelWrite(state_write_entries))
         else:
             self.channels[key] = EphemeralValue(Any)
             self.nodes[key] = ChannelInvoke(
@@ -188,7 +188,7 @@ class CompiledStateGraph(CompiledGraph):
                 # subscribe to start channel
                 self.nodes[end].triggers.append(starts)
         else:
-            channel_name = f"join:{starts}:{end}"
+            channel_name = f"join:{'+'.join(starts)}:{end}"
             # register channel
             self.channels[channel_name] = NamedBarrierValue(str, set(starts))
             # subscribe to channel
