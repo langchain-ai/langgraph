@@ -11,10 +11,10 @@ from langgraph.channels.base import (
 )
 
 
-class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, Value]):
+class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
     """A channel that waits until all named values are received before making the value available."""
 
-    def __init__(self, typ: Type[Value], names: set[str]) -> None:
+    def __init__(self, typ: Type[Value], names: set[Value]) -> None:
         self.typ = typ
         self.names = names
         self.seen = set()
@@ -29,11 +29,16 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
+    def checkpoint(self) -> set[Value]:
+        return self.seen
+
     @contextmanager
-    def empty(self, checkpoint: Optional[Value] = None) -> Generator[Self, None, None]:
+    def from_checkpoint(
+        self, checkpoint: Optional[set[Value]] = None
+    ) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ, self.names)
         if checkpoint is not None:
-            empty.seen = checkpoint
+            empty.seen = checkpoint.copy()
 
         try:
             yield empty
@@ -53,6 +58,3 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, Value]):
         if self.seen != self.names:
             raise EmptyChannelError()
         return None
-
-    def checkpoint(self) -> Value:
-        return self.seen
