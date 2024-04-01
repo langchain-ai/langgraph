@@ -43,7 +43,6 @@ from langchain_core.runnables.utils import (
 )
 from langchain_core.tracers.log_stream import LogStreamCallbackHandler
 
-from langgraph.channels.any_value import AnyValue
 from langgraph.channels.base import (
     AsyncChannelsManager,
     BaseChannel,
@@ -52,8 +51,6 @@ from langgraph.channels.base import (
     InvalidUpdateError,
     create_checkpoint,
 )
-from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -522,12 +519,15 @@ class Pregel(
 
                     # if no more tasks, we're done
                     if not next_tasks:
-                        break
+                        if step == 0:
+                            raise ValueError("No tasks to run in graph.")
+                        else:
+                            break
                     elif step == config["recursion_limit"]:
                         raise GraphRecursionError(
                             f"Recursion limit of {config['recursion_limit']} reached"
-                            "without hitting a stop condition. You can increase the limit"
-                            "by setting the `recursion_limit` config key."
+                            "without hitting a stop condition. You can increase the "
+                            "limit by setting the `recursion_limit` config key."
                         )
 
                     if debug:
@@ -582,10 +582,6 @@ class Pregel(
                     # yield current value and checkpoint view
                     if step_output := map_output(output_keys, pending_writes, channels):
                         yield step_output
-                        # we can detect updates when output is multiple channels (ie. dict)
-                        if not isinstance(output_keys, str):
-                            # if view was updated, apply writes to channels
-                            _apply_writes_from_view(checkpoint, channels, step_output)
 
                     # with previous step's checkpoint
                     if _should_interrupt(
@@ -773,10 +769,6 @@ class Pregel(
                     # yield current value and checkpoint view
                     if step_output := map_output(output_keys, pending_writes, channels):
                         yield step_output
-                        # we can detect updates when output is multiple channels (ie. dict)
-                        if not isinstance(output_keys, str):
-                            # if view was updated, apply writes to channels
-                            _apply_writes_from_view(checkpoint, channels, step_output)
 
                     # with previous step's checkpoint
                     if _should_interrupt(
@@ -1072,22 +1064,6 @@ def _apply_writes(
     for chan in channels:
         if chan not in updated_channels:
             channels[chan].update([])
-
-
-def _apply_writes_from_view(
-    checkpoint: Checkpoint, channels: Mapping[str, BaseChannel], values: dict[str, Any]
-) -> None:
-    # Apply writes to channels
-    for chan, value in values.items():
-        if value == _read_channel(channels, chan):
-            continue
-
-        assert isinstance(channels[chan], (LastValue, EphemeralValue, AnyValue)), (
-            f"Can't modify channel {chan} of type "
-            f"{channels[chan].__class__.__name__}"
-        )
-        checkpoint["channel_versions"][chan] += 1
-        channels[chan].update([values[chan]])
 
 
 def _prepare_next_tasks(

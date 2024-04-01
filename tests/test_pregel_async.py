@@ -192,22 +192,6 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             }
     assert step == 2
 
-    step = 0
-    async for values in app.astream(2):
-        step += 1
-        if step == 1:
-            assert values == {
-                "inbox": 3,
-            }
-            # modify inbox value
-            values["inbox"] = 5
-        elif step == 2:
-            # output is different now
-            assert values == {
-                "output": 6,
-            }
-    assert step == 2
-
     graph = Graph()
     graph.add_node("add_one", add_one)
     graph.add_node("add_one_more", add_one)
@@ -232,26 +216,6 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
         elif step == 3:
             assert values == {
                 "__end__": 4,
-            }
-    assert step == 3
-
-    step = 0
-    async for values in gapp.astream(2):
-        step += 1
-        if step == 1:
-            assert values == {
-                "add_one": 3,
-            }
-            # modify value before running next step
-            values["add_one"] = 5
-        elif step == 2:
-            # output is different now
-            assert values == {
-                "add_one_more": 6,
-            }
-        elif step == 3:
-            assert values == {
-                "__end__": 6,
             }
     assert step == 3
 

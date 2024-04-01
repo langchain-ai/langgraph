@@ -179,29 +179,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     with pytest.raises(GraphRecursionError):
         app.invoke(2, {"recursion_limit": 1})
 
-    for step, values in enumerate(app.stream(2), start=1):
-        if step == 1:
-            assert values == {
-                "inbox": 3,
-            }
-        elif step == 2:
-            assert values == {
-                "output": 4,
-            }
-
-    for step, values in enumerate(app.stream(2), start=1):
-        if step == 1:
-            assert values == {
-                "inbox": 3,
-            }
-            # modify inbox value
-            values["inbox"] = 5
-        elif step == 2:
-            # output is different now
-            assert values == {
-                "output": 6,
-            }
-
     graph = Graph()
     graph.add_node("add_one", add_one)
     graph.add_node("add_one_more", add_one)
@@ -227,25 +204,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             }
         else:
             assert 0, f"{step}:{values}"
-    assert step == 3
-
-    for step, values in enumerate(gapp.stream(2), start=1):
-        if step == 1:
-            assert values == {
-                "add_one": 3,
-            }
-            # modify value before next step
-            values["add_one"] = 5
-        elif step == 2:
-            assert values == {
-                "add_one_more": 6,
-            }
-        elif step == 3:
-            assert values == {
-                "__end__": 6,
-            }
-        else:
-            assert 0, "Should not get here"
     assert step == 3
 
 
