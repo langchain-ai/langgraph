@@ -1,10 +1,8 @@
-from collections import deque
 from typing import Any, Iterator, Mapping, Optional, Sequence, Union
-
-from langchain_core.runnables import Runnable
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.pregel.log import logger
+from langgraph.pregel.types import PregelExecutableTask
 
 
 def read_channel(
@@ -79,13 +77,18 @@ def map_output_values(
 
 def map_output_updates(
     output_channels: Union[str, Sequence[str]],
-    next_tasks: list[tuple[Runnable, Any, str, deque[tuple[str, Any]]]],
+    tasks: list[PregelExecutableTask],
 ) -> Optional[dict[str, Union[Any, dict[str, Any]]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
+    output_tasks = [
+        t
+        for t in tasks
+        if not t.config or "langsmith:hidden" not in t.config.get("tags")
+    ]
     if isinstance(output_channels, str):
         if updated := {
             node: value
-            for _, _, node, writes in next_tasks
+            for node, _, _, writes, _ in output_tasks
             for chan, value in writes
             if chan == output_channels
         }:
@@ -93,7 +96,7 @@ def map_output_updates(
     else:
         if updated := {
             node: {chan: value for chan, value in writes if chan in output_channels}
-            for _, _, node, writes in next_tasks
+            for node, _, _, writes, _ in output_tasks
             if any(chan in output_channels for chan, _ in writes)
         }:
             return updated

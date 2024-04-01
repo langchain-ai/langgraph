@@ -12,7 +12,6 @@ from typing import (
     Iterator,
     Literal,
     Mapping,
-    NamedTuple,
     Optional,
     Sequence,
     Type,
@@ -36,6 +35,7 @@ from langchain_core.runnables.config import (
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
     get_executor_for_config,
+    merge_configs,
     patch_config,
 )
 from langchain_core.runnables.utils import (
@@ -77,6 +77,11 @@ from langgraph.pregel.io import (
 )
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import ChannelInvoke
+from langgraph.pregel.types import (
+    PregelExecutableTask,
+    PregelTaskDescription,
+    StateSnapshot,
+)
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 
@@ -165,17 +170,6 @@ class Channel:
 
 
 StreamMode = Literal["values", "updates"]
-
-
-class StateSnapshot(NamedTuple):
-    values: dict[str, Any] | Any
-    """Current values of channels"""
-    next: tuple[str]
-    """Nodes to execute in the next step, if any"""
-    config: RunnableConfig
-    """Config used to fetch this snapshot"""
-    parent_config: Optional[RunnableConfig] = None
-    """Config used to fetch the parent snapshot, if any"""
 
 
 class Pregel(
@@ -424,9 +418,9 @@ class Pregel(
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
-                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
-                values,
                 as_node,
+                values,
+                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                 deque(),
             )
             # execute task
@@ -481,9 +475,9 @@ class Pregel(
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
-                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
-                values,
                 as_node,
+                values,
+                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                 deque(),
             )
             # execute task
@@ -652,7 +646,7 @@ class Pregel(
                             proc,
                             input,
                             patch_config(
-                                config,
+                                merge_configs(config, proc_config),
                                 run_name=name,
                                 callbacks=run_manager.get_child(f"graph:step:{step}"),
                                 configurable={
@@ -664,7 +658,7 @@ class Pregel(
                                 },
                             ),
                         )
-                        for proc, input, name, writes in next_tasks
+                        for name, input, proc, writes, proc_config in next_tasks
                     ]
 
                     futures = [
@@ -685,7 +679,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes in next_tasks:
+                    for _, _, _, writes, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     # apply writes to channels
@@ -857,7 +851,7 @@ class Pregel(
                             proc,
                             input,
                             patch_config(
-                                config,
+                                merge_configs(config, proc_config),
                                 run_name=name,
                                 callbacks=run_manager.get_child(f"graph:step:{step}"),
                                 configurable={
@@ -869,7 +863,7 @@ class Pregel(
                                 },
                             ),
                         )
-                        for proc, input, name, writes in next_tasks
+                        for name, input, proc, writes, proc_config in next_tasks
                     ]
 
                     futures = (
@@ -897,7 +891,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes in next_tasks:
+                    for _, _, _, writes, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     # apply writes to channels
@@ -1052,7 +1046,7 @@ def _should_interrupt(
             for chan in snapshot_channels
         )
         # and any channel written to is in interrupt_nodes list
-        and any(node for _, _, node, _ in tasks if node in interrupt_nodes)
+        and any(node for node, _, _, _, _ in tasks if node in interrupt_nodes)
     )
 
 
@@ -1106,18 +1100,6 @@ def _apply_writes(
     for chan in channels:
         if chan not in updated_channels:
             channels[chan].update([])
-
-
-class PregelTaskDescription(NamedTuple):
-    name: str
-    input: Any
-
-
-class PregelExecutableTask(NamedTuple):
-    proc: Runnable
-    input: Any
-    name: str
-    writes: deque[tuple[str, Any]]
 
 
 @overload
@@ -1200,7 +1182,9 @@ def _prepare_next_tasks(
 
             if for_execution:
                 if node := proc.get_node():
-                    tasks.append(PregelExecutableTask(node, val, name, deque()))
+                    tasks.append(
+                        PregelExecutableTask(name, val, node, deque(), proc.config)
+                    )
             else:
                 tasks.append(PregelTaskDescription(name, val))
     return checkpoint, tasks
