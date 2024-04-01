@@ -1,5 +1,6 @@
 import logging
 from collections import defaultdict
+from enum import Enum
 from typing import (
     Any,
     Awaitable,
@@ -101,7 +102,9 @@ class Graph:
     def _all_edges(self) -> set[tuple[str, str]]:
         return self.edges
 
-    def add_node(self, key: str, action: RunnableLike) -> None:
+    def add_node(self, key: Union[str, Enum], action: RunnableLike) -> None:
+        key = key.value if isinstance(key, Enum) else key
+
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "
@@ -114,7 +117,10 @@ class Graph:
 
         self.nodes[key] = coerce_to_runnable(action)
 
-    def add_edge(self, start_key: str, end_key: str) -> None:
+    def add_edge(self, start_key: Union[str, Enum], end_key: Union[str, Enum]) -> None:
+        start_key = start_key.value if isinstance(start_key, Enum) else start_key
+        end_key = end_key.value if isinstance(end_key, Enum) else end_key
+
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
@@ -141,12 +147,16 @@ class Graph:
 
     def add_conditional_edges(
         self,
-        start_key: str,
+        start_key: Union[str, Enum],
         condition: Union[
             Callable[..., str], Callable[..., Awaitable[str]], Runnable[Any, str]
         ],
-        conditional_edge_mapping: Optional[dict[str, str]] = None,
+        conditional_edge_mapping: Optional[
+            Dict[Union[str, Enum], Union[str, Enum]]
+        ] = None,
     ) -> None:
+        start_key = start_key.value if isinstance(start_key, Enum) else start_key
+
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
@@ -158,6 +168,13 @@ class Graph:
         # validate the condition
         if start_key not in self.nodes and start_key != START:
             raise ValueError(f"Need to add_node `{start_key}` first")
+
+        if conditional_edge_mapping:
+            conditional_edge_mapping = {
+                key: (value.value if isinstance(value, Enum) else value)
+                for key, value in conditional_edge_mapping.items()
+            }
+
         if conditional_edge_mapping and set(
             conditional_edge_mapping.values()
         ).difference([END]).difference(self.nodes):
@@ -175,7 +192,9 @@ class Graph:
         # save it
         self.branches[start_key][name] = Branch(condition, conditional_edge_mapping)
 
-    def set_entry_point(self, key: str) -> None:
+    def set_entry_point(self, key: Union[str, Enum]) -> None:
+        key = key.value if isinstance(key, Enum) else key
+
         return self.add_edge(START, key)
 
     def set_conditional_entry_point(
@@ -187,7 +206,7 @@ class Graph:
     ) -> None:
         return self.add_conditional_edges(START, condition, conditional_edge_mapping)
 
-    def set_finish_point(self, key: str) -> None:
+    def set_finish_point(self, key: Union[str, Enum]) -> None:
         return self.add_edge(key, END)
 
     def validate(self, interrupt: Optional[Sequence[str]] = None) -> None:

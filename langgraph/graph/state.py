@@ -1,4 +1,6 @@
 import logging
+from collections import defaultdict
+from enum import Enum
 from functools import partial
 from inspect import signature
 from typing import Any, Optional, Sequence, Type, Union
@@ -44,12 +46,16 @@ class StateGraph(Graph):
             (start, end) for starts, end in self.waiting_edges for start in starts
         }
 
-    def add_node(self, key: str, action: RunnableLike) -> None:
+    def add_node(self, key: Union[str, Enum], action: RunnableLike) -> None:
+        key = key.value if isinstance(key, Enum) else key
+
         if key in self.channels:
             raise ValueError(f"'{key}' is already being used as a state key")
         return super().add_node(key, action)
 
-    def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
+    def add_edge(self, start_key: Union[str, list[str], Enum], end_key: str) -> None:
+        start_key = start_key.value if isinstance(start_key, Enum) else start_key
+
         if isinstance(start_key, str):
             return super().add_edge(start_key, end_key)
 
