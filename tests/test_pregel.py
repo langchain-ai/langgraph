@@ -2269,7 +2269,7 @@ def test_message_graph(
         FunctionMessage(
             content="result for query",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000019",
+            id="00000000-0000-4000-8000-000000000018",
         ),
         AIMessage(
             content="",
@@ -2281,7 +2281,7 @@ def test_message_graph(
         FunctionMessage(
             content="result for another",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000033",
+            id="00000000-0000-4000-8000-000000000031",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -2291,7 +2291,7 @@ def test_message_graph(
             "__start__": [
                 HumanMessage(
                     content="what is weather in sf",
-                    id="00000000-0000-4000-8000-000000000045",
+                    id="00000000-0000-4000-8000-000000000042",
                 )
             ]
         },
@@ -2308,7 +2308,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000059",
+                id="00000000-0000-4000-8000-000000000055",
             )
         },
         {
@@ -2324,7 +2324,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for another",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000073",
+                id="00000000-0000-4000-8000-000000000068",
             )
         },
         {"agent": AIMessage(content="answer", id="ai3")},

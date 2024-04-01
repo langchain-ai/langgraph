@@ -1,13 +1,20 @@
+import asyncio
 import logging
 from collections import defaultdict
-from typing import Any, Awaitable, Callable, Dict, NamedTuple, Optional, Sequence, Union
+from typing import (
+    Any,
+    Awaitable,
+    Callable,
+    Coroutine,
+    Dict,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Union,
+)
 
 from langchain_core.runnables import Runnable
-from langchain_core.runnables.base import (
-    RunnableLambda,
-    RunnableLike,
-    coerce_to_runnable,
-)
+from langchain_core.runnables.base import RunnableLike, coerce_to_runnable
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import (
     Graph as RunnableGraph,
@@ -28,23 +35,57 @@ START = "__start__"
 END = "__end__"
 
 
+class RunnableCallable(Runnable):
+    def __init__(
+        self,
+        func: Callable[..., Optional[Runnable]],
+        afunc: Callable[..., Awaitable[Optional[Runnable]]],
+        name: str,
+        writer: Callable[[str], Optional[Runnable]],
+    ) -> None:
+        self.name = name
+        self.func = func
+        self.afunc = afunc
+        self.writer = writer
+
+    def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+        ret = self._call_with_config(self.func, input, config, writer=self.writer)
+        if isinstance(ret, Runnable):
+            return ret.invoke(input, config)
+        return ret
+
+    async def ainvoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+        ret = await self._acall_with_config(
+            self.afunc, input, config, writer=self.writer
+        )
+        if isinstance(ret, Runnable):
+            return await ret.ainvoke(input, config)
+        return ret
+
+
 class Branch(NamedTuple):
-    condition: Runnable[Any, str]
+    condition: Union[Runnable[Any, str], Callable[..., str], Coroutine[Any, Any, str]]
     ends: Optional[dict[str, str]]
 
     def run(self, writer: Callable[[str], Optional[Runnable]]) -> None:
         return ChannelWrite.register_writer(
-            RunnableLambda(
-                self._route,
-                self._aroute,
-                name=self.condition.name,
-            ).bind(writer=writer)
+            RunnableCallable(
+                func=self._route,
+                afunc=self._aroute,
+                writer=writer,
+                name=self.condition.name
+                if isinstance(self.condition, Runnable)
+                else self.condition.__name__,
+            )
         )
 
     def _route(
         self, input: Any, *, writer: Callable[[str], Optional[Runnable]]
     ) -> Runnable:
-        result = self.condition.invoke(input, {"run_name": "condition"})
+        if isinstance(self.condition, Runnable):
+            result = self.condition.invoke(input, {"run_name": "condition"})
+        else:
+            result = self.condition(input)
         if self.ends:
             destination = self.ends[result]
         else:
@@ -54,7 +95,12 @@ class Branch(NamedTuple):
     async def _aroute(
         self, input: Any, *, writer: Callable[[str], Optional[Runnable]]
     ) -> Runnable:
-        result = await self.condition.ainvoke(input, {"run_name": "condition"})
+        if isinstance(self.condition, Runnable):
+            result = await self.condition.ainvoke(input, {"run_name": "condition"})
+        elif asyncio.iscoroutinefunction(self.condition):
+            result = await self.condition(input)
+        else:
+            result = self.condition(input)
         if self.ends:
             destination = self.ends[result]
         else:
@@ -122,6 +168,14 @@ class Graph:
                 "Adding an edge to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
+        # find a name for the condition
+        try:
+            name = (
+                condition.__name__ if condition.__name__ != "<lambda>" else "condition"
+            )
+        except AttributeError:
+            name = "condition"
+        # validate the condition
         if start_key not in self.nodes and start_key != START:
             raise ValueError(f"Need to add_node `{start_key}` first")
         if conditional_edge_mapping and set(
@@ -133,19 +187,13 @@ class Graph:
                 f"{list(conditional_edge_mapping.values())}. Possible nodes are "
                 f"{list(self.nodes.keys())}."
             )
-        if not isinstance(condition, Runnable):
-            condition = RunnableLambda(condition)
-        if condition.name is None:
-            condition.name = "condition"
-        if condition.name in self.branches[start_key]:
+        if name in self.branches[start_key]:
             raise ValueError(
                 f"Branch with name `{condition.name}` already exists for node "
                 f"`{start_key}`"
             )
-
-        self.branches[start_key][condition.name] = Branch(
-            condition, conditional_edge_mapping
-        )
+        # save it
+        self.branches[start_key][name] = Branch(condition, conditional_edge_mapping)
 
     def set_entry_point(self, key: str) -> None:
         return self.add_edge(START, key)
