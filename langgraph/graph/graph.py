@@ -310,7 +310,7 @@ class CompiledGraph(Pregel):
                 n = graph.add_node(node, key)
                 start_nodes[key] = n
                 end_nodes[key] = n
-        for start, end in self.graph._all_edges:
+        for start, end in sorted(self.graph._all_edges):
             graph.add_edge(start_nodes[start], end_nodes[end])
         for start, branches in self.graph.branches.items():
             for name, branch in branches.items():
