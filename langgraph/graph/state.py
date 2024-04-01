@@ -21,6 +21,14 @@ logger = logging.getLogger(__name__)
 
 
 class StateGraph(Graph):
+    """A graph whose nodes communicate by reading and writing to a shared state.
+    The signature of each node is State -> Partial<State>.
+
+    Each state key can optionally be annotated with a reducer function that
+    will be used to aggregate the values of that key received from multiple nodes.
+    The signature of a reducer function is (Value, Value) -> Value.
+    """
+
     def __init__(self, schema: Type[Any]) -> None:
         super().__init__()
         self.schema = schema

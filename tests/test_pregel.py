@@ -2996,3 +2996,62 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         },
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
+
+
+def test_simple_multi_edge() -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+
+    def up(state: State):
+        pass
+
+    def side(state: State):
+        pass
+
+    def down(state: State):
+        pass
+
+    graph = StateGraph(State)
+
+    graph.add_node("up", up)
+    graph.add_node("side", side)
+    graph.add_node("down", down)
+
+    graph.set_entry_point("up")
+    graph.add_edge("up", "side")
+    graph.add_edge("up", "down")
+    graph.add_edge(["up", "side"], "down")
+    graph.set_finish_point("down")
+
+    app = graph.compile()
+
+    assert app.get_graph().draw_ascii() == (
+        """    +-----------+  
+    | __start__ |  
+    +-----------+  
+           *       
+           *       
+           *       
+        +----+     
+        | up |     
+        +----+     
+       **     **   
+      *         *  
+     *           * 
++------+          *
+| side |         * 
++------+        *  
+       **     **   
+         *   *     
+          * *      
+       +------+    
+       | down |    
+       +------+    
+           *       
+           *       
+           *       
+      +---------+  
+      | __end__ |  
+      +---------+  """
+    )
+    assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}

@@ -151,7 +151,10 @@ class Graph:
         if not self.support_multiple_edges and start_key in set(
             start for start, _ in self.edges
         ):
-            raise ValueError(f"Already found path for {start_key}")
+            raise ValueError(
+                f"Already found path for node '{start_key}'.\n"
+                "For multiple edges, use StateGraph with an annotated state key."
+            )
 
         self.edges.add((start_key, end_key))
 
