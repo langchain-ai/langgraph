@@ -21,8 +21,8 @@ SKIP_WRITE = object()
 
 class ChannelWriteEntry(NamedTuple):
     channel: str
-    value: Optional[Union[Any, Runnable]]
-    skip_none: bool
+    value: Optional[Union[Any, Runnable]] = None
+    skip_none: bool = False
 
 
 class ChannelWrite(RunnablePassthrough):

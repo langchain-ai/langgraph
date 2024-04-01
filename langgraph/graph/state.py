@@ -27,20 +27,17 @@ class StateGraph(Graph):
         self.channels = _get_channels(schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
-        self.w_edges: set[tuple[tuple[str, ...], str]] = set()
+        self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
 
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
         return self.edges | {
-            (start, end) for starts, end in self.w_edges for start in starts
+            (start, end) for starts, end in self.waiting_edges for start in starts
         }
 
     def add_node(self, key: str, action: RunnableLike) -> None:
         if key in self.channels:
-            raise ValueError(
-                f"'{key}' is already being used as a state attribute "
-                "(a.k.a. a channel), cannot also be used as a node name."
-            )
+            raise ValueError(f"'{key}' is already being used as a state key")
         return super().add_node(key, action)
 
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
@@ -62,7 +59,7 @@ class StateGraph(Graph):
         if end_key not in self.nodes:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
-        self.w_edges.add((tuple(start_key), end_key))
+        self.waiting_edges.add((tuple(start_key), end_key))
 
     def compile(
         self,
@@ -71,10 +68,6 @@ class StateGraph(Graph):
         interrupt_after: Optional[Sequence[str]] = None,
         debug: bool = False,
     ) -> CompiledGraph:
-        # prepare state channels
-        state_keys = list(self.channels)
-        state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
-
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -82,14 +75,18 @@ class StateGraph(Graph):
         # validate the graph
         self.validate(interrupt=interrupt_before + interrupt_after)
 
+        # prepare output channels
+        state_keys = list(self.channels)
+        output_channels = state_keys[0] if state_keys == ["__root__"] else state_keys
+
         compiled = CompiledStateGraph(
             graph=self,
             nodes={},
             channels={**self.channels, START: EphemeralValue(self.schema)},
             input_channels=START,
             stream_mode="updates",
-            output_channels=state_keys_read,
-            stream_channels=state_keys_read,
+            output_channels=output_channels,
+            stream_channels=output_channels,
             checkpointer=checkpointer,
             interrupt_before_nodes=interrupt_before,
             interrupt_after_nodes=interrupt_after,
@@ -104,7 +101,7 @@ class StateGraph(Graph):
         for start, end in self.edges:
             compiled.attach_edge(start, end)
 
-        for starts, end in self.w_edges:
+        for starts, end in self.waiting_edges:
             compiled.attach_edge(starts, end)
 
         for start, branches in self.branches.items():
@@ -118,17 +115,20 @@ class CompiledStateGraph(CompiledGraph):
     graph: StateGraph
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
-        # prepare state
+        def _get_state_key(key: str, input: dict) -> Any:
+            if input is None:
+                return SKIP_WRITE
+            elif not isinstance(input, dict):
+                raise InvalidUpdateError(f"Expected dict, got {input}")
+            else:
+                return input.get(key, SKIP_WRITE)
+
         state_keys = list(self.graph.channels)
-        state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
+        # state updaters
         state_write_entries = [
-            ChannelWriteEntry(
-                key,
-                RunnableLambda(partial(_dict_getter, state_keys, key)),
-                False,
-            )
-            if key != "__root__"
-            else ChannelWriteEntry(key, None, True)
+            ChannelWriteEntry(key, None, skip_none=True)
+            if key == "__root__"
+            else ChannelWriteEntry(key, RunnableLambda(partial(_get_state_key, key)))
             for key in state_keys
         ]
 
@@ -143,23 +143,24 @@ class CompiledStateGraph(CompiledGraph):
                 triggers=[],
                 # read state keys
                 channels=(
-                    {chan: chan for chan in state_keys}
-                    if isinstance(state_keys_read, list)
-                    else [state_keys_read]
+                    state_keys
+                    if state_keys == ["__root__"]
+                    else {chan: chan for chan in state_keys}
                 ),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=(
-                    partial(_coerce_state, self.graph.schema)
-                    if isinstance(state_keys_read, list)
-                    else None
+                    None
+                    if state_keys == ["__root__"]
+                    else partial(_coerce_state, self.graph.schema)
                 ),
                 # publish to this channel and state keys
                 writers=[
-                    ChannelWrite(
-                        [ChannelWriteEntry(key, None, False)] + state_write_entries
-                    ),
+                    ChannelWrite([ChannelWriteEntry(key)] + state_write_entries),
                     # read back state with updates applied
-                    ChannelRead(state_keys_read, fresh=True),
+                    ChannelRead(
+                        state_keys[0] if state_keys == ["__root__"] else state_keys,
+                        fresh=True,
+                    ),
                 ],
             ).pipe(node)
 
@@ -173,7 +174,7 @@ class CompiledStateGraph(CompiledGraph):
                 self.nodes[end].triggers.append(channel_name)
                 # publish to channel
                 self.nodes[START] |= ChannelWrite(
-                    [ChannelWriteEntry(channel_name, START, False)]
+                    [ChannelWriteEntry(channel_name, START)]
                 )
             elif end != END:
                 # subscribe to start channel
@@ -187,14 +188,14 @@ class CompiledStateGraph(CompiledGraph):
             # publish to channel
             for start in starts:
                 self.nodes[start] |= ChannelWrite(
-                    [ChannelWriteEntry(channel_name, start, False)]
+                    [ChannelWriteEntry(channel_name, start)]
                 )
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(end: str) -> Optional[ChannelWrite]:
             if end != END:
                 return ChannelWrite(
-                    [ChannelWriteEntry(f"branch:{start}:{name}:{end}", start, False)]
+                    [ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)]
                 )
 
         # attach branch publisher
@@ -211,18 +212,6 @@ class CompiledStateGraph(CompiledGraph):
 
 def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
-
-
-def _dict_getter(allowed_keys: list[str], key: str, input: dict) -> Any:
-    if input is not None:
-        if not isinstance(input, dict) or any(key not in allowed_keys for key in input):
-            raise InvalidUpdateError(
-                f"Invalid state update,"
-                f" expected dict with one or more of {allowed_keys}, got {input}"
-            )
-        return input.get(key, SKIP_WRITE)
-    else:
-        return SKIP_WRITE
 
 
 def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
