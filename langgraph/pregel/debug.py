@@ -25,7 +25,7 @@ def print_checkpoint(step: int, channels: Mapping[str, BaseChannel]) -> None:
     print(
         f"{get_colored_text('[langgraph/checkpoint]', color='blue')} "
         + get_bolded_text(f"Finishing step {step}. Channel values:\n")
-        + pformat({name: val for name, val in _read_channels(channels)}, depth=2)
+        + pformat({name: val for name, val in _read_channels(channels)}, depth=3)
     )
 
 

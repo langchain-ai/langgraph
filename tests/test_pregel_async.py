@@ -31,7 +31,7 @@ from langgraph.prebuilt.chat_agent_executor import (
 )
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
-from langgraph.pregel.reserved import ReservedChannels
+from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
 
 
@@ -100,28 +100,6 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
         },
     }
     assert await app.ainvoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
-
-
-async def test_invoke_single_process_in_out_reserved_is_last(
-    mocker: MockerFixture,
-) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: {**x, "input": x["input"] + 1})
-
-    chain = (
-        Channel.subscribe_to(["input"]).join([ReservedChannels.is_last_step])
-        | add_one
-        | Channel.write_to("output")
-    )
-
-    app = Pregel(nodes={"one": chain})
-
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
-    assert await app.ainvoke(2) == {"input": 3, "is_last_step": False}
-    assert await app.ainvoke(2, {"recursion_limit": 1}) == {
-        "input": 3,
-        "is_last_step": True,
-    }
 
 
 async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
@@ -227,7 +205,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
     app = Pregel(
         nodes={"one": one, "two": two},
         checkpointer=memory,
-        interrupt_after_nodes=["inbox"],
+        interrupt_after_nodes=["one"],
     )
 
     # start execution, stop at inbox
@@ -262,7 +240,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
     assert snapshot.next == ("two",)
 
     # update the state, resume
-    await app.aupdate_state({"configurable": {"thread_id": 2}}, {"inbox": 25})
+    await app.aupdate_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
     assert await app.ainvoke(None, {"configurable": {"thread_id": 2}}) == 26
 
     # no pending tasks
@@ -536,9 +514,11 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
         state = await app.aget_state({"configurable": {"thread_id": "1"}})
         assert state is not None
         assert state.values.get("total") == 7
+        assert state.next == ()
         state = await app.aget_state(thread_2)
         assert state is not None
         assert state.values.get("total") == 5
+        assert state.next == ()
 
         # list all checkpoints for thread 1
         thread_1_history = [c async for c in app.aget_state_history(thread_1)]
@@ -561,9 +541,7 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
             "ts"
         ] == thread_1_history[1].config["configurable"]["thread_ts"]
 
-        thread_1_next_config = await app.aupdate_state(
-            thread_1_history[1].config, {"total": 10}
-        )
+        thread_1_next_config = await app.aupdate_state(thread_1_history[1].config, 10)
         # update creates a new checkpoint
         assert (
             thread_1_next_config["configurable"]["thread_ts"]
@@ -981,23 +959,20 @@ async def test_conditional_graph() -> None:
                     tool="search_api", tool_input="query", log="tool:search_api:query"
                 ),
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     await app_w_interrupt.aupdate_state(
         config,
         {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:a different query",
-                ),
-                "input": "what is weather in sf",
-            },
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            ),
+            "input": "what is weather in sf",
         },
     )
 
@@ -1011,9 +986,8 @@ async def test_conditional_graph() -> None:
                 ),
                 "input": "what is weather in sf",
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
@@ -1058,6 +1032,26 @@ async def test_conditional_graph() -> None:
     await app_w_interrupt.aupdate_state(
         config,
         {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                )
+            ],
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+        },
+    )
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
             "agent": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -1074,11 +1068,11 @@ async def test_conditional_graph() -> None:
                     return_values={"answer": "a really nice answer"},
                     log="finish:a really nice answer",
                 ),
-            }
+            },
         },
+        next=(),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
-
-    assert [c async for c in app_w_interrupt.astream(None, config)] == []
 
     # test state get/update methods with interrupt_before
 
@@ -1112,23 +1106,20 @@ async def test_conditional_graph() -> None:
                     tool="search_api", tool_input="query", log="tool:search_api:query"
                 ),
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
     await app_w_interrupt.aupdate_state(
         config,
         {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:a different query",
-                ),
-                "input": "what is weather in sf",
-            },
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            ),
+            "input": "what is weather in sf",
         },
     )
 
@@ -1142,9 +1133,8 @@ async def test_conditional_graph() -> None:
                 ),
                 "input": "what is weather in sf",
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
@@ -1189,6 +1179,26 @@ async def test_conditional_graph() -> None:
     await app_w_interrupt.aupdate_state(
         config,
         {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                )
+            ],
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+        },
+    )
+
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
             "agent": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -1205,11 +1215,11 @@ async def test_conditional_graph() -> None:
                     return_values={"answer": "a really nice answer"},
                     log="finish:a really nice answer",
                 ),
-            }
+            },
         },
+        next=(),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
-
-    assert [c async for c in app_w_interrupt.astream(None, config)] == []
 
     # test re-invoke to continue with interrupt_before
 
@@ -1243,9 +1253,8 @@ async def test_conditional_graph() -> None:
                     tool="search_api", tool_input="query", log="tool:search_api:query"
                 ),
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
@@ -1527,11 +1536,13 @@ async def test_conditional_graph_state() -> None:
         values={
             "input": "what is weather in sf",
             "agent_outcome": AgentAction(
-                tool="search_api", tool_input="query", log="tool:search_api:query"
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:query",
             ),
             "intermediate_steps": [],
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
@@ -1556,7 +1567,7 @@ async def test_conditional_graph_state() -> None:
             ),
             "intermediate_steps": [],
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
@@ -1596,7 +1607,27 @@ async def test_conditional_graph_state() -> None:
         },
     )
 
-    assert [c async for c in app_w_interrupt.astream(None, config)] == []
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                )
+            ],
+        },
+        next=(),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+    )
 
     # test state get/update methods with interrupt_before
 
@@ -1630,7 +1661,7 @@ async def test_conditional_graph_state() -> None:
             ),
             "intermediate_steps": [],
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
@@ -1655,7 +1686,7 @@ async def test_conditional_graph_state() -> None:
             ),
             "intermediate_steps": [],
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
@@ -1695,7 +1726,27 @@ async def test_conditional_graph_state() -> None:
         },
     )
 
-    assert [c async for c in app_w_interrupt.astream(None, config)] == []
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                )
+            ],
+        },
+        next=(),
+        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+    )
 
 
 async def test_conditional_entrypoint_graph() -> None:
@@ -2092,7 +2143,7 @@ async def test_prebuilt_chat() -> None:
     ]
 
 
-async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
+async def test_message_graph() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
@@ -2206,9 +2257,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
     app = workflow.compile()
 
     assert await app.ainvoke(HumanMessage(content="what is weather in sf")) == [
-        HumanMessage(
-            content="what is weather in sf", id="00000000-0000-4000-8000-000000000002"
-        ),
+        HumanMessage(content="what is weather in sf", id=AnyStr()),
         AIMessage(
             content="",
             additional_kwargs={
@@ -2216,11 +2265,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             },
             id="ai1",
         ),
-        FunctionMessage(
-            content="result for query",
-            name="search_api",
-            id="00000000-0000-4000-8000-000000000015",
-        ),
+        FunctionMessage(content="result for query", name="search_api", id=AnyStr()),
         AIMessage(
             content="",
             additional_kwargs={
@@ -2228,25 +2273,14 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             },
             id="ai2",
         ),
-        FunctionMessage(
-            content="result for another",
-            name="search_api",
-            id="00000000-0000-4000-8000-000000000028",
-        ),
+        FunctionMessage(content="result for another", name="search_api", id=AnyStr()),
         AIMessage(content="answer", id="ai3"),
     ]
 
     assert [
         c async for c in app.astream([HumanMessage(content="what is weather in sf")])
     ] == [
-        {
-            "__start__": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id="00000000-0000-4000-8000-000000000037",
-                )
-            ]
-        },
+        {"__start__": [HumanMessage(content="what is weather in sf", id=AnyStr())]},
         {
             "agent": AIMessage(
                 content="",
@@ -2258,9 +2292,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         },
         {
             "action": FunctionMessage(
-                content="result for query",
-                name="search_api",
-                id="00000000-0000-4000-8000-000000000050",
+                content="result for query", name="search_api", id=AnyStr()
             )
         },
         {
@@ -2274,9 +2306,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         },
         {
             "action": FunctionMessage(
-                content="result for another",
-                name="search_api",
-                id="00000000-0000-4000-8000-000000000063",
+                content="result for another", name="search_api", id=AnyStr()
             )
         },
         {"agent": AIMessage(content="answer", id="ai3")},
@@ -2296,7 +2326,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         {
             "__start__": HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
+                id=AnyStr(),
             )
         },
         {
@@ -2314,7 +2344,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2324,7 +2354,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
                 id="ai1",
             ),
         ],
-        next=("agent:edges",),
+        next=("action",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
     )
 
@@ -2338,7 +2368,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2351,7 +2381,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
                 id="ai1",
             ),
         ],
-        next=("agent:edges",),
+        next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -2360,7 +2390,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             "action": FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000086",
+                id=AnyStr(),
             )
         },
         {
@@ -2378,7 +2408,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2393,7 +2423,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000086",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2403,7 +2433,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
                 id="ai2",
             ),
         ],
-        next=("agent:edges",),
+        next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -2417,7 +2447,7 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2432,15 +2462,13 @@ async def test_message_graph(deterministic_uuids: MockerFixture) -> None:
             FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000086",
+                id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
         ],
-        next=("agent:edges",),
+        next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
-
-    assert [c async for c in app_w_interrupt.astream(None, config)] == []
 
 
 async def test_in_one_fan_out_out_one_graph_state() -> None:

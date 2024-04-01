@@ -11,13 +11,9 @@ Messages = Union[list[AnyMessage], AnyMessage]
 def add_messages(left: Messages, right: Messages) -> Messages:
     # coerce to list
     if not isinstance(left, list):
-        left = [message_chunk_to_message(left)]
-    else:
-        left = [message_chunk_to_message(m) for m in left]
+        left = [left]
     if not isinstance(right, list):
-        right = [message_chunk_to_message(right)]
-    else:
-        right = [message_chunk_to_message(m) for m in right]
+        right = [right]
     # assign missing ids
     for m in left:
         if m.id is None:
@@ -25,6 +21,9 @@ def add_messages(left: Messages, right: Messages) -> Messages:
     for m in right:
         if m.id is None:
             m.id = str(uuid.uuid4())
+    # coerce to message
+    left = [message_chunk_to_message(m) for m in left]
+    right = [message_chunk_to_message(m) for m in right]
     # merge
     left_idx_by_id = {m.id: i for i, m in enumerate(left)}
     merged = left.copy()

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, NamedTuple, Optional, Sequence, Union
+from typing import Any, Callable, NamedTuple, Optional, Sequence, TypeVar, Union
 
 from langchain_core.runnables import (
     Runnable,
@@ -13,6 +13,7 @@ from langchain_core.runnables.utils import ConfigurableFieldSpec
 from langgraph.constants import CONFIG_KEY_SEND
 
 TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
+R = TypeVar("R", bound=Runnable)
 
 
 SKIP_WRITE = object()
@@ -36,12 +37,16 @@ class ChannelWrite(RunnablePassthrough):
     class Config:
         arbitrary_types_allowed = True
 
-    def __init__(self, *, channels: Sequence[ChannelWriteEntry]):
+    def __init__(self, channels: Sequence[ChannelWriteEntry]):
         super().__init__(func=self._write, afunc=self._awrite, channels=channels)
         self.name = f"ChannelWrite<{','.join(chan for chan, _, _ in self.channels)}>"
 
     def __repr_args__(self) -> Any:
         return [("channels", self.channels)]
+
+    @property
+    def is_channel_writer(self) -> bool:
+        return True
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -98,6 +103,18 @@ class ChannelWrite(RunnablePassthrough):
     def do_write(config: RunnableConfig, **values: Any) -> None:
         write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
         write([(chan, val) for chan, val in values.items() if val is not SKIP_WRITE])
+
+    @staticmethod
+    def is_writer(runnable: Runnable) -> bool:
+        return (
+            isinstance(runnable, ChannelWrite)
+            or getattr(runnable, "_is_channel_writer", False) is True
+        )
+
+    @staticmethod
+    def register_writer(runnable: R) -> R:
+        object.__setattr__(runnable, "_is_channel_writer", True)
+        return runnable
 
 
 def _mk_future(val: Any) -> asyncio.Future:

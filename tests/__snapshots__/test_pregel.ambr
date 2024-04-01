@@ -50,20 +50,7 @@
         }
       },
       {
-        "id": "left_condition",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "RunnableLambda"
-        }
-      },
-      {
-        "id": "should_start",
+        "id": "__start___should_start",
         "type": "runnable",
         "data": {
           "id": [
@@ -74,6 +61,19 @@
           ],
           "name": "should_start"
         }
+      },
+      {
+        "id": "left_left_condition",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "left_condition"
+        }
       }
     ],
     "edges": [
@@ -82,37 +82,37 @@
         "target": "__end__"
       },
       {
-        "source": "left",
-        "target": "left_condition"
-      },
-      {
-        "source": "left_condition",
-        "target": "left",
-        "data": "left"
-      },
-      {
-        "source": "left_condition",
-        "target": "right",
-        "data": "right"
-      },
-      {
-        "source": "left_condition",
-        "target": "__end__",
-        "data": "__end__"
-      },
-      {
         "source": "__start__",
-        "target": "should_start"
+        "target": "__start___should_start"
       },
       {
-        "source": "should_start",
+        "source": "__start___should_start",
         "target": "left",
         "data": "go-left"
       },
       {
-        "source": "should_start",
+        "source": "__start___should_start",
         "target": "right",
         "data": "go-right"
+      },
+      {
+        "source": "left",
+        "target": "left_left_condition"
+      },
+      {
+        "source": "left_left_condition",
+        "target": "left",
+        "data": "left"
+      },
+      {
+        "source": "left_left_condition",
+        "target": "right",
+        "data": "right"
+      },
+      {
+        "source": "left_left_condition",
+        "target": "__end__",
+        "data": "__end__"
       }
     ]
   }
@@ -120,39 +120,39 @@
 # ---
 # name: test_conditional_entrypoint_graph.3
   '''
-                +-----------+            
-                | __start__ |            
-                +-----------+            
-                       *                 
-                       *                 
-                       *                 
-               +--------------+          
-               | should_start |          
-               +--------------+          
-                ***         **           
-               *              **         
-             **                 **       
-       +------+                   *      
-       | left |                   *      
-       +------+                   *      
-           *                      *      
-           *                      *      
-           *                      *      
-  +----------------+              *      
-  | left_condition |              *      
-  +----------------+*             *      
-           *         *****        *      
-           *              ***     *      
-           *                 ***  *      
-           **                 +-------+  
-             *                | right |  
-              ***             +-------+  
-                 *          ***          
-                  ***      *             
-                     *   **              
-                 +---------+             
-                 | __end__ |             
-                 +---------+             
+                    +-----------+             
+                    | __start__ |             
+                    +-----------+             
+                          *                   
+                          *                   
+                          *                   
+              +------------------------+      
+              | __start___should_start |      
+              +------------------------+      
+                   ***           **           
+                  *                **         
+                **                   **       
+          +------+                     **     
+          | left |                      *     
+          +------+                      *     
+              *                         *     
+              *                         *     
+              *                         *     
+  +---------------------+               *     
+  | left_left_condition |               *     
+  +---------------------+               *     
+              *          *****          *     
+              *               ****      *     
+              *                   ***   *     
+              **                   +-------+  
+                *                  | right |  
+                 ***               +-------+  
+                    *           ***           
+                     ***       *              
+                        *    **               
+                     +---------+              
+                     | __end__ |              
+                     +---------+              
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
@@ -234,20 +234,7 @@
         }
       },
       {
-        "id": "left_condition",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "RunnableLambda"
-        }
-      },
-      {
-        "id": "should_start",
+        "id": "__start___should_start",
         "type": "runnable",
         "data": {
           "id": [
@@ -258,6 +245,19 @@
           ],
           "name": "should_start"
         }
+      },
+      {
+        "id": "left_left_condition",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "left_condition"
+        }
       }
     ],
     "edges": [
@@ -266,37 +266,37 @@
         "target": "__end__"
       },
       {
-        "source": "left",
-        "target": "left_condition"
-      },
-      {
-        "source": "left_condition",
-        "target": "left",
-        "data": "left"
-      },
-      {
-        "source": "left_condition",
-        "target": "right",
-        "data": "right"
-      },
-      {
-        "source": "left_condition",
-        "target": "__end__",
-        "data": "__end__"
-      },
-      {
         "source": "__start__",
-        "target": "should_start"
+        "target": "__start___should_start"
       },
       {
-        "source": "should_start",
+        "source": "__start___should_start",
         "target": "left",
         "data": "go-left"
       },
       {
-        "source": "should_start",
+        "source": "__start___should_start",
         "target": "right",
         "data": "go-right"
+      },
+      {
+        "source": "left",
+        "target": "left_left_condition"
+      },
+      {
+        "source": "left_left_condition",
+        "target": "left",
+        "data": "left"
+      },
+      {
+        "source": "left_left_condition",
+        "target": "right",
+        "data": "right"
+      },
+      {
+        "source": "left_left_condition",
+        "target": "__end__",
+        "data": "__end__"
       }
     ]
   }
@@ -304,39 +304,39 @@
 # ---
 # name: test_conditional_entrypoint_graph_state.3
   '''
-                +-----------+            
-                | __start__ |            
-                +-----------+            
-                       *                 
-                       *                 
-                       *                 
-               +--------------+          
-               | should_start |          
-               +--------------+          
-                ***         **           
-               *              **         
-             **                 **       
-       +------+                   *      
-       | left |                   *      
-       +------+                   *      
-           *                      *      
-           *                      *      
-           *                      *      
-  +----------------+              *      
-  | left_condition |              *      
-  +----------------+*             *      
-           *         *****        *      
-           *              ***     *      
-           *                 ***  *      
-           **                 +-------+  
-             *                | right |  
-              ***             +-------+  
-                 *          ***          
-                  ***      *             
-                     *   **              
-                 +---------+             
-                 | __end__ |             
-                 +---------+             
+                    +-----------+             
+                    | __start__ |             
+                    +-----------+             
+                          *                   
+                          *                   
+                          *                   
+              +------------------------+      
+              | __start___should_start |      
+              +------------------------+      
+                   ***           **           
+                  *                **         
+                **                   **       
+          +------+                     **     
+          | left |                      *     
+          +------+                      *     
+              *                         *     
+              *                         *     
+              *                         *     
+  +---------------------+               *     
+  | left_left_condition |               *     
+  +---------------------+               *     
+              *          *****          *     
+              *               ****      *     
+              *                   ***   *     
+              **                   +-------+  
+                *                  | right |  
+                 ***               +-------+  
+                    *           ***           
+                     ***       *              
+                        *    **               
+                     +---------+              
+                     | __end__ |              
+                     +---------+              
   '''
 # ---
 # name: test_conditional_graph
@@ -399,6 +399,10 @@
     ],
     "edges": [
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "tools",
         "target": "agent"
       },
@@ -415,10 +419,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "exit"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }
@@ -670,6 +670,10 @@
         "target": 3
       },
       {
+        "source": "__start__",
+        "target": 2
+      },
+      {
         "source": "tools",
         "target": 2
       },
@@ -686,10 +690,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "exit"
-      },
-      {
-        "source": "__start__",
-        "target": 2
       }
     ]
   }
@@ -1020,6 +1020,10 @@
     ],
     "edges": [
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "tools",
         "target": "agent"
       },
@@ -1036,10 +1040,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "exit"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }
@@ -1843,6 +1843,10 @@
         "target": "agent"
       },
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "agent",
         "target": "agent_should_continue"
       },
@@ -1855,10 +1859,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "end"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }
@@ -2086,6 +2086,10 @@
         "target": "agent"
       },
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "agent",
         "target": "agent_should_continue"
       },
@@ -2098,10 +2102,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "end"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }
@@ -2329,6 +2329,10 @@
         "target": "agent"
       },
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "agent",
         "target": "agent_should_continue"
       },
@@ -2341,10 +2345,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "end"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }
