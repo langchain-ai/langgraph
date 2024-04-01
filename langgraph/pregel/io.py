@@ -7,16 +7,40 @@ from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.pregel.log import logger
 
 
-def _read_channel(
-    channels: Mapping[str, BaseChannel], chan: str, catch: bool = True
+def read_channel(
+    channels: Mapping[str, BaseChannel],
+    chan: str,
+    *,
+    catch: bool = True,
+    return_exception: bool = False,
 ) -> Any:
     try:
         return channels[chan].get()
-    except EmptyChannelError:
-        if catch:
+    except EmptyChannelError as exc:
+        if return_exception:
+            return exc
+        elif catch:
             return None
         else:
             raise
+
+
+def read_channels(
+    channels: Mapping[str, BaseChannel],
+    select: Union[list[str], str],
+    *,
+    skip_empty: bool = True,
+) -> Union[dict[str, Any], Any]:
+    if isinstance(select, str):
+        return read_channel(channels, select)
+    else:
+        values: dict[str, Any] = {}
+        for k in select:
+            try:
+                values[k] = read_channel(channels, k, catch=not skip_empty)
+            except EmptyChannelError:
+                pass
+        return values
 
 
 def map_input(
@@ -46,10 +70,10 @@ def map_output_values(
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
         if any(chan == output_channels for chan, _ in pending_writes):
-            return _read_channel(channels, output_channels)
+            return read_channel(channels, output_channels)
     else:
         if updated := {c for c, _ in pending_writes if c in output_channels}:
-            return {chan: _read_channel(channels, chan) for chan in updated}
+            return read_channels(channels, updated)
     return None
 
 
