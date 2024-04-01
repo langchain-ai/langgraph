@@ -10,6 +10,7 @@ from typing import (
     Awaitable,
     Callable,
     Iterator,
+    Literal,
     Mapping,
     NamedTuple,
     Optional,
@@ -284,7 +285,7 @@ class Pregel(
         config = saved.config if saved else config
         with ChannelsManager(self.channels, checkpoint) as channels:
             _, next_tasks = _prepare_next_tasks(
-                checkpoint, self.nodes, channels, update_seen=False
+                checkpoint, self.nodes, channels, for_execution=False
             )
             values = {
                 k: _read_channel(channels, k)
@@ -308,7 +309,7 @@ class Pregel(
         config = saved.config if saved else config
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
             _, next_tasks = _prepare_next_tasks(
-                checkpoint, self.nodes, channels, update_seen=False
+                checkpoint, self.nodes, channels, for_execution=False
             )
             values = {
                 k: _read_channel(channels, k)
@@ -330,7 +331,7 @@ class Pregel(
         for config, checkpoint, parent_config in self.checkpointer.list(config):
             with ChannelsManager(self.channels, checkpoint) as channels:
                 _, next_tasks = _prepare_next_tasks(
-                    checkpoint, self.nodes, channels, update_seen=False
+                    checkpoint, self.nodes, channels, for_execution=False
                 )
                 values = {
                     k: _read_channel(channels, k)
@@ -355,7 +356,7 @@ class Pregel(
         async for config, checkpoint, parent_config in self.checkpointer.alist(config):
             async with AsyncChannelsManager(self.channels, checkpoint) as channels:
                 _, next_tasks = _prepare_next_tasks(
-                    checkpoint, self.nodes, channels, update_seen=False
+                    checkpoint, self.nodes, channels, for_execution=False
                 )
                 values = {
                     k: _read_channel(channels, k)
@@ -488,7 +489,9 @@ class Pregel(
                     w for c in input for w in map_input(input_keys, c)
                 ):
                     # discard any unfinished tasks from previous checkpoint
-                    checkpoint, _ = _prepare_next_tasks(checkpoint, processes, channels)
+                    checkpoint, _ = _prepare_next_tasks(
+                        checkpoint, processes, channels, for_execution=True
+                    )
                     # apply input writes
                     _apply_writes(
                         checkpoint,
@@ -514,7 +517,7 @@ class Pregel(
                 # with channel updates applied only at the transition between steps
                 for step in range(config["recursion_limit"] + 1):
                     checkpoint, next_tasks = _prepare_next_tasks(
-                        checkpoint, processes, channels
+                        checkpoint, processes, channels, for_execution=True
                     )
 
                     # if no more tasks, we're done
@@ -533,9 +536,6 @@ class Pregel(
                     if debug:
                         print_step_start(step, next_tasks)
 
-                    # collect all writes to channels, without applying them yet
-                    pending_writes = deque[tuple[str, Any]]()
-
                     # prepare tasks with config
                     tasks_w_config = [
                         (
@@ -547,12 +547,12 @@ class Pregel(
                                 callbacks=run_manager.get_child(f"graph:step:{step}"),
                                 configurable={
                                     # deque.extend is thread-safe
-                                    CONFIG_KEY_SEND: pending_writes.extend,
+                                    CONFIG_KEY_SEND: writes.extend,
                                     CONFIG_KEY_READ: read,
                                 },
                             ),
                         )
-                        for proc, input, name in next_tasks
+                        for proc, input, name, writes in next_tasks
                     ]
 
                     futures = [
@@ -570,6 +570,11 @@ class Pregel(
 
                     # panic on failure or timeout
                     _panic_or_proceed(done, inflight, step)
+
+                    # combine pending writes from all tasks
+                    pending_writes = deque[tuple[str, Any]]()
+                    for _, _, _, writes in next_tasks:
+                        pending_writes.extend(writes)
 
                     # apply writes to channels
                     _apply_writes(
@@ -671,7 +676,9 @@ class Pregel(
                     [w async for c in input for w in map_input(input_keys, c)]
                 ):
                     # discard any unfinished tasks from previous checkpoint
-                    checkpoint, _ = _prepare_next_tasks(checkpoint, processes, channels)
+                    checkpoint, _ = _prepare_next_tasks(
+                        checkpoint, processes, channels, for_execution=True
+                    )
                     # apply input writes
                     _apply_writes(
                         checkpoint,
@@ -697,7 +704,7 @@ class Pregel(
                 # channel updates being applied only at the transition between steps
                 for step in range(config["recursion_limit"] + 1):
                     checkpoint, next_tasks = _prepare_next_tasks(
-                        checkpoint, processes, channels
+                        checkpoint, processes, channels, for_execution=True
                     )
 
                     # if no more tasks, we're done
@@ -713,9 +720,6 @@ class Pregel(
                     if debug:
                         print_step_start(step, next_tasks)
 
-                    # collect all writes to channels, without applying them yet
-                    pending_writes = deque[tuple[str, Any]]()
-
                     # prepare tasks with config
                     tasks_w_config = [
                         (
@@ -727,12 +731,12 @@ class Pregel(
                                 callbacks=run_manager.get_child(f"graph:step:{step}"),
                                 configurable={
                                     # deque.extend is thread-safe
-                                    CONFIG_KEY_SEND: pending_writes.extend,
+                                    CONFIG_KEY_SEND: writes.extend,
                                     CONFIG_KEY_READ: read,
                                 },
                             ),
                         )
-                        for proc, input, name in next_tasks
+                        for proc, input, name, writes in next_tasks
                     ]
 
                     futures = (
@@ -757,6 +761,11 @@ class Pregel(
 
                     # panic on failure or timeout
                     _panic_or_proceed(done, inflight, step)
+
+                    # combine pending writes from all tasks
+                    pending_writes = deque[tuple[str, Any]]()
+                    for _, _, _, writes in next_tasks:
+                        pending_writes.extend(writes)
 
                     # apply writes to channels
                     _apply_writes(
@@ -1066,14 +1075,44 @@ def _apply_writes(
             channels[chan].update([])
 
 
+@overload
 def _prepare_next_tasks(
     checkpoint: Checkpoint,
     processes: Mapping[str, ChannelInvoke],
     channels: Mapping[str, BaseChannel],
-    update_seen: bool = True,
+    for_execution: Literal[False],
 ) -> tuple[Checkpoint, list[tuple[Runnable, Any, str]]]:
+    ...
+
+
+@overload
+def _prepare_next_tasks(
+    checkpoint: Checkpoint,
+    processes: Mapping[str, ChannelInvoke],
+    channels: Mapping[str, BaseChannel],
+    for_execution: Literal[True],
+) -> tuple[Checkpoint, list[tuple[Runnable, Any, str, deque[tuple[str, Any]]]]]:
+    ...
+
+
+def _prepare_next_tasks(
+    checkpoint: Checkpoint,
+    processes: Mapping[str, ChannelInvoke],
+    channels: Mapping[str, BaseChannel],
+    *,
+    for_execution: bool,
+) -> tuple[
+    Checkpoint,
+    Union[
+        list[tuple[Runnable, Any, str]],
+        list[tuple[Runnable, Any, str, deque[tuple[str, Any]]]],
+    ],
+]:
     checkpoint = copy_checkpoint(checkpoint)
-    tasks: list[tuple[Runnable, Any, str]] = []
+    tasks: Union[
+        list[tuple[Runnable, Any, str]],
+        list[tuple[Runnable, Any, str, deque[tuple[str, Any]]]],
+    ] = []
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
@@ -1106,7 +1145,7 @@ def _prepare_next_tasks(
                 val = val[None]
 
             # update seen versions
-            if update_seen:
+            if for_execution:
                 seen.update(
                     {
                         chan: checkpoint["channel_versions"][chan]
@@ -1116,7 +1155,10 @@ def _prepare_next_tasks(
 
             # skip if condition is not met
             if proc.when is None or proc.when(val):
-                tasks.append((proc, val, name))
+                if for_execution:
+                    tasks.append((proc, val, name, deque()))
+                else:
+                    tasks.append((proc, val, name))
     return checkpoint, tasks
 
 
