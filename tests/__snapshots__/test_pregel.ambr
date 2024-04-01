@@ -50,7 +50,7 @@
         }
       },
       {
-        "id": "left__route",
+        "id": "left_condition",
         "type": "runnable",
         "data": {
           "id": [
@@ -59,11 +59,11 @@
             "base",
             "RunnableLambda"
           ],
-          "name": "_route"
+          "name": "RunnableLambda"
         }
       },
       {
-        "id": "__start___condition",
+        "id": "should_start",
         "type": "runnable",
         "data": {
           "id": [
@@ -83,34 +83,34 @@
       },
       {
         "source": "left",
-        "target": "left__route"
+        "target": "left_condition"
       },
       {
-        "source": "left__route",
+        "source": "left_condition",
         "target": "left",
         "data": "left"
       },
       {
-        "source": "left__route",
+        "source": "left_condition",
         "target": "right",
         "data": "right"
       },
       {
-        "source": "left__route",
+        "source": "left_condition",
         "target": "__end__",
         "data": "__end__"
       },
       {
         "source": "__start__",
-        "target": "__start___condition"
+        "target": "should_start"
       },
       {
-        "source": "__start___condition",
+        "source": "should_start",
         "target": "left",
         "data": "go-left"
       },
       {
-        "source": "__start___condition",
+        "source": "should_start",
         "target": "right",
         "data": "go-right"
       }
@@ -120,46 +120,46 @@
 # ---
 # name: test_conditional_entrypoint_graph.3
   '''
-              +-----------+           
-              | __start__ |           
-              +-----------+           
-                    *                 
-                    *                 
-                    *                 
-         +---------------------+      
-         | __start___condition |      
-         +---------------------+      
-              ***        ***          
-             *              *         
-           **                ***      
-      +------+                  *     
-      | left |                  *     
-      +------+                  *     
-          *                     *     
-          *                     *     
-          *                     *     
-  +-------------+               *     
-  | left__route |               *     
-  +-------------+**             *     
-          *        ****         *     
-          *            ****     *     
-          *                **   *     
-          *                +-------+  
-           **              | right |  
-             **            +-------+  
-               **        ***          
-                 **     *             
-                   *  **              
-               +---------+            
-               | __end__ |            
-               +---------+            
+                +-----------+            
+                | __start__ |            
+                +-----------+            
+                       *                 
+                       *                 
+                       *                 
+               +--------------+          
+               | should_start |          
+               +--------------+          
+                ***         **           
+               *              **         
+             **                 **       
+       +------+                   *      
+       | left |                   *      
+       +------+                   *      
+           *                      *      
+           *                      *      
+           *                      *      
+  +----------------+              *      
+  | left_condition |              *      
+  +----------------+*             *      
+           *         *****        *      
+           *              ***     *      
+           *                 ***  *      
+           **                 +-------+  
+             *                | right |  
+              ***             +-------+  
+                 *          ***          
+                  ***      *             
+                     *   **              
+                 +---------+             
+                 | __end__ |             
+                 +---------+             
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
   '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}}}}}'
 # ---
 # name: test_conditional_entrypoint_graph_state.1
-  '{"title": "LangGraphOutput", "$ref": "#/definitions/AgentState", "definitions": {"AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}}}}}'
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}}}'
 # ---
 # name: test_conditional_entrypoint_graph_state.2
   '''
@@ -194,21 +194,15 @@
         "type": "schema",
         "data": {
           "title": "LangGraphOutput",
-          "$ref": "#/definitions/AgentState",
-          "definitions": {
-            "AgentState": {
-              "title": "AgentState",
-              "type": "object",
-              "properties": {
-                "input": {
-                  "title": "Input",
-                  "type": "string"
-                },
-                "output": {
-                  "title": "Output",
-                  "type": "string"
-                }
-              }
+          "type": "object",
+          "properties": {
+            "input": {
+              "title": "Input",
+              "type": "string"
+            },
+            "output": {
+              "title": "Output",
+              "type": "string"
             }
           }
         }
@@ -240,7 +234,7 @@
         }
       },
       {
-        "id": "left__route",
+        "id": "left_condition",
         "type": "runnable",
         "data": {
           "id": [
@@ -249,11 +243,11 @@
             "base",
             "RunnableLambda"
           ],
-          "name": "_route"
+          "name": "RunnableLambda"
         }
       },
       {
-        "id": "__start___condition",
+        "id": "should_start",
         "type": "runnable",
         "data": {
           "id": [
@@ -273,34 +267,34 @@
       },
       {
         "source": "left",
-        "target": "left__route"
+        "target": "left_condition"
       },
       {
-        "source": "left__route",
+        "source": "left_condition",
         "target": "left",
         "data": "left"
       },
       {
-        "source": "left__route",
+        "source": "left_condition",
         "target": "right",
         "data": "right"
       },
       {
-        "source": "left__route",
+        "source": "left_condition",
         "target": "__end__",
         "data": "__end__"
       },
       {
         "source": "__start__",
-        "target": "__start___condition"
+        "target": "should_start"
       },
       {
-        "source": "__start___condition",
+        "source": "should_start",
         "target": "left",
         "data": "go-left"
       },
       {
-        "source": "__start___condition",
+        "source": "should_start",
         "target": "right",
         "data": "go-right"
       }
@@ -310,39 +304,39 @@
 # ---
 # name: test_conditional_entrypoint_graph_state.3
   '''
-              +-----------+           
-              | __start__ |           
-              +-----------+           
-                    *                 
-                    *                 
-                    *                 
-         +---------------------+      
-         | __start___condition |      
-         +---------------------+      
-              ***        ***          
-             *              *         
-           **                ***      
-      +------+                  *     
-      | left |                  *     
-      +------+                  *     
-          *                     *     
-          *                     *     
-          *                     *     
-  +-------------+               *     
-  | left__route |               *     
-  +-------------+**             *     
-          *        ****         *     
-          *            ****     *     
-          *                **   *     
-          *                +-------+  
-           **              | right |  
-             **            +-------+  
-               **        ***          
-                 **     *             
-                   *  **              
-               +---------+            
-               | __end__ |            
-               +---------+            
+                +-----------+            
+                | __start__ |            
+                +-----------+            
+                       *                 
+                       *                 
+                       *                 
+               +--------------+          
+               | should_start |          
+               +--------------+          
+                ***         **           
+               *              **         
+             **                 **       
+       +------+                   *      
+       | left |                   *      
+       +------+                   *      
+           *                      *      
+           *                      *      
+           *                      *      
+  +----------------+              *      
+  | left_condition |              *      
+  +----------------+*             *      
+           *         *****        *      
+           *              ***     *      
+           *                 ***  *      
+           **                 +-------+  
+             *                | right |  
+              ***             +-------+  
+                 *          ***          
+                  ***      *             
+                     *   **              
+                 +---------+             
+                 | __end__ |             
+                 +---------+             
   '''
 # ---
 # name: test_conditional_graph
@@ -754,7 +748,7 @@
   '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"AgentAction": {"title": "AgentAction", "description": "A full description of an action for an ActionAgent to execute.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "The final return value of an ActionAgent.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}}}}'
 # ---
 # name: test_conditional_graph_state.1
-  '{"title": "LangGraphOutput", "$ref": "#/definitions/AgentState", "definitions": {"AgentAction": {"title": "AgentAction", "description": "A full description of an action for an ActionAgent to execute.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "The final return value of an ActionAgent.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}}}}'
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "A full description of an action for an ActionAgent to execute.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "The final return value of an ActionAgent.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
 # ---
 # name: test_conditional_graph_state.2
   '''
@@ -879,7 +873,41 @@
         "type": "schema",
         "data": {
           "title": "LangGraphOutput",
-          "$ref": "#/definitions/AgentState",
+          "type": "object",
+          "properties": {
+            "input": {
+              "title": "Input",
+              "type": "string"
+            },
+            "agent_outcome": {
+              "title": "Agent Outcome",
+              "anyOf": [
+                {
+                  "$ref": "#/definitions/AgentAction"
+                },
+                {
+                  "$ref": "#/definitions/AgentFinish"
+                }
+              ]
+            },
+            "intermediate_steps": {
+              "title": "Intermediate Steps",
+              "type": "array",
+              "items": {
+                "type": "array",
+                "minItems": 2,
+                "maxItems": 2,
+                "items": [
+                  {
+                    "$ref": "#/definitions/AgentAction"
+                  },
+                  {
+                    "type": "string"
+                  }
+                ]
+              }
+            }
+          },
           "definitions": {
             "AgentAction": {
               "title": "AgentAction",
@@ -946,44 +974,6 @@
                 "return_values",
                 "log"
               ]
-            },
-            "AgentState": {
-              "title": "AgentState",
-              "type": "object",
-              "properties": {
-                "input": {
-                  "title": "Input",
-                  "type": "string"
-                },
-                "agent_outcome": {
-                  "title": "Agent Outcome",
-                  "anyOf": [
-                    {
-                      "$ref": "#/definitions/AgentAction"
-                    },
-                    {
-                      "$ref": "#/definitions/AgentFinish"
-                    }
-                  ]
-                },
-                "intermediate_steps": {
-                  "title": "Intermediate Steps",
-                  "type": "array",
-                  "items": {
-                    "type": "array",
-                    "minItems": 2,
-                    "maxItems": 2,
-                    "items": [
-                      {
-                        "$ref": "#/definitions/AgentAction"
-                      },
-                      {
-                        "type": "string"
-                      }
-                    ]
-                  }
-                }
-              }
             }
           }
         }
@@ -1903,7 +1893,7 @@
   '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
 # ---
 # name: test_prebuilt_chat.1
-  '{"title": "LangGraphOutput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
 # ---
 # name: test_prebuilt_chat.2
   '''
@@ -1988,7 +1978,16 @@
         "type": "schema",
         "data": {
           "title": "LangGraphOutput",
-          "$ref": "#/definitions/AgentState",
+          "type": "object",
+          "properties": {
+            "messages": {
+              "title": "Messages",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/BaseMessage"
+              }
+            }
+          },
           "definitions": {
             "BaseMessage": {
               "title": "BaseMessage",
@@ -2036,22 +2035,6 @@
               "required": [
                 "content",
                 "type"
-              ]
-            },
-            "AgentState": {
-              "title": "AgentState",
-              "type": "object",
-              "properties": {
-                "messages": {
-                  "title": "Messages",
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/BaseMessage"
-                  }
-                }
-              },
-              "required": [
-                "messages"
               ]
             }
           }
@@ -2153,7 +2136,7 @@
   '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
 # ---
 # name: test_prebuilt_tool_chat.1
-  '{"title": "LangGraphOutput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
 # ---
 # name: test_prebuilt_tool_chat.2
   '''
@@ -2238,7 +2221,16 @@
         "type": "schema",
         "data": {
           "title": "LangGraphOutput",
-          "$ref": "#/definitions/AgentState",
+          "type": "object",
+          "properties": {
+            "messages": {
+              "title": "Messages",
+              "type": "array",
+              "items": {
+                "$ref": "#/definitions/BaseMessage"
+              }
+            }
+          },
           "definitions": {
             "BaseMessage": {
               "title": "BaseMessage",
@@ -2286,22 +2278,6 @@
               "required": [
                 "content",
                 "type"
-              ]
-            },
-            "AgentState": {
-              "title": "AgentState",
-              "type": "object",
-              "properties": {
-                "messages": {
-                  "title": "Messages",
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/BaseMessage"
-                  }
-                }
-              },
-              "required": [
-                "messages"
               ]
             }
           }
