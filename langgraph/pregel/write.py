@@ -26,7 +26,7 @@ class ChannelWriteEntry(NamedTuple):
 
 
 class ChannelWrite(RunnablePassthrough):
-    channels: Sequence[ChannelWriteEntry]
+    writes: Sequence[ChannelWriteEntry]
     """
     Sequence of write entries, each of which is a tuple of:
     - channel name
@@ -37,12 +37,20 @@ class ChannelWrite(RunnablePassthrough):
     class Config:
         arbitrary_types_allowed = True
 
-    def __init__(self, channels: Sequence[ChannelWriteEntry]):
-        super().__init__(func=self._write, afunc=self._awrite, channels=channels)
-        self.name = f"ChannelWrite<{','.join(chan for chan, _, _ in self.channels)}>"
+    def __init__(self, writes: Sequence[ChannelWriteEntry]):
+        super().__init__(func=self._write, afunc=self._awrite, writes=writes)
 
     def __repr_args__(self) -> Any:
-        return [("channels", self.channels)]
+        return [("writes", self.writes)]
+
+    def get_name(
+        self, suffix: Optional[str] = None, *, name: Optional[str] = None
+    ) -> str:
+        return super().get_name(
+            suffix,
+            name=name
+            or f"ChannelWrite<{','.join(chan for chan, _, _ in self.writes)}>",
+        )
 
     @property
     def is_channel_writer(self) -> bool:
@@ -70,11 +78,11 @@ class ChannelWrite(RunnablePassthrough):
                 if r is not None
                 else input,
             )
-            for chan, r, _ in self.channels
+            for chan, r, _ in self.writes
         ]
         values = [
             write
-            for write, (_, _, skip_none) in zip(values, self.channels)
+            for write, (_, _, skip_none) in zip(values, self.writes)
             if not skip_none or write[1] is not None
         ]
 
@@ -88,12 +96,12 @@ class ChannelWrite(RunnablePassthrough):
                 else _mk_future(r)
                 if r is not None
                 else _mk_future(input)
-                for _, r, _ in self.channels
+                for _, r, _ in self.writes
             )
         )
         values = [
             (chan, val)
-            for val, (chan, _, skip_none) in zip(values, self.channels)
+            for val, (chan, _, skip_none) in zip(values, self.writes)
             if not skip_none or val is not None
         ]
 

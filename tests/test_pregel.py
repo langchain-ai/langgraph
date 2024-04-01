@@ -2257,7 +2257,7 @@ def test_message_graph(
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
         HumanMessage(
             content="what is weather in sf",
-            id="00000000-0000-4000-8000-000000000005",  # adds missing ids
+            id="00000000-0000-4000-8000-000000000002",  # adds missing ids
         ),
         AIMessage(
             content="",
@@ -2269,7 +2269,7 @@ def test_message_graph(
         FunctionMessage(
             content="result for query",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000018",
+            id="00000000-0000-4000-8000-000000000014",
         ),
         AIMessage(
             content="",
@@ -2281,7 +2281,7 @@ def test_message_graph(
         FunctionMessage(
             content="result for another",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000031",
+            id="00000000-0000-4000-8000-000000000026",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -2291,7 +2291,7 @@ def test_message_graph(
             "__start__": [
                 HumanMessage(
                     content="what is weather in sf",
-                    id="00000000-0000-4000-8000-000000000042",
+                    id="00000000-0000-4000-8000-000000000034",
                 )
             ]
         },
@@ -2308,7 +2308,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000055",
+                id="00000000-0000-4000-8000-000000000046",
             )
         },
         {
@@ -2324,7 +2324,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for another",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000068",
+                id="00000000-0000-4000-8000-000000000058",
             )
         },
         {"agent": AIMessage(content="answer", id="ai3")},

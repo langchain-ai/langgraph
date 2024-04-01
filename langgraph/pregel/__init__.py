@@ -150,7 +150,7 @@ class Channel:
     ) -> ChannelWrite:
         """Writes to channels the result of the lambda, or None to skip writing."""
         return ChannelWrite(
-            [ChannelWriteEntry(c, None, False) for c in channels]
+            [ChannelWriteEntry(c) for c in channels]
             + [
                 ChannelWriteEntry(k, _coerce_write_value(v), True)
                 for k, v in kwargs.items()
@@ -295,7 +295,7 @@ class Pregel(
             )
 
     @property
-    def snapshot_channels_list(self) -> Sequence[str]:
+    def stream_channels_list(self) -> Sequence[str]:
         return (
             [self.stream_channels]
             if isinstance(self.stream_channels, str)
@@ -316,7 +316,7 @@ class Pregel(
             values = {
                 k: _read_channel(channels, k, return_exception=True)
                 for k in channels
-                if k in self.snapshot_channels_list
+                if k in self.stream_channels_list
             }
             values = {
                 k: v for k, v in values.items() if not isinstance(v, EmptyChannelError)
@@ -325,7 +325,7 @@ class Pregel(
                 values[self.stream_channels]
                 if isinstance(self.stream_channels, str)
                 else values,
-                tuple(name for _, _, name in next_tasks),
+                tuple(name for name, _ in next_tasks),
                 config,
             )
 
@@ -343,7 +343,7 @@ class Pregel(
             values = {
                 k: _read_channel(channels, k, return_exception=True)
                 for k in channels
-                if k in self.snapshot_channels_list
+                if k in self.stream_channels_list
             }
             values = {
                 k: v for k, v in values.items() if not isinstance(v, EmptyChannelError)
@@ -352,7 +352,7 @@ class Pregel(
                 values[self.stream_channels]
                 if isinstance(self.stream_channels, str)
                 else values,
-                tuple(name for _, _, name in next_tasks),
+                tuple(name for name, _ in next_tasks),
                 config,
             )
 
@@ -368,7 +368,7 @@ class Pregel(
                 values = {
                     k: _read_channel(channels, k, return_exception=True)
                     for k in channels
-                    if k in self.snapshot_channels_list
+                    if k in self.stream_channels_list
                 }
                 values = {
                     k: v
@@ -379,7 +379,7 @@ class Pregel(
                     values[self.stream_channels]
                     if isinstance(self.stream_channels, str)
                     else values,
-                    tuple(name for _, _, name in next_tasks),
+                    tuple(name for name, _ in next_tasks),
                     config,
                     parent_config,
                 )
@@ -398,7 +398,7 @@ class Pregel(
                 values = {
                     k: _read_channel(channels, k, return_exception=True)
                     for k in channels
-                    if k in self.snapshot_channels_list
+                    if k in self.stream_channels_list
                 }
                 values = {
                     k: v
@@ -409,7 +409,7 @@ class Pregel(
                     values[self.stream_channels]
                     if isinstance(self.stream_channels, str)
                     else values,
-                    tuple(name for _, _, name in next_tasks),
+                    tuple(name for name, _ in next_tasks),
                     config,
                     parent_config,
                 )
@@ -446,10 +446,11 @@ class Pregel(
         # update channels
         with ChannelsManager(self.channels, checkpoint) as channels:
             # create task to run all writers of the chosen node
+            writers = self.nodes[as_node].get_writers()
+            if not writers:
+                raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
-                RunnableSequence(*self.nodes[as_node].writers)
-                if len(self.nodes[as_node].writers) > 1
-                else self.nodes[as_node].writers[0],
+                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                 values,
                 as_node,
                 deque(),
@@ -502,10 +503,11 @@ class Pregel(
         # update channels, acting as the chosen node
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
             # create task to run all writers of the chosen node
+            writers = self.nodes[as_node].get_writers()
+            if not writers:
+                raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
-                RunnableSequence(*self.nodes[as_node].writers)
-                if len(self.nodes[as_node].writers) > 1
-                else self.nodes[as_node].writers[0],
+                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                 values,
                 as_node,
                 deque(),
@@ -616,7 +618,7 @@ class Pregel(
                     # if received no input, take that as signal to proceed
                     # past previous interrupt, if any
                     checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.snapshot_channels_list:
+                    for k in self.stream_channels_list:
                         version = checkpoint["channel_versions"][k]
                         checkpoint["versions_seen"][INTERRUPT][k] = version
 
@@ -647,7 +649,7 @@ class Pregel(
                     if _should_interrupt(
                         checkpoint,
                         interrupt_before_nodes,
-                        self.snapshot_channels_list,
+                        self.stream_channels_list,
                         next_tasks,
                     ):
                         break
@@ -726,7 +728,7 @@ class Pregel(
                     if _should_interrupt(
                         checkpoint,
                         interrupt_after_nodes,
-                        self.snapshot_channels_list,
+                        self.stream_channels_list,
                         next_tasks,
                     ):
                         break
@@ -800,7 +802,7 @@ class Pregel(
                     # if received no input, take that as signal to proceed
                     # past previous interrupt, if any
                     checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.snapshot_channels_list:
+                    for k in self.stream_channels_list:
                         version = checkpoint["channel_versions"][k]
                         checkpoint["versions_seen"][INTERRUPT][k] = version
 
@@ -831,7 +833,7 @@ class Pregel(
                     if _should_interrupt(
                         checkpoint,
                         interrupt_before_nodes,
-                        self.snapshot_channels_list,
+                        self.stream_channels_list,
                         next_tasks,
                     ):
                         break
@@ -917,7 +919,7 @@ class Pregel(
                     if _should_interrupt(
                         checkpoint,
                         interrupt_after_nodes,
-                        self.snapshot_channels_list,
+                        self.stream_channels_list,
                         next_tasks,
                     ):
                         break
@@ -1226,10 +1228,9 @@ def _apply_writes(
             channels[chan].update([])
 
 
-class PregelTask(NamedTuple):
-    proc: Runnable
-    input: Any
+class PregelTaskDescription(NamedTuple):
     name: str
+    input: Any
 
 
 class PregelExecutableTask(NamedTuple):
@@ -1245,7 +1246,7 @@ def _prepare_next_tasks(
     processes: Mapping[str, ChannelInvoke],
     channels: Mapping[str, BaseChannel],
     for_execution: Literal[False],
-) -> tuple[Checkpoint, list[PregelTask]]:
+) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
 
 
@@ -1265,9 +1266,9 @@ def _prepare_next_tasks(
     channels: Mapping[str, BaseChannel],
     *,
     for_execution: bool,
-) -> tuple[Checkpoint, Union[list[PregelTask], list[PregelExecutableTask]]]:
+) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
-    tasks: Union[list[PregelTask], list[PregelExecutableTask]] = []
+    tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
@@ -1320,18 +1321,10 @@ def _prepare_next_tasks(
                 )
 
             if for_execution:
-                tasks.append(
-                    PregelExecutableTask(
-                        RunnableSequence(proc, *proc.writers, name=name)
-                        if proc.writers
-                        else proc,
-                        val,
-                        name,
-                        deque(),
-                    )
-                )
+                if node := proc.get_node():
+                    tasks.append(PregelExecutableTask(node, val, name, deque()))
             else:
-                tasks.append(PregelTask(proc, val, name))
+                tasks.append(PregelTaskDescription(name, val))
     return checkpoint, tasks
 
 
