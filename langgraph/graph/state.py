@@ -1,22 +1,20 @@
 import logging
-from collections import defaultdict
 from functools import partial
 from inspect import signature
 from typing import Any, Optional, Sequence, Type, Union
 
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.runnables.base import RunnableLike
 
-from langgraph.channels.any_value import AnyValue
 from langgraph.channels.base import BaseChannel, InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.graph.graph import END, START, CompiledGraph, Graph
+from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
 from langgraph.pregel import Channel
-from langgraph.pregel.read import ChannelInvoke
+from langgraph.pregel.read import ChannelInvoke, ChannelRead
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 
 logger = logging.getLogger(__name__)
@@ -29,20 +27,17 @@ class StateGraph(Graph):
         self.channels = _get_channels(schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
-        self.w_edges: set[tuple[tuple[str, ...], str]] = set()
+        self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
 
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
         return self.edges | {
-            (start, end) for starts, end in self.w_edges for start in starts
+            (start, end) for starts, end in self.waiting_edges for start in starts
         }
 
     def add_node(self, key: str, action: RunnableLike) -> None:
         if key in self.channels:
-            raise ValueError(
-                f"'{key}' is already being used as a state attribute "
-                "(a.k.a. a channel), cannot also be used as a node name."
-            )
+            raise ValueError(f"'{key}' is already being used as a state key")
         return super().add_node(key, action)
 
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
@@ -64,7 +59,7 @@ class StateGraph(Graph):
         if end_key not in self.nodes:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
-        self.w_edges.add((tuple(start_key), end_key))
+        self.waiting_edges.add((tuple(start_key), end_key))
 
     def compile(
         self,
@@ -73,149 +68,150 @@ class StateGraph(Graph):
         interrupt_after: Optional[Sequence[str]] = None,
         debug: bool = False,
     ) -> CompiledGraph:
+        # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
+
+        # validate the graph
         self.validate(interrupt=interrupt_before + interrupt_after)
 
+        # prepare output channels
         state_keys = list(self.channels)
-        state_keys_read = state_keys[0] if state_keys == ["__root__"] else state_keys
-        state_channels = (
-            {chan: chan for chan in state_keys}
-            if isinstance(state_keys_read, list)
-            else {None: state_keys_read}
-        )
-        update_channels = (
-            [ChannelWriteEntry("__root__", None, True)]
-            if not isinstance(state_keys_read, list)
-            else [
-                ChannelWriteEntry(
-                    key, RunnableLambda(partial(_dict_getter, state_keys, key)), False
-                )
-                for key in state_keys_read
-            ]
-        )
-        coerce_state = (
-            partial(_coerce_state, self.schema)
-            if isinstance(state_keys_read, list)
-            else None
-        )
+        output_channels = state_keys[0] if state_keys == ["__root__"] else state_keys
 
-        waiting_edges = {
-            (f"{starts}:{end}", starts, end) for starts, end in self.w_edges
-        }
-        waiting_edge_channels = {
-            key: NamedBarrierValue(str, set(starts)) for key, starts, _ in waiting_edges
-        }
-
-        outgoing_edges = defaultdict(list)
-        for start, end in self.edges:
-            if end != END:
-                outgoing_edges[start].append(f"{end}:inbox")
-        for key, starts, end in waiting_edges:
-            for start in starts:
-                outgoing_edges[start].append(key)
-
-        nodes = {
-            key: (
-                ChannelInvoke(
-                    triggers=[
-                        f"{key}:inbox",
-                        *[chan for chan, _, end in waiting_edges if end == key],
-                    ],
-                    channels=state_channels,
-                    mapper=coerce_state,
-                )
-                | node
-                | ChannelWrite(
-                    channels=[ChannelWriteEntry(key, None, False)] + update_channels
-                )
-            )
-            for key, node in self.nodes.items()
-        }
-        node_inboxes = {
-            # we take any value written to channel because all writers
-            # write the entire state as of that step, which is equal for all
-            f"{key}:inbox": AnyValue(self.schema)
-            for key in list(self.nodes) + [START]
-        }
-        node_outboxes = {
-            # we clear outbox channels after each step
-            key: EphemeralValue(Any)
-            for key in list(self.nodes) + [START]
-        }
-
-        def branch_writer(src: str, dest: str) -> Optional[ChannelWrite]:
-            if dest != END:
-                return ChannelWrite(
-                    channels=[ChannelWriteEntry(f"{dest}:inbox", src, False)]
-                )
-
-        for key in self.nodes:
-            outgoing = outgoing_edges[key]
-            edges_key = f"{key}:edges"
-            if outgoing or key in self.branches:
-                nodes[edges_key] = ChannelInvoke(
-                    triggers=[key], tags=["langsmith:hidden"], channels=state_channels
-                )
-            if outgoing:
-                nodes[edges_key] |= ChannelWrite(
-                    channels=[ChannelWriteEntry(dest, key, True) for dest in outgoing]
-                )
-            if key in self.branches:
-                for branch in self.branches[key]:
-                    nodes[edges_key] |= branch.run(partial(branch_writer, key))
-
-        nodes[START] = Channel.subscribe_to(
-            f"{START}:inbox", tags=["langsmith:hidden"]
-        ) | ChannelWrite(
-            channels=[ChannelWriteEntry(START, None, False)] + update_channels
-        )
-        nodes[f"{START}:edges"] = ChannelInvoke(
-            triggers=[START], tags=["langsmith:hidden"], channels=state_channels
-        )
-        if self.entry_point:
-            nodes[f"{START}:edges"] |= Channel.write_to(f"{self.entry_point}:inbox")
-        elif self.entry_point_branch:
-            nodes[f"{START}:edges"] |= self.entry_point_branch.run(
-                partial(branch_writer, START)
-            )
-        else:
-            raise ValueError("No entry point set")
-
-        return CompiledGraph(
+        compiled = CompiledStateGraph(
             graph=self,
-            nodes=nodes,
-            channels={
-                **self.channels,
-                **node_inboxes,
-                **node_outboxes,
-                **waiting_edge_channels,
-            },
-            input_channels=f"{START}:inbox",
+            nodes={},
+            channels={**self.channels, START: EphemeralValue(self.schema)},
+            input_channels=START,
             stream_mode="updates",
-            output_channels=state_keys_read,
-            stream_channels=state_keys_read,
+            output_channels=output_channels,
+            stream_channels=output_channels,
             checkpointer=checkpointer,
-            interrupt_before_nodes=[f"{node}:inbox" for node in interrupt_before],
+            interrupt_before_nodes=interrupt_before,
             interrupt_after_nodes=interrupt_after,
+            auto_validate=False,
             debug=debug,
         )
+
+        compiled.attach_node(START, None)
+        for key, node in self.nodes.items():
+            compiled.attach_node(key, node)
+
+        for start, end in self.edges:
+            compiled.attach_edge(start, end)
+
+        for starts, end in self.waiting_edges:
+            compiled.attach_edge(starts, end)
+
+        for start, branches in self.branches.items():
+            for name, branch in branches.items():
+                compiled.attach_branch(start, name, branch)
+
+        return compiled.validate()
+
+
+class CompiledStateGraph(CompiledGraph):
+    graph: StateGraph
+
+    def attach_node(self, key: str, node: Optional[Runnable]) -> None:
+        def _get_state_key(key: str, input: dict) -> Any:
+            if input is None:
+                return SKIP_WRITE
+            elif not isinstance(input, dict):
+                raise InvalidUpdateError(f"Expected dict, got {input}")
+            else:
+                return input.get(key, SKIP_WRITE)
+
+        state_keys = list(self.graph.channels)
+        # state updaters
+        state_write_entries = [
+            ChannelWriteEntry(key, None, skip_none=True)
+            if key == "__root__"
+            else ChannelWriteEntry(key, RunnableLambda(partial(_get_state_key, key)))
+            for key in state_keys
+        ]
+
+        # add node and output channel
+        if key == START:
+            self.nodes[key] = Channel.subscribe_to(
+                START, tags=["langsmith:hidden"]
+            ).pipe(ChannelWrite(channels=state_write_entries))
+        else:
+            self.channels[key] = EphemeralValue(Any)
+            self.nodes[key] = ChannelInvoke(
+                triggers=[],
+                # read state keys
+                channels=(
+                    state_keys
+                    if state_keys == ["__root__"]
+                    else {chan: chan for chan in state_keys}
+                ),
+                # coerce state dict to schema class (eg. pydantic model)
+                mapper=(
+                    None
+                    if state_keys == ["__root__"]
+                    else partial(_coerce_state, self.graph.schema)
+                ),
+                # publish to this channel and state keys
+                writers=[
+                    ChannelWrite([ChannelWriteEntry(key)] + state_write_entries),
+                    # read back state with updates applied
+                    ChannelRead(
+                        state_keys[0] if state_keys == ["__root__"] else state_keys,
+                        fresh=True,
+                    ),
+                ],
+            ).pipe(node)
+
+    def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
+        if isinstance(starts, str):
+            if starts == START:
+                channel_name = f"start:{end}"
+                # register channel
+                self.channels[channel_name] = EphemeralValue(Any)
+                # subscribe to channel
+                self.nodes[end].triggers.append(channel_name)
+                # publish to channel
+                self.nodes[START] |= ChannelWrite(
+                    [ChannelWriteEntry(channel_name, START)]
+                )
+            elif end != END:
+                # subscribe to start channel
+                self.nodes[end].triggers.append(starts)
+        else:
+            channel_name = f"join:{starts}:{end}"
+            # register channel
+            self.channels[channel_name] = NamedBarrierValue(str, set(starts))
+            # subscribe to channel
+            self.nodes[end].triggers.append(channel_name)
+            # publish to channel
+            for start in starts:
+                self.nodes[start] |= ChannelWrite(
+                    [ChannelWriteEntry(channel_name, start)]
+                )
+
+    def attach_branch(self, start: str, name: str, branch: Branch) -> None:
+        def branch_writer(end: str) -> Optional[ChannelWrite]:
+            if end != END:
+                return ChannelWrite(
+                    [ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)]
+                )
+
+        # attach branch publisher
+        self.nodes[start] |= branch.run(branch_writer)
+
+        # attach branch subscribers
+        ends = branch.ends.values() if branch.ends else [node for node in self.nodes]
+        for end in ends:
+            if end != END:
+                channel_name = f"branch:{start}:{name}:{end}"
+                self.channels[channel_name] = EphemeralValue(Any)
+                self.nodes[end].triggers.append(channel_name)
 
 
 def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
-
-
-def _dict_getter(allowed_keys: list[str], key: str, input: dict) -> Any:
-    if input is not None:
-        if not isinstance(input, dict) or any(key not in allowed_keys for key in input):
-            raise InvalidUpdateError(
-                f"Invalid state update,"
-                f" expected dict with one or more of {allowed_keys}, got {input}"
-            )
-        return input.get(key, SKIP_WRITE)
-    else:
-        return SKIP_WRITE
 
 
 def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:

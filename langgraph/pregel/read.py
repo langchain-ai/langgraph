@@ -15,10 +15,15 @@ from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
+from langgraph.pregel.write import ChannelWrite
+
+READ_TYPE = Callable[[str, bool], Union[Any, dict[str, Any]]]
 
 
 class ChannelRead(RunnableLambda):
     channel: Union[str, list[str]]
+
+    fresh: bool = False
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -32,51 +37,44 @@ class ChannelRead(RunnableLambda):
             ),
         ]
 
-    def __init__(self, channel: Union[str, list[str]]) -> None:
+    def __init__(self, channel: Union[str, list[str]], fresh: bool = False) -> None:
         super().__init__(func=self._read, afunc=self._aread)
+        self.fresh = fresh
         self.channel = channel
         self.name = f"ChannelRead<{channel}>"
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
         try:
-            read: Callable[[str], Any] = config["configurable"][CONFIG_KEY_READ]
+            read: READ_TYPE = config["configurable"][CONFIG_KEY_READ]
         except KeyError:
             raise RuntimeError(
                 f"Runnable {self} is not configured with a read function"
                 "Make sure to call in the context of a Pregel process"
             )
-        return (
-            read(self.channel)
-            if isinstance(self.channel, str)
-            else {chan: read(chan) for chan in self.channel}
-        )
+        return read(self.channel, self.fresh)
 
     async def _aread(self, _: Any, config: RunnableConfig) -> Any:
         try:
-            read: Callable[[str], Any] = config["configurable"][CONFIG_KEY_READ]
+            read: READ_TYPE = config["configurable"][CONFIG_KEY_READ]
         except KeyError:
             raise RuntimeError(
                 f"Runnable {self} is not configured with a read function"
                 "Make sure to call in the context of a Pregel process"
             )
-        return (
-            read(self.channel)
-            if isinstance(self.channel, str)
-            else {chan: read(chan) for chan in self.channel}
-        )
+        return read(self.channel, self.fresh)
 
 
 default_bound: RunnablePassthrough = RunnablePassthrough()
 
 
 class ChannelInvoke(RunnableBindingBase):
-    channels: Union[Mapping[None, str], Mapping[str, str]]
+    channels: Union[list[str], Mapping[str, str]]
 
     triggers: list[str] = Field(default_factory=list)
 
     mapper: Optional[Callable[[Any], Any]] = None
 
-    when: Optional[Callable[[Any], bool]] = None
+    writers: list[Runnable] = Field(default_factory=list)
 
     bound: Runnable[Any, Any] = Field(default=default_bound)
 
@@ -84,12 +82,12 @@ class ChannelInvoke(RunnableBindingBase):
 
     def __init__(
         self,
-        channels: Mapping[None, str] | Mapping[str, str],
+        *,
+        channels: Union[list[str], Mapping[str, str]],
         triggers: Sequence[str],
         mapper: Optional[Callable[[Any], Any]] = None,
-        when: Optional[Callable[[Any], bool]] = None,
+        writers: Optional[list[Runnable]] = None,
         tags: Optional[list[str]] = None,
-        *,
         bound: Optional[Runnable[Any, Any]] = None,
         kwargs: Optional[Mapping[str, Any]] = None,
         config: Optional[RunnableConfig] = None,
@@ -99,19 +97,22 @@ class ChannelInvoke(RunnableBindingBase):
             channels=channels,
             triggers=triggers,
             mapper=mapper,
-            when=when,
+            writers=writers or [],
             bound=bound or default_bound,
             kwargs=kwargs or {},
             config=merge_configs(config, {"tags": tags or []}),
             **other_kwargs,
         )
 
+    def __repr_args__(self) -> Any:
+        return [(k, v) for k, v in super().__repr_args__() if k != "bound"]
+
     def join(self, channels: Sequence[str]) -> ChannelInvoke:
         assert isinstance(channels, list) or isinstance(
             channels, tuple
         ), "channels must be a list or tuple"
-        assert all(
-            k is not None for k in self.channels.keys()
+        assert isinstance(
+            self.channels, dict
         ), "all channels must be named when using .join()"
         return ChannelInvoke(
             channels={
@@ -120,7 +121,7 @@ class ChannelInvoke(RunnableBindingBase):
             },
             triggers=self.triggers,
             mapper=self.mapper,
-            when=self.when,
+            writers=self.writers,
             bound=self.bound,
             kwargs=self.kwargs,
             config=self.config,
@@ -134,12 +135,22 @@ class ChannelInvoke(RunnableBindingBase):
             Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
         ],
     ) -> ChannelInvoke:
-        if self.bound is default_bound:
+        if ChannelWrite.is_writer(other):
             return ChannelInvoke(
                 channels=self.channels,
                 triggers=self.triggers,
                 mapper=self.mapper,
-                when=self.when,
+                writers=[*self.writers, other],
+                bound=self.bound,
+                kwargs=self.kwargs,
+                config=self.config,
+            )
+        elif self.bound is default_bound:
+            return ChannelInvoke(
+                channels=self.channels,
+                triggers=self.triggers,
+                mapper=self.mapper,
+                writers=self.writers,
                 bound=coerce_to_runnable(other),
                 kwargs=self.kwargs,
                 config=self.config,
@@ -149,12 +160,21 @@ class ChannelInvoke(RunnableBindingBase):
                 channels=self.channels,
                 triggers=self.triggers,
                 mapper=self.mapper,
-                when=self.when,
+                writers=self.writers,
                 # delegate to __or__ in self.bound
                 bound=self.bound | other,
                 kwargs=self.kwargs,
                 config=self.config,
             )
+
+    def pipe(
+        self,
+        *others: Runnable[Any, Other] | Callable[[Any], Other],
+        name: Optional[str] = None,
+    ) -> RunnableSerializable[Any, Other]:
+        for other in others:
+            self = self | other
+        return self
 
     def __ror__(
         self,

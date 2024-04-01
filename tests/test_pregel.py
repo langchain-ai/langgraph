@@ -26,7 +26,7 @@ from langgraph.prebuilt.chat_agent_executor import (
 )
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
-from langgraph.pregel.reserved import ReservedChannels
+from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
 
 
@@ -64,7 +64,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert app.invoke(2, output_keys=["output"]) == {"output": 3}
     assert repr(app), "does not raise recursion error"
 
-    assert gapp.invoke(2) == 3
+    assert gapp.invoke(2, debug=True) == 3
 
 
 def test_invoke_single_process_in_out_implicit_channels(mocker: MockerFixture) -> None:
@@ -101,23 +101,6 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
         },
     }
     assert app.invoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
-
-
-def test_invoke_single_process_in_out_reserved_is_last(mocker: MockerFixture) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: {**x, "input": x["input"] + 1})
-
-    chain = (
-        Channel.subscribe_to(["input"]).join([ReservedChannels.is_last_step])
-        | add_one
-        | Channel.write_to("output")
-    )
-
-    app = Pregel(nodes={"one": chain})
-
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
-    assert app.invoke(2) == {"input": 3, "is_last_step": False}
-    assert app.invoke(2, {"recursion_limit": 1}) == {"input": 3, "is_last_step": True}
 
 
 def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
@@ -214,7 +197,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     app = Pregel(
         nodes={"one": one, "two": two},
         checkpointer=memory,
-        interrupt_after_nodes=["inbox"],
+        interrupt_after_nodes=["one"],
     )
 
     # start execution, stop at inbox
@@ -249,7 +232,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     assert snapshot.next == ("two",)
 
     # update the state, resume
-    app.update_state({"configurable": {"thread_id": 2}}, {"inbox": 25})
+    app.update_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
     assert app.invoke(None, {"configurable": {"thread_id": 2}}) == 26
 
     # no pending tasks
@@ -507,9 +490,11 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         state = app.get_state({"configurable": {"thread_id": "1"}})
         assert state is not None
         assert state.values.get("total") == 7
+        assert state.next == ()
         state = app.get_state(thread_2)
         assert state is not None
         assert state.values.get("total") == 5
+        assert state.next == ()
 
         # list all checkpoints for thread 1
         thread_1_history = [c for c in app.get_state_history(thread_1)]
@@ -534,9 +519,7 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
             == thread_1_history[1].config["configurable"]["thread_ts"]
         )
 
-        thread_1_next_config = app.update_state(
-            thread_1_history[1].config, {"total": 10}
-        )
+        thread_1_next_config = app.update_state(thread_1_history[1].config, 10)
         # update creates a new checkpoint
         assert (
             thread_1_next_config["configurable"]["thread_ts"]
@@ -927,9 +910,8 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                     tool="search_api", tool_input="query", log="tool:search_api:query"
                 ),
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
     assert (
@@ -942,14 +924,12 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     app_w_interrupt.update_state(
         config,
         {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:a different query",
-                ),
-                "input": "what is weather in sf",
-            },
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            ),
+            "input": "what is weather in sf",
         },
     )
 
@@ -963,9 +943,8 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
                 "input": "what is weather in sf",
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -1010,6 +989,26 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     app_w_interrupt.update_state(
         config,
         {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                )
+            ],
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+        },
+    )
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
             "agent": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -1026,11 +1025,11 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                     return_values={"answer": "a really nice answer"},
                     log="finish:a really nice answer",
                 ),
-            }
+            },
         },
+        next=(),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
-
-    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
     # test state get/update methods with interrupt_before
 
@@ -1061,23 +1060,20 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                     tool="search_api", tool_input="query", log="tool:search_api:query"
                 ),
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
     app_w_interrupt.update_state(
         config,
         {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:a different query",
-                ),
-                "input": "what is weather in sf",
-            },
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="query",
+                log="tool:search_api:a different query",
+            ),
+            "input": "what is weather in sf",
         },
     )
 
@@ -1091,9 +1087,8 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
                 "input": "what is weather in sf",
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -1138,6 +1133,26 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     app_w_interrupt.update_state(
         config,
         {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                )
+            ],
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+        },
+    )
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
             "agent": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -1154,11 +1169,11 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                     return_values={"answer": "a really nice answer"},
                     log="finish:a really nice answer",
                 ),
-            }
+            },
         },
+        next=(),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
-
-    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
     # test re-invoke to continue with interrupt_before
 
@@ -1189,9 +1204,8 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                     tool="search_api", tool_input="query", log="tool:search_api:query"
                 ),
             },
-            "tools": None,
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -1283,6 +1297,50 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             }
         },
+    ]
+
+
+def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
+    def left(data: str) -> str:
+        return data + "->left"
+
+    def right(data: str) -> str:
+        return data + "->right"
+
+    def should_start(data: str) -> str:
+        # Logic to decide where to start
+        if len(data) > 10:
+            return "go-right"
+        else:
+            return "go-left"
+
+    # Define a new graph
+    workflow = Graph()
+
+    workflow.add_node("left", left)
+    workflow.add_node("right", right)
+
+    workflow.set_conditional_entry_point(
+        should_start, {"go-left": "left", "go-right": "right"}
+    )
+
+    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_edge("right", END)
+
+    app = workflow.compile()
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
+
+    assert (
+        app.invoke("what is weather in sf", debug=True)
+        == "what is weather in sf->right"
+    )
+
+    assert [*app.stream("what is weather in sf")] == [
+        {"right": "what is weather in sf->right"},
     ]
 
 
@@ -1479,7 +1537,7 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
             ),
             "intermediate_steps": [],
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -1504,7 +1562,7 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
             ),
             "intermediate_steps": [],
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -1544,7 +1602,27 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
         },
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == []
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                )
+            ],
+        },
+        next=(),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
 
     # test state get/update methods with interrupt_before
 
@@ -1577,7 +1655,7 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
             ),
             "intermediate_steps": [],
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -1602,7 +1680,7 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
             ),
             "intermediate_steps": [],
         },
-        next=("agent:edges",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -1642,48 +1720,27 @@ def test_conditional_graph_state(snapshot: SnapshotAssertion) -> None:
         },
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == []
-
-
-def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
-    def left(data: str) -> str:
-        return data + "->left"
-
-    def right(data: str) -> str:
-        return data + "->right"
-
-    def should_start(data: str) -> str:
-        # Logic to decide where to start
-        if len(data) > 10:
-            return "go-right"
-        else:
-            return "go-left"
-
-    # Define a new graph
-    workflow = Graph()
-
-    workflow.add_node("left", left)
-    workflow.add_node("right", right)
-
-    workflow.set_conditional_entry_point(
-        should_start, {"go-left": "left", "go-right": "right"}
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "a really nice answer"},
+                log="finish:a really nice answer",
+            ),
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "result for query",
+                )
+            ],
+        },
+        next=(),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
-
-    workflow.add_conditional_edges("left", lambda data: END)
-    workflow.add_edge("right", END)
-
-    app = workflow.compile()
-
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
-
-    assert app.invoke("what is weather in sf") == "what is weather in sf->right"
-
-    assert [*app.stream("what is weather in sf")] == [
-        {"right": "what is weather in sf->right"},
-    ]
 
 
 def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None:
@@ -2200,7 +2257,7 @@ def test_message_graph(
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
         HumanMessage(
             content="what is weather in sf",
-            id="00000000-0000-4000-8000-000000000002",  # adds missing ids
+            id="00000000-0000-4000-8000-000000000005",  # adds missing ids
         ),
         AIMessage(
             content="",
@@ -2212,7 +2269,7 @@ def test_message_graph(
         FunctionMessage(
             content="result for query",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000015",
+            id="00000000-0000-4000-8000-000000000019",
         ),
         AIMessage(
             content="",
@@ -2224,7 +2281,7 @@ def test_message_graph(
         FunctionMessage(
             content="result for another",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000028",
+            id="00000000-0000-4000-8000-000000000033",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -2234,7 +2291,7 @@ def test_message_graph(
             "__start__": [
                 HumanMessage(
                     content="what is weather in sf",
-                    id="00000000-0000-4000-8000-000000000037",
+                    id="00000000-0000-4000-8000-000000000045",
                 )
             ]
         },
@@ -2251,7 +2308,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000050",
+                id="00000000-0000-4000-8000-000000000059",
             )
         },
         {
@@ -2267,7 +2324,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for another",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000063",
+                id="00000000-0000-4000-8000-000000000073",
             )
         },
         {"agent": AIMessage(content="answer", id="ai3")},
@@ -2284,12 +2341,7 @@ def test_message_graph(
             HumanMessage(content="what is weather in sf"), config
         )
     ] == [
-        {
-            "__start__": HumanMessage(
-                content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
-            )
-        },
+        {"__start__": HumanMessage(content="what is weather in sf", id=AnyStr())},
         {
             "agent": AIMessage(
                 content="",
@@ -2303,10 +2355,7 @@ def test_message_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
-            ),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 content="",
                 additional_kwargs={
@@ -2315,7 +2364,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
-        next=("agent:edges",),
+        next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -2327,10 +2376,7 @@ def test_message_graph(
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
-            ),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 content="",
                 additional_kwargs={
@@ -2342,7 +2388,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
-        next=("agent:edges",),
+        next=("action",),
         config=next_config,
     )
 
@@ -2351,7 +2397,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000086",
+                id=AnyStr(),
             )
         },
         {
@@ -2369,7 +2415,7 @@ def test_message_graph(
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2384,7 +2430,7 @@ def test_message_graph(
             FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000086",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2394,7 +2440,7 @@ def test_message_graph(
                 id="ai2",
             ),
         ],
-        next=("agent:edges",),
+        next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -2408,7 +2454,7 @@ def test_message_graph(
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000072",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2423,15 +2469,13 @@ def test_message_graph(
             FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000086",
+                id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
         ],
-        next=("agent:edges",),
+        next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
-
-    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
     app_w_interrupt = workflow.compile(
         checkpointer=MemorySaverAssertImmutable(), interrupt_before=["action"]
@@ -2448,7 +2492,7 @@ def test_message_graph(
         {
             "__start__": HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000096",
+                id=AnyStr(),
             )
         },
         {
@@ -2466,7 +2510,7 @@ def test_message_graph(
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000096",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2476,7 +2520,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
-        next=("agent:edges",),
+        next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -2490,7 +2534,7 @@ def test_message_graph(
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000096",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2503,7 +2547,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
-        next=("agent:edges",),
+        next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -2512,7 +2556,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000113",
+                id=AnyStr(),
             )
         },
         {
@@ -2530,7 +2574,7 @@ def test_message_graph(
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000096",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2545,7 +2589,7 @@ def test_message_graph(
             FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000113",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2555,7 +2599,7 @@ def test_message_graph(
                 id="ai2",
             ),
         ],
-        next=("agent:edges",),
+        next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
@@ -2569,7 +2613,7 @@ def test_message_graph(
         values=[
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000096",
+                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -2584,15 +2628,13 @@ def test_message_graph(
             FunctionMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000113",
+                id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
         ],
-        next=("agent:edges",),
+        next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
-
-    assert [c for c in app_w_interrupt.stream(None, config)] == []
 
 
 def test_in_one_fan_out_out_one_graph_state() -> None:

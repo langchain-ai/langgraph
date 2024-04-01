@@ -50,20 +50,7 @@
         }
       },
       {
-        "id": "left_condition",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "RunnableLambda"
-        }
-      },
-      {
-        "id": "should_start",
+        "id": "__start___should_start",
         "type": "runnable",
         "data": {
           "id": [
@@ -74,12 +61,39 @@
           ],
           "name": "should_start"
         }
+      },
+      {
+        "id": "left_condition",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "condition"
+        }
       }
     ],
     "edges": [
       {
         "source": "right",
         "target": "__end__"
+      },
+      {
+        "source": "__start__",
+        "target": "__start___should_start"
+      },
+      {
+        "source": "__start___should_start",
+        "target": "left",
+        "data": "go-left"
+      },
+      {
+        "source": "__start___should_start",
+        "target": "right",
+        "data": "go-right"
       },
       {
         "source": "left",
@@ -99,20 +113,6 @@
         "source": "left_condition",
         "target": "__end__",
         "data": "__end__"
-      },
-      {
-        "source": "__start__",
-        "target": "should_start"
-      },
-      {
-        "source": "should_start",
-        "target": "left",
-        "data": "go-left"
-      },
-      {
-        "source": "should_start",
-        "target": "right",
-        "data": "go-right"
       }
     ]
   }
@@ -126,9 +126,9 @@
                        *                 
                        *                 
                        *                 
-               +--------------+          
-               | should_start |          
-               +--------------+          
+          +------------------------+     
+          | __start___should_start |     
+          +------------------------+     
                 ***         **           
                *              **         
              **                 **       
@@ -234,20 +234,7 @@
         }
       },
       {
-        "id": "left_condition",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "RunnableLambda"
-        }
-      },
-      {
-        "id": "should_start",
+        "id": "__start___should_start",
         "type": "runnable",
         "data": {
           "id": [
@@ -258,12 +245,39 @@
           ],
           "name": "should_start"
         }
+      },
+      {
+        "id": "left_condition",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "condition"
+        }
       }
     ],
     "edges": [
       {
         "source": "right",
         "target": "__end__"
+      },
+      {
+        "source": "__start__",
+        "target": "__start___should_start"
+      },
+      {
+        "source": "__start___should_start",
+        "target": "left",
+        "data": "go-left"
+      },
+      {
+        "source": "__start___should_start",
+        "target": "right",
+        "data": "go-right"
       },
       {
         "source": "left",
@@ -283,20 +297,6 @@
         "source": "left_condition",
         "target": "__end__",
         "data": "__end__"
-      },
-      {
-        "source": "__start__",
-        "target": "should_start"
-      },
-      {
-        "source": "should_start",
-        "target": "left",
-        "data": "go-left"
-      },
-      {
-        "source": "should_start",
-        "target": "right",
-        "data": "go-right"
       }
     ]
   }
@@ -310,9 +310,9 @@
                        *                 
                        *                 
                        *                 
-               +--------------+          
-               | should_start |          
-               +--------------+          
+          +------------------------+     
+          | __start___should_start |     
+          +------------------------+     
                 ***         **           
                *              **         
              **                 **       
@@ -399,6 +399,10 @@
     ],
     "edges": [
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "tools",
         "target": "agent"
       },
@@ -415,10 +419,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "exit"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }
@@ -670,6 +670,10 @@
         "target": 3
       },
       {
+        "source": "__start__",
+        "target": 2
+      },
+      {
         "source": "tools",
         "target": 2
       },
@@ -686,10 +690,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "exit"
-      },
-      {
-        "source": "__start__",
-        "target": 2
       }
     ]
   }
@@ -1020,6 +1020,10 @@
     ],
     "edges": [
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "tools",
         "target": "agent"
       },
@@ -1036,10 +1040,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "exit"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }
@@ -1839,6 +1839,10 @@
     ],
     "edges": [
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "action",
         "target": "agent"
       },
@@ -1855,10 +1859,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "end"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }
@@ -2082,6 +2082,10 @@
     ],
     "edges": [
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "action",
         "target": "agent"
       },
@@ -2098,10 +2102,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "end"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }
@@ -2325,6 +2325,10 @@
     ],
     "edges": [
       {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
         "source": "action",
         "target": "agent"
       },
@@ -2341,10 +2345,6 @@
         "source": "agent_should_continue",
         "target": "__end__",
         "data": "end"
-      },
-      {
-        "source": "__start__",
-        "target": "agent"
       }
     ]
   }

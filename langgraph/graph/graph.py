@@ -19,6 +19,8 @@ from langchain_core.runnables.graph import (
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.pregel import Channel, Pregel
+from langgraph.pregel.read import ChannelInvoke
+from langgraph.pregel.write import ChannelWrite
 
 logger = logging.getLogger(__name__)
 
@@ -31,11 +33,13 @@ class Branch(NamedTuple):
     ends: Optional[dict[str, str]]
 
     def run(self, writer: Callable[[str], Optional[Runnable]]) -> None:
-        return RunnableLambda(
-            self._route,
-            self._aroute,
-            name=self.condition.name,
-        ).bind(writer=writer)
+        return ChannelWrite.register_writer(
+            RunnableLambda(
+                self._route,
+                self._aroute,
+                name=self.condition.name,
+            ).bind(writer=writer)
+        )
 
     def _route(
         self, input: Any, *, writer: Callable[[str], Optional[Runnable]]
@@ -62,11 +66,9 @@ class Graph:
     def __init__(self) -> None:
         self.nodes: dict[str, Runnable] = {}
         self.edges = set[tuple[str, str]]()
-        self.branches: defaultdict[str, list[Branch]] = defaultdict(list)
+        self.branches: defaultdict[str, dict[str, Branch]] = defaultdict(dict)
         self.support_multiple_edges = False
         self.compiled = False
-        self.entry_point: Optional[str] = None
-        self.entry_point_branch: Optional[Branch] = None
 
     @property
     def _all_edges(self) -> set[tuple[str, str]]:
@@ -93,7 +95,9 @@ class Graph:
             )
         if start_key == END:
             raise ValueError("END cannot be a start node")
-        if start_key not in self.nodes:
+        if end_key == START:
+            raise ValueError("START cannot be an end node")
+        if start_key not in self.nodes and start_key != START:
             raise ValueError(f"Need to add_node `{start_key}` first")
         if end_key not in self.nodes and end_key != END:
             raise ValueError(f"Need to add_node `{end_key}` first")
@@ -118,7 +122,7 @@ class Graph:
                 "Adding an edge to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
-        if start_key not in self.nodes:
+        if start_key not in self.nodes and start_key != START:
             raise ValueError(f"Need to add_node `{start_key}` first")
         if conditional_edge_mapping and set(
             conditional_edge_mapping.values()
@@ -131,18 +135,20 @@ class Graph:
             )
         if not isinstance(condition, Runnable):
             condition = RunnableLambda(condition)
+        if condition.name is None:
+            condition.name = "condition"
+        if condition.name in self.branches[start_key]:
+            raise ValueError(
+                f"Branch with name `{condition.name}` already exists for node "
+                f"`{start_key}`"
+            )
 
-        self.branches[start_key].append(Branch(condition, conditional_edge_mapping))
+        self.branches[start_key][condition.name] = Branch(
+            condition, conditional_edge_mapping
+        )
 
     def set_entry_point(self, key: str) -> None:
-        if self.compiled:
-            logger.warning(
-                "Setting the entry point of a graph that has already been compiled. "
-                "This will not be reflected in the compiled graph."
-            )
-        if key not in self.nodes:
-            raise ValueError(f"Need to add_node `{key}` first")
-        self.entry_point = key
+        return self.add_edge(START, key)
 
     def set_conditional_entry_point(
         self,
@@ -151,23 +157,7 @@ class Graph:
         ],
         conditional_edge_mapping: Optional[Dict[str, str]] = None,
     ) -> None:
-        if self.compiled:
-            logger.warning(
-                "Setting the entry point of a graph that has already been compiled. "
-                "This will not be reflected in the compiled graph."
-            )
-        if conditional_edge_mapping and set(
-            conditional_edge_mapping.values()
-        ).difference([END]).difference(self.nodes):
-            raise ValueError(
-                f"Missing nodes which are in conditional edge mapping. Mapping "
-                f"contains possible destinations: "
-                f"{list(conditional_edge_mapping.values())}. Possible nodes are "
-                f"{list(self.nodes.keys())}."
-            )
-        if not isinstance(condition, Runnable):
-            condition = RunnableLambda(condition)
-        self.entry_point_branch = Branch(condition, conditional_edge_mapping)
+        return self.add_conditional_edges(START, condition, conditional_edge_mapping)
 
     def set_finish_point(self, key: str) -> None:
         return self.add_edge(key, END)
@@ -180,19 +170,14 @@ class Graph:
             if node not in all_starts:
                 raise ValueError(f"Node `{node}` is a dead-end")
 
-        branches = [
-            branch for branch_list in self.branches.values() for branch in branch_list
+        all_branches = [
+            branch
+            for branches in self.branches.values()
+            for branch in branches.values()
         ]
-        if self.entry_point_branch is not None:
-            branches.append(self.entry_point_branch)
-
-        all_hard_ends = {end for _, end in self._all_edges}
-        if self.entry_point is not None:
-            all_hard_ends.add(self.entry_point)
-
-        if all(branch.ends is not None for branch in branches):
-            all_ends = all_hard_ends | {
-                end for branch in branches for end in branch.ends.values()
+        if all(branch.ends is not None for branch in all_branches):
+            all_ends = {end for _, end in self._all_edges} | {
+                end for branch in all_branches for end in branch.ends.values()
             }
 
             for node in self.nodes:
@@ -213,65 +198,89 @@ class Graph:
         interrupt_after: Optional[Sequence[str]] = None,
         debug: bool = False,
     ) -> "CompiledGraph":
+        # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
+
+        # validate the graph
         self.validate(interrupt=interrupt_before + interrupt_after)
 
-        outgoing_edges = defaultdict(list)
-        for start, end in self.edges:
-            outgoing_edges[start].append(f"{end}:inbox" if end != END else END)
-
-        nodes = {
-            key: (Channel.subscribe_to(f"{key}:inbox") | node | Channel.write_to(key))
-            for key, node in self.nodes.items()
-        }
-        node_outboxes = {
-            # we clear outbox channels after each step
-            key: EphemeralValue(Any)
-            for key in self.nodes
-        }
-
-        def branch_writer(dest: str) -> Optional[Runnable]:
-            return Channel.write_to(f"{dest}:inbox" if dest != END else END)
-
-        for key in self.nodes:
-            outgoing = outgoing_edges[key]
-            edges_key = f"{key}:edges"
-            if outgoing or key in self.branches:
-                nodes[edges_key] = Channel.subscribe_to(key, tags=["langsmith:hidden"])
-            if outgoing:
-                nodes[edges_key] |= Channel.write_to(*[dest for dest in outgoing])
-            if key in self.branches:
-                for branch in self.branches[key]:
-                    nodes[edges_key] |= branch.run(branch_writer)
-
-        if self.entry_point_branch:
-            nodes[f"{START}:edges"] = Channel.subscribe_to(
-                START, tags=["langsmith:hidden"]
-            ) | self.entry_point_branch.run(branch_writer)
-        elif self.entry_point is None:
-            raise ValueError("No entry point set")
-
-        return CompiledGraph(
+        # create empty compiled graph
+        compiled = CompiledGraph(
             graph=self,
-            nodes=nodes,
-            channels={**node_outboxes},
-            input_channels=f"{self.entry_point}:inbox" if self.entry_point else START,
+            nodes={},
+            channels={START: EphemeralValue(Any), END: EphemeralValue(Any)},
+            input_channels=START,
             output_channels=END,
-            stream_channels=list(self.nodes),
+            stream_mode="values",
+            stream_channels=[],
             checkpointer=checkpointer,
-            interrupt_before_nodes=[f"{node}:inbox" for node in interrupt_before],
+            interrupt_before_nodes=interrupt_before,
             interrupt_after_nodes=interrupt_after,
+            auto_validate=False,
             debug=debug,
         )
+
+        # attach nodes, edges, and branches
+        for key, node in self.nodes.items():
+            compiled.attach_node(key, node)
+
+        for start, end in self.edges:
+            compiled.attach_edge(start, end)
+
+        for start, branches in self.branches.items():
+            for name, branch in branches.items():
+                compiled.attach_branch(start, name, branch)
+
+        # validate the compiled graph
+        return compiled.validate()
 
 
 class CompiledGraph(Pregel):
     graph: Graph
 
+    def attach_node(self, key: str, node: Runnable) -> None:
+        self.channels[key] = EphemeralValue(Any)
+        self.nodes[key] = (
+            ChannelInvoke(channels=[], triggers=[]) | node | Channel.write_to(key)
+        )
+        self.stream_channels.append(key)
+
+    def attach_edge(self, start: str, end: str) -> None:
+        if end == END:
+            # publish to end channel
+            self.nodes[start].writers.append(Channel.write_to(END))
+        else:
+            # subscribe to start channel
+            self.nodes[end].triggers.append(start)
+            self.nodes[end].channels.append(start)
+
+    def attach_branch(self, start: str, name: str, branch: Branch) -> None:
+        def branch_writer(end: str) -> Optional[ChannelWrite]:
+            return Channel.write_to(
+                f"branch:{start}:{name}:{end}" if end != END else END
+            )
+
+        # add hidden start node
+        if start == START and start not in self.nodes:
+            self.nodes[start] = Channel.subscribe_to(START, tags=["langsmith:hidden"])
+
+        # attach branch writer
+        self.nodes[start] |= branch.run(branch_writer)
+
+        # attach branch readers
+        ends = branch.ends.values() if branch.ends else [node for node in self.nodes]
+        for end in ends:
+            if end != END:
+                channel_name = f"branch:{start}:{name}:{end}"
+                self.channels[channel_name] = EphemeralValue(Any)
+                self.nodes[end].triggers.append(channel_name)
+                self.nodes[end].channels.append(channel_name)
+
     def get_graph(
         self, config: Optional[RunnableConfig] = None, *, xray: bool = False
     ) -> RunnableGraph:
+        """Returns a drawable representation of the computation graph."""
         graph = RunnableGraph()
         start_nodes: dict[str, RunnableGraphNode] = {
             START: graph.add_node(self.get_input_schema(config), START)
@@ -301,13 +310,11 @@ class CompiledGraph(Pregel):
                 n = graph.add_node(node, key)
                 start_nodes[key] = n
                 end_nodes[key] = n
-        for start, end in self.graph._all_edges:
+        for start, end in sorted(self.graph._all_edges):
             graph.add_edge(start_nodes[start], end_nodes[end])
         for start, branches in self.graph.branches.items():
-            for i, branch in enumerate(branches):
-                name = f"{start}_{branch.condition.name or 'condition'}"
-                if i > 0:
-                    name += f"_{i}"
+            for name, branch in branches.items():
+                name = f"{start}_{name}"
                 cond = graph.add_node(branch.condition, name)
                 graph.add_edge(start_nodes[start], cond)
                 ends = branch.ends or {
@@ -316,16 +323,5 @@ class CompiledGraph(Pregel):
                 }
                 for label, end in ends.items():
                     graph.add_edge(cond, end_nodes[end], label)
-        if entry_point_branch := self.graph.entry_point_branch:
-            cond = graph.add_node(
-                entry_point_branch.condition,
-                entry_point_branch.condition.name or f"{START}_condition",
-            )
-            graph.add_edge(start_nodes[START], cond)
-            ends = entry_point_branch.ends or {k: k for k in self.graph.nodes}
-            for label, end in ends.items():
-                graph.add_edge(cond, end_nodes[end], label)
-        elif self.graph.entry_point:
-            graph.add_edge(start_nodes[START], end_nodes[self.graph.entry_point])
 
         return graph
