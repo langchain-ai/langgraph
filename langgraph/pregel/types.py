@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Any, NamedTuple, Optional
+from typing import Any, NamedTuple, Optional, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
@@ -18,7 +18,7 @@ class PregelExecutableTask(NamedTuple):
 
 
 class StateSnapshot(NamedTuple):
-    values: dict[str, Any] | Any
+    values: Union[dict[str, Any], Any]
     """Current values of channels"""
     next: tuple[str]
     """Nodes to execute in the next step, if any"""
