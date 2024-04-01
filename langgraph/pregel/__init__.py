@@ -952,8 +952,9 @@ class Pregel(
         output_keys = output_keys if output_keys is not None else self.output_channels
         output_is_dict = not isinstance(output_keys, str)
         latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
-        for chunk in self.stream(
-            input,
+        for chunk in self._transform_stream_with_config(
+            iter([input]),
+            self._transform,
             config,
             stream_mode="values",
             output_keys=output_keys,
@@ -979,8 +980,9 @@ class Pregel(
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Iterator[Union[dict[str, Any], Any]]:
-        return self.transform(
+        return self._transform_stream_with_config(
             iter([input]),
+            self._transform,
             config,
             stream_mode=stream_mode,
             output_keys=output_keys,
@@ -1004,7 +1006,7 @@ class Pregel(
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Iterator[Union[dict[str, Any], Any]]:
-        for chunk in self._transform_stream_with_config(
+        return self._transform_stream_with_config(
             input,
             self._transform,
             config,
@@ -1015,8 +1017,7 @@ class Pregel(
             interrupt_after_nodes=interrupt_after_nodes,
             debug=debug,
             **kwargs,
-        ):
-            yield chunk
+        )
 
     async def ainvoke(
         self,
@@ -1030,11 +1031,15 @@ class Pregel(
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
+        async def input_stream() -> AsyncIterator[Union[dict[str, Any], Any]]:
+            yield input
+
         output_keys = output_keys if output_keys is not None else self.output_channels
         output_is_dict = not isinstance(output_keys, str)
         latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
-        async for chunk in self.astream(
-            input,
+        async for chunk in self._atransform_stream_with_config(
+            input_stream(),
+            self._atransform,
             config,
             stream_mode="values",
             output_keys=output_keys,
@@ -1047,7 +1052,7 @@ class Pregel(
             latest = {**latest, **chunk} if output_is_dict else chunk
         return latest
 
-    async def astream(
+    def astream(
         self,
         input: Union[dict[str, Any], Any],
         config: Optional[RunnableConfig] = None,
@@ -1063,8 +1068,9 @@ class Pregel(
         async def input_stream() -> AsyncIterator[Union[dict[str, Any], Any]]:
             yield input
 
-        async for chunk in self.atransform(
+        return self._atransform_stream_with_config(
             input_stream(),
+            self._atransform,
             config,
             stream_mode=stream_mode,
             output_keys=output_keys,
@@ -1073,10 +1079,9 @@ class Pregel(
             interrupt_after_nodes=interrupt_after_nodes,
             debug=debug,
             **kwargs,
-        ):
-            yield chunk
+        )
 
-    async def atransform(
+    def atransform(
         self,
         input: AsyncIterator[Union[dict[str, Any], Any]],
         config: Optional[RunnableConfig] = None,
@@ -1089,7 +1094,7 @@ class Pregel(
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
-        async for chunk in self._atransform_stream_with_config(
+        return self._atransform_stream_with_config(
             input,
             self._atransform,
             config,
@@ -1100,8 +1105,7 @@ class Pregel(
             interrupt_after_nodes=interrupt_after_nodes,
             debug=debug,
             **kwargs,
-        ):
-            yield chunk
+        )
 
 
 def _panic_or_proceed(

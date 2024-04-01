@@ -51,29 +51,13 @@
       },
       {
         "id": "__start___should_start",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "should_start"
-        }
+        "type": "unknown",
+        "data": "__start___should_start"
       },
       {
         "id": "left_condition",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "condition"
-        }
+        "type": "unknown",
+        "data": "left_condition"
       }
     ],
     "edges": [
@@ -235,29 +219,13 @@
       },
       {
         "id": "__start___should_start",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "should_start"
-        }
+        "type": "unknown",
+        "data": "__start___should_start"
       },
       {
         "id": "left_condition",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "condition"
-        }
+        "type": "unknown",
+        "data": "left_condition"
       }
     ],
     "edges": [
@@ -385,16 +353,8 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "should_continue"
-        }
+        "type": "unknown",
+        "data": "agent_should_continue"
       }
     ],
     "edges": [
@@ -632,16 +592,8 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "should_continue"
-        }
+        "type": "unknown",
+        "data": "agent_should_continue"
       }
     ],
     "edges": [
@@ -1006,16 +958,8 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "should_continue"
-        }
+        "type": "unknown",
+        "data": "agent_should_continue"
       }
     ],
     "edges": [
@@ -1825,16 +1769,8 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "should_continue"
-        }
+        "type": "unknown",
+        "data": "agent_should_continue"
       }
     ],
     "edges": [
@@ -2068,16 +2004,8 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "should_continue"
-        }
+        "type": "unknown",
+        "data": "agent_should_continue"
       }
     ],
     "edges": [
@@ -2311,16 +2239,8 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "should_continue"
-        }
+        "type": "unknown",
+        "data": "agent_should_continue"
       }
     ],
     "edges": [
