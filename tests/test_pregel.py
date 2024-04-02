@@ -3303,7 +3303,6 @@ def test_simple_multi_edge() -> None:
 
     graph.set_entry_point("up")
     graph.add_edge("up", "side")
-    graph.add_edge("up", "down")
     graph.add_edge(["up", "side"], "down")
     graph.set_finish_point("down")
 
