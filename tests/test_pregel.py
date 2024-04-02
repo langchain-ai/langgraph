@@ -2307,7 +2307,7 @@ def test_message_graph(
         FunctionMessage(
             content="result for query",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000014",
+            id="00000000-0000-4000-8000-000000000013",
         ),
         AIMessage(
             content="",
@@ -2319,7 +2319,7 @@ def test_message_graph(
         FunctionMessage(
             content="result for another",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000026",
+            id="00000000-0000-4000-8000-000000000024",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -2338,7 +2338,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000046",
+                id="00000000-0000-4000-8000-000000000043",
             )
         },
         {
@@ -2354,7 +2354,7 @@ def test_message_graph(
             "action": FunctionMessage(
                 content="result for another",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000058",
+                id="00000000-0000-4000-8000-000000000054",
             )
         },
         {"agent": AIMessage(content="answer", id="ai3")},
