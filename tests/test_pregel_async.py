@@ -23,6 +23,7 @@ from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+from langgraph.checkpoint.base import CheckpointAt
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -196,12 +197,17 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 2
 
 
-async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_invoke_two_processes_in_out_interrupt(
+    mocker: MockerFixture, checkpoint_at: CheckpointAt
+) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
-    memory = MemorySaverAssertImmutable()
+    memory = MemorySaverAssertImmutable(at=checkpoint_at)
     app = Pregel(
         nodes={"one": one, "two": two},
         checkpointer=memory,
@@ -408,7 +414,12 @@ async def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) 
     assert await app.ainvoke(2) == [3, 3]
 
 
-async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_invoke_checkpoint(
+    mocker: MockerFixture, checkpoint_at: CheckpointAt
+) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
     def raise_if_above_10(input: int) -> int:
@@ -423,7 +434,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
         | raise_if_above_10
     )
 
-    memory = MemorySaverAssertImmutable()
+    memory = MemorySaverAssertImmutable(at=checkpoint_at)
 
     app = Pregel(
         nodes={"one": one},
@@ -458,7 +469,12 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     assert checkpoint["channel_values"].get("total") == 5
 
 
-async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_invoke_checkpoint_aiosqlite(
+    mocker: MockerFixture, checkpoint_at: CheckpointAt
+) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
     def raise_if_above_10(input: int) -> int:
@@ -474,6 +490,7 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
     )
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as memory:
+        memory.at = checkpoint_at
         app = Pregel(
             nodes={"one": one},
             channels={"total": BinaryOperatorAggregate(int, operator.add)},
@@ -726,7 +743,10 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     assert cleanup_async.call_count == 1, "Expected cleanup to be called once"
 
 
-async def test_conditional_graph() -> None:
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
     from copy import deepcopy
 
     from langchain.llms.fake import FakeStreamingListLLM
@@ -931,7 +951,8 @@ async def test_conditional_graph() -> None:
     # test state get/update methods with interrupt_after
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["agent"]
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
 
@@ -1077,7 +1098,8 @@ async def test_conditional_graph() -> None:
     # test state get/update methods with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(), interrupt_before=["tools"]
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
     llm.i = 0
@@ -1224,7 +1246,8 @@ async def test_conditional_graph() -> None:
     # test re-invoke to continue with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(), interrupt_before=["tools"]
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
     llm.i = 0  # reset the llm
@@ -1349,7 +1372,10 @@ async def test_conditional_graph() -> None:
     ]
 
 
-async def test_conditional_graph_state() -> None:
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
     from langchain.llms.fake import FakeStreamingListLLM
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
@@ -1511,7 +1537,8 @@ async def test_conditional_graph_state() -> None:
     # test state get/update methods with interrupt_after
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["agent"]
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
 
@@ -1630,7 +1657,8 @@ async def test_conditional_graph_state() -> None:
     # test state get/update methods with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(), interrupt_before=["tools"]
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
     llm.i = 0  # reset the llm
@@ -2137,7 +2165,10 @@ async def test_prebuilt_chat() -> None:
     ]
 
 
-async def test_message_graph() -> None:
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_message_graph(checkpoint_at: CheckpointAt) -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
@@ -2306,7 +2337,8 @@ async def test_message_graph() -> None:
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["agent"]
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
 
@@ -2511,7 +2543,12 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
 
-async def test_in_one_fan_out_state_graph_waiting_edge() -> None:
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_in_one_fan_out_state_graph_waiting_edge(
+    checkpoint_at: CheckpointAt,
+) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -2575,7 +2612,8 @@ async def test_in_one_fan_out_state_graph_waiting_edge() -> None:
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["retriever_one"]
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
 
@@ -2598,7 +2636,12 @@ async def test_in_one_fan_out_state_graph_waiting_edge() -> None:
     ]
 
 
-async def test_in_one_fan_out_state_graph_waiting_edge_via_branch() -> None:
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
+    checkpoint_at: CheckpointAt,
+) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -2700,7 +2743,8 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch() -> None:
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["retriever_one"]
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
 
@@ -2723,7 +2767,12 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch() -> None:
     ]
 
 
-async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
+    checkpoint_at: CheckpointAt,
+) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -2792,7 +2841,8 @@ async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(), interrupt_after=["retriever_one"]
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
 

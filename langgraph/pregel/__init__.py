@@ -407,7 +407,9 @@ class Pregel(
             )
             # if two nodes updated the state at the same time, it's ambiguous
             if last_seen_by_node:
-                if last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                if len(last_seen_by_node) == 1:
+                    as_node = last_seen_by_node[0][1]
+                elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
                     as_node = last_seen_by_node[-1][1]
         if as_node is None:
             raise InvalidUpdateError("Ambiguous update, specify as_node")
@@ -464,7 +466,9 @@ class Pregel(
             )
             # if two nodes updated the state at the same time, it's ambiguous
             if last_seen_by_node:
-                if last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                if len(last_seen_by_node) == 1:
+                    as_node = last_seen_by_node[0][1]
+                elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
                     as_node = last_seen_by_node[-1][1]
         if as_node is None:
             raise InvalidUpdateError("Ambiguous update, specify as_node")
@@ -611,7 +615,7 @@ class Pregel(
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
                 for step in range(config["recursion_limit"] + 1):
-                    checkpoint, next_tasks = _prepare_next_tasks(
+                    next_checkpoint, next_tasks = _prepare_next_tasks(
                         checkpoint, processes, channels, for_execution=True
                     )
 
@@ -636,6 +640,8 @@ class Pregel(
                         next_tasks,
                     ):
                         break
+                    else:
+                        checkpoint = next_checkpoint
 
                     if debug:
                         print_step_start(step, next_tasks)
@@ -816,7 +822,7 @@ class Pregel(
                 # channels are guaranteed to be immutable for the duration of the step,
                 # channel updates being applied only at the transition between steps
                 for step in range(config["recursion_limit"] + 1):
-                    checkpoint, next_tasks = _prepare_next_tasks(
+                    next_checkpoint, next_tasks = _prepare_next_tasks(
                         checkpoint, processes, channels, for_execution=True
                     )
 
@@ -841,6 +847,8 @@ class Pregel(
                         next_tasks,
                     ):
                         break
+                    else:
+                        checkpoint = next_checkpoint
 
                     if debug:
                         print_step_start(step, next_tasks)
@@ -1038,11 +1046,12 @@ def _should_interrupt(
     snapshot_channels: Sequence[str],
     tasks: list[PregelExecutableTask],
 ) -> bool:
+    # defaultdicts are mutated on access :( so we need to copy
+    seen = checkpoint["versions_seen"].copy()[INTERRUPT].copy()
     return (
         # interrupt if any of snapshopt_channels has been updated since last interrupt
         any(
-            checkpoint["channel_versions"][chan]
-            > checkpoint["versions_seen"][INTERRUPT][chan]
+            checkpoint["channel_versions"][chan] > seen[chan]
             for chan in snapshot_channels
         )
         # and any channel written to is in interrupt_nodes list
