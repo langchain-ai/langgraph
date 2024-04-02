@@ -6,7 +6,6 @@ from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
-    RunnableLambda,
     RunnablePassthrough,
     RunnableSequence,
     RunnableSerializable,
@@ -17,11 +16,12 @@ from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
 from langgraph.pregel.write import ChannelWrite
+from langgraph.utils import RunnableCallable
 
 READ_TYPE = Callable[[str, bool], Union[Any, dict[str, Any]]]
 
 
-class ChannelRead(RunnableLambda):
+class ChannelRead(RunnableCallable):
     channel: Union[str, list[str]]
 
     fresh: bool = False
@@ -46,12 +46,23 @@ class ChannelRead(RunnableLambda):
         *,
         fresh: bool = False,
         mapper: Optional[Callable[[Any], Any]] = None,
+        tags: Optional[list[str]] = None,
     ) -> None:
-        super().__init__(func=self._read, afunc=self._aread)
+        super().__init__(func=self._read, afunc=self._aread, tags=tags, name=None)
         self.fresh = fresh
         self.mapper = mapper
         self.channel = channel
-        self.name = f"ChannelRead<{channel}>"
+
+    def get_name(
+        self, suffix: Optional[str] = None, *, name: Optional[str] = None
+    ) -> str:
+        if name:
+            pass
+        elif isinstance(self.channel, str):
+            name = f"ChannelRead<{self.channel}>"
+        else:
+            name = f"ChannelRead<{','.join(self.channel)}>"
+        return super().get_name(suffix, name=name)
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
         try:
@@ -80,7 +91,7 @@ class ChannelRead(RunnableLambda):
             return read(self.channel, self.fresh)
 
 
-default_bound: RunnablePassthrough = RunnablePassthrough()
+DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
 
 
 class PregelNode(RunnableBindingBase):
@@ -92,7 +103,7 @@ class PregelNode(RunnableBindingBase):
 
     writers: list[Runnable] = Field(default_factory=list)
 
-    bound: Runnable[Any, Any] = Field(default=default_bound)
+    bound: Runnable[Any, Any] = Field(default=DEFAULT_BOUND)
 
     kwargs: Mapping[str, Any] = Field(default_factory=dict)
 
@@ -125,11 +136,11 @@ class PregelNode(RunnableBindingBase):
 
     def get_node(self) -> Optional[Runnable[Any, Any]]:
         writers = self.get_writers()
-        if self.bound is default_bound and not writers:
+        if self.bound is DEFAULT_BOUND and not writers:
             return None
-        elif self.bound is default_bound and len(writers) == 1:
+        elif self.bound is DEFAULT_BOUND and len(writers) == 1:
             return writers[0]
-        elif self.bound is default_bound:
+        elif self.bound is DEFAULT_BOUND:
             return RunnableSequence(*writers)
         elif writers:
             return RunnableSequence(self.bound, *writers)
@@ -154,7 +165,7 @@ class PregelNode(RunnableBindingBase):
             triggers=triggers,
             mapper=mapper,
             writers=writers or [],
-            bound=bound or default_bound,
+            bound=bound or DEFAULT_BOUND,
             kwargs=kwargs or {},
             config=merge_configs(config, {"tags": tags or []}),
             **other_kwargs,
@@ -201,7 +212,7 @@ class PregelNode(RunnableBindingBase):
                 kwargs=self.kwargs,
                 config=self.config,
             )
-        elif self.bound is default_bound:
+        elif self.bound is DEFAULT_BOUND:
             return PregelNode(
                 channels=self.channels,
                 triggers=self.triggers,

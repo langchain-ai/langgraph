@@ -12,16 +12,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput"
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput"
-        }
+        "data": "__end__"
       },
       {
         "id": "left",
@@ -51,13 +47,29 @@
       },
       {
         "id": "__start___should_start",
-        "type": "unknown",
-        "data": "__start___should_start"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_start"
+        }
       },
       {
         "id": "left_condition",
-        "type": "unknown",
-        "data": "left_condition"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "RunnableLambda"
+        }
       }
     ],
     "edges": [
@@ -140,10 +152,10 @@
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
-  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}}}}}'
+  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"title": "Steps", "type": "array", "items": {"type": "string"}}}}}}'
 # ---
 # name: test_conditional_entrypoint_graph_state.1
-  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}}}'
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"title": "Steps", "type": "array", "items": {"type": "string"}}}}'
 # ---
 # name: test_conditional_entrypoint_graph_state.2
   '''
@@ -152,44 +164,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput",
-          "$ref": "#/definitions/AgentState",
-          "definitions": {
-            "AgentState": {
-              "title": "AgentState",
-              "type": "object",
-              "properties": {
-                "input": {
-                  "title": "Input",
-                  "type": "string"
-                },
-                "output": {
-                  "title": "Output",
-                  "type": "string"
-                }
-              }
-            }
-          }
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput",
-          "type": "object",
-          "properties": {
-            "input": {
-              "title": "Input",
-              "type": "string"
-            },
-            "output": {
-              "title": "Output",
-              "type": "string"
-            }
-          }
-        }
+        "data": "__end__"
       },
       {
         "id": "left",
@@ -219,13 +199,29 @@
       },
       {
         "id": "__start___should_start",
-        "type": "unknown",
-        "data": "__start___should_start"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_start"
+        }
       },
       {
         "id": "left_condition",
-        "type": "unknown",
-        "data": "left_condition"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "RunnableLambda"
+        }
       }
     ],
     "edges": [
@@ -314,16 +310,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput"
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput"
-        }
+        "data": "__end__"
       },
       {
         "id": "agent",
@@ -353,8 +345,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [
@@ -416,114 +416,22 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput"
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput"
-        }
+        "data": "__end__"
       },
       {
         "id": 2,
         "type": "schema",
-        "data": {
-          "title": "RunnableParallel<agent_outcome>Input",
-          "type": "object",
-          "properties": {}
-        }
+        "data": "Parallel<agent_outcome>Input"
       },
       {
         "id": 3,
         "type": "schema",
-        "data": {
-          "title": "RunnableParallel<agent_outcome>Output",
-          "type": "object",
-          "properties": {
-            "agent_outcome": {
-              "title": "Agent Outcome",
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/AgentAction"
-                },
-                {
-                  "$ref": "#/definitions/AgentFinish"
-                }
-              ]
-            }
-          },
-          "definitions": {
-            "AgentAction": {
-              "title": "AgentAction",
-              "description": "A full description of an action for an ActionAgent to execute.",
-              "type": "object",
-              "properties": {
-                "tool": {
-                  "title": "Tool",
-                  "type": "string"
-                },
-                "tool_input": {
-                  "title": "Tool Input",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "object"
-                    }
-                  ]
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentAction",
-                  "enum": [
-                    "AgentAction"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "tool",
-                "tool_input",
-                "log"
-              ]
-            },
-            "AgentFinish": {
-              "title": "AgentFinish",
-              "description": "The final return value of an ActionAgent.",
-              "type": "object",
-              "properties": {
-                "return_values": {
-                  "title": "Return Values",
-                  "type": "object"
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentFinish",
-                  "enum": [
-                    "AgentFinish"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "return_values",
-                "log"
-              ]
-            }
-          }
-        }
+        "data": "Parallel<agent_outcome>Output"
       },
       {
         "id": 4,
@@ -592,8 +500,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [
@@ -703,16 +619,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput"
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput"
-        }
+        "data": "__end__"
       },
       {
         "id": "agent",
@@ -742,8 +654,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [
@@ -805,114 +725,22 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput"
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput"
-        }
+        "data": "__end__"
       },
       {
         "id": 2,
         "type": "schema",
-        "data": {
-          "title": "RunnableParallel<agent_outcome>Input",
-          "type": "object",
-          "properties": {}
-        }
+        "data": "Parallel<agent_outcome>Input"
       },
       {
         "id": 3,
         "type": "schema",
-        "data": {
-          "title": "RunnableParallel<agent_outcome>Output",
-          "type": "object",
-          "properties": {
-            "agent_outcome": {
-              "title": "Agent Outcome",
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/AgentAction"
-                },
-                {
-                  "$ref": "#/definitions/AgentFinish"
-                }
-              ]
-            }
-          },
-          "definitions": {
-            "AgentAction": {
-              "title": "AgentAction",
-              "description": "A full description of an action for an ActionAgent to execute.",
-              "type": "object",
-              "properties": {
-                "tool": {
-                  "title": "Tool",
-                  "type": "string"
-                },
-                "tool_input": {
-                  "title": "Tool Input",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "object"
-                    }
-                  ]
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentAction",
-                  "enum": [
-                    "AgentAction"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "tool",
-                "tool_input",
-                "log"
-              ]
-            },
-            "AgentFinish": {
-              "title": "AgentFinish",
-              "description": "The final return value of an ActionAgent.",
-              "type": "object",
-              "properties": {
-                "return_values": {
-                  "title": "Return Values",
-                  "type": "object"
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentFinish",
-                  "enum": [
-                    "AgentFinish"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "return_values",
-                "log"
-              ]
-            }
-          }
-        }
+        "data": "Parallel<agent_outcome>Output"
       },
       {
         "id": 4,
@@ -981,8 +809,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [
@@ -1098,226 +934,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput",
-          "$ref": "#/definitions/AgentState",
-          "definitions": {
-            "AgentAction": {
-              "title": "AgentAction",
-              "description": "A full description of an action for an ActionAgent to execute.",
-              "type": "object",
-              "properties": {
-                "tool": {
-                  "title": "Tool",
-                  "type": "string"
-                },
-                "tool_input": {
-                  "title": "Tool Input",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "object"
-                    }
-                  ]
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentAction",
-                  "enum": [
-                    "AgentAction"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "tool",
-                "tool_input",
-                "log"
-              ]
-            },
-            "AgentFinish": {
-              "title": "AgentFinish",
-              "description": "The final return value of an ActionAgent.",
-              "type": "object",
-              "properties": {
-                "return_values": {
-                  "title": "Return Values",
-                  "type": "object"
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentFinish",
-                  "enum": [
-                    "AgentFinish"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "return_values",
-                "log"
-              ]
-            },
-            "AgentState": {
-              "title": "AgentState",
-              "type": "object",
-              "properties": {
-                "input": {
-                  "title": "Input",
-                  "type": "string"
-                },
-                "agent_outcome": {
-                  "title": "Agent Outcome",
-                  "anyOf": [
-                    {
-                      "$ref": "#/definitions/AgentAction"
-                    },
-                    {
-                      "$ref": "#/definitions/AgentFinish"
-                    }
-                  ]
-                },
-                "intermediate_steps": {
-                  "title": "Intermediate Steps",
-                  "type": "array",
-                  "items": {
-                    "type": "array",
-                    "minItems": 2,
-                    "maxItems": 2,
-                    "items": [
-                      {
-                        "$ref": "#/definitions/AgentAction"
-                      },
-                      {
-                        "type": "string"
-                      }
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput",
-          "type": "object",
-          "properties": {
-            "input": {
-              "title": "Input",
-              "type": "string"
-            },
-            "agent_outcome": {
-              "title": "Agent Outcome",
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/AgentAction"
-                },
-                {
-                  "$ref": "#/definitions/AgentFinish"
-                }
-              ]
-            },
-            "intermediate_steps": {
-              "title": "Intermediate Steps",
-              "type": "array",
-              "items": {
-                "type": "array",
-                "minItems": 2,
-                "maxItems": 2,
-                "items": [
-                  {
-                    "$ref": "#/definitions/AgentAction"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "definitions": {
-            "AgentAction": {
-              "title": "AgentAction",
-              "description": "A full description of an action for an ActionAgent to execute.",
-              "type": "object",
-              "properties": {
-                "tool": {
-                  "title": "Tool",
-                  "type": "string"
-                },
-                "tool_input": {
-                  "title": "Tool Input",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "object"
-                    }
-                  ]
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentAction",
-                  "enum": [
-                    "AgentAction"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "tool",
-                "tool_input",
-                "log"
-              ]
-            },
-            "AgentFinish": {
-              "title": "AgentFinish",
-              "description": "The final return value of an ActionAgent.",
-              "type": "object",
-              "properties": {
-                "return_values": {
-                  "title": "Return Values",
-                  "type": "object"
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentFinish",
-                  "enum": [
-                    "AgentFinish"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "return_values",
-                "log"
-              ]
-            }
-          }
-        }
+        "data": "__end__"
       },
       {
         "id": "agent",
@@ -1347,8 +969,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [
@@ -1416,226 +1046,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput",
-          "$ref": "#/definitions/AgentState",
-          "definitions": {
-            "AgentAction": {
-              "title": "AgentAction",
-              "description": "A full description of an action for an ActionAgent to execute.",
-              "type": "object",
-              "properties": {
-                "tool": {
-                  "title": "Tool",
-                  "type": "string"
-                },
-                "tool_input": {
-                  "title": "Tool Input",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "object"
-                    }
-                  ]
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentAction",
-                  "enum": [
-                    "AgentAction"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "tool",
-                "tool_input",
-                "log"
-              ]
-            },
-            "AgentFinish": {
-              "title": "AgentFinish",
-              "description": "The final return value of an ActionAgent.",
-              "type": "object",
-              "properties": {
-                "return_values": {
-                  "title": "Return Values",
-                  "type": "object"
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentFinish",
-                  "enum": [
-                    "AgentFinish"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "return_values",
-                "log"
-              ]
-            },
-            "AgentState": {
-              "title": "AgentState",
-              "type": "object",
-              "properties": {
-                "input": {
-                  "title": "Input",
-                  "type": "string"
-                },
-                "agent_outcome": {
-                  "title": "Agent Outcome",
-                  "anyOf": [
-                    {
-                      "$ref": "#/definitions/AgentAction"
-                    },
-                    {
-                      "$ref": "#/definitions/AgentFinish"
-                    }
-                  ]
-                },
-                "intermediate_steps": {
-                  "title": "Intermediate Steps",
-                  "type": "array",
-                  "items": {
-                    "type": "array",
-                    "minItems": 2,
-                    "maxItems": 2,
-                    "items": [
-                      {
-                        "$ref": "#/definitions/AgentAction"
-                      },
-                      {
-                        "type": "string"
-                      }
-                    ]
-                  }
-                }
-              }
-            }
-          }
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput",
-          "type": "object",
-          "properties": {
-            "input": {
-              "title": "Input",
-              "type": "string"
-            },
-            "agent_outcome": {
-              "title": "Agent Outcome",
-              "anyOf": [
-                {
-                  "$ref": "#/definitions/AgentAction"
-                },
-                {
-                  "$ref": "#/definitions/AgentFinish"
-                }
-              ]
-            },
-            "intermediate_steps": {
-              "title": "Intermediate Steps",
-              "type": "array",
-              "items": {
-                "type": "array",
-                "minItems": 2,
-                "maxItems": 2,
-                "items": [
-                  {
-                    "$ref": "#/definitions/AgentAction"
-                  },
-                  {
-                    "type": "string"
-                  }
-                ]
-              }
-            }
-          },
-          "definitions": {
-            "AgentAction": {
-              "title": "AgentAction",
-              "description": "A full description of an action for an ActionAgent to execute.",
-              "type": "object",
-              "properties": {
-                "tool": {
-                  "title": "Tool",
-                  "type": "string"
-                },
-                "tool_input": {
-                  "title": "Tool Input",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "object"
-                    }
-                  ]
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentAction",
-                  "enum": [
-                    "AgentAction"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "tool",
-                "tool_input",
-                "log"
-              ]
-            },
-            "AgentFinish": {
-              "title": "AgentFinish",
-              "description": "The final return value of an ActionAgent.",
-              "type": "object",
-              "properties": {
-                "return_values": {
-                  "title": "Return Values",
-                  "type": "object"
-                },
-                "log": {
-                  "title": "Log",
-                  "type": "string"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "AgentFinish",
-                  "enum": [
-                    "AgentFinish"
-                  ],
-                  "type": "string"
-                }
-              },
-              "required": [
-                "return_values",
-                "log"
-              ]
-            }
-          }
-        }
+        "data": "__end__"
       },
       {
         "id": "agent",
@@ -1665,8 +1081,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [
@@ -1722,10 +1146,10 @@
   '''
 # ---
 # name: test_message_graph[end_of_run]
-  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
 # ---
 # name: test_message_graph[end_of_run].1
-  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
 # ---
 # name: test_message_graph[end_of_run].2
   '''
@@ -1734,720 +1158,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput",
-          "type": "array",
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/definitions/AIMessage"
-              },
-              {
-                "$ref": "#/definitions/HumanMessage"
-              },
-              {
-                "$ref": "#/definitions/ChatMessage"
-              },
-              {
-                "$ref": "#/definitions/SystemMessage"
-              },
-              {
-                "$ref": "#/definitions/FunctionMessage"
-              },
-              {
-                "$ref": "#/definitions/ToolMessage"
-              }
-            ]
-          },
-          "definitions": {
-            "AIMessage": {
-              "title": "AIMessage",
-              "description": "Message from an AI.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "ai",
-                  "enum": [
-                    "ai"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "example": {
-                  "title": "Example",
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "HumanMessage": {
-              "title": "HumanMessage",
-              "description": "Message from a human.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "human",
-                  "enum": [
-                    "human"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "example": {
-                  "title": "Example",
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "ChatMessage": {
-              "title": "ChatMessage",
-              "description": "Message that can be assigned an arbitrary speaker (i.e. role).",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "chat",
-                  "enum": [
-                    "chat"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "role": {
-                  "title": "Role",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "role"
-              ]
-            },
-            "SystemMessage": {
-              "title": "SystemMessage",
-              "description": "Message for priming AI behavior, usually passed in as the first of a sequence\nof input messages.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "system",
-                  "enum": [
-                    "system"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "FunctionMessage": {
-              "title": "FunctionMessage",
-              "description": "Message for passing the result of executing a function back to a model.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "function",
-                  "enum": [
-                    "function"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "name"
-              ]
-            },
-            "ToolMessage": {
-              "title": "ToolMessage",
-              "description": "Message for passing the result of executing a tool back to a model.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "tool",
-                  "enum": [
-                    "tool"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "tool_call_id": {
-                  "title": "Tool Call Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "tool_call_id"
-              ]
-            }
-          }
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput",
-          "type": "array",
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/definitions/AIMessage"
-              },
-              {
-                "$ref": "#/definitions/HumanMessage"
-              },
-              {
-                "$ref": "#/definitions/ChatMessage"
-              },
-              {
-                "$ref": "#/definitions/SystemMessage"
-              },
-              {
-                "$ref": "#/definitions/FunctionMessage"
-              },
-              {
-                "$ref": "#/definitions/ToolMessage"
-              }
-            ]
-          },
-          "definitions": {
-            "AIMessage": {
-              "title": "AIMessage",
-              "description": "Message from an AI.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "ai",
-                  "enum": [
-                    "ai"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "example": {
-                  "title": "Example",
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "HumanMessage": {
-              "title": "HumanMessage",
-              "description": "Message from a human.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "human",
-                  "enum": [
-                    "human"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "example": {
-                  "title": "Example",
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "ChatMessage": {
-              "title": "ChatMessage",
-              "description": "Message that can be assigned an arbitrary speaker (i.e. role).",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "chat",
-                  "enum": [
-                    "chat"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "role": {
-                  "title": "Role",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "role"
-              ]
-            },
-            "SystemMessage": {
-              "title": "SystemMessage",
-              "description": "Message for priming AI behavior, usually passed in as the first of a sequence\nof input messages.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "system",
-                  "enum": [
-                    "system"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "FunctionMessage": {
-              "title": "FunctionMessage",
-              "description": "Message for passing the result of executing a function back to a model.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "function",
-                  "enum": [
-                    "function"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "name"
-              ]
-            },
-            "ToolMessage": {
-              "title": "ToolMessage",
-              "description": "Message for passing the result of executing a tool back to a model.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "tool",
-                  "enum": [
-                    "tool"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "tool_call_id": {
-                  "title": "Tool Call Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "tool_call_id"
-              ]
-            }
-          }
-        }
+        "data": "__end__"
       },
       {
         "id": "agent",
@@ -2476,8 +1192,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [
@@ -2533,10 +1257,10 @@
   '''
 # ---
 # name: test_message_graph[end_of_step]
-  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
 # ---
 # name: test_message_graph[end_of_step].1
-  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
 # ---
 # name: test_message_graph[end_of_step].2
   '''
@@ -2545,720 +1269,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput",
-          "type": "array",
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/definitions/AIMessage"
-              },
-              {
-                "$ref": "#/definitions/HumanMessage"
-              },
-              {
-                "$ref": "#/definitions/ChatMessage"
-              },
-              {
-                "$ref": "#/definitions/SystemMessage"
-              },
-              {
-                "$ref": "#/definitions/FunctionMessage"
-              },
-              {
-                "$ref": "#/definitions/ToolMessage"
-              }
-            ]
-          },
-          "definitions": {
-            "AIMessage": {
-              "title": "AIMessage",
-              "description": "Message from an AI.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "ai",
-                  "enum": [
-                    "ai"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "example": {
-                  "title": "Example",
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "HumanMessage": {
-              "title": "HumanMessage",
-              "description": "Message from a human.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "human",
-                  "enum": [
-                    "human"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "example": {
-                  "title": "Example",
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "ChatMessage": {
-              "title": "ChatMessage",
-              "description": "Message that can be assigned an arbitrary speaker (i.e. role).",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "chat",
-                  "enum": [
-                    "chat"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "role": {
-                  "title": "Role",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "role"
-              ]
-            },
-            "SystemMessage": {
-              "title": "SystemMessage",
-              "description": "Message for priming AI behavior, usually passed in as the first of a sequence\nof input messages.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "system",
-                  "enum": [
-                    "system"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "FunctionMessage": {
-              "title": "FunctionMessage",
-              "description": "Message for passing the result of executing a function back to a model.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "function",
-                  "enum": [
-                    "function"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "name"
-              ]
-            },
-            "ToolMessage": {
-              "title": "ToolMessage",
-              "description": "Message for passing the result of executing a tool back to a model.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "tool",
-                  "enum": [
-                    "tool"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "tool_call_id": {
-                  "title": "Tool Call Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "tool_call_id"
-              ]
-            }
-          }
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput",
-          "type": "array",
-          "items": {
-            "anyOf": [
-              {
-                "$ref": "#/definitions/AIMessage"
-              },
-              {
-                "$ref": "#/definitions/HumanMessage"
-              },
-              {
-                "$ref": "#/definitions/ChatMessage"
-              },
-              {
-                "$ref": "#/definitions/SystemMessage"
-              },
-              {
-                "$ref": "#/definitions/FunctionMessage"
-              },
-              {
-                "$ref": "#/definitions/ToolMessage"
-              }
-            ]
-          },
-          "definitions": {
-            "AIMessage": {
-              "title": "AIMessage",
-              "description": "Message from an AI.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "ai",
-                  "enum": [
-                    "ai"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "example": {
-                  "title": "Example",
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "HumanMessage": {
-              "title": "HumanMessage",
-              "description": "Message from a human.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "human",
-                  "enum": [
-                    "human"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "example": {
-                  "title": "Example",
-                  "default": false,
-                  "type": "boolean"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "ChatMessage": {
-              "title": "ChatMessage",
-              "description": "Message that can be assigned an arbitrary speaker (i.e. role).",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "chat",
-                  "enum": [
-                    "chat"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "role": {
-                  "title": "Role",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "role"
-              ]
-            },
-            "SystemMessage": {
-              "title": "SystemMessage",
-              "description": "Message for priming AI behavior, usually passed in as the first of a sequence\nof input messages.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "system",
-                  "enum": [
-                    "system"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content"
-              ]
-            },
-            "FunctionMessage": {
-              "title": "FunctionMessage",
-              "description": "Message for passing the result of executing a function back to a model.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "function",
-                  "enum": [
-                    "function"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "name"
-              ]
-            },
-            "ToolMessage": {
-              "title": "ToolMessage",
-              "description": "Message for passing the result of executing a tool back to a model.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "default": "tool",
-                  "enum": [
-                    "tool"
-                  ],
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                },
-                "tool_call_id": {
-                  "title": "Tool Call Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "tool_call_id"
-              ]
-            }
-          }
-        }
+        "data": "__end__"
       },
       {
         "id": "agent",
@@ -3287,8 +1303,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [
@@ -3344,10 +1368,10 @@
   '''
 # ---
 # name: test_prebuilt_chat
-  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
+  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
 # ---
 # name: test_prebuilt_chat.1
-  '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
 # ---
 # name: test_prebuilt_chat.2
   '''
@@ -3356,143 +1380,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput",
-          "$ref": "#/definitions/AgentState",
-          "definitions": {
-            "BaseMessage": {
-              "title": "BaseMessage",
-              "description": "Base abstract Message class.\n\nMessages are the inputs and outputs of ChatModels.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "type"
-              ]
-            },
-            "AgentState": {
-              "title": "AgentState",
-              "type": "object",
-              "properties": {
-                "messages": {
-                  "title": "Messages",
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/BaseMessage"
-                  }
-                }
-              },
-              "required": [
-                "messages"
-              ]
-            }
-          }
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput",
-          "type": "object",
-          "properties": {
-            "messages": {
-              "title": "Messages",
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/BaseMessage"
-              }
-            }
-          },
-          "definitions": {
-            "BaseMessage": {
-              "title": "BaseMessage",
-              "description": "Base abstract Message class.\n\nMessages are the inputs and outputs of ChatModels.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "type"
-              ]
-            }
-          }
-        }
+        "data": "__end__"
       },
       {
         "id": "agent",
@@ -3522,8 +1415,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [
@@ -3579,10 +1480,10 @@
   '''
 # ---
 # name: test_prebuilt_tool_chat
-  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
+  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
 # ---
 # name: test_prebuilt_tool_chat.1
-  '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
 # ---
 # name: test_prebuilt_tool_chat.2
   '''
@@ -3591,143 +1492,12 @@
       {
         "id": "__start__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphInput",
-          "$ref": "#/definitions/AgentState",
-          "definitions": {
-            "BaseMessage": {
-              "title": "BaseMessage",
-              "description": "Base abstract Message class.\n\nMessages are the inputs and outputs of ChatModels.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "type"
-              ]
-            },
-            "AgentState": {
-              "title": "AgentState",
-              "type": "object",
-              "properties": {
-                "messages": {
-                  "title": "Messages",
-                  "type": "array",
-                  "items": {
-                    "$ref": "#/definitions/BaseMessage"
-                  }
-                }
-              },
-              "required": [
-                "messages"
-              ]
-            }
-          }
-        }
+        "data": "__start__"
       },
       {
         "id": "__end__",
         "type": "schema",
-        "data": {
-          "title": "LangGraphOutput",
-          "type": "object",
-          "properties": {
-            "messages": {
-              "title": "Messages",
-              "type": "array",
-              "items": {
-                "$ref": "#/definitions/BaseMessage"
-              }
-            }
-          },
-          "definitions": {
-            "BaseMessage": {
-              "title": "BaseMessage",
-              "description": "Base abstract Message class.\n\nMessages are the inputs and outputs of ChatModels.",
-              "type": "object",
-              "properties": {
-                "content": {
-                  "title": "Content",
-                  "anyOf": [
-                    {
-                      "type": "string"
-                    },
-                    {
-                      "type": "array",
-                      "items": {
-                        "anyOf": [
-                          {
-                            "type": "string"
-                          },
-                          {
-                            "type": "object"
-                          }
-                        ]
-                      }
-                    }
-                  ]
-                },
-                "additional_kwargs": {
-                  "title": "Additional Kwargs",
-                  "type": "object"
-                },
-                "type": {
-                  "title": "Type",
-                  "type": "string"
-                },
-                "name": {
-                  "title": "Name",
-                  "type": "string"
-                },
-                "id": {
-                  "title": "Id",
-                  "type": "string"
-                }
-              },
-              "required": [
-                "content",
-                "type"
-              ]
-            }
-          }
-        }
+        "data": "__end__"
       },
       {
         "id": "agent",
@@ -3757,8 +1527,16 @@
       },
       {
         "id": "agent_should_continue",
-        "type": "unknown",
-        "data": "agent_should_continue"
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "should_continue"
+        }
       }
     ],
     "edges": [

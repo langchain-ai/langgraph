@@ -3,7 +3,7 @@ from functools import partial
 from inspect import signature
 from typing import Any, Optional, Sequence, Type, Union
 
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 
 from langgraph.channels.base import BaseChannel, InvalidUpdateError
@@ -12,10 +12,11 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
+from langgraph.constants import TAG_HIDDEN
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
-from langgraph.pregel import Channel
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
+from langgraph.utils import RunnableCallable
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ class CompiledStateGraph(CompiledGraph):
     graph: StateGraph
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
-        def _get_state_key(key: str, input: dict) -> Any:
+        def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
             elif not isinstance(input, dict):
@@ -136,15 +137,36 @@ class CompiledStateGraph(CompiledGraph):
         state_write_entries = [
             ChannelWriteEntry(key, None, skip_none=True)
             if key == "__root__"
-            else ChannelWriteEntry(key, RunnableLambda(partial(_get_state_key, key)))
+            else ChannelWriteEntry(
+                key, RunnableCallable(_get_state_key, key=key, trace=False)
+            )
             for key in state_keys
         ]
+        # node that reads current state with (this node's) updates applied
+        state_reader = ChannelRead(
+            state_keys[0] if state_keys == ["__root__"] else state_keys,
+            tags=[TAG_HIDDEN],
+            fresh=True,
+            # coerce state dict to schema class (eg. pydantic model)
+            mapper=(
+                None
+                if state_keys == ["__root__"]
+                else partial(_coerce_state, self.graph.schema)
+            ),
+        )
 
         # add node and output channel
         if key == START:
-            self.nodes[key] = Channel.subscribe_to(
-                START, tags=["langsmith:hidden"]
-            ).pipe(ChannelWrite(state_write_entries))
+            self.nodes[key] = PregelNode(
+                tags=[TAG_HIDDEN],
+                triggers=[START],
+                channels=[START],
+                writers=[
+                    ChannelWrite(state_write_entries, tags=[TAG_HIDDEN]),
+                    # read back state with updates applied
+                    state_reader,
+                ],
+            )
         else:
             self.channels[key] = EphemeralValue(Any)
             self.nodes[key] = PregelNode(
@@ -156,24 +178,15 @@ class CompiledStateGraph(CompiledGraph):
                     else {chan: chan for chan in state_keys}
                 ),
                 # coerce state dict to schema class (eg. pydantic model)
-                mapper=(
-                    None
-                    if state_keys == ["__root__"]
-                    else partial(_coerce_state, self.graph.schema)
-                ),
-                # publish to this channel and state keys
+                mapper=state_reader.mapper,
                 writers=[
-                    ChannelWrite([ChannelWriteEntry(key)] + state_write_entries),
-                    # read back state with updates applied
-                    ChannelRead(
-                        state_keys[0] if state_keys == ["__root__"] else state_keys,
-                        fresh=True,
-                        mapper=(
-                            None
-                            if state_keys == ["__root__"]
-                            else partial(_coerce_state, self.graph.schema)
-                        ),
+                    # publish to this channel and state keys
+                    ChannelWrite(
+                        [ChannelWriteEntry(key)] + state_write_entries,
+                        tags=[TAG_HIDDEN],
                     ),
+                    # read back state with updates applied
+                    state_reader,
                 ],
             ).pipe(node)
 
@@ -187,7 +200,7 @@ class CompiledStateGraph(CompiledGraph):
                 self.nodes[end].triggers.append(channel_name)
                 # publish to channel
                 self.nodes[START] |= ChannelWrite(
-                    [ChannelWriteEntry(channel_name, START)]
+                    [ChannelWriteEntry(channel_name, START)], tags=[TAG_HIDDEN]
                 )
             elif end != END:
                 # subscribe to start channel
@@ -201,14 +214,15 @@ class CompiledStateGraph(CompiledGraph):
             # publish to channel
             for start in starts:
                 self.nodes[start] |= ChannelWrite(
-                    [ChannelWriteEntry(channel_name, start)]
+                    [ChannelWriteEntry(channel_name, start)], tags=[TAG_HIDDEN]
                 )
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(end: str) -> Optional[ChannelWrite]:
             if end != END:
                 return ChannelWrite(
-                    [ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)]
+                    [ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)],
+                    tags=[TAG_HIDDEN],
                 )
 
         # attach branch publisher

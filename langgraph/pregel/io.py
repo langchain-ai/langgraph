@@ -1,6 +1,7 @@
 from typing import Any, Iterator, Mapping, Optional, Sequence, Union
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
+from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel.log import logger
 from langgraph.pregel.types import PregelExecutableTask
 
@@ -81,9 +82,7 @@ def map_output_updates(
 ) -> Optional[dict[str, Union[Any, dict[str, Any]]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
-        t
-        for t in tasks
-        if not t.config or "langsmith:hidden" not in t.config.get("tags")
+        t for t in tasks if not t.config or TAG_HIDDEN not in t.config.get("tags")
     ]
     if isinstance(output_channels, str):
         if updated := {
