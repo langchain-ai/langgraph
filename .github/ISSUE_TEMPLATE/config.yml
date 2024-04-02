@@ -1,15 +1,12 @@
 blank_issues_enabled: false
 version: 2.1
 contact_links:
-  - name: 🤔 Question or Problem
-    about: Ask a question or ask about a problem in GitHub Discussions.
+  - name: 🤔 Вопрос или проблема
+    about: Задайте вопрос или расскажите о проблеме
     url: https://www.github.com/langchain-ai/langchain/discussions/categories/q-a
-  - name: Discord
-    url: https://discord.gg/6adMQxSpJS
-    about: General community discussions
-  - name: Feature Request
-    url: https://www.github.com/langchain-ai/langchain/discussions/categories/ideas
-    about: Suggest a feature or an idea
-  - name: Show and tell
-    about: Show what you built with LangChain
+  - name: Запрос на доработку
+    url: https://www.github.com/ai-forever/gigachain/discussions/categories/ideas
+    about: Поделитесь идеей или предложите доработку
+  - name: Ваши истории
+    about: Расскажите, как вы использовали GigaChain для решения своих задач
     url: https://www.github.com/langchain-ai/langchain/discussions/categories/show-and-tell
