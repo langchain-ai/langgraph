@@ -2357,10 +2357,7 @@ def test_message_graph(
     config = {"configurable": {"thread_id": "1"}}
 
     assert [
-        c
-        for c in app_w_interrupt.stream(
-            HumanMessage(content="what is weather in sf"), config
-        )
+        c for c in app_w_interrupt.stream(("human", "what is weather in sf"), config)
     ] == [
         {
             "agent": AIMessage(
@@ -2466,7 +2463,7 @@ def test_message_graph(
 
     app_w_interrupt.update_state(
         config,
-        AIMessage(content="answer", id="ai2"),
+        AIMessage(content="answer", id="ai2"),  # replace existing message
     )
 
     # replaces message even if object identity is different, as long as id is the same
@@ -2504,12 +2501,7 @@ def test_message_graph(
     config = {"configurable": {"thread_id": "2"}}
     model.i = 0  # reset the llm
 
-    assert [
-        c
-        for c in app_w_interrupt.stream(
-            HumanMessage(content="what is weather in sf"), config
-        )
-    ] == [
+    assert [c for c in app_w_interrupt.stream("what is weather in sf", config)] == [
         {
             "agent": AIMessage(
                 content="",
@@ -2648,6 +2640,39 @@ def test_message_graph(
             AIMessage(content="answer", id="ai2"),
         ],
         next=(),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    # add an extra message as if it came from "action" node
+    app_w_interrupt.update_state(config, ("ai", "an extra message"), as_node="action")
+
+    # extra message is coerced BaseMessge and appended
+    # now the next node is "agent" per the graph edges
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                additional_kwargs={
+                    "function_call": {
+                        "name": "search_api",
+                        "arguments": '"a different query"',
+                    }
+                },
+                id="ai1",
+            ),
+            FunctionMessage(
+                content="result for a different query",
+                name="search_api",
+                id=AnyStr(),
+            ),
+            AIMessage(content="answer", id="ai2"),
+            AIMessage(content="an extra message", id=AnyStr()),
+        ],
+        next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
 
