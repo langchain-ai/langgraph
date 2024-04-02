@@ -2970,7 +2970,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     checkpoint_at: CheckpointAt,
 ) -> None:
-    from langchain_core.pydantic_v1 import BaseModel
+    from langchain_core.pydantic_v1 import BaseModel, ValidationError
 
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -3059,6 +3059,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
                 | __end__ |                      
                 +---------+                      """
     )
+
+    with pytest.raises(ValidationError):
+        app.invoke({"query": {}})
 
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
