@@ -3,7 +3,7 @@ from functools import partial
 from inspect import signature
 from typing import Any, Optional, Sequence, Type, Union
 
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 
 from langgraph.channels.base import BaseChannel, InvalidUpdateError
@@ -16,6 +16,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
+from langgraph.utils import RunnableCallable
 
 logger = logging.getLogger(__name__)
 
@@ -123,7 +124,7 @@ class CompiledStateGraph(CompiledGraph):
     graph: StateGraph
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
-        def _get_state_key(key: str, input: dict) -> Any:
+        def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
             elif not isinstance(input, dict):
@@ -136,7 +137,9 @@ class CompiledStateGraph(CompiledGraph):
         state_write_entries = [
             ChannelWriteEntry(key, None, skip_none=True)
             if key == "__root__"
-            else ChannelWriteEntry(key, RunnableLambda(partial(_get_state_key, key)))
+            else ChannelWriteEntry(
+                key, RunnableCallable(_get_state_key, key=key, trace=False)
+            )
             for key in state_keys
         ]
         # node that reads current state with (this node's) updates applied

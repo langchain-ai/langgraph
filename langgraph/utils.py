@@ -18,18 +18,27 @@ class RunnableCallable(Runnable):
     def __init__(
         self,
         func: Callable[..., Optional[Runnable]],
-        afunc: Callable[..., Awaitable[Optional[Runnable]]],
-        name: str,
+        afunc: Optional[Callable[..., Awaitable[Optional[Runnable]]]] = None,
+        *,
+        name: Optional[str] = None,
         tags: Optional[list[str]] = None,
         trace: bool = True,
         **kwargs: Any,
     ) -> None:
-        self.name = name
+        self.name = name or func.__name__
         self.func = func
         self.afunc = afunc
         self.config = {"tags": tags} if tags else None
         self.kwargs = kwargs
         self.trace = trace
+
+    def __repr__(self) -> str:
+        repr_args = {
+            k: v
+            for k, v in self.__dict__.items()
+            if k not in {"name", "func", "afunc", "config", "kwargs", "trace"}
+        }
+        return f"{self.get_name()}({', '.join(f'{k}={v!r}' for k, v in repr_args.items())})"
 
     def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
         if self.trace:
@@ -43,6 +52,8 @@ class RunnableCallable(Runnable):
         return ret
 
     async def ainvoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+        if not self.afunc:
+            return self.invoke(input, config)
         if self.trace:
             ret = await self._acall_with_config(
                 self.afunc, input, merge_configs(self.config, config), **self.kwargs
