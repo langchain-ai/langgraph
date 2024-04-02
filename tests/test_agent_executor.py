@@ -12,12 +12,16 @@ from syrupy import SnapshotAssertion
 from langgraph.prebuilt.agent_executor import create_agent_executor
 
 
-def _make_agent_runnable(tools: List[BaseTool], response_messages: List[BaseMessage]) -> Runnable:
+def _make_agent_runnable(
+    tools: List[BaseTool], response_messages: List[BaseMessage]
+) -> Runnable:
     """Make fake agent runnable."""
     from langchain.agents.format_scratchpad.openai_tools import (
         format_to_openai_tool_messages,
     )
-    from langchain.agents.output_parsers.openai_tools import OpenAIToolsAgentOutputParser
+    from langchain.agents.output_parsers.openai_tools import (
+        OpenAIToolsAgentOutputParser,
+    )
     from langchain.chat_models.fake import FakeMessagesListChatModel
 
     chat_model = FakeMessagesListChatModel(responses=response_messages)
@@ -29,7 +33,9 @@ def _make_agent_runnable(tools: List[BaseTool], response_messages: List[BaseMess
             MessagesPlaceholder(variable_name="agent_scratchpad"),
         ]
     )
-    llm_with_tools = chat_model.bind(tools=[convert_to_openai_tool(tool) for tool in tools])
+    llm_with_tools = chat_model.bind(
+        tools=[convert_to_openai_tool(tool) for tool in tools]
+    )
 
     return (
         RunnablePassthrough.assign(
@@ -118,7 +124,9 @@ def test_agent_executor(snapshot: SnapshotAssertion) -> None:
             # "start_time": time.time()
         }
     )
-    assert result["agent_outcome"] == AgentFinish(return_values={'output': 'answer'}, log='answer')
+    assert result["agent_outcome"] == AgentFinish(
+        return_values={"output": "answer"}, log="answer"
+    )
     result = app.invoke(
         {
             "input": "what is the weather in sf?",
@@ -129,4 +137,7 @@ def test_agent_executor(snapshot: SnapshotAssertion) -> None:
             # "start_time": time.time()
         }
     )
-    assert result["agent_outcome"] == AgentFinish(return_values={'output': 'Agent stopped due to max iterations.'}, log='Agent stopped due to max iterations.')
+    assert result["agent_outcome"] == AgentFinish(
+        return_values={"output": "Agent stopped due to max iterations."},
+        log="Agent stopped due to max iterations.",
+    )

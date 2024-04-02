@@ -59,10 +59,8 @@ def _get_agent_state(input_schema=None):
 def _should_abort(data) -> bool:
     """Check if exceeding max iterations."""
     return (
-        (
-            data.get("max_iterations") is not None
-            and data.get("iteration_count", 0) >= data["max_iterations"]
-        )
+        data.get("max_iterations") is not None
+        and data.get("iteration_count", 0) >= data["max_iterations"]
         # or (
         #     data.get("max_execution_time") is not None
         #     and time.time() - data["start_time"] >= data["max_execution_time"]
