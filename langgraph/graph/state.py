@@ -168,6 +168,11 @@ class CompiledStateGraph(CompiledGraph):
                     ChannelRead(
                         state_keys[0] if state_keys == ["__root__"] else state_keys,
                         fresh=True,
+                        mapper=(
+                            None
+                            if state_keys == ["__root__"]
+                            else partial(_coerce_state, self.graph.schema)
+                        ),
                     ),
                 ],
             ).pipe(node)
