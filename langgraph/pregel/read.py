@@ -83,7 +83,7 @@ class ChannelRead(RunnableLambda):
 default_bound: RunnablePassthrough = RunnablePassthrough()
 
 
-class ChannelInvoke(RunnableBindingBase):
+class PregelNode(RunnableBindingBase):
     channels: Union[list[str], Mapping[str, str]]
 
     triggers: list[str] = Field(default_factory=list)
@@ -163,14 +163,14 @@ class ChannelInvoke(RunnableBindingBase):
     def __repr_args__(self) -> Any:
         return [(k, v) for k, v in super().__repr_args__() if k != "bound"]
 
-    def join(self, channels: Sequence[str]) -> ChannelInvoke:
+    def join(self, channels: Sequence[str]) -> PregelNode:
         assert isinstance(channels, list) or isinstance(
             channels, tuple
         ), "channels must be a list or tuple"
         assert isinstance(
             self.channels, dict
         ), "all channels must be named when using .join()"
-        return ChannelInvoke(
+        return PregelNode(
             channels={
                 **self.channels,
                 **{chan: chan for chan in channels},
@@ -190,9 +190,9 @@ class ChannelInvoke(RunnableBindingBase):
             Callable[[Any], Other],
             Mapping[str, Runnable[Any, Other] | Callable[[Any], Other]],
         ],
-    ) -> ChannelInvoke:
+    ) -> PregelNode:
         if ChannelWrite.is_writer(other):
-            return ChannelInvoke(
+            return PregelNode(
                 channels=self.channels,
                 triggers=self.triggers,
                 mapper=self.mapper,
@@ -202,7 +202,7 @@ class ChannelInvoke(RunnableBindingBase):
                 config=self.config,
             )
         elif self.bound is default_bound:
-            return ChannelInvoke(
+            return PregelNode(
                 channels=self.channels,
                 triggers=self.triggers,
                 mapper=self.mapper,
@@ -212,7 +212,7 @@ class ChannelInvoke(RunnableBindingBase):
                 config=self.config,
             )
         else:
-            return ChannelInvoke(
+            return PregelNode(
                 channels=self.channels,
                 triggers=self.triggers,
                 mapper=self.mapper,

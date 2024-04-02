@@ -26,7 +26,7 @@ from langchain_core.runnables.graph import (
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.pregel import Channel, Pregel
-from langgraph.pregel.read import ChannelInvoke
+from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite
 
 logger = logging.getLogger(__name__)
@@ -293,7 +293,7 @@ class CompiledGraph(Pregel):
     def attach_node(self, key: str, node: Runnable) -> None:
         self.channels[key] = EphemeralValue(Any)
         self.nodes[key] = (
-            ChannelInvoke(channels=[], triggers=[]) | node | Channel.write_to(key)
+            PregelNode(channels=[], triggers=[]) | node | Channel.write_to(key)
         )
         self.stream_channels.append(key)
 

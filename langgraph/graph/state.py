@@ -14,7 +14,7 @@ from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
 from langgraph.pregel import Channel
-from langgraph.pregel.read import ChannelInvoke, ChannelRead
+from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 
 logger = logging.getLogger(__name__)
@@ -147,7 +147,7 @@ class CompiledStateGraph(CompiledGraph):
             ).pipe(ChannelWrite(state_write_entries))
         else:
             self.channels[key] = EphemeralValue(Any)
-            self.nodes[key] = ChannelInvoke(
+            self.nodes[key] = PregelNode(
                 triggers=[],
                 # read state keys
                 channels=(
