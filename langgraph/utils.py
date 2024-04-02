@@ -1,4 +1,8 @@
 import enum
+from typing import Any, Awaitable, Callable, Optional
+
+from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables.config import merge_configs
 
 
 # Before Python 3.11 native StrEnum is not available
@@ -6,3 +10,47 @@ class StrEnum(str, enum.Enum):
     """A string enum."""
 
     pass
+
+
+class RunnableCallable(Runnable):
+    """A much simpler version of RunnableLambda that requires sync and async functions."""
+
+    def __init__(
+        self,
+        func: Callable[..., Optional[Runnable]],
+        afunc: Callable[..., Awaitable[Optional[Runnable]]],
+        name: str,
+        tags: Optional[list[str]] = None,
+        trace: bool = True,
+        **kwargs: Any,
+    ) -> None:
+        self.name = name
+        self.func = func
+        self.afunc = afunc
+        self.config = {"tags": tags} if tags else None
+        self.kwargs = kwargs
+        self.trace = trace
+
+    def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+        if self.trace:
+            ret = self._call_with_config(
+                self.func, input, merge_configs(self.config, config), **self.kwargs
+            )
+        else:
+            ret = self.func(input, merge_configs(self.config, config), **self.kwargs)
+        if isinstance(ret, Runnable):
+            return ret.invoke(input, config)
+        return ret
+
+    async def ainvoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+        if self.trace:
+            ret = await self._acall_with_config(
+                self.afunc, input, merge_configs(self.config, config), **self.kwargs
+            )
+        else:
+            ret = await self.afunc(
+                input, merge_configs(self.config, config), **self.kwargs
+            )
+        if isinstance(ret, Runnable):
+            return await ret.ainvoke(input, config)
+        return ret

@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-langchain-core = "^0.1.25"
+langchain-core = "^0.1.38"
 
 
 [tool.poetry.group.test.dependencies]

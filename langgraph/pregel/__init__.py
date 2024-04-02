@@ -430,6 +430,7 @@ class Pregel(
                 task.input,
                 patch_config(
                     config,
+                    run_name=self.name + "UpdateState",
                     configurable={
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: task.writes.extend,
@@ -489,6 +490,7 @@ class Pregel(
                 task.input,
                 patch_config(
                     config,
+                    run_name=self.name + "UpdateState",
                     configurable={
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: task.writes.extend,

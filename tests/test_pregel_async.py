@@ -1814,6 +1814,7 @@ async def test_conditional_entrypoint_graph_state() -> None:
     class AgentState(TypedDict, total=False):
         input: str
         output: str
+        steps: Annotated[list[str], operator.add]
 
     async def left(data: AgentState) -> AgentState:
         return {"output": data["input"] + "->left"}
@@ -1822,6 +1823,7 @@ async def test_conditional_entrypoint_graph_state() -> None:
         return {"output": data["input"] + "->right"}
 
     def should_start(data: AgentState) -> str:
+        assert data["steps"] == [], "Expected input to be read from the state"
         # Logic to decide where to start
         if len(data["input"]) > 10:
             return "go-right"
@@ -1922,6 +1924,7 @@ async def test_prebuilt_tool_chat() -> None:
         "messages": [
             HumanMessage(content="what is weather in sf"),
             AIMessage(
+                id=AnyStr(),
                 content="",
                 additional_kwargs={
                     "tool_calls": [
@@ -1938,6 +1941,7 @@ async def test_prebuilt_tool_chat() -> None:
             ),
             ToolMessage(content="result for query", tool_call_id="tool_call123"),
             AIMessage(
+                id=AnyStr(),
                 content="",
                 additional_kwargs={
                     "tool_calls": [
@@ -1962,7 +1966,7 @@ async def test_prebuilt_tool_chat() -> None:
             ),
             ToolMessage(content="result for another", tool_call_id="tool_call234"),
             ToolMessage(content="result for a third one", tool_call_id="tool_call567"),
-            AIMessage(content="answer"),
+            AIMessage(content="answer", id=AnyStr()),
         ]
     }
 
@@ -1976,6 +1980,7 @@ async def test_prebuilt_tool_chat() -> None:
             "agent": {
                 "messages": [
                     AIMessage(
+                        id=AnyStr(),
                         content="",
                         additional_kwargs={
                             "tool_calls": [
@@ -2004,6 +2009,7 @@ async def test_prebuilt_tool_chat() -> None:
             "agent": {
                 "messages": [
                     AIMessage(
+                        id=AnyStr(),
                         content="",
                         additional_kwargs={
                             "tool_calls": [
@@ -2041,7 +2047,7 @@ async def test_prebuilt_tool_chat() -> None:
                 ]
             }
         },
-        {"agent": {"messages": [AIMessage(content="answer")]}},
+        {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
     ]
 
 
@@ -2094,6 +2100,7 @@ async def test_prebuilt_chat() -> None:
         "messages": [
             HumanMessage(content="what is weather in sf"),
             AIMessage(
+                id=AnyStr(),
                 content="",
                 additional_kwargs={
                     "function_call": {"name": "search_api", "arguments": '"query"'}
@@ -2101,13 +2108,14 @@ async def test_prebuilt_chat() -> None:
             ),
             FunctionMessage(content="result for query", name="search_api"),
             AIMessage(
+                id=AnyStr(),
                 content="",
                 additional_kwargs={
                     "function_call": {"name": "search_api", "arguments": '"another"'}
                 },
             ),
             FunctionMessage(content="result for another", name="search_api"),
-            AIMessage(content="answer"),
+            AIMessage(content="answer", id=AnyStr()),
         ]
     }
 
@@ -2121,6 +2129,7 @@ async def test_prebuilt_chat() -> None:
             "agent": {
                 "messages": [
                     AIMessage(
+                        id=AnyStr(),
                         content="",
                         additional_kwargs={
                             "function_call": {
@@ -2143,6 +2152,7 @@ async def test_prebuilt_chat() -> None:
             "agent": {
                 "messages": [
                     AIMessage(
+                        id=AnyStr(),
                         content="",
                         additional_kwargs={
                             "function_call": {
@@ -2161,7 +2171,7 @@ async def test_prebuilt_chat() -> None:
                 ]
             }
         },
-        {"agent": {"messages": [AIMessage(content="answer")]}},
+        {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
     ]
 
 

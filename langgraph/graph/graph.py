@@ -1,16 +1,15 @@
-import asyncio
 import logging
 from collections import defaultdict
 from typing import (
     Any,
     Awaitable,
     Callable,
-    Coroutine,
     Dict,
     NamedTuple,
     Optional,
     Sequence,
     Union,
+    cast,
 )
 
 from langchain_core.runnables import Runnable
@@ -25,9 +24,11 @@ from langchain_core.runnables.graph import (
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
+from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite
+from langgraph.utils import RunnableCallable
 
 logger = logging.getLogger(__name__)
 
@@ -35,36 +36,8 @@ START = "__start__"
 END = "__end__"
 
 
-class RunnableCallable(Runnable):
-    def __init__(
-        self,
-        func: Callable[..., Optional[Runnable]],
-        afunc: Callable[..., Awaitable[Optional[Runnable]]],
-        name: str,
-        writer: Callable[[str], Optional[Runnable]],
-    ) -> None:
-        self.name = name
-        self.func = func
-        self.afunc = afunc
-        self.writer = writer
-
-    def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
-        ret = self._call_with_config(self.func, input, config, writer=self.writer)
-        if isinstance(ret, Runnable):
-            return ret.invoke(input, config)
-        return ret
-
-    async def ainvoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
-        ret = await self._acall_with_config(
-            self.afunc, input, config, writer=self.writer
-        )
-        if isinstance(ret, Runnable):
-            return await ret.ainvoke(input, config)
-        return ret
-
-
 class Branch(NamedTuple):
-    condition: Union[Runnable[Any, str], Callable[..., str], Coroutine[Any, Any, str]]
+    condition: Runnable[Any, str]
     ends: Optional[dict[str, str]]
 
     def run(self, writer: Callable[[str], Optional[Runnable]]) -> None:
@@ -73,19 +46,19 @@ class Branch(NamedTuple):
                 func=self._route,
                 afunc=self._aroute,
                 writer=writer,
-                name=self.condition.name
-                if isinstance(self.condition, Runnable)
-                else self.condition.__name__,
+                name=None,
+                trace=False,
             )
         )
 
     def _route(
-        self, input: Any, *, writer: Callable[[str], Optional[Runnable]]
+        self,
+        input: Any,
+        config: RunnableConfig,
+        *,
+        writer: Callable[[str], Optional[Runnable]],
     ) -> Runnable:
-        if isinstance(self.condition, Runnable):
-            result = self.condition.invoke(input, {"run_name": "condition"})
-        else:
-            result = self.condition(input)
+        result = self.condition.invoke(input, config)
         if self.ends:
             destination = self.ends[result]
         else:
@@ -93,14 +66,13 @@ class Branch(NamedTuple):
         return writer(destination)
 
     async def _aroute(
-        self, input: Any, *, writer: Callable[[str], Optional[Runnable]]
+        self,
+        input: Any,
+        config: RunnableConfig,
+        *,
+        writer: Callable[[str], Optional[Runnable]],
     ) -> Runnable:
-        if isinstance(self.condition, Runnable):
-            result = await self.condition.ainvoke(input, {"run_name": "condition"})
-        elif asyncio.iscoroutinefunction(self.condition):
-            result = await self.condition(input)
-        else:
-            result = self.condition(input)
+        result = await self.condition.ainvoke(input, config)
         if self.ends:
             destination = self.ends[result]
         else:
@@ -172,12 +144,8 @@ class Graph:
                 "not be reflected in the compiled graph."
             )
         # find a name for the condition
-        try:
-            name = (
-                condition.__name__ if condition.__name__ != "<lambda>" else "condition"
-            )
-        except AttributeError:
-            name = "condition"
+        condition = coerce_to_runnable(condition)
+        name = condition.name or "condition"
         # validate the condition
         if start_key not in self.nodes and start_key != START:
             raise ValueError(f"Need to add_node `{start_key}` first")
@@ -293,14 +261,16 @@ class CompiledGraph(Pregel):
     def attach_node(self, key: str, node: Runnable) -> None:
         self.channels[key] = EphemeralValue(Any)
         self.nodes[key] = (
-            PregelNode(channels=[], triggers=[]) | node | Channel.write_to(key)
+            PregelNode(channels=[], triggers=[])
+            | node
+            | Channel.write_to(key, tags=[TAG_HIDDEN])
         )
-        self.stream_channels.append(key)
+        cast(list[str], self.stream_channels).append(key)
 
     def attach_edge(self, start: str, end: str) -> None:
         if end == END:
             # publish to end channel
-            self.nodes[start].writers.append(Channel.write_to(END))
+            self.nodes[start].writers.append(Channel.write_to(END, tags=[TAG_HIDDEN]))
         else:
             # subscribe to start channel
             self.nodes[end].triggers.append(start)
@@ -309,12 +279,13 @@ class CompiledGraph(Pregel):
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(end: str) -> Optional[ChannelWrite]:
             return Channel.write_to(
-                f"branch:{start}:{name}:{end}" if end != END else END
+                f"branch:{start}:{name}:{end}" if end != END else END,
+                tags=[TAG_HIDDEN],
             )
 
         # add hidden start node
         if start == START and start not in self.nodes:
-            self.nodes[start] = Channel.subscribe_to(START, tags=["langsmith:hidden"])
+            self.nodes[start] = Channel.subscribe_to(START, tags=[TAG_HIDDEN])
 
         # attach branch writer
         self.nodes[start] |= branch.run(branch_writer)
