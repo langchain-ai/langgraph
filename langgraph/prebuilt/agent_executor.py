@@ -1,5 +1,5 @@
 import operator
-from typing import Annotated, Sequence, TypedDict, Union
+from typing import Annotated, Optional, Sequence, TypedDict, Union
 
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
@@ -24,6 +24,10 @@ def _get_agent_state(input_schema=None):
             # Here we annotate this with `operator.add` to indicate that operations to
             # this state should be ADDED to the existing values (not overwrite it)
             intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+            # Iteration count, tracked to enable early stopping
+            iteration_count: int
+            # Maximum number of iterations
+            max_iterations: Optional[int]
 
     else:
 
@@ -35,8 +39,20 @@ def _get_agent_state(input_schema=None):
             # Here we annotate this with `operator.add` to indicate that operations to
             # this state should be ADDED to the existing values (not overwrite it)
             intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+            # Iteration count, tracked to enable early stopping
+            iteration_count: int
+            # Maximum number of iterations
+            max_iterations: Optional[int]
 
     return AgentState
+
+
+def _should_abort(data) -> bool:
+    """Check if exceeding max iterations."""
+    return (
+        data["max_iterations"] is not None
+        and data.get("iteration_count", 0) >= data["max_iterations"]
+    )
 
 
 def create_agent_executor(agent_runnable, tools, input_schema=None):
@@ -54,6 +70,9 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
         # This will be used when setting up the graph to define the flow
         if isinstance(data["agent_outcome"], AgentFinish):
             return "end"
+        # If exceeding max iterations
+        elif _should_abort(data):
+            return "abort"
         # Otherwise, an AgentAction is returned
         # Here we return `continue` string
         # This will be used when setting up the graph to define the flow
@@ -71,29 +90,47 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
     # Define the function to execute tools
     def execute_tools(data):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
+        iteration_count = data.get("iteration_count", 0) + 1
         agent_action = data["agent_outcome"]
         if isinstance(agent_action, list):
             output = tool_executor.batch(agent_action, return_exceptions=True)
             return {
                 "intermediate_steps": [
                     (action, str(out)) for action, out in zip(agent_action, output)
-                ]
+                ],
+                "iteration_count": iteration_count,
             }
         output = tool_executor.invoke(agent_action)
-        return {"intermediate_steps": [(agent_action, str(output))]}
+        return {
+            "intermediate_steps": [(agent_action, str(output))],
+            "iteration_count": iteration_count,
+        }
 
     async def aexecute_tools(data):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
+        iteration_count = data.get("iteration_count", 0) + 1
         agent_action = data["agent_outcome"]
         if isinstance(agent_action, list):
             output = await tool_executor.abatch(agent_action, return_exceptions=True)
             return {
                 "intermediate_steps": [
                     (action, str(out)) for action, out in zip(agent_action, output)
-                ]
+                ],
+                "iteration_count": iteration_count,
             }
         output = await tool_executor.ainvoke(agent_action)
-        return {"intermediate_steps": [(agent_action, str(output))]}
+        return {
+            "intermediate_steps": [(agent_action, str(output))],
+            "iteration_count": iteration_count,
+        }
+
+    def abort(data):
+        return {
+            "agent_outcome": AgentFinish(
+                return_values={"output": "Agent stopped due to max iterations."},
+                log="Agent stopped due to max iterations.",
+            )
+        }
 
     # Define a new graph
     workflow = StateGraph(state)
@@ -101,6 +138,7 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(run_agent, arun_agent))
     workflow.add_node("action", RunnableLambda(execute_tools, aexecute_tools))
+    workflow.add_node("abort", RunnableLambda(abort))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -122,6 +160,8 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
         {
             # If `tools`, then we call the tool node.
             "continue": "action",
+            # If `abort`, then we call the abort node.
+            "abort": "abort",
             # Otherwise we finish.
             "end": END,
         },
@@ -130,6 +170,9 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
     workflow.add_edge("action", "agent")
+
+    # End if we abort due to exceeding iteration or time constraints.
+    workflow.add_edge("abort", END)
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
