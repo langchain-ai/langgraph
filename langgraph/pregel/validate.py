@@ -2,11 +2,11 @@ from typing import Any, Mapping, Optional, Sequence, Type, Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import INTERRUPT
-from langgraph.pregel.read import ChannelInvoke
+from langgraph.pregel.read import PregelNode
 
 
 def validate_graph(
-    nodes: Mapping[str, ChannelInvoke],
+    nodes: Mapping[str, PregelNode],
     channels: dict[str, BaseChannel],
     input_channels: Union[str, Sequence[str]],
     output_channels: Union[str, Sequence[str]],
@@ -19,7 +19,7 @@ def validate_graph(
     for name, node in nodes.items():
         if name == INTERRUPT:
             raise ValueError(f"Node name {INTERRUPT} is reserved")
-        if isinstance(node, ChannelInvoke):
+        if isinstance(node, PregelNode):
             subscribed_channels.update(node.triggers)
         else:
             raise TypeError(

@@ -76,7 +76,7 @@ from langgraph.pregel.io import (
     read_channels,
 )
 from langgraph.pregel.log import logger
-from langgraph.pregel.read import ChannelInvoke
+from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import (
     PregelExecutableTask,
     PregelTaskDescription,
@@ -112,7 +112,7 @@ class Channel:
         *,
         key: Optional[str] = None,
         tags: Optional[list[str]] = None,
-    ) -> ChannelInvoke:
+    ) -> PregelNode:
         ...
 
     @overload
@@ -123,7 +123,7 @@ class Channel:
         *,
         key: None = None,
         tags: Optional[list[str]] = None,
-    ) -> ChannelInvoke:
+    ) -> PregelNode:
         ...
 
     @classmethod
@@ -133,14 +133,14 @@ class Channel:
         *,
         key: Optional[str] = None,
         tags: Optional[list[str]] = None,
-    ) -> ChannelInvoke:
+    ) -> PregelNode:
         """Runs process.invoke() each time channels are updated,
         with a dict of the channel values as input."""
         if not isinstance(channels, str) and key is not None:
             raise ValueError(
                 "Can't specify a key when subscribing to multiple channels"
             )
-        return ChannelInvoke(
+        return PregelNode(
             channels=cast(
                 Union[Mapping[None, str], Mapping[str, str]],
                 {key: channels}
@@ -175,7 +175,7 @@ StreamMode = Literal["values", "updates"]
 class Pregel(
     RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
 ):
-    nodes: Mapping[str, ChannelInvoke]
+    nodes: Mapping[str, PregelNode]
 
     channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
 
@@ -1114,7 +1114,7 @@ def _apply_writes(
 @overload
 def _prepare_next_tasks(
     checkpoint: Checkpoint,
-    processes: Mapping[str, ChannelInvoke],
+    processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     for_execution: Literal[False],
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
@@ -1124,7 +1124,7 @@ def _prepare_next_tasks(
 @overload
 def _prepare_next_tasks(
     checkpoint: Checkpoint,
-    processes: Mapping[str, ChannelInvoke],
+    processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     for_execution: Literal[True],
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
@@ -1133,7 +1133,7 @@ def _prepare_next_tasks(
 
 def _prepare_next_tasks(
     checkpoint: Checkpoint,
-    processes: Mapping[str, ChannelInvoke],
+    processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     *,
     for_execution: bool,
