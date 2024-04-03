@@ -65,30 +65,34 @@ class ChannelRead(RunnableCallable):
         return super().get_name(suffix, name=name)
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
-        try:
-            read: READ_TYPE = config["configurable"][CONFIG_KEY_READ]
-        except KeyError:
-            raise RuntimeError(
-                f"Runnable {self} is not configured with a read function"
-                "Make sure to call in the context of a Pregel process"
-            )
-        if self.mapper:
-            return self.mapper(read(self.channel, self.fresh))
-        else:
-            return read(self.channel, self.fresh)
+        return self.do_read(
+            config, channel=self.channel, fresh=self.fresh, mapper=self.mapper
+        )
 
     async def _aread(self, _: Any, config: RunnableConfig) -> Any:
+        return self.do_read(
+            config, channel=self.channel, fresh=self.fresh, mapper=self.mapper
+        )
+
+    @staticmethod
+    def do_read(
+        config: RunnableConfig,
+        *,
+        channel: Union[str, list[str]],
+        fresh: bool = False,
+        mapper: Optional[Callable[[Any], Any]] = None,
+    ) -> Any:
         try:
             read: READ_TYPE = config["configurable"][CONFIG_KEY_READ]
         except KeyError:
             raise RuntimeError(
-                f"Runnable {self} is not configured with a read function"
+                "Not configured with a read function"
                 "Make sure to call in the context of a Pregel process"
             )
-        if self.mapper:
-            return self.mapper(read(self.channel, self.fresh))
+        if mapper:
+            return mapper(read(channel, fresh))
         else:
-            return read(self.channel, self.fresh)
+            return read(channel, fresh)
 
 
 DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
@@ -110,20 +114,6 @@ class PregelNode(RunnableBindingBase):
     def get_writers(self) -> list[Runnable]:
         """Get writers with optimizations applied."""
         writers = self.writers.copy()
-        while writers and isinstance(writers[-1], ChannelRead):
-            # we can avoid reads if no writers would be called after them
-            writers.pop()
-        while (
-            len(writers) > 1
-            and isinstance(writers[-1], ChannelWrite)
-            and all(
-                write.value is not None and not isinstance(write.value, Runnable)
-                for write in writers[-1].writes
-            )
-            and isinstance(writers[-2], ChannelRead)
-        ):
-            # we can avoid reads if all subsequent write values don't use the input
-            writers.pop(-2)
         while (
             len(writers) > 1
             and isinstance(writers[-1], ChannelWrite)

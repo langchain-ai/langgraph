@@ -40,12 +40,17 @@ class Branch(NamedTuple):
     condition: Runnable[Any, str]
     ends: Optional[dict[str, str]]
 
-    def run(self, writer: Callable[[str], Optional[Runnable]]) -> None:
+    def run(
+        self,
+        writer: Callable[[str], Optional[Runnable]],
+        reader: Optional[Callable[[RunnableConfig], Any]] = None,
+    ) -> None:
         return ChannelWrite.register_writer(
             RunnableCallable(
                 func=self._route,
                 afunc=self._aroute,
                 writer=writer,
+                reader=reader,
                 name=None,
                 trace=False,
             )
@@ -56,9 +61,10 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
+        reader: Optional[Callable[[], Any]],
         writer: Callable[[str], Optional[Runnable]],
     ) -> Runnable:
-        result = self.condition.invoke(input, config)
+        result = self.condition.invoke(reader(config) if reader else input, config)
         if self.ends:
             destination = self.ends[result]
         else:
@@ -70,9 +76,12 @@ class Branch(NamedTuple):
         input: Any,
         config: RunnableConfig,
         *,
+        reader: Optional[Callable[[], Any]],
         writer: Callable[[str], Optional[Runnable]],
     ) -> Runnable:
-        result = await self.condition.ainvoke(input, config)
+        result = await self.condition.ainvoke(
+            reader(config) if reader else input, config
+        )
         if self.ends:
             destination = self.ends[result]
         else:
