@@ -3,13 +3,14 @@ from typing import Annotated, Union
 
 from langchain_core.messages import (
     AnyMessage,
+    MessageLikeRepresentation,
     convert_to_messages,
     message_chunk_to_message,
 )
 
 from langgraph.graph.state import StateGraph
 
-Messages = Union[list[AnyMessage], AnyMessage]
+Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
 
 
 def add_messages(left: Messages, right: Messages) -> Messages:

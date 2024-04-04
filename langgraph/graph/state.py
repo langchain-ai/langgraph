@@ -142,18 +142,6 @@ class CompiledStateGraph(CompiledGraph):
             )
             for key in state_keys
         ]
-        # node that reads current state with (this node's) updates applied
-        state_reader = ChannelRead(
-            state_keys[0] if state_keys == ["__root__"] else state_keys,
-            tags=[TAG_HIDDEN],
-            fresh=True,
-            # coerce state dict to schema class (eg. pydantic model)
-            mapper=(
-                None
-                if state_keys == ["__root__"]
-                else partial(_coerce_state, self.graph.schema)
-            ),
-        )
 
         # add node and output channel
         if key == START:
@@ -163,8 +151,6 @@ class CompiledStateGraph(CompiledGraph):
                 channels=[START],
                 writers=[
                     ChannelWrite(state_write_entries, tags=[TAG_HIDDEN]),
-                    # read back state with updates applied
-                    state_reader,
                 ],
             )
         else:
@@ -178,15 +164,17 @@ class CompiledStateGraph(CompiledGraph):
                     else {chan: chan for chan in state_keys}
                 ),
                 # coerce state dict to schema class (eg. pydantic model)
-                mapper=state_reader.mapper,
+                mapper=(
+                    None
+                    if state_keys == ["__root__"]
+                    else partial(_coerce_state, self.graph.schema)
+                ),
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
                         [ChannelWriteEntry(key)] + state_write_entries,
                         tags=[TAG_HIDDEN],
                     ),
-                    # read back state with updates applied
-                    state_reader,
                 ],
             ).pipe(node)
 
@@ -226,7 +214,7 @@ class CompiledStateGraph(CompiledGraph):
                 )
 
         # attach branch publisher
-        self.nodes[start] |= branch.run(branch_writer)
+        self.nodes[start] |= branch.run(branch_writer, _get_state_reader(self.graph))
 
         # attach branch subscribers
         ends = branch.ends.values() if branch.ends else [node for node in self.nodes]
@@ -235,6 +223,19 @@ class CompiledStateGraph(CompiledGraph):
                 channel_name = f"branch:{start}:{name}:{end}"
                 self.channels[channel_name] = EphemeralValue(Any)
                 self.nodes[end].triggers.append(channel_name)
+
+
+def _get_state_reader(graph: StateGraph) -> ChannelRead:
+    state_keys = list(graph.channels)
+    return partial(
+        ChannelRead.do_read,
+        channel=state_keys[0] if state_keys == ["__root__"] else state_keys,
+        fresh=True,
+        # coerce state dict to schema class (eg. pydantic model)
+        mapper=(
+            None if state_keys == ["__root__"] else partial(_coerce_state, graph.schema)
+        ),
+    )
 
 
 def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
