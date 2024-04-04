@@ -13,11 +13,29 @@ from langgraph.utils import StrEnum
 
 
 class Checkpoint(TypedDict):
+    """State snapshot at a given point in time."""
     v: int
+    """The version of the checkpoint format. Currently 1."""
     ts: str
+    """The timestamp of the checkpoint in ISO 8601 format."""
     channel_values: dict[str, Any]
+    """The values of the channels at the time of the checkpoint.
+    
+    Mapping from channel name to channel snapshot value.
+    """
     channel_versions: defaultdict[str, int]
+    """The versions of the channels at the time of the checkpoint.
+    
+    The keys are channel names and the values are the logical time step
+    at which the channel was last updated.
+    """
     versions_seen: defaultdict[str, defaultdict[str, int]]
+    """Map from node ID to map from channel name to version seen.
+    
+    This keeps track of the versions of the channels that each node has seen.
+    
+    Used to determine which nodes to execute next.
+    """
 
 
 def _seen_dict():
