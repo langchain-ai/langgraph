@@ -14,6 +14,7 @@ from langgraph.utils import StrEnum
 
 class Checkpoint(TypedDict):
     """State snapshot at a given point in time."""
+
     v: int
     """The version of the checkpoint format. Currently 1."""
     ts: str
