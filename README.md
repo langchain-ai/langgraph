@@ -4,13 +4,13 @@
 
 ## Описание
 
-GigaGraph — это библиотека, дающая возможность работать с LLM (большие языковые модели) для создания приложений, которые используют множество взаимодействующих цепочек (акторов) и сохраняют данные о состоянии.
+GigaGraph — это библиотека, которая дает возможность работать с большими языковыми моделями (*LLM*) для создания приложений, которые используют множество взаимодействующих цепочек (акторов) и сохраняют данные о состоянии.
 Так как в основе GigaGraph лежит [GigaChain](https://github.com/ai-forever/gigachain), предполагается совместное использование обоих библиотек.
 
 Основной сценарий использования GigaGraph — добавление циклов в приложения с LLM. Для этого библиотека добавляет в [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) возможность работать с множеством цепочек на каждой из итераций вычислительного цикла.
-Использование циклов позволяет реализовать поведение агента, когда приложению нужно многократно вызывать LLM и спрашивать, какое действие нужно выполнить следующим.
+Использование циклов позволяет реализовать поведение агента, при котором приложению нужно многократно вызывать LLM и спрашивать, какое действие нужно выполнить следующим.
 
-Следует отметить, что GigaGraph не предназначена для создания *DAG* (ориентированного ациклического графа).
+Следует отметить, что GigaGraph не предназначена для создания ориентированных ациклических графов (*DAG*).
 Для решения этой задачи используйте стандартные возможности LangChain Expression Language.
 
 ## Установка
@@ -23,8 +23,8 @@ pip install gigagraph
 
 ## Быстрый старт
 
-Ниже приводится пример разработки агента, использующего несколько моделей и вызов функций.
-Агент отображает каждое свое состояние в виде отдельных сообщений в списке
+Ниже приводится пример разработки агента, использующего вызов функций и несколько моделей.
+Агент отображает каждое свое состояние в виде отдельных сообщений в списке.
 
 Для работы агента потребуется установить некоторые пакеты LangChain и использовать в качестве демонстрации сервис [Tavily](https://app.tavily.com/sign-in):
 
@@ -50,7 +50,7 @@ export LANGCHAIN_API_KEY=ls__...
 
 В первую очередь определите инструменты (`tools`), которые будет использовать приложение.
 В качестве примера в этом разделе используется поиск, встроенный в Tavily, но вы также можете использовать собственные инструменты.
-Подробнее об том как создавать свои инструменты — в [документации](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
+Подробнее о том, как создавать свои инструменты — в [документации](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
 
 
 ```python
@@ -210,7 +210,7 @@ workflow.add_conditional_edges(
     # Передайте функцию, которая определяет какую вершину вызвать дальше.
     should_continue,
     # Передайте структуру (map), в которой ключами будут строки, а значениями другие вершины.
-    # END — зарезервированная вершна, указываящая на то, что граф должен завершиться.
+    # END — зарезервированная вершина, указываящая на то, что граф должен завершиться.
     # После вызова `should_continue` вывод функции сравнивается с ключами в структуре.
     # После чего вызывается соотвествующая выводу вершина.
     {
@@ -264,7 +264,7 @@ for output in app.stream(inputs):
     print("\n---\n")
 ```
 
-```
+```python
 Output from node 'agent':
 ---
 {'messages': [AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{\n  "query": "weather in San Francisco"\n}', 'name': 'tavily_search_results_json'}})]}
@@ -290,11 +290,12 @@ Output from node '__end__':
 ---
 ```
 
-### Потоковая передача токенов модели
+### Потоковая передача токенов
 
-Библиотека дает доступ к потоковой передачи токенов модели по мере их возникновения на каждой из вершин.
+Библиотека дает доступ к потоковой передаче токенов модели по мере их возникновения на каждой из вершин.
 В приведенном примере только вершина `agent` может возвращать токены модели.
-Для работы этой функциональность нужно чтобы модель поддерживала работу в режиме потоковой передачи токенов.
+
+Функциональность доступна при работе с моделями, которые поддерживают потоковую передачу.
 
 ```python
 inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
@@ -311,7 +312,7 @@ async for output in app.astream_log(inputs, include_types=["llm"]):
             print(op["value"])
 ```
 
-```
+```python
 content='' additional_kwargs={'function_call': {'arguments': '', 'name': 'tavily_search_results_json'}}
 content='' additional_kwargs={'function_call': {'arguments': '{\n', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': ' ', 'name': ''}}
@@ -407,105 +408,13 @@ content=''
 
 ## Область применения
 
-Используйте библиотеку если вам нужна поддержка циклов.
+Используйте библиотеку когда вам нужна поддержка циклов.
 
-Если обычной работы с цепочками для решения ваших задач достаточно, используйте основные возможности [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
+Если для решения ваших задач достаточно обычных цепочек, используйте основные возможности [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
 
-## How-to Guides
+## Руководства
 
-These guides show how to use LangGraph in particular ways.
-
-### Async
-
-If you are running LangGraph in async workflows, you may want to create the nodes to be async by default.
-For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb)
-
-### Streaming Tokens
-
-Sometimes language models take a while to respond and you may want to stream tokens to end users.
-For a guide on how to do this, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb)
-
-### Persistence
-
-LangGraph comes with built-in persistence, allowing you to save the state of the graph at point and resume from there.
-For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/persistence.ipynb)
-
-### Human-in-the-loop
-
-LangGraph comes with built-in support for human-in-the-loop workflows. This is useful when you want to have a human review the current state before proceeding to a particular node.
-For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb)
-
-
-## Примеры
-
-### ChatAgentExecutor: with function calling
-
-### Исполнитель чат-агента с возможностью вызывать функции
-
-Пример приложения-исполнителя принимает на вход список сообщений и также возвращает список сообщений на выходе.
-Состояние агента также представлено в виде списка сообщений.
-Представленный пример использует вызов функций OpenAI.
-
-
-- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb). Базовый пример, демонстрирующий пошаговое создание приложения исполнителя агентов.
-- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/high-level.ipynb). Пример демонстрирует как можно использовать высокоуровневую точку входа для исполнителя чат-агента.
-
-**Вариации примеров**
-
-We also have a lot of examples highlighting how to slightly modify the base chat agent executor. These all build off the [getting started notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb) so it is recommended you start with that first.
-
-- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb). Пример демонстрирует как реализовать подход «человек-в-цикле».
-- [Принудительный вызов инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb). Пример демонстрирует как всегда вызывать определенный инструмент в первую очередь.
-- [Ответ в заданном формате](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/respond-in-format.ipynb). Пример демонстрирует, как принудительно получить ответ агента в заданном формате.
-- [Динамический вывод результата использования инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb). Пример демонстрирует, как агент может самостоятельно решать возвращать результат использования инструмента пользователю или нет.
-- [Управление этапами работы агента](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb). Пример демонстрирует, как можно более детально управлять промежуточными этапами работы агента.
-
-### Исполнители агентов
-
-Примеры приложений-исполнителей, использующих агенты LangChain.
-
-- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb). Базовый пример, демонстрирующий пошаговое создание приложения исполнителя агентов.
-- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/high-level.ipynb). Пример демонстрирует как можно использовать высокоуровневую точку входа для исполнителя чат-агента.
-
-**Вариации примеров**
-
-Примеры небольших изменений, которые можно сделать при разработке исполнителя чат-агента.
-Приведенные вариации основаны на примере [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb).
-
-- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/human-in-the-loop.ipynb). Пример демонстрирует как реализовать подход «человек-в-цикле».
-- [Принудительный вызов инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb). Пример демонстрирует как всегда вызывать определенный инструмент в первую очередь.
-- [Управление этапами работы агента](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb). Пример демонстрирует, как можно более детально управлять промежуточными этапами работы агента.
-
-
-### Planning Agent Examples
-
-The following notebooks implement agent architectures prototypical of the "plan-and-execute" style, where an LLM planner decomposes a user request into a program, an executor executes the program, and an LLM synthesizes a response (and/or dynamically replans) based on the program outputs.
-
-- [Plan-and-execute](https://github.com/langchain-ai/langgraph/blob/main/examples/plan-and-execute/plan-and-execute.ipynb): a simple agent with a **planner** that generates a multi-step task list, an **executor** that invokes the tools in the plan, and a **replanner** that responds or generates an updated plan. Based on the [Plan-and-solve](https://arxiv.org/abs/2305.04091) paper by Wang, et. al.
-- [Reasoning without Observation](https://github.com/langchain-ai/langgraph/blob/main/examples/rewoo/rewoo.ipynb): planner generates a task list whose observations are saved as **variables**. Variables can be used in subsequent tasks to reduce the need for further re-planning. Based on the [ReWOO](https://arxiv.org/abs/2305.18323) paper by Xu, et. al.
-- [LLMCompiler](https://github.com/langchain-ai/langgraph/blob/main/examples/llm-compiler/LLMCompiler.ipynb): planner generates a **DAG** of tasks with variable responses. Tasks are **streamed** and executed eagerly to minimize tool execution runtime. Based on the [paper](https://arxiv.org/abs/2312.04511) by Kim, et. al.
-
-
-### Reflection / Self-Critique
-
-When output quality is a major concern, it's common to incorporate some combination of self-critique or reflection and external validation to refine your system's outputs. The following examples demonstrate research that implement this type of design.
-
-- [Basic Reflection](./examples/reflection/reflection.ipynb): add a simple "reflect" step in your graph to prompt your system to revise its outputs.
-- [Reflexion](./examples/reflexion/reflexion.ipynb): critique missing and superflous aspects of the agent's response to guide subsequent steps. Based on [Reflexion](https://arxiv.org/abs/2303.11366), by Shinn, et. al.
-- [Language Agent Tree Search](./examples/lats/lats.ipynb): execute multiple agents in parallel, using reflection and environmental rewards to drive a Monte Carlo Tree Search. Based on [LATS](https://arxiv.org/abs/2310.04406/LanguageAgentTreeSearch/), by Zhou, et. al.
-
-### Multi-agent Examples
-### Примеры с несколькими агентами
-
-- [Совместная работа нескольких агентов](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/multi-agent-collaboration.ipynb). Пример демонстрирует как создать двух агентов, которые работают вместе для решения задачи.
-- [Несколько агентов с «руководителем»](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/agent_supervisor.ipynb). Пример демонстрирует как организовать работу агентов используя LLM в роли «руководителя», который решает как распределять работу.
-- [Иерархичные команды агентов](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/hierarchical_agent_teams.ipynb): пример демонстрирует как организовать «команды» агентов, которые будут взаимодействовать для решения задачи, в виде вложенных графов.
-
-### Симуляция для оценки чат-бота
-
-Оценка работы чат-бота в многоэтапных сценариях может вызывать трудности. Для решения таких задач вы можете использовать симуляции.
-
-- [Оценка чат-бота с помощью симуляции взаимодействия нескольких агентов.](https://github.com/langchain-ai/langgraph/blob/main/examples/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb). В примере показано как симулировать диалог «виртуального пользователя» с чат-ботом.
+Приведенные руководства демонстрируют сценарии использования GigaGraph.
 
 ### Асинхронная работа
 
@@ -526,6 +435,73 @@ GigaGraph позволяет сохранять состояние графа в
 
 GigaGraph поддерживает процесс, при котором необходимо участие человека, проверяющего текущее состояние графа перед переходом к следующей вершине.
 Пример такого подхода — в [документации](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb).
+
+## Примеры
+
+### Исполнитель чат-агента с возможностью вызывать функции
+
+Пример приложения-исполнителя принимает на вход список сообщений и возвращает список сообщений на выходе.
+Состояние агента также представлено в виде списка сообщений.
+Представленный пример использует вызов функций OpenAI.
+
+- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb). Базовый пример, демонстрирующий пошаговое создание приложения исполнителя агентов.
+- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/high-level.ipynb). Пример демонстрирует как можно использовать высокоуровневую точку входа для исполнителя чат-агента.
+
+**Вариации примеров**
+
+Примеры небольших изменений, которые можно сделать при разработке исполнителя чат-агента с возможностью вызвать функции.
+Приведенные вариации основаны на примере [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/base.ipynb).
+
+- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb). Пример демонстрирует, как реализовать подход «человек-в-цикле».
+- [Принудительный вызов инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb). Пример демонстрирует, как всегда вызывать определенный инструмент в первую очередь.
+- [Ответ в заданном формате](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/respond-in-format.ipynb). Пример демонстрирует, как принудительно получить ответ агента в заданном формате.
+- [Динамический вывод результата использования инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb). Пример демонстрирует, как агент может самостоятельно решать возвращать результат использования инструмента пользователю или нет.
+- [Управление этапами работы агента](https://github.com/langchain-ai/langgraph/blob/main/examples/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb). Пример демонстрирует, как можно более детально управлять промежуточными этапами работы агента.
+
+### Исполнители агентов
+
+Примеры приложений-исполнителей, использующих агенты LangChain.
+
+- [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb). Базовый пример, демонстрирующий пошаговое создание приложения исполнителя агентов.
+- [High Level Entrypoint](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/high-level.ipynb). Пример демонстрирует как можно использовать высокоуровневую точку входа для исполнителя чат-агента.
+
+**Вариации примеров**
+
+Примеры небольших изменений, которые можно сделать при разработке исполнителя чат-агента.
+Приведенные вариации основаны на примере [Getting Started Notebook](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/base.ipynb).
+
+- [Human-in-the-loop](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/human-in-the-loop.ipynb). Пример демонстрирует, как реализовать подход «человек-в-цикле».
+- [Принудительный вызов инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb). Пример демонстрирует, как всегда вызывать определенный инструмент в первую очередь.
+- [Управление этапами работы агента](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb). Пример демонстрирует, как можно более детально управлять промежуточными этапами работы агента.
+
+### Агент-планировщик
+
+Блокноты содержат примеры прототипов архитектуры «планируй и выполняй».
+При таком подходе LLM декомпозирует запрос пользователя в программу, после чего исполнитель выполняет ее и в завершении LLM, в зависимости от результата, собирает ответ и/или динамически изменяет план работы.
+
+- [Планирование и выполнение](https://github.com/langchain-ai/langgraph/blob/main/examples/plan-and-execute/plan-and-execute.ipynb). Пример простого агента, состоящий из: планировщика, который создает многоэтапный список задач, исполнителя, который вызывает доступные инструменты согласно плану, и перепланирощика, который возвращает результат работы или обновляет план действий. Пример основан на работе [Plan-and-solve](https://arxiv.org/abs/2305.04091), за авторством Wang, и других.
+- [Рассуждения без наблюдений](https://github.com/langchain-ai/langgraph/blob/main/examples/rewoo/rewoo.ipynb). Пример планировщика, создающего список задач, наблюдения в котором сохраняются как переменные. Переменные могут быть использованы в последующих задачах, чтобы уменьшить необходимость в дальнейшем перепланировании. Пример основан на работе [ReWOO](https://arxiv.org/abs/2305.18323), за авторством Xu и других.
+- [LLM компилятор](https://github.com/langchain-ai/langgraph/blob/main/examples/llm-compiler/LLMCompiler.ipynb). Задачи передаются потоком и выполняются с целью уменьшения время выполнения инструмента. Пример планировщика, который создает ациклический граф (*DAG*) задач с переменными ответами. Пример основан на [работе](https://arxiv.org/abs/2312.04511) за авторством Kim и других.
+
+### Размышления / самокритика
+
+Для повышения качества работы агента, как правило используют сочетание «самокритики» или «размышлений» языковой модели, а также внешний контроль результатов работы системы. Представленные примеры демонстрируют исследования, которые реализуют такой подход в проектировании.
+
+- [Общие размышления](https://github.com/ai-forever/gigagraph/blob/main/examples/reflection/reflection.ipynb). Пример показывает, как добавить в граф шаг простых «размышлений», подсказывающий системе пересмотреть результат работы.
+- [Рефлексия](https://github.com/ai-forever/gigagraph/blob/main/examples/reflexion/reflexion.ipynb). Пример показывает, как критиковать недостающие и избыточные части ответа агента, чтобы направлять последующие шаги. Пример основан на работе [Reflexion](https://arxiv.org/abs/2303.11366) за авторством Shinn и других.
+- [Поиск по дереву с помощью языкового агента](https://github.com/ai-forever/gigagraph/blob/main/examples/lats/lats.ipynb). Пример показывает параллельную работу нескольких агентов, с применением «размышлений» и внешнего положительного подкрепления для организации поиска по дереву Монте-Карло. Пример основан на работе [LATS](https://arxiv.org/abs/2310.04406/LanguageAgentTreeSearch/) за авторством Zhou и других.
+
+### Примеры с несколькими агентами
+
+- [Совместная работа нескольких агентов](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/multi-agent-collaboration.ipynb). Пример демонстрирует, как создать двух агентов, которые работают вместе для решения задачи.
+- [Несколько агентов с «руководителем»](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/agent_supervisor.ipynb). Пример демонстрирует, как организовать работу агентов используя LLM в роли «руководителя», который решает как распределять работу.
+- [Иерархичные команды агентов](https://github.com/langchain-ai/langgraph/blob/main/examples/multi_agent/hierarchical_agent_teams.ipynb). Пример демонстрирует, как организовать «команды» агентов, которые будут взаимодействовать для решения задачи, в виде вложенных графов.
+
+### Симуляция для оценки чат-бота
+
+Оценка работы чат-бота в многоэтапных сценариях может вызывать трудности. Для решения таких задач вы можете использовать симуляции.
+
+- [Оценка чат-бота с помощью симуляции взаимодействия нескольких агентов](https://github.com/langchain-ai/langgraph/blob/main/examples/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb). В примере показано как симулировать диалог «виртуального пользователя» с чат-ботом.
 
 ## Справка
 
@@ -549,15 +525,15 @@ from langgraph.graph import StateGraph
 ```
 
 При создании графа нужно передать схему состояния.
-Каждая вершина будет возращать операции для обновления этого состояния.
-Операции могут либо задавать (SET) определенные атрибуты состояния (например, переписывать существующие значения), либо добавлять ()ADD данные к существующим атрибутам.
+Каждая вершина будет возвращать операции для обновления этого состояния.
+Операции могут либо задавать (SET) определенные атрибуты состояния (например, переписывать существующие значения), либо добавлять (ADD) данные к существующим атрибутам.
 Будет операция задавать или добавлять данные, определяется аннотациями объекта состояния, который используется для создания графа.
 
 Схему состояния рекомендуется задавать с помощью типизированного словаря: `from typing import TypedDict`
 
 После создания схемы вы можете аннотировать атрибуты с помощью `from typing imoport Annotated`.
 Сейчас поддерживается только одна аннотация — `import operator; operator.add`.
-Аннотация указывает, что каждая вершина, которая возвращает этот атрибут добавляет новые данные к существующему значению.
+Аннотация указывает, что каждая вершина, которая возвращает этот атрибут, добавляет новые данные к существующему значению.
 
 Пример состояния:
 
@@ -570,8 +546,6 @@ import operator
 class AgentState(TypedDict):
    # Входная строка
    input: str
-   # The outcome of a given call to the agent
-   # Needs `None` as a valid type, since this is what this will start as
    # Результат вызова агента
    # Должен принимать `None` в качестве валидного типа, так как это начальное значение
    agent_outcome: Union[AgentAction, AgentFinish, None]
@@ -611,7 +585,6 @@ inputs = {
     def add_node(self, key: str, action: RunnableLike) -> None:
 ```
 
-This method adds a node to the graph.
 Добавляет вершину графа.
 Принимает два параметра:
 
@@ -671,11 +644,11 @@ This method adds a node to the graph.
     ) -> None:
 ```
 
-This method adds a conditional entry point.
-What this means is that when the graph is called, it will call the `condition` Callable to decide what node to enter into first.
+Добавляет условную точку входа.
+При вызове графа метод проверяет условие (`condition: Callable[..., str],`), чтобы выбрать начальную вершину.
 
-- `condition`: A function to call to decide what to do next. The input will be the input to the graph. It should return a string that is present in `conditional_edge_mapping` and represents the edge to take.
-- `conditional_edge_mapping`: A mapping of string to string. The keys should be strings that may be returned by `condition`. The values should be the downstream node to call if that condition is returned.
+- `condition`. Функция, которую нужно вызвать, чтобы решить, что делать дальше. Входные данные функции используются при запуске графа. Функция должна возвращать строку из `conditional_edge_mapping`, указывающую на ребро, по которому пойдет выполнение графа.
+- `conditional_edge_mapping`. Структура данных строка-строка. В качестве ключей задаются строки, которые может вернуть `condition`. В качестве значения задается вершина, которая будет вызвана при срабатывании условия.
 
 
 #### `.set_finish_point`
@@ -684,17 +657,13 @@ What this means is that when the graph is called, it will call the `condition` C
     def set_finish_point(self, key: str) -> None:
 ```
 
-This is the exit point of the graph.
-When this node is called, the results will be the final result from the graph.
-It only has one argument:
-
 Точка выхода из графа.
 При вызове заданной вершины, результат ее работы будет итоговым для графа.
 Принимает один параметр:
 
 - `key` — название вершины, результат вызова который будет считаться итоговым результатом работы графа.
 
-Вершину не нужно вызывать если на предыдущих шагах графа было создано ребро (условное или обычное) ведущее к зарезервированной вершине `END`.
+Вершину не нужно вызывать, если на предыдущих шагах графа было создано ребро (условное или обычное), ведущее к зарезервированной вершине `END`.
 
 ### Graph
 
@@ -713,12 +682,8 @@ graph = Graph()
 from langgraph.graph import END
 ```
 
-This is a special node representing the end of the graph.
-This means that anything passed to this node will be the final output of the graph.
-It can be used in two places:
-
 Зарезервированная вершина указывающая на завершение работы графа.
-Все данные, которые передаются вершине при вызове будут считаться результатом работы графа.
+Все данные, которые передаются вершине при вызове, будут считаться результатом работы графа.
 Вершину можно использовать в двух случая:
 
 - В качестве ключа `end_key` в `add_edge`.
@@ -778,9 +743,9 @@ for s in app.stream(inputs):
 from langgraph.prebuilt import chat_agent_executor
 ```
 
-This is a helper function for creating a graph that works with a chat model that utilizes tool calling.
-Can be created by passing in a model and a list of tools.
-The model must be one that supports OpenAI tool calling.
+Вспомогательная функция для создания графа, который работает с моделью, способной вызывать инструменты.
+Принимает на вход модель и список инструментов.
+Модель должна поддерживать вызов инструментов OpenAI.
 
 ```python
 from langchain_openai import ChatOpenAI
