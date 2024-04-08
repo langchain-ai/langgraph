@@ -36,7 +36,6 @@ jobs:
             poetry run pip install -r docs/docs-requirements.txt
 
         - name: Build site
-          working-directory: ./docs
           run: make build-docs
         
         - name: Configure GitHub Pages
