@@ -71,7 +71,7 @@ nav:
       - 'index.md'
       - Quick Start: quick_start.ipynb
   - Concepts:
-      - 'concepts/langgraph.md'
+      - 'concepts.md'
   - "How-to Guides":
       - Basics:
           - State Management: how-tos/state-model.ipynb
