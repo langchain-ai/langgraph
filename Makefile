@@ -50,6 +50,7 @@ spell_fix:
 	poetry run codespell --toml pyproject.toml -w
 
 build-docs:
+	poetry run python docs/_scripts/copy_notebooks.py
 	poetry run mkdocs build --clean -f docs/mkdocs.yml
 
 serve-docs: build-docs
