@@ -1,4 +1,4 @@
-.PHONY: all clean docs_build docs_clean docs_linkcheck api_docs_build api_docs_clean api_docs_linkcheck format lint test tests test_watch integration_tests docker_tests help extended_tests
+.PHONY: all clean docs_build docs_clean docs_linkcheck api_docs_build api_docs_clean api_docs_linkcheck format lint test tests test_watch integration_tests docker_tests help extended_tests coverage spell_check spell_fix build-docs serve-docs
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -48,6 +48,12 @@ spell_check:
 
 spell_fix:
 	poetry run codespell --toml pyproject.toml -w
+
+build-docs:
+	poetry run mkdocs build --clean -f docs/mkdocs.yml
+
+serve-docs: build-docs
+	poetry run mkdocs serve -f docs/mkdocs.yml
 
 ######################
 # HELP
