@@ -1,8 +1,7 @@
-# StateGraph
+# Prebuilt 
 
 
-
-::: langgraph.graph
+::: langgraph.prebuilt
     handler: python
     options:
       selection:

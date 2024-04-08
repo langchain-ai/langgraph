@@ -143,7 +143,9 @@ nav:
           - Self-Discovering Agent: tutorials/self-discover/self-discover.ipynb
           - Swarm: tutorials/gptswarm/swarm.ipynb
   - Reference:
-      - Client: reference/client.md
+      - Graphs: reference/graphs.md
+      - Checkpointing: reference/checkpoints.md
+      - Prebuilt Components: reference/prebuilt_components.md
   
 
 markdown_extensions:
