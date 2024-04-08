@@ -1,0 +1,52 @@
+name: Deploy SDK Docs
+
+on:
+  push:
+    branches:
+      - master 
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+        - uses: actions/checkout@v4
+        - name: install deps
+          run: |
+            pip install poetry poethepoet
+        - name: Set up Python
+          uses: actions/setup-python@v4
+          with:
+            python-version: 3.12
+            cache: poetry
+            cache-dependency-path: 'poetry.lock'
+
+        - name: Poetry install
+          run: |
+            poetry install
+            poetry run pip install -r docs/docs-requirements.txt
+
+        - name: Build site
+          working-directory: ./docs
+          run: make build-docs
+        
+        - name: Configure GitHub Pages
+          uses: actions/configure-pages@v4
+        
+        - name: Upload Pages Artifact
+          uses: actions/upload-pages-artifact@v3
+          with:
+            path: ./docs/site/
+
+        - name: Deploy to GitHub Pages
+          id: deployment
+          uses: actions/deploy-pages@v4
