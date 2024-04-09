@@ -28,11 +28,11 @@ def validate_graph(
 
     for chan in subscribed_channels:
         if chan not in channels:
-            channels[chan] = default_channel_cls(Any)  # type: ignore[arg-type]
+            channels[chan] = default_channel_cls(Any)  # type: ignore[call-arg]
 
     if isinstance(input_channels, str):
         if input_channels not in channels:
-            channels[input_channels] = default_channel_cls(Any)  # type: ignore[arg-type]
+            channels[input_channels] = default_channel_cls(Any)  # type: ignore[call-arg]
         if input_channels not in subscribed_channels:
             raise ValueError(
                 f"Input channel {input_channels} is not subscribed to by any node"
@@ -40,7 +40,7 @@ def validate_graph(
     else:
         for chan in input_channels:
             if chan not in channels:
-                channels[chan] = default_channel_cls(Any)  # type: ignore[arg-type]
+                channels[chan] = default_channel_cls(Any)  # type: ignore[call-arg]
         if all(chan not in subscribed_channels for chan in input_channels):
             raise ValueError(
                 f"None of the input channels {input_channels} are subscribed to by any node"
@@ -58,14 +58,14 @@ def validate_graph(
 
     for chan in all_output_channels:
         if chan not in channels:
-            channels[chan] = default_channel_cls(Any)  # type: ignore[arg-type]
+            channels[chan] = default_channel_cls(Any)  # type: ignore[call-arg]
 
-    for node in interrupt_after_nodes:
-        if node not in nodes:
-            raise ValueError(f"Node {node} not in nodes")
-    for node in interrupt_before_nodes:
-        if node not in nodes:
-            raise ValueError(f"Node {node} not in nodes")
+    for n in interrupt_after_nodes:
+        if n not in nodes:
+            raise ValueError(f"Node {n} not in nodes")
+    for n in interrupt_before_nodes:
+        if n not in nodes:
+            raise ValueError(f"Node {n} not in nodes")
 
 
 def validate_keys(

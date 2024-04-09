@@ -31,8 +31,8 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         __exc_type: Optional[type[BaseException]],
         __exc_value: Optional[BaseException],
         __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
-        return self.conn.close()
+    ) -> None:
+        self.conn.close()
 
     def setup(self) -> None:
         if self.is_setup:
@@ -53,7 +53,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         self.is_setup = True
 
     @contextmanager
-    def cursor(self, transaction: bool = True):
+    def cursor(self, transaction: bool = True) -> Iterator[sqlite3.Cursor]:
         self.setup()
         cur = self.conn.cursor()
         try:
@@ -110,6 +110,8 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                         else None,
                     )
 
+        return None
+
     def list(self, config: RunnableConfig) -> Iterator[CheckpointTuple]:
         with self.cursor(transaction=False) as cur:
             cur.execute(
@@ -151,9 +153,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         raise NotImplementedError("Use AsyncSqliteSaver instead")
 
-    async def alist(
-        self, config: RunnableConfig
-    ) -> AsyncIterator[tuple[RunnableConfig, Checkpoint]]:
+    def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
         raise NotImplementedError("Use AsyncSqliteSaver instead")
 
     async def aput(

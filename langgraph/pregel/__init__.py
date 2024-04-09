@@ -9,12 +9,14 @@ from typing import (
     AsyncIterator,
     Awaitable,
     Callable,
+    Generic,
     Iterator,
     Literal,
     Mapping,
     Optional,
     Sequence,
     Type,
+    TypeVar,
     Union,
     cast,
     overload,
@@ -171,13 +173,16 @@ class Channel:
 
 StreamMode = Literal["values", "updates"]
 
+Ch = TypeVar("Ch", bound=Optional[BaseCheckpointSaver])
+
 
 class Pregel(
-    RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
+    RunnableSerializable[Optional[Input], Output],
+    Generic[Input, Output, Ch],
 ):
     nodes: Mapping[str, PregelNode]
 
-    channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
+    channels: dict[str, BaseChannel] = Field(default_factory=dict)
 
     default_channel_cls: Type[BaseChannel] = Field(default=LastValue)
 
@@ -201,7 +206,7 @@ class Pregel(
 
     debug: bool = Field(default_factory=get_debug)
 
-    checkpointer: Optional[BaseCheckpointSaver] = None
+    checkpointer: Ch = None
 
     name: str = "LangGraph"
 
@@ -227,7 +232,7 @@ class Pregel(
                 raise ValueError("Interrupts require a checkpointer")
         return values
 
-    def validate(self) -> Self:
+    def valid(self) -> Self:
         validate_graph(
             self.nodes,
             self.channels,
@@ -303,7 +308,7 @@ class Pregel(
         )
 
     def get_state(self, config: RunnableConfig) -> StateSnapshot:
-        if not self.checkpointer:
+        if self.checkpointer is None:
             raise ValueError("No checkpointer set")
 
         saved = self.checkpointer.get_tuple(config)
@@ -323,7 +328,7 @@ class Pregel(
             )
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
-        if not self.checkpointer:
+        if self.checkpointer is None:
             raise ValueError("No checkpointer set")
 
         saved = await self.checkpointer.aget_tuple(config)
@@ -343,7 +348,7 @@ class Pregel(
             )
 
     def get_state_history(self, config: RunnableConfig) -> Iterator[StateSnapshot]:
-        if not self.checkpointer:
+        if self.checkpointer is None:
             raise ValueError("No checkpointer set")
 
         for config, checkpoint, parent_config in self.checkpointer.list(config):
@@ -364,7 +369,7 @@ class Pregel(
     async def aget_state_history(
         self, config: RunnableConfig
     ) -> AsyncIterator[StateSnapshot]:
-        if not self.checkpointer:
+        if self.checkpointer is None:
             raise ValueError("No checkpointer set")
 
         async for config, checkpoint, parent_config in self.checkpointer.alist(config):
@@ -385,14 +390,14 @@ class Pregel(
     def update_state(
         self,
         config: RunnableConfig,
-        values: dict[str, Any] | Any,
+        values: Input,
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
         """Update the state of the graph with the given values, as if they came from
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        if not self.checkpointer:
+        if self.checkpointer is None:
             raise ValueError("No checkpointer set")
 
         # get last checkpoint
@@ -449,10 +454,10 @@ class Pregel(
     async def aupdate_state(
         self,
         config: RunnableConfig,
-        values: dict[str, Any] | Any,
+        values: Input,
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        if not self.checkpointer:
+        if self.checkpointer is None:
             raise ValueError("No checkpointer set")
 
         # get last checkpoint
@@ -549,7 +554,7 @@ class Pregel(
 
     def stream(
         self,
-        input: Union[dict[str, Any], Any],
+        input: Optional[Input],
         config: Optional[RunnableConfig] = None,
         *,
         stream_mode: Optional[StreamMode] = None,
@@ -558,7 +563,7 @@ class Pregel(
         interrupt_before_nodes: Optional[Sequence[str]] = None,
         interrupt_after_nodes: Optional[Sequence[str]] = None,
         debug: Optional[bool] = None,
-    ) -> Iterator[Union[dict[str, Any], Any]]:
+    ) -> Iterator[Output]:
         config = ensure_config(config)
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
@@ -747,7 +752,7 @@ class Pregel(
 
     async def astream(
         self,
-        input: Union[dict[str, Any], Any],
+        input: Optional[Input],
         config: Optional[RunnableConfig] = None,
         *,
         stream_mode: Optional[StreamMode] = None,
@@ -756,7 +761,7 @@ class Pregel(
         interrupt_before_nodes: Optional[Sequence[str]] = None,
         interrupt_after_nodes: Optional[Sequence[str]] = None,
         debug: Optional[bool] = None,
-    ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+    ) -> AsyncIterator[Output]:
         config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
@@ -961,7 +966,7 @@ class Pregel(
 
     def invoke(
         self,
-        input: Union[dict[str, Any], Any],
+        input: Optional[Input],
         config: Optional[RunnableConfig] = None,
         *,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
@@ -970,10 +975,10 @@ class Pregel(
         interrupt_after_nodes: Optional[Sequence[str]] = None,
         debug: Optional[bool] = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], Any]:
+    ) -> Output:
         output_keys = output_keys if output_keys is not None else self.output_channels
         output_is_dict = not isinstance(output_keys, str)
-        latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
+        latest: Output = {} if output_is_dict else None
         for chunk in self.stream(
             input,
             config,
@@ -990,7 +995,7 @@ class Pregel(
 
     async def ainvoke(
         self,
-        input: Union[dict[str, Any], Any],
+        input: Optional[Input],
         config: Optional[RunnableConfig] = None,
         *,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
@@ -999,10 +1004,10 @@ class Pregel(
         interrupt_after_nodes: Optional[Sequence[str]] = None,
         debug: Optional[bool] = None,
         **kwargs: Any,
-    ) -> Union[dict[str, Any], Any]:
+    ) -> Output:
         output_keys = output_keys if output_keys is not None else self.output_channels
         output_is_dict = not isinstance(output_keys, str)
-        latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
+        latest: Output = {} if output_is_dict else None
         async for chunk in self.astream(
             input,
             config,

@@ -31,8 +31,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         __exc_type: Optional[type[BaseException]],
         __exc_value: Optional[BaseException],
         __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
-        return await self.conn.close()
+    ) -> None:
+        await self.conn.close()
 
     async def setup(self) -> None:
         if self.is_setup:
@@ -100,6 +100,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                         if value[2]
                         else None,
                     )
+
+        return None
 
     async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
         await self.setup()

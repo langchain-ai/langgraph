@@ -39,7 +39,7 @@ class Checkpoint(TypedDict):
     """
 
 
-def _seen_dict():
+def _seen_dict() -> defaultdict[str, int]:
     return defaultdict(int)
 
 
@@ -104,6 +104,8 @@ class BaseCheckpointSaver(Serializable, ABC):
         if value := self.get_tuple(config):
             return value.checkpoint
 
+        return None
+
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         raise NotImplementedError
 
@@ -117,6 +119,8 @@ class BaseCheckpointSaver(Serializable, ABC):
         if value := await self.aget_tuple(config):
             return value.checkpoint
 
+        return None
+
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         return await asyncio.get_running_loop().run_in_executor(
             None, self.get_tuple, config
@@ -127,7 +131,7 @@ class BaseCheckpointSaver(Serializable, ABC):
         iter = loop.run_in_executor(None, self.list, config)
         while True:
             try:
-                yield await loop.run_in_executor(None, next, iter)
+                yield await loop.run_in_executor(None, next, iter)  # type: ignore[arg-type]
             except StopIteration:
                 return
 

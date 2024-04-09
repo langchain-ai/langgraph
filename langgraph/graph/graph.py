@@ -5,6 +5,7 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
+    Generic,
     NamedTuple,
     Optional,
     Sequence,
@@ -13,7 +14,12 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable
-from langchain_core.runnables.base import RunnableLike, coerce_to_runnable
+from langchain_core.runnables.base import (
+    Input,
+    Output,
+    RunnableLike,
+    coerce_to_runnable,
+)
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import (
     Graph as RunnableGraph,
@@ -23,9 +29,8 @@ from langchain_core.runnables.graph import (
 )
 
 from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
-from langgraph.pregel import Channel, Pregel
+from langgraph.pregel import Ch, Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils import RunnableCallable
@@ -227,11 +232,11 @@ class Graph:
 
     def compile(
         self,
-        checkpointer: Optional[BaseCheckpointSaver] = None,
+        checkpointer: Ch = None,
         interrupt_before: Optional[Sequence[str]] = None,
         interrupt_after: Optional[Sequence[str]] = None,
         debug: bool = False,
-    ) -> "CompiledGraph":
+    ) -> "CompiledGraph[Any, Any, Ch]":
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -267,10 +272,10 @@ class Graph:
                 compiled.attach_branch(start, name, branch)
 
         # validate the compiled graph
-        return compiled.validate()
+        return compiled.valid()
 
 
-class CompiledGraph(Pregel):
+class CompiledGraph(Pregel[Input, Output, Ch], Generic[Input, Output, Ch]):
     graph: Graph
 
     def attach_node(self, key: str, node: Runnable) -> None:

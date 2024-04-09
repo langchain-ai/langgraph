@@ -1,5 +1,4 @@
 import json
-import operator
 from typing import Annotated, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
@@ -12,12 +11,22 @@ from langchain_core.utils.function_calling import (
 )
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
+
+
+# We create the AgentState that we will pass around
+# This simply involves a list of messages
+# We want steps to return messages to append to the list
+# So we annotate the messages attribute with operator.add
+class AgentState(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
 def create_function_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
-):
+) -> CompiledStateGraph[AgentState, None]:
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
         tool_classes = tools.tools
@@ -25,13 +34,6 @@ def create_function_calling_executor(
         tool_executor = ToolExecutor(tools)
         tool_classes = tools
     model = model.bind(functions=[convert_to_openai_function(t) for t in tool_classes])
-
-    # We create the AgentState that we will pass around
-    # This simply involves a list of messages
-    # We want steps to return messages to append to the list
-    # So we annotate the messages attribute with operator.add
-    class AgentState(TypedDict):
-        messages: Annotated[Sequence[BaseMessage], operator.add]
 
     # Define the function that determines whether to continue or not
     def should_continue(state: AgentState):
@@ -133,7 +135,7 @@ def create_function_calling_executor(
 
 def create_tool_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
-):
+) -> CompiledStateGraph[AgentState, None]:
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
         tool_classes = tools.tools
@@ -141,13 +143,6 @@ def create_tool_calling_executor(
         tool_executor = ToolExecutor(tools)
         tool_classes = tools
     model = model.bind(tools=[convert_to_openai_tool(t) for t in tool_classes])
-
-    # We create the AgentState that we will pass around
-    # This simply involves a list of messages
-    # We want steps to return messages to append to the list
-    # So we annotate the messages attribute with operator.add
-    class AgentState(TypedDict):
-        messages: Annotated[Sequence[BaseMessage], operator.add]
 
     # Define the function that determines whether to continue or not
     def should_continue(state: AgentState):

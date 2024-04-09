@@ -11,18 +11,18 @@ from langgraph.channels.base import (
 )
 
 
-class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
+class NamedBarrierValue(Generic[Value], BaseChannel[None, Value, set[Value]]):
     """A channel that waits until all named values are received before making the value available."""
 
     def __init__(self, typ: Type[Value], names: set[Value]) -> None:
         self.typ = typ
         self.names = names
-        self.seen = set()
+        self.seen: set[Value] = set()
 
     @property
-    def ValueType(self) -> Type[Value]:
+    def ValueType(self) -> Type[None]:
         """The type of the value stored in the channel."""
-        return self.typ
+        return type(None)
 
     @property
     def UpdateType(self) -> Type[Value]:
@@ -54,7 +54,7 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
             else:
                 raise InvalidUpdateError(f"Value {value} not in {self.names}")
 
-    def get(self) -> Value:
+    def get(self) -> None:
         if self.seen != self.names:
             raise EmptyChannelError()
         return None

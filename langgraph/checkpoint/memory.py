@@ -16,6 +16,8 @@ class MemorySaver(BaseCheckpointSaver):
         if value := self.get_tuple(config):
             return value.checkpoint
 
+        return None
+
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         if config["configurable"].get("thread_ts"):
             if checkpoint := self.storage[config["configurable"]["thread_id"]].get(
@@ -34,6 +36,8 @@ class MemorySaver(BaseCheckpointSaver):
                     },
                     checkpoint=checkpoints[thread_ts],
                 )
+
+        return None
 
     def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
         self.storage[config["configurable"]["thread_id"]].update(
