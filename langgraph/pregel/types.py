@@ -20,7 +20,7 @@ class PregelExecutableTask(NamedTuple):
 class StateSnapshot(NamedTuple):
     values: Union[dict[str, Any], Any]
     """Current values of channels"""
-    next: tuple[str]
+    next: tuple[str, ...]
     """Nodes to execute in the next step, if any"""
     config: RunnableConfig
     """Config used to fetch this snapshot"""

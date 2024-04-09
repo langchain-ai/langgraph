@@ -1,6 +1,7 @@
 from collections import defaultdict
 
 from langchain_core.pydantic_v1 import Field
+from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import Checkpoint, CheckpointAt, copy_checkpoint
 from langgraph.checkpoint.memory import MemorySaver
@@ -13,7 +14,7 @@ class MemorySaverAssertImmutable(MemorySaver):
 
     at = CheckpointAt.END_OF_STEP
 
-    def put(self, config: dict, checkpoint: Checkpoint) -> None:
+    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
         # assert checkpoint hasn't been modified since last written
         thread_id = config["configurable"]["thread_id"]
         if saved := super().get(config):

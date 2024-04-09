@@ -104,7 +104,7 @@ class ChannelWrite(RunnableCallable):
         write([(chan, val) for chan, val in values.items() if val is not SKIP_WRITE])
 
     @staticmethod
-    def is_writer(runnable: Runnable) -> bool:
+    def is_writer(runnable: Union[Runnable, Any]) -> bool:
         return (
             isinstance(runnable, ChannelWrite)
             or getattr(runnable, "_is_channel_writer", False) is True
@@ -118,7 +118,7 @@ class ChannelWrite(RunnableCallable):
         return runnable
 
 
-def _mk_future(val: Any) -> asyncio.Future:
-    fut = asyncio.Future()
+def _mk_future(val: Any) -> asyncio.Future[Any]:
+    fut: asyncio.Future[Any] = asyncio.Future()
     fut.set_result(val)
     return fut

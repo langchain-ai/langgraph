@@ -1,7 +1,7 @@
 import logging
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union
+from typing import Any, Generic, Optional, Sequence, Type, TypeVar, Union, cast
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
@@ -11,17 +11,19 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
+from langgraph.pregel import Ch
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.utils import RunnableCallable
 
 logger = logging.getLogger(__name__)
 
+S = TypeVar("S")
 
-class StateGraph(Graph):
+
+class StateGraph(Graph, Generic[S]):
     """A graph whose nodes communicate by reading and writing to a shared state.
     The signature of each node is State -> Partial<State>.
 
@@ -30,7 +32,7 @@ class StateGraph(Graph):
     The signature of a reducer function is (Value, Value) -> Value.
     """
 
-    def __init__(self, schema: Type[Any]) -> None:
+    def __init__(self, schema: Type[S]) -> None:
         super().__init__()
         self.schema = schema
         self.channels = _get_channels(schema)
@@ -72,11 +74,11 @@ class StateGraph(Graph):
 
     def compile(
         self,
-        checkpointer: Optional[BaseCheckpointSaver] = None,
+        checkpointer: Ch = None,
         interrupt_before: Optional[Sequence[str]] = None,
         interrupt_after: Optional[Sequence[str]] = None,
         debug: bool = False,
-    ) -> CompiledGraph:
+    ) -> "CompiledStateGraph[S, Ch]":
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -117,11 +119,11 @@ class StateGraph(Graph):
             for name, branch in branches.items():
                 compiled.attach_branch(start, name, branch)
 
-        return compiled.validate()
+        return compiled.valid()
 
 
-class CompiledStateGraph(CompiledGraph):
-    graph: StateGraph
+class CompiledStateGraph(CompiledGraph[S, S, Ch], Generic[S, Ch]):
+    graph: StateGraph[S]
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
@@ -176,7 +178,7 @@ class CompiledStateGraph(CompiledGraph):
                         tags=[TAG_HIDDEN],
                     ),
                 ],
-            ).pipe(node)
+            ).pipe(cast(Runnable, node))
 
     def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
         if isinstance(starts, str):

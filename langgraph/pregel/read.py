@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Mapping, Optional, Sequence, Union, cast
 
 from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import (
@@ -18,7 +18,7 @@ from langgraph.constants import CONFIG_KEY_READ
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils import RunnableCallable
 
-READ_TYPE = Callable[[str, bool], Union[Any, dict[str, Any]]]
+READ_TYPE = Callable[[Union[str, list[str]], bool], Union[Any, dict[str, Any]]]
 
 
 class ChannelRead(RunnableCallable):
@@ -120,7 +120,7 @@ class PregelNode(RunnableBindingBase):
             and isinstance(writers[-2], ChannelWrite)
         ):
             # we can combine writes if they are consecutive
-            writers[-2].writes += writers[-1].writes
+            writers[-2].writes += writers[-1].writes  # type: ignore[operator]
             writers.pop()
         return writers
 
@@ -197,7 +197,7 @@ class PregelNode(RunnableBindingBase):
                 channels=self.channels,
                 triggers=self.triggers,
                 mapper=self.mapper,
-                writers=[*self.writers, other],
+                writers=[*self.writers, cast(ChannelWrite, other)],
                 bound=self.bound,
                 kwargs=self.kwargs,
                 config=self.config,

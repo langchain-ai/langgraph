@@ -1,15 +1,16 @@
 import operator
-from typing import Annotated, Sequence, TypedDict, Union
+from typing import Annotated, Any, Sequence, TypedDict, Union
 
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.utils import RunnableCallable
 
 
-def _get_agent_state(input_schema=None):
+def _get_agent_state(input_schema=None) -> Any:
     if input_schema is None:
 
         class AgentState(TypedDict):
@@ -27,7 +28,7 @@ def _get_agent_state(input_schema=None):
 
     else:
 
-        class AgentState(input_schema):
+        class AgentState(input_schema):  # type: ignore[no-redef]
             # The outcome of a given call to the agent
             # Needs `None` as a valid type, since this is what this will start as
             agent_outcome: Union[AgentAction, AgentFinish, None]
@@ -39,7 +40,9 @@ def _get_agent_state(input_schema=None):
     return AgentState
 
 
-def create_agent_executor(agent_runnable, tools, input_schema=None):
+def create_agent_executor(
+    agent_runnable, tools, input_schema=None
+) -> CompiledStateGraph[Any, None]:
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
     else:
@@ -49,7 +52,7 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
 
     # Define logic that will be used to determine which conditional edge to go down
 
-    def should_continue(data):
+    def should_continue(data: dict[str, Any]) -> str:
         # If the agent outcome is an AgentFinish, then we return `exit` string
         # This will be used when setting up the graph to define the flow
         if isinstance(data["agent_outcome"], AgentFinish):
@@ -60,16 +63,18 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
         else:
             return "continue"
 
-    def run_agent(data):
+    def run_agent(data: dict[str, Any]) -> dict[str, Union[AgentAction, AgentFinish]]:
         agent_outcome = agent_runnable.invoke(data)
         return {"agent_outcome": agent_outcome}
 
-    async def arun_agent(data):
+    async def arun_agent(
+        data: dict[str, Any],
+    ) -> dict[str, Union[AgentAction, AgentFinish]]:
         agent_outcome = await agent_runnable.ainvoke(data)
         return {"agent_outcome": agent_outcome}
 
     # Define the function to execute tools
-    def execute_tools(data):
+    def execute_tools(data: dict[str, Any]) -> dict[str, list[tuple[AgentAction, str]]]:
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
         if not isinstance(agent_action, list):
@@ -81,7 +86,9 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
             ]
         }
 
-    async def aexecute_tools(data):
+    async def aexecute_tools(
+        data: dict[str, Any],
+    ) -> dict[str, list[tuple[AgentAction, str]]]:
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
         if not isinstance(agent_action, list):

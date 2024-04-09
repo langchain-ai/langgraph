@@ -32,7 +32,7 @@ grandalf = "^0.8"
 ruff = "^0.1.4"
 
 [tool.poetry.group.typing.dependencies]
-mypy = "^1.6.0"
+mypy = "^1.9.0"
 
 [tool.poetry.group.dev]
 optional = true

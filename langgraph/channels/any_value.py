@@ -10,6 +10,8 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, assumes that if multiple values are
     received, they are all equal."""
 
+    value: Value
+
     def __init__(self, typ: Type[Value]) -> None:
         self.typ = typ
 

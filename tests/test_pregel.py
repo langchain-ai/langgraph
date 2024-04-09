@@ -7,7 +7,7 @@ from contextlib import contextmanager
 from typing import Annotated, Any, Generator, Optional, TypedDict, Union
 
 import pytest
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
@@ -933,7 +933,7 @@ def test_conditional_graph(
             },
         },
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,  # type: ignore
     )
     assert (
         app_w_interrupt.checkpointer.get_tuple(config).config["configurable"][
@@ -966,7 +966,7 @@ def test_conditional_graph(
             },
         },
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,  # type: ignore
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1542,7 +1542,7 @@ def test_conditional_graph_state(
         checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
         interrupt_after=["agent"],
     )
-    config = {"configurable": {"thread_id": "1"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
 
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
@@ -1825,7 +1825,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list):
+        def bind_functions(self, functions: list) -> "FakeFuntionChatModel":
             return self
 
     @tool()
@@ -2220,7 +2220,7 @@ def test_message_graph(
     tool_executor = ToolExecutor(tools)
 
     # Define the function that determines whether to continue or not
-    def should_continue(messages):
+    def should_continue(messages) -> str:
         last_message = messages[-1]
         # If there is no function call, then we finish
         if "function_call" not in last_message.additional_kwargs:
@@ -2229,7 +2229,7 @@ def test_message_graph(
         else:
             return "continue"
 
-    def call_tool(messages):
+    def call_tool(messages) -> FunctionMessage:
         # Based on the continue condition
         # we know the last message involves a function call
         last_message = messages[-1]
@@ -2364,7 +2364,7 @@ def test_message_graph(
         checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
         interrupt_after=["agent"],
     )
-    config = {"configurable": {"thread_id": "1"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
 
     assert [
         c for c in app_w_interrupt.stream(("human", "what is weather in sf"), config)
@@ -2468,7 +2468,7 @@ def test_message_graph(
             ),
         ],
         next=("action",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,  # type: ignore
     )
 
     app_w_interrupt.update_state(
@@ -2501,7 +2501,7 @@ def test_message_graph(
             AIMessage(content="answer", id="ai2"),
         ],
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,  # type: ignore
     )
 
     app_w_interrupt = workflow.compile(
@@ -2538,7 +2538,7 @@ def test_message_graph(
             ),
         ],
         next=("action",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,  # type: ignore
     )
 
     # modify ai message
@@ -2565,7 +2565,7 @@ def test_message_graph(
             ),
         ],
         next=("action",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,  # type: ignore  # type: ignore
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2617,7 +2617,7 @@ def test_message_graph(
             ),
         ],
         next=("action",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,  # type: ignore
     )
 
     app_w_interrupt.update_state(
@@ -2650,7 +2650,7 @@ def test_message_graph(
             AIMessage(content="answer", id="ai2"),
         ],
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,  # type: ignore
     )
 
     # add an extra message as if it came from "action" node
@@ -2683,7 +2683,7 @@ def test_message_graph(
             AIMessage(content="an extra message", id=AnyStr()),
         ],
         next=("agent",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,  # type: ignore
     )
 
 
@@ -2853,7 +2853,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) ->
         checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
         interrupt_after=["retriever_one"],
     )
-    config = {"configurable": {"thread_id": "1"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
 
     assert [
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
@@ -2981,7 +2981,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
         interrupt_after=["retriever_one"],
     )
-    config = {"configurable": {"thread_id": "1"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
 
     assert [
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
@@ -3021,19 +3021,19 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
 
-    def rewrite_query(data: State) -> State:
+    def rewrite_query(data: State) -> dict[str, Any]:
         return {"query": f"query: {data.query}"}
 
-    def analyzer_one(data: State) -> State:
+    def analyzer_one(data: State) -> dict[str, Any]:
         return {"query": f"analyzed: {data.query}"}
 
-    def retriever_one(data: State) -> State:
+    def retriever_one(data: State) -> dict[str, Any]:
         return {"docs": ["doc1", "doc2"]}
 
-    def retriever_two(data: State) -> State:
+    def retriever_two(data: State) -> dict[str, Any]:
         return {"docs": ["doc3", "doc4"]}
 
-    def qa(data: State) -> State:
+    def qa(data: State) -> dict[str, Any]:
         return {"answer": ",".join(data.docs)}
 
     def decider(data: State) -> str:
@@ -3118,7 +3118,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
         interrupt_after=["retriever_one"],
     )
-    config = {"configurable": {"thread_id": "1"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
 
     assert [
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
@@ -3213,7 +3213,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
         checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
         interrupt_after=["retriever_one"],
     )
-    config = {"configurable": {"thread_id": "1"}}
+    config: RunnableConfig = {"configurable": {"thread_id": "1"}}
 
     assert [
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
@@ -3236,7 +3236,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
-        if isinstance(y[0], tuple):
+        if all(isinstance(t, tuple) for t in y):
             for rem, _ in y:
                 x.remove(rem)
             y = [t[1] for t in y]

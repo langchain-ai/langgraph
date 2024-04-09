@@ -14,6 +14,8 @@ from langgraph.channels.base import (
 class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the value received in the step immediately preceding, clears after."""
 
+    value: Value
+
     def __init__(self, typ: Type[Value], guard: bool = True) -> None:
         self.typ = typ
         self.guard = guard
