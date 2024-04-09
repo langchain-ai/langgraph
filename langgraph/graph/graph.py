@@ -37,12 +37,12 @@ END = "__end__"
 
 
 class Branch(NamedTuple):
-    condition: Runnable[Any, str]
+    condition: Runnable[Any, Union[str, list[str]]]
     ends: Optional[dict[str, str]]
 
     def run(
         self,
-        writer: Callable[[str], Optional[Runnable]],
+        writer: Callable[[list[str]], Optional[Runnable]],
         reader: Optional[Callable[[RunnableConfig], Any]] = None,
     ) -> None:
         return ChannelWrite.register_writer(
@@ -65,11 +65,13 @@ class Branch(NamedTuple):
         writer: Callable[[str], Optional[Runnable]],
     ) -> Runnable:
         result = self.condition.invoke(reader(config) if reader else input, config)
+        if isinstance(result, str):
+            result = [result]
         if self.ends:
-            destination = self.ends[result]
+            destinations = [self.ends[r] for r in result]
         else:
-            destination = result
-        return writer(destination)
+            destinations = result
+        return writer(destinations)
 
     async def _aroute(
         self,
@@ -82,11 +84,13 @@ class Branch(NamedTuple):
         result = await self.condition.ainvoke(
             reader(config) if reader else input, config
         )
+        if isinstance(result, str):
+            result = [result]
         if self.ends:
-            destination = self.ends[result]
+            destinations = [self.ends[r] for r in result]
         else:
-            destination = result
-        return writer(destination)
+            destinations = result
+        return writer(destinations)
 
 
 class Graph:
@@ -143,7 +147,9 @@ class Graph:
         self,
         start_key: str,
         condition: Union[
-            Callable[..., str], Callable[..., Awaitable[str]], Runnable[Any, str]
+            Callable[..., Union[str, list[str]]],
+            Callable[..., Awaitable[Union[str, list[str]]]],
+            Runnable[Any, Union[str, list[str]]],
         ],
         conditional_edge_mapping: Optional[dict[str, str]] = None,
     ) -> None:
@@ -286,11 +292,11 @@ class CompiledGraph(Pregel):
             self.nodes[end].channels.append(start)
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(end: str) -> Optional[ChannelWrite]:
-            return Channel.write_to(
-                f"branch:{start}:{name}:{end}" if end != END else END,
-                tags=[TAG_HIDDEN],
-            )
+        def branch_writer(ends: list[str]) -> Optional[ChannelWrite]:
+            channels = [
+                f"branch:{start}:{name}:{end}" if end != END else END for end in ends
+            ]
+            return Channel.write_to(*channels, tags=[TAG_HIDDEN])
 
         # add hidden start node
         if start == START and start not in self.nodes:

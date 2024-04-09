@@ -3099,3 +3099,90 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         },
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
+
+
+async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
+    def sorted_add(
+        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+    ) -> list[str]:
+        if isinstance(y[0], tuple):
+            for rem, _ in y:
+                x.remove(rem)
+            y = [t[1] for t in y]
+        return sorted(operator.add(x, y))
+
+    class State(TypedDict, total=False):
+        query: str
+        answer: str
+        docs: Annotated[list[str], sorted_add]
+
+    async def rewrite_query(data: State) -> State:
+        return {"query": f'query: {data["query"]}'}
+
+    async def retriever_picker(data: State) -> list[str]:
+        return ["analyzer_one", "retriever_two"]
+
+    async def analyzer_one(data: State) -> State:
+        return {"query": f'analyzed: {data["query"]}'}
+
+    async def retriever_one(data: State) -> State:
+        return {"docs": ["doc1", "doc2"]}
+
+    async def retriever_two(data: State) -> State:
+        return {"docs": ["doc3", "doc4"]}
+
+    async def qa(data: State) -> State:
+        return {"answer": ",".join(data["docs"])}
+
+    async def decider(data: State) -> None:
+        return None
+
+    def decider_cond(data: State) -> str:
+        if data["query"].count("analyzed") > 1:
+            return "qa"
+        else:
+            return "rewrite_query"
+
+    workflow = StateGraph(State)
+
+    workflow.add_node("rewrite_query", rewrite_query)
+    workflow.add_node("analyzer_one", analyzer_one)
+    workflow.add_node("retriever_one", retriever_one)
+    workflow.add_node("retriever_two", retriever_two)
+    workflow.add_node("decider", decider)
+    workflow.add_node("qa", qa)
+
+    workflow.set_entry_point("rewrite_query")
+    workflow.add_conditional_edges("rewrite_query", retriever_picker)
+    workflow.add_edge("analyzer_one", "retriever_one")
+    workflow.add_edge(["retriever_one", "retriever_two"], "decider")
+    workflow.add_conditional_edges("decider", decider_cond)
+    workflow.set_finish_point("qa")
+
+    app = workflow.compile()
+
+    assert await app.ainvoke({"query": "what is weather in sf"}) == {
+        "query": "analyzed: query: analyzed: query: what is weather in sf",
+        "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
+        "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
+    }
+
+    assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
+        {
+            "analyzer_one": {
+                "query": "analyzed: query: analyzed: query: what is weather in sf"
+            },
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {
+            "retriever_one": {"docs": ["doc1", "doc2"]},
+        },
+        {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
+    ]
