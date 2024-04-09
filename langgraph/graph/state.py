@@ -206,10 +206,13 @@ class CompiledStateGraph(CompiledGraph):
                 )
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(end: str) -> Optional[ChannelWrite]:
-            if end != END:
+        def branch_writer(ends: list[str]) -> Optional[ChannelWrite]:
+            if filtered_ends := [end for end in ends if end != END]:
                 return ChannelWrite(
-                    [ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)],
+                    [
+                        ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)
+                        for end in filtered_ends
+                    ],
                     tags=[TAG_HIDDEN],
                 )
 
