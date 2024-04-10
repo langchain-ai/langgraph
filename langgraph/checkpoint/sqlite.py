@@ -1,4 +1,4 @@
-import pickle
+import dill as pickle
 import sqlite3
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType

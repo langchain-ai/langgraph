@@ -1,4 +1,4 @@
-import pickle
+import dill as pickle
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
 from typing import AsyncIterator, Optional
