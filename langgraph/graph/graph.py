@@ -27,7 +27,7 @@ from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.write import ChannelWrite
+from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.utils import RunnableCallable
 
 logger = logging.getLogger(__name__)
@@ -71,7 +71,7 @@ class Branch(NamedTuple):
             destinations = [self.ends[r] for r in result]
         else:
             destinations = result
-        return writer(destinations)
+        return writer(destinations) or input
 
     async def _aroute(
         self,
@@ -90,7 +90,7 @@ class Branch(NamedTuple):
             destinations = [self.ends[r] for r in result]
         else:
             destinations = result
-        return writer(destinations)
+        return writer(destinations) or input
 
 
 class Graph:
@@ -278,14 +278,16 @@ class CompiledGraph(Pregel):
         self.nodes[key] = (
             PregelNode(channels=[], triggers=[])
             | node
-            | Channel.write_to(key, tags=[TAG_HIDDEN])
+            | ChannelWrite([ChannelWriteEntry(key)], tags=[TAG_HIDDEN])
         )
         cast(list[str], self.stream_channels).append(key)
 
     def attach_edge(self, start: str, end: str) -> None:
         if end == END:
             # publish to end channel
-            self.nodes[start].writers.append(Channel.write_to(END, tags=[TAG_HIDDEN]))
+            self.nodes[start].writers.append(
+                ChannelWrite([ChannelWriteEntry(END)], tags=[TAG_HIDDEN])
+            )
         else:
             # subscribe to start channel
             self.nodes[end].triggers.append(start)
@@ -296,7 +298,9 @@ class CompiledGraph(Pregel):
             channels = [
                 f"branch:{start}:{name}:{end}" if end != END else END for end in ends
             ]
-            return Channel.write_to(*channels, tags=[TAG_HIDDEN])
+            return ChannelWrite(
+                [ChannelWriteEntry(ch) for ch in channels], tags=[TAG_HIDDEN]
+            )
 
         # add hidden start node
         if start == START and start not in self.nodes:
