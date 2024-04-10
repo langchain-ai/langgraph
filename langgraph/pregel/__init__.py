@@ -1106,7 +1106,7 @@ def _apply_writes(
             checkpoint["channel_versions"][chan] = max_version + 1
             updated_channels.add(chan)
         else:
-            logger.warning(f"Skipping write for channel {chan} which has no readers")
+            logger.warning(f"Skipping write for channel '{chan}' which has no readers")
     # Channels that weren't updated in this step are notified of a new step
     for chan in channels:
         if chan not in updated_channels:
