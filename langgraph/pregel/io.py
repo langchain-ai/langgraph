@@ -65,21 +65,20 @@ def map_output_values(
     output_channels: Union[str, Sequence[str]],
     pending_writes: Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
-) -> Optional[Union[dict[str, Any], Any]]:
+) -> Iterator[Union[dict[str, Any], Any]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
         if any(chan == output_channels for chan, _ in pending_writes):
-            return read_channel(channels, output_channels)
+            yield read_channel(channels, output_channels)
     else:
         if updated := {c for c, _ in pending_writes if c in output_channels}:
-            return read_channels(channels, updated)
-    return None
+            yield read_channels(channels, updated)
 
 
 def map_output_updates(
     output_channels: Union[str, Sequence[str]],
     tasks: list[PregelExecutableTask],
-) -> Optional[dict[str, Union[Any, dict[str, Any]]]]:
+) -> Iterator[dict[str, Union[Any, dict[str, Any]]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
         t for t in tasks if not t.config or TAG_HIDDEN not in t.config.get("tags")
@@ -91,12 +90,11 @@ def map_output_updates(
             for chan, value in writes
             if chan == output_channels
         }:
-            return updated
+            yield updated
     else:
         if updated := {
             node: {chan: value for chan, value in writes if chan in output_channels}
             for node, _, _, writes, _ in output_tasks
             if any(chan in output_channels for chan, _ in writes)
         }:
-            return updated
-    return None
+            yield updated

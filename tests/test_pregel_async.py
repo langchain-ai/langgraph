@@ -65,6 +65,19 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert await gapp.ainvoke(2) == 3
 
 
+@pytest.mark.parametrize(
+    "falsy_value",
+    [None, False, 0, "", [], {}, set(), frozenset(), 0.0, 0j],
+)
+async def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
+    graph = Graph()
+    graph.add_node("return_falsy_const", lambda *args, **kwargs: falsy_value)
+    graph.set_entry_point("return_falsy_const")
+    graph.set_finish_point("return_falsy_const")
+    gapp = graph.compile()
+    assert falsy_value == await gapp.ainvoke(1)
+
+
 async def test_invoke_single_process_in_out_implicit_channels(
     mocker: MockerFixture,
 ) -> None:
