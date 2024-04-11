@@ -557,6 +557,7 @@ class Pregel(
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
         interrupt_after_nodes: Optional[Sequence[str]] = None,
+        allow_falsy_output: bool = False,
         debug: Optional[bool] = None,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         config = ensure_config(config)
@@ -698,12 +699,16 @@ class Pregel(
 
                     # yield current value or updates
                     if stream_mode == "values":
-                        if step_output := map_output_values(
-                            output_keys, pending_writes, channels
-                        ):
+                        if (
+                            step_output := map_output_values(
+                                output_keys, pending_writes, channels
+                            )
+                        ) or allow_falsy_output:
                             yield step_output
                     else:
-                        if step_output := map_output_updates(output_keys, next_tasks):
+                        if (
+                            step_output := map_output_updates(output_keys, next_tasks)
+                        ) or allow_falsy_output:
                             yield step_output
 
                     # save end of step checkpoint
@@ -755,6 +760,7 @@ class Pregel(
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
         interrupt_after_nodes: Optional[Sequence[str]] = None,
+        allow_falsy_output: bool = False,
         debug: Optional[bool] = None,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         config = ensure_config(config)
@@ -912,12 +918,16 @@ class Pregel(
 
                     # yield current value or updates
                     if stream_mode == "values":
-                        if step_output := map_output_values(
-                            output_keys, pending_writes, channels
-                        ):
+                        if (
+                            step_output := map_output_values(
+                                output_keys, pending_writes, channels
+                            )
+                        ) or allow_falsy_output:
                             yield step_output
                     else:
-                        if step_output := map_output_updates(output_keys, next_tasks):
+                        if (
+                            step_output := map_output_updates(output_keys, next_tasks)
+                        ) or allow_falsy_output:
                             yield step_output
 
                     # save end of step checkpoint
@@ -969,6 +979,7 @@ class Pregel(
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
         interrupt_after_nodes: Optional[Sequence[str]] = None,
+        allow_falsy_output: bool = False,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
@@ -986,6 +997,7 @@ class Pregel(
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,
             interrupt_after_nodes=interrupt_after_nodes,
+            allow_falsy_output=allow_falsy_output,
             debug=debug,
             **kwargs,
         ):
@@ -1008,6 +1020,7 @@ class Pregel(
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
         interrupt_after_nodes: Optional[Sequence[str]] = None,
+        allow_falsy_output: bool = False,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
@@ -1025,6 +1038,7 @@ class Pregel(
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,
             interrupt_after_nodes=interrupt_after_nodes,
+            allow_falsy_output=allow_falsy_output,
             debug=debug,
             **kwargs,
         ):
