@@ -698,13 +698,11 @@ class Pregel(
 
                     # yield current value or updates
                     if stream_mode == "values":
-                        if step_output := map_output_values(
+                        yield from map_output_values(
                             output_keys, pending_writes, channels
-                        ):
-                            yield step_output
+                        )
                     else:
-                        if step_output := map_output_updates(output_keys, next_tasks):
-                            yield step_output
+                        yield from map_output_updates(output_keys, next_tasks)
 
                     # save end of step checkpoint
                     if self.checkpointer is not None and (
@@ -912,13 +910,13 @@ class Pregel(
 
                     # yield current value or updates
                     if stream_mode == "values":
-                        if step_output := map_output_values(
+                        for chunk in map_output_values(
                             output_keys, pending_writes, channels
                         ):
-                            yield step_output
+                            yield chunk
                     else:
-                        if step_output := map_output_updates(output_keys, next_tasks):
-                            yield step_output
+                        for chunk in map_output_updates(output_keys, next_tasks):
+                            yield chunk
 
                     # save end of step checkpoint
                     if self.checkpointer is not None and (
@@ -973,9 +971,8 @@ class Pregel(
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
         output_keys = output_keys if output_keys is not None else self.output_channels
-        output_is_dict = not isinstance(output_keys, str)
         if stream_mode == "values":
-            latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
+            latest: Union[dict[str, Any], Any] = None
         else:
             chunks = []
         for chunk in self.stream(
@@ -990,7 +987,7 @@ class Pregel(
             **kwargs,
         ):
             if stream_mode == "values":
-                latest = {**latest, **chunk} if output_is_dict else chunk
+                latest = chunk
             else:
                 chunks.append(chunk)
         if stream_mode == "values":
@@ -1012,9 +1009,8 @@ class Pregel(
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
         output_keys = output_keys if output_keys is not None else self.output_channels
-        output_is_dict = not isinstance(output_keys, str)
         if stream_mode == "values":
-            latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
+            latest: Union[dict[str, Any], Any] = None
         else:
             chunks = []
         async for chunk in self.astream(
@@ -1029,7 +1025,7 @@ class Pregel(
             **kwargs,
         ):
             if stream_mode == "values":
-                latest = {**latest, **chunk} if output_is_dict else chunk
+                latest = chunk
             else:
                 chunks.append(chunk)
         if stream_mode == "values":

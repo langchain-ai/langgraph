@@ -25,7 +25,7 @@ from langgraph.prebuilt.chat_agent_executor import (
     create_function_calling_executor,
     create_tool_calling_executor,
 )
-from langgraph.prebuilt.tool_executor import ToolExecutor
+from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
@@ -66,6 +66,19 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert repr(app), "does not raise recursion error"
 
     assert gapp.invoke(2, debug=True) == 3
+
+
+@pytest.mark.parametrize(
+    "falsy_value",
+    [None, False, 0, "", [], {}, set(), frozenset(), 0.0, 0j],
+)
+def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
+    graph = Graph()
+    graph.add_node("return_falsy_const", lambda *args, **kwargs: falsy_value)
+    graph.set_entry_point("return_falsy_const")
+    graph.set_finish_point("return_falsy_const")
+    gapp = graph.compile()
+    assert gapp.invoke(1) == falsy_value
 
 
 def test_invoke_single_process_in_out_implicit_channels(mocker: MockerFixture) -> None:
@@ -259,6 +272,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
         nodes={"one": one, "two": two},
         channels={"inbox": Topic(int)},
         input_channels=["input", "inbox"],
+        stream_channels=["output", "inbox"],
     )
 
     # [12 + 1, 2 + 1 + 1]
@@ -281,7 +295,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
     assert [*app.stream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
-        {"output": 4},
+        {"inbox": [], "output": 4},
     ]
 
 
@@ -624,13 +638,16 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["output", "between"])
 
     assert [c for c in app.stream(2, stream_mode="updates")] == [
         {"one": {"between": 3, "output": 3}},
         {"two": {"output": 4}},
     ]
-    assert [c for c in app.stream(2)] == [{"between": 3, "output": 3}, {"output": 4}]
+    assert [c for c in app.stream(2)] == [
+        {"between": 3, "output": 3},
+        {"between": 3, "output": 4},
+    ]
 
 
 def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
@@ -682,6 +699,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             "ctx": Context(an_int, typ=int),
         },
         output_channels=["inbox", "output"],
+        stream_channels=["inbox", "output"],
     )
 
     assert setup.call_count == 0
@@ -692,7 +710,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
-            assert chunk == {"output": 4}
+            assert chunk == {"inbox": [], "output": 4}
         else:
             assert False, "Expected only two chunks"
     assert cleanup.call_count == 1, "Expected cleanup to be called once"
@@ -1812,6 +1830,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
         "output": "what is weather in sf->right",
+        "steps": [],
     }
 
     assert [*app.stream({"input": "what is weather in sf"})] == [
@@ -1825,7 +1844,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list):
+        def bind_tools(self, functions: list):
             return self
 
     @tool()
@@ -1840,41 +1859,28 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             responses=[
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "tool_calls": [
-                            {
-                                "id": "tool_call123",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": json.dumps("query"),
-                                },
-                            }
-                        ]
-                    },
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
                 ),
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "tool_calls": [
-                            {
-                                "id": "tool_call234",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": json.dumps("another"),
-                                },
-                            },
-                            {
-                                "id": "tool_call567",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": '"a third one"',
-                                },
-                            },
-                        ]
-                    },
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another"},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one"},
+                        },
+                    ],
                 ),
                 AIMessage(content="answer"),
             ]
@@ -1891,50 +1897,52 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf"),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call123",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            },
-                        }
-                    ]
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
             ),
-            ToolMessage(content="result for query", tool_call_id="tool_call123"),
+            ToolMessage(
+                content="result for query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
             AIMessage(
                 id=AnyStr(),
                 content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call234",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            },
-                        },
-                        {
-                            "id": "tool_call567",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"a third one"',
-                            },
-                        },
-                    ]
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call234",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    },
+                    {
+                        "id": "tool_call567",
+                        "name": "search_api",
+                        "args": {"query": "a third one"},
+                    },
+                ],
             ),
-            ToolMessage(content="result for another", tool_call_id="tool_call234"),
-            ToolMessage(content="result for a third one", tool_call_id="tool_call567"),
+            ToolMessage(
+                content="result for another",
+                name="search_api",
+                tool_call_id="tool_call234",
+                id=AnyStr(),
+            ),
+            ToolMessage(
+                content="result for a third one",
+                name="search_api",
+                tool_call_id="tool_call567",
+                id=AnyStr(),
+            ),
             AIMessage(content="answer", id=AnyStr()),
         ]
     }
@@ -1948,18 +1956,13 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "messages": [
                     AIMessage(
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call123",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"query"',
-                                    },
-                                }
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                            },
+                        ],
                         id=AnyStr(),
                     )
                 ]
@@ -1968,7 +1971,12 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "action": {
                 "messages": [
-                    ToolMessage(content="result for query", tool_call_id="tool_call123")
+                    ToolMessage(
+                        content="result for query",
+                        name="search_api",
+                        tool_call_id="tool_call123",
+                        id=AnyStr(),
+                    )
                 ]
             }
         },
@@ -1977,26 +1985,18 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 "messages": [
                     AIMessage(
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call234",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"another"',
-                                    },
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"a third one"',
-                                    },
-                                },
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call234",
+                                "name": "search_api",
+                                "args": {"query": "another"},
+                            },
+                            {
+                                "id": "tool_call567",
+                                "name": "search_api",
+                                "args": {"query": "a third one"},
+                            },
+                        ],
                         id=AnyStr(),
                     )
                 ]
@@ -2006,10 +2006,16 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             "action": {
                 "messages": [
                     ToolMessage(
-                        content="result for another", tool_call_id="tool_call234"
+                        content="result for another",
+                        name="search_api",
+                        tool_call_id="tool_call234",
+                        id=AnyStr(),
                     ),
                     ToolMessage(
-                        content="result for a third one", tool_call_id="tool_call567"
+                        content="result for a third one",
+                        name="search_api",
+                        tool_call_id="tool_call567",
+                        id=AnyStr(),
                     ),
                 ]
             }
@@ -2035,18 +2041,13 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     AIMessage(
                         id=AnyStr(),
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call123",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"query"',
-                                    },
-                                }
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                            },
+                        ],
                     )
                 ]
             }
@@ -2054,7 +2055,12 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "action": {
                 "messages": [
-                    ToolMessage(content="result for query", tool_call_id="tool_call123")
+                    ToolMessage(
+                        content="result for query",
+                        name="search_api",
+                        tool_call_id="tool_call123",
+                        id=AnyStr(),
+                    )
                 ]
             }
         },
@@ -2064,26 +2070,18 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     AIMessage(
                         id=AnyStr(),
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call234",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"another"',
-                                    },
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"a third one"',
-                                    },
-                                },
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call234",
+                                "name": "search_api",
+                                "args": {"query": "another"},
+                            },
+                            {
+                                "id": "tool_call567",
+                                "name": "search_api",
+                                "args": {"query": "a third one"},
+                            },
+                        ],
                     )
                 ]
             }
@@ -2092,10 +2090,16 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             "action": {
                 "messages": [
                     ToolMessage(
-                        content="result for another", tool_call_id="tool_call234"
+                        content="result for another",
+                        name="search_api",
+                        tool_call_id="tool_call234",
+                        id=AnyStr(),
                     ),
                     ToolMessage(
-                        content="result for a third one", tool_call_id="tool_call567"
+                        content="result for a third one",
+                        name="search_api",
+                        tool_call_id="tool_call567",
+                        id=AnyStr(),
                     ),
                 ]
             }
@@ -2156,7 +2160,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf"),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -2164,7 +2168,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
                     "function_call": {"name": "search_api", "arguments": '"query"'}
                 },
             ),
-            FunctionMessage(content="result for query", name="search_api"),
+            FunctionMessage(content="result for query", name="search_api", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -2172,7 +2176,9 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
                     "function_call": {"name": "search_api", "arguments": '"another"'}
                 },
             ),
-            FunctionMessage(content="result for another", name="search_api"),
+            FunctionMessage(
+                content="result for another", name="search_api", id=AnyStr()
+            ),
             AIMessage(content="answer", id=AnyStr()),
         ]
     }
@@ -2199,7 +2205,9 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for query", name="search_api")
+                    FunctionMessage(
+                        content="result for query", name="search_api", id=AnyStr()
+                    )
                 ]
             }
         },
@@ -2222,7 +2230,9 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for another", name="search_api")
+                    FunctionMessage(
+                        content="result for another", name="search_api", id=AnyStr()
+                    )
                 ]
             }
         },
@@ -2242,13 +2252,12 @@ def test_message_graph(
 
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
-    from langchain_core.agents import AgentAction
     from langchain_core.callbacks import CallbackManagerForLLMRun
     from langchain_core.messages import (
         AIMessage,
         BaseMessage,
-        FunctionMessage,
         HumanMessage,
+        ToolMessage,
     )
     from langchain_core.outputs import ChatGeneration, ChatResult
 
@@ -2282,63 +2291,46 @@ def test_message_graph(
         responses=[
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
                         "name": "search_api",
-                        "arguments": json.dumps("query"),
+                        "args": {"query": "query"},
                     }
-                },
+                ],
                 id="ai1",
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
                         "name": "search_api",
-                        "arguments": json.dumps("another"),
+                        "args": {"query": "another"},
                     }
-                },
+                ],
                 id="ai2",
             ),
             AIMessage(content="answer", id="ai3"),
         ]
     )
 
-    tool_executor = ToolExecutor(tools)
-
     # Define the function that determines whether to continue or not
     def should_continue(messages):
         last_message = messages[-1]
         # If there is no function call, then we finish
-        if "function_call" not in last_message.additional_kwargs:
+        if not last_message.tool_calls:
             return "end"
         # Otherwise if there is, we continue
         else:
             return "continue"
-
-    def call_tool(messages):
-        # Based on the continue condition
-        # we know the last message involves a function call
-        last_message = messages[-1]
-        # We construct an AgentAction from the function_call
-        action = AgentAction(
-            tool=last_message.additional_kwargs["function_call"]["name"],
-            tool_input=json.loads(
-                last_message.additional_kwargs["function_call"]["arguments"]
-            ),
-            log="",
-        )
-        # We call the tool_executor and get back a response
-        response = tool_executor.invoke(action)
-        # We use the response to create a FunctionMessage
-        return FunctionMessage(content=str(response), name=action.tool)
 
     # Define a new graph
     workflow = MessageGraph()
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", model)
-    workflow.add_node("action", call_tool)
+    workflow.add_node("action", ToolNode(tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -2386,27 +2378,37 @@ def test_message_graph(
         ),
         AIMessage(
             content="",
-            additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"query"'}
-            },
+            tool_calls=[
+                {
+                    "id": "tool_call123",
+                    "name": "search_api",
+                    "args": {"query": "query"},
+                }
+            ],
             id="ai1",  # respects ids passed in
         ),
-        FunctionMessage(
+        ToolMessage(
             content="result for query",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000012",
+            tool_call_id="tool_call123",
+            id="00000000-0000-4000-8000-000000000011",
         ),
         AIMessage(
             content="",
-            additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"another"'}
-            },
+            tool_calls=[
+                {
+                    "id": "tool_call456",
+                    "name": "search_api",
+                    "args": {"query": "another"},
+                }
+            ],
             id="ai2",
         ),
-        FunctionMessage(
+        ToolMessage(
             content="result for another",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000022",
+            tool_call_id="tool_call456",
+            id="00000000-0000-4000-8000-000000000020",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -2415,34 +2417,48 @@ def test_message_graph(
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             )
         },
         {
-            "action": FunctionMessage(
-                content="result for query",
-                name="search_api",
-                id="00000000-0000-4000-8000-000000000039",
-            )
+            "action": [
+                ToolMessage(
+                    content="result for query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id="00000000-0000-4000-8000-000000000036",
+                )
+            ]
         },
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             )
         },
         {
-            "action": FunctionMessage(
-                content="result for another",
-                name="search_api",
-                id="00000000-0000-4000-8000-000000000049",
-            )
+            "action": [
+                ToolMessage(
+                    content="result for another",
+                    name="search_api",
+                    tool_call_id="tool_call456",
+                    id="00000000-0000-4000-8000-000000000045",
+                )
+            ]
         },
         {"agent": AIMessage(content="answer", id="ai3")},
     ]
@@ -2459,9 +2475,13 @@ def test_message_graph(
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             )
         },
@@ -2472,9 +2492,13 @@ def test_message_graph(
             HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             ),
         ],
@@ -2484,7 +2508,7 @@ def test_message_graph(
 
     # modify ai message
     last_message = app_w_interrupt.get_state(config).values[-1]
-    last_message.additional_kwargs["function_call"]["arguments"] = '"a different query"'
+    last_message.tool_calls[0]["args"] = {"query": "a different query"}
     next_config = app_w_interrupt.update_state(config, last_message)
 
     # message was replaced instead of appended
@@ -2493,13 +2517,14 @@ def test_message_graph(
             HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
         ],
         next=("action",),
@@ -2508,18 +2533,25 @@ def test_message_graph(
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
-            "action": FunctionMessage(
-                content="result for a different query",
-                name="search_api",
-                id=AnyStr(),
-            )
+            "action": [
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id=AnyStr(),
+                )
+            ]
         },
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             )
         },
@@ -2533,24 +2565,30 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             ),
         ],
@@ -2572,17 +2610,19 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
@@ -2602,9 +2642,13 @@ def test_message_graph(
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             )
         },
@@ -2618,9 +2662,13 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             ),
         ],
@@ -2630,7 +2678,7 @@ def test_message_graph(
 
     # modify ai message
     last_message = app_w_interrupt.get_state(config).values[-1]
-    last_message.additional_kwargs["function_call"]["arguments"] = '"a different query"'
+    last_message.tool_calls[0]["args"] = {"query": "a different query"}
     app_w_interrupt.update_state(config, last_message)
 
     # message was replaced instead of appended
@@ -2642,13 +2690,14 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
         ],
         next=("action",),
@@ -2657,18 +2706,25 @@ def test_message_graph(
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
-            "action": FunctionMessage(
-                content="result for a different query",
-                name="search_api",
-                id=AnyStr(),
-            )
+            "action": [
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id=AnyStr(),
+                )
+            ]
         },
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             )
         },
@@ -2682,24 +2738,30 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             ),
         ],
@@ -2721,17 +2783,19 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
@@ -2753,17 +2817,19 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
@@ -2827,10 +2893,17 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
     assert [*app.stream({"query": "what is weather in sf"}, stream_mode="values")] == [
-        {"query": "what is weather in sf"},
-        {"query": "query: what is weather in sf"},
-        {"docs": ["doc1", "doc2", "doc3", "doc4"]},
-        {"answer": "doc1,doc2,doc3,doc4"},
+        {"query": "what is weather in sf", "docs": []},
+        {"query": "query: what is weather in sf", "docs": []},
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+        },
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+            "answer": "doc1,doc2,doc3,doc4",
+        },
     ]
 
 
