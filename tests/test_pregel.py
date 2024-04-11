@@ -74,9 +74,9 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
 )
 def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
     graph = Graph()
-    graph.add_node("add_one", lambda *args, **kwargs: falsy_value)
-    graph.set_entry_point("add_one")
-    graph.set_finish_point("add_one")
+    graph.add_node("return_falsy_const", lambda *args, **kwargs: falsy_value)
+    graph.set_entry_point("return_falsy_const")
+    graph.set_finish_point("return_falsy_const")
     gapp = graph.compile()
     assert gapp.invoke(1, allow_falsy_output=True) == falsy_value
     assert gapp.invoke(1) is None
