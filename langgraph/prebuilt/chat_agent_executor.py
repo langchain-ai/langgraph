@@ -1,18 +1,24 @@
 import json
-import operator
 from typing import Annotated, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import BaseMessage, FunctionMessage, ToolMessage
+from langchain_core.messages import BaseMessage, FunctionMessage
 from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import BaseTool
-from langchain_core.utils.function_calling import (
-    convert_to_openai_function,
-    convert_to_openai_tool,
-)
+from langchain_core.utils.function_calling import convert_to_openai_function
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.message import add_messages
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
+from langgraph.prebuilt.tool_node import ToolNode
+
+
+# We create the AgentState that we will pass around
+# This simply involves a list of messages
+# We want steps to return messages to append to the list
+# So we annotate the messages attribute with operator.add
+class AgentState(TypedDict):
+    messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
 def create_function_calling_executor(
@@ -25,13 +31,6 @@ def create_function_calling_executor(
         tool_executor = ToolExecutor(tools)
         tool_classes = tools
     model = model.bind(functions=[convert_to_openai_function(t) for t in tool_classes])
-
-    # We create the AgentState that we will pass around
-    # This simply involves a list of messages
-    # We want steps to return messages to append to the list
-    # So we annotate the messages attribute with operator.add
-    class AgentState(TypedDict):
-        messages: Annotated[Sequence[BaseMessage], operator.add]
 
     # Define the function that determines whether to continue or not
     def should_continue(state: AgentState):
@@ -135,26 +134,17 @@ def create_tool_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
 ):
     if isinstance(tools, ToolExecutor):
-        tool_executor = tools
         tool_classes = tools.tools
     else:
-        tool_executor = ToolExecutor(tools)
         tool_classes = tools
-    model = model.bind(tools=[convert_to_openai_tool(t) for t in tool_classes])
-
-    # We create the AgentState that we will pass around
-    # This simply involves a list of messages
-    # We want steps to return messages to append to the list
-    # So we annotate the messages attribute with operator.add
-    class AgentState(TypedDict):
-        messages: Annotated[Sequence[BaseMessage], operator.add]
+    model = model.bind_tools(tool_classes)
 
     # Define the function that determines whether to continue or not
     def should_continue(state: AgentState):
         messages = state["messages"]
         last_message = messages[-1]
         # If there is no function call, then we finish
-        if "tool_calls" not in last_message.additional_kwargs:
+        if not last_message.tool_calls:
             return "end"
         # Otherwise if there is, we continue
         else:
@@ -173,57 +163,12 @@ def create_tool_calling_executor(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    # Define the function to execute tools
-    def _get_actions(state: AgentState):
-        messages = state["messages"]
-        # Based on the continue condition
-        # we know the last message involves a tool call
-        last_message = messages[-1]
-        # We construct an AgentAction from each of the tool_calls
-        return (
-            [
-                ToolInvocation(
-                    tool=tool_call["function"]["name"],
-                    tool_input=json.loads(tool_call["function"]["arguments"]),
-                )
-                for tool_call in last_message.additional_kwargs["tool_calls"]
-            ],
-            [
-                tool_call["id"]
-                for tool_call in last_message.additional_kwargs["tool_calls"]
-            ],
-        )
-
-    def call_tool(state: AgentState):
-        actions, ids = _get_actions(state)
-        # We call the tool_executor and get back a response
-        responses = tool_executor.batch(actions)
-        # We use the response to create a FunctionMessage
-        tool_messages = [
-            ToolMessage(content=str(response), tool_call_id=id)
-            for response, id in zip(responses, ids)
-        ]
-        # We return a list, because this will get added to the existing list
-        return {"messages": tool_messages}
-
-    async def acall_tool(state: AgentState):
-        actions, ids = _get_actions(state)
-        # We call the tool_executor and get back a response
-        responses = await tool_executor.abatch(actions)
-        # We use the response to create a FunctionMessage
-        tool_messages = [
-            ToolMessage(content=str(response), tool_call_id=id)
-            for response, id in zip(responses, ids)
-        ]
-        # We return a list, because this will get added to the existing list
-        return {"messages": tool_messages}
-
     # Define a new graph
     workflow = StateGraph(AgentState)
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("action", RunnableLambda(call_tool, acall_tool))
+    workflow.add_node("action", ToolNode(tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called

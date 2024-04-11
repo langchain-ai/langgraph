@@ -1587,13 +1587,13 @@ extended-testing = ["aiosqlite (>=0.19.0,<0.20.0)", "aleph-alpha-client (>=2.15.
 
 [[package]]
 name = "langchain-core"
-version = "0.1.38"
+version = "0.1.42rc1"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langchain_core-0.1.38-py3-none-any.whl", hash = "sha256:d881b2754254cb4bdb0d5bb56e5c138d032b6e75e5cb21f151b01224b322e02b"},
-    {file = "langchain_core-0.1.38.tar.gz", hash = "sha256:ee8da6d061c06cce7dc22fec224b6ecbc3a8de106d6dd9f409c7fe448ea41861"},
+    {file = "langchain_core-0.1.42rc1-py3-none-any.whl", hash = "sha256:2b216652f61b915ae274d1228ad45e7fc99af1d5f41bb6900aafd0636e66def5"},
+    {file = "langchain_core-0.1.42rc1.tar.gz", hash = "sha256:af75525f31251d8d2889671b6051a0e2afffd355b5efefb1c59fc91545805ab8"},
 ]
 
 [package.dependencies]
@@ -1602,7 +1602,6 @@ langsmith = ">=0.1.0,<0.2.0"
 packaging = ">=23.2,<24.0"
 pydantic = ">=1,<3"
 PyYAML = ">=5.3"
-requests = ">=2,<3"
 tenacity = ">=8.1.0,<9.0.0"
 
 [package.extras]
@@ -1610,20 +1609,19 @@ extended-testing = ["jinja2 (>=3,<4)"]
 
 [[package]]
 name = "langchain-openai"
-version = "0.0.2.post1"
+version = "0.1.2"
 description = "An integration package connecting OpenAI and LangChain"
 optional = false
-python-versions = ">=3.8.1,<4.0"
+python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langchain_openai-0.0.2.post1-py3-none-any.whl", hash = "sha256:ba468b94c23da9d8ccefe5d5a3c1c65b4b9702292523e53acc689a9110022e26"},
-    {file = "langchain_openai-0.0.2.post1.tar.gz", hash = "sha256:f8e78db4a663feeac71d9f036b9422406c199ea3ef4c97d99ff392c93530e073"},
+    {file = "langchain_openai-0.1.2-py3-none-any.whl", hash = "sha256:45fab91803df22c6d5fce7c010df404569898372df5ae8cd03af50bef774d2ec"},
+    {file = "langchain_openai-0.1.2.tar.gz", hash = "sha256:cd391e61bd93ab72ae24d8e1f250257d6acff6d9e455e623363b8c171533050a"},
 ]
 
 [package.dependencies]
-langchain-core = ">=0.1.7,<0.2"
-numpy = ">=1,<2"
-openai = ">=1.6.1,<2.0.0"
-tiktoken = ">=0.5.2,<0.6.0"
+langchain-core = ">=0.1.41,<0.2.0"
+openai = ">=1.10.0,<2.0.0"
+tiktoken = ">=0.5.2,<1"
 
 [[package]]
 name = "langchain-text-splitters"
@@ -3859,4 +3857,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "3f31fdccb53a66dc294a53d63bcef0233f38c9909170113c44b8dc215fc77d7c"
+content-hash = "a3e232b85db7332e70c88b6715a0b5716bcb424fe7e8ac7cb65057a8b93b39a4"

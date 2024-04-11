@@ -1956,7 +1956,7 @@ async def test_prebuilt_tool_chat() -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list):
+        def bind_tools(self, functions: list):
             return self
 
     @tool()
@@ -1971,41 +1971,28 @@ async def test_prebuilt_tool_chat() -> None:
             responses=[
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "tool_calls": [
-                            {
-                                "id": "tool_call123",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": json.dumps("query"),
-                                },
-                            }
-                        ]
-                    },
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
                 ),
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "tool_calls": [
-                            {
-                                "id": "tool_call234",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": json.dumps("another"),
-                                },
-                            },
-                            {
-                                "id": "tool_call567",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": '"a third one"',
-                                },
-                            },
-                        ]
-                    },
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another"},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one"},
+                        },
+                    ],
                 ),
                 AIMessage(content="answer"),
             ]
@@ -2017,50 +2004,52 @@ async def test_prebuilt_tool_chat() -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf"),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call123",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            },
-                        }
-                    ]
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
             ),
-            ToolMessage(content="result for query", tool_call_id="tool_call123"),
+            ToolMessage(
+                content="result for query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
             AIMessage(
                 id=AnyStr(),
                 content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call234",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            },
-                        },
-                        {
-                            "id": "tool_call567",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"a third one"',
-                            },
-                        },
-                    ]
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call234",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    },
+                    {
+                        "id": "tool_call567",
+                        "name": "search_api",
+                        "args": {"query": "a third one"},
+                    },
+                ],
             ),
-            ToolMessage(content="result for another", tool_call_id="tool_call234"),
-            ToolMessage(content="result for a third one", tool_call_id="tool_call567"),
+            ToolMessage(
+                content="result for another",
+                name="search_api",
+                tool_call_id="tool_call234",
+                id=AnyStr(),
+            ),
+            ToolMessage(
+                content="result for a third one",
+                name="search_api",
+                tool_call_id="tool_call567",
+                id=AnyStr(),
+            ),
             AIMessage(content="answer", id=AnyStr()),
         ]
     }
@@ -2077,18 +2066,13 @@ async def test_prebuilt_tool_chat() -> None:
                     AIMessage(
                         id=AnyStr(),
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call123",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"query"',
-                                    },
-                                }
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                            },
+                        ],
                     )
                 ]
             }
@@ -2096,7 +2080,12 @@ async def test_prebuilt_tool_chat() -> None:
         {
             "action": {
                 "messages": [
-                    ToolMessage(content="result for query", tool_call_id="tool_call123")
+                    ToolMessage(
+                        content="result for query",
+                        name="search_api",
+                        tool_call_id="tool_call123",
+                        id=AnyStr(),
+                    )
                 ]
             }
         },
@@ -2106,26 +2095,18 @@ async def test_prebuilt_tool_chat() -> None:
                     AIMessage(
                         id=AnyStr(),
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call234",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"another"',
-                                    },
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"a third one"',
-                                    },
-                                },
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call234",
+                                "name": "search_api",
+                                "args": {"query": "another"},
+                            },
+                            {
+                                "id": "tool_call567",
+                                "name": "search_api",
+                                "args": {"query": "a third one"},
+                            },
+                        ],
                     )
                 ]
             }
@@ -2134,10 +2115,16 @@ async def test_prebuilt_tool_chat() -> None:
             "action": {
                 "messages": [
                     ToolMessage(
-                        content="result for another", tool_call_id="tool_call234"
+                        content="result for another",
+                        tool_call_id="tool_call234",
+                        name="search_api",
+                        id=AnyStr(),
                     ),
                     ToolMessage(
-                        content="result for a third one", tool_call_id="tool_call567"
+                        content="result for a third one",
+                        tool_call_id="tool_call567",
+                        name="search_api",
+                        id=AnyStr(),
                     ),
                 ]
             }
@@ -2193,7 +2180,7 @@ async def test_prebuilt_chat() -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf"),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -2201,7 +2188,7 @@ async def test_prebuilt_chat() -> None:
                     "function_call": {"name": "search_api", "arguments": '"query"'}
                 },
             ),
-            FunctionMessage(content="result for query", name="search_api"),
+            FunctionMessage(content="result for query", name="search_api", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -2209,7 +2196,9 @@ async def test_prebuilt_chat() -> None:
                     "function_call": {"name": "search_api", "arguments": '"another"'}
                 },
             ),
-            FunctionMessage(content="result for another", name="search_api"),
+            FunctionMessage(
+                content="result for another", name="search_api", id=AnyStr()
+            ),
             AIMessage(content="answer", id=AnyStr()),
         ]
     }
@@ -2239,7 +2228,9 @@ async def test_prebuilt_chat() -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for query", name="search_api")
+                    FunctionMessage(
+                        content="result for query", name="search_api", id=AnyStr()
+                    )
                 ]
             }
         },
@@ -2262,7 +2253,9 @@ async def test_prebuilt_chat() -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for another", name="search_api")
+                    FunctionMessage(
+                        content="result for another", name="search_api", id=AnyStr()
+                    )
                 ]
             }
         },
