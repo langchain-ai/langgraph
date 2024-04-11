@@ -1939,6 +1939,93 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         ]
     }
 
+    assert app.invoke(
+        {"messages": [HumanMessage(content="what is weather in sf")]},
+        stream_mode="updates",
+    ) == [
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "tool_calls": [
+                                {
+                                    "id": "tool_call123",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "search_api",
+                                        "arguments": '"query"',
+                                    },
+                                }
+                            ]
+                        },
+                        id=AnyStr(),
+                    )
+                ]
+            }
+        },
+        {
+            "action": {
+                "messages": [
+                    ToolMessage(content="result for query", tool_call_id="tool_call123")
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        additional_kwargs={
+                            "tool_calls": [
+                                {
+                                    "id": "tool_call234",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "search_api",
+                                        "arguments": '"another"',
+                                    },
+                                },
+                                {
+                                    "id": "tool_call567",
+                                    "type": "function",
+                                    "function": {
+                                        "name": "search_api",
+                                        "arguments": '"a third one"',
+                                    },
+                                },
+                            ]
+                        },
+                        id=AnyStr(),
+                    )
+                ]
+            }
+        },
+        {
+            "action": {
+                "messages": [
+                    ToolMessage(
+                        content="result for another", tool_call_id="tool_call234"
+                    ),
+                    ToolMessage(
+                        content="result for a third one", tool_call_id="tool_call567"
+                    ),
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="answer",
+                        id=AnyStr(),
+                    )
+                ]
+            }
+        },
+    ]
+
     assert [
         *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
     ] == [

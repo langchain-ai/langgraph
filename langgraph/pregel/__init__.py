@@ -964,6 +964,7 @@ class Pregel(
         input: Union[dict[str, Any], Any],
         config: Optional[RunnableConfig] = None,
         *,
+        stream_mode: StreamMode = "values",
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
@@ -973,11 +974,14 @@ class Pregel(
     ) -> Union[dict[str, Any], Any]:
         output_keys = output_keys if output_keys is not None else self.output_channels
         output_is_dict = not isinstance(output_keys, str)
-        latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
+        if stream_mode == "values":
+            latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
+        else:
+            chunks = []
         for chunk in self.stream(
             input,
             config,
-            stream_mode="values",
+            stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,
@@ -985,14 +989,21 @@ class Pregel(
             debug=debug,
             **kwargs,
         ):
-            latest = {**latest, **chunk} if output_is_dict else chunk
-        return latest
+            if stream_mode == "values":
+                latest = {**latest, **chunk} if output_is_dict else chunk
+            else:
+                chunks.append(chunk)
+        if stream_mode == "values":
+            return latest
+        else:
+            return chunks
 
     async def ainvoke(
         self,
         input: Union[dict[str, Any], Any],
         config: Optional[RunnableConfig] = None,
         *,
+        stream_mode: StreamMode = "values",
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before_nodes: Optional[Sequence[str]] = None,
@@ -1002,11 +1013,14 @@ class Pregel(
     ) -> Union[dict[str, Any], Any]:
         output_keys = output_keys if output_keys is not None else self.output_channels
         output_is_dict = not isinstance(output_keys, str)
-        latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
+        if stream_mode == "values":
+            latest: Union[dict[str, Any], Any] = {} if output_is_dict else None
+        else:
+            chunks = []
         async for chunk in self.astream(
             input,
             config,
-            stream_mode="values",
+            stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
             interrupt_before_nodes=interrupt_before_nodes,
@@ -1014,8 +1028,14 @@ class Pregel(
             debug=debug,
             **kwargs,
         ):
-            latest = {**latest, **chunk} if output_is_dict else chunk
-        return latest
+            if stream_mode == "values":
+                latest = {**latest, **chunk} if output_is_dict else chunk
+            else:
+                chunks.append(chunk)
+        if stream_mode == "values":
+            return latest
+        else:
+            return chunks
 
 
 def _panic_or_proceed(
