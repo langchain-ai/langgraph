@@ -1,6 +1,6 @@
 import asyncio
 import json
-from typing import Any, Sequence, Union
+from typing import Any, Optional, Sequence, Union
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolCall, ToolMessage
 from langchain_core.runnables import RunnableConfig
@@ -33,7 +33,7 @@ class ToolNode(RunnableCallable):
         tools: Sequence[BaseTool],
         *,
         name: str = "tools",
-        tags: list[str] | None = None,
+        tags: Optional[list[str]] = None,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name = {tool.name: tool for tool in tools}
