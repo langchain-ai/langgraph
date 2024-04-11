@@ -71,8 +71,8 @@ def map_output_values(
         if any(chan == output_channels for chan, _ in pending_writes):
             yield read_channel(channels, output_channels)
     else:
-        if updated := {c for c, _ in pending_writes if c in output_channels}:
-            yield read_channels(channels, updated)
+        if {c for c, _ in pending_writes if c in output_channels}:
+            yield read_channels(channels, output_channels)
 
 
 def map_output_updates(

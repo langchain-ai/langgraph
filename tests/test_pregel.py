@@ -272,6 +272,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
         nodes={"one": one, "two": two},
         channels={"inbox": Topic(int)},
         input_channels=["input", "inbox"],
+        stream_channels=["output", "inbox"],
     )
 
     # [12 + 1, 2 + 1 + 1]
@@ -294,7 +295,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
     assert [*app.stream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
-        {"output": 4},
+        {"inbox": [], "output": 4},
     ]
 
 
@@ -637,13 +638,16 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["output", "between"])
 
     assert [c for c in app.stream(2, stream_mode="updates")] == [
         {"one": {"between": 3, "output": 3}},
         {"two": {"output": 4}},
     ]
-    assert [c for c in app.stream(2)] == [{"between": 3, "output": 3}, {"output": 4}]
+    assert [c for c in app.stream(2)] == [
+        {"between": 3, "output": 3},
+        {"between": 3, "output": 4},
+    ]
 
 
 def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
@@ -695,6 +699,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             "ctx": Context(an_int, typ=int),
         },
         output_channels=["inbox", "output"],
+        stream_channels=["inbox", "output"],
     )
 
     assert setup.call_count == 0
@@ -705,7 +710,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
-            assert chunk == {"output": 4}
+            assert chunk == {"inbox": [], "output": 4}
         else:
             assert False, "Expected only two chunks"
     assert cleanup.call_count == 1, "Expected cleanup to be called once"
@@ -1825,6 +1830,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
         "output": "what is weather in sf->right",
+        "steps": [],
     }
 
     assert [*app.stream({"input": "what is weather in sf"})] == [
@@ -2887,10 +2893,17 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
     assert [*app.stream({"query": "what is weather in sf"}, stream_mode="values")] == [
-        {"query": "what is weather in sf"},
-        {"query": "query: what is weather in sf"},
-        {"docs": ["doc1", "doc2", "doc3", "doc4"]},
-        {"answer": "doc1,doc2,doc3,doc4"},
+        {"query": "what is weather in sf", "docs": []},
+        {"query": "query: what is weather in sf", "docs": []},
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+        },
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+            "answer": "doc1,doc2,doc3,doc4",
+        },
     ]
 
 

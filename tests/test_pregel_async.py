@@ -164,7 +164,7 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["inbox", "output"])
 
     assert await app.ainvoke(2) == 4
 
@@ -182,6 +182,7 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             }
         elif step == 2:
             assert values == {
+                "inbox": 3,
                 "output": 4,
             }
     assert step == 2
@@ -280,6 +281,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
         nodes={"one": one, "two": two},
         channels={"inbox": Topic(int)},
         input_channels=["input", "inbox"],
+        stream_channels=["inbox", "output"],
     )
 
     # [12 + 1, 2 + 1 + 1]
@@ -304,7 +306,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
     assert [c async for c in app.astream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
-        {"output": 4},
+        {"inbox": [], "output": 4},
     ]
 
 
@@ -669,12 +671,12 @@ async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> Non
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["output", "between"])
 
     # Then invoke pubsub
     assert [c async for c in app.astream(2)] == [
         {"between": 3, "output": 3},
-        {"output": 4},
+        {"between": 3, "output": 4},
     ]
 
 
@@ -727,6 +729,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             "ctx": Context(an_int, an_int_async, typ=int),
         },
         output_channels=["inbox", "output"],
+        stream_channels=["inbox", "output"],
     )
 
     async def aenumerate(aiter: AsyncIterator[Any]) -> AsyncIterator[tuple[int, Any]]:
@@ -747,7 +750,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
-            assert chunk == {"output": 4}
+            assert chunk == {"inbox": [], "output": 4}
         else:
             assert False, "Expected only two chunks"
     assert setup_sync.call_count == 0
@@ -1956,6 +1959,7 @@ async def test_conditional_entrypoint_graph_state() -> None:
     assert await app.ainvoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
         "output": "what is weather in sf->right",
+        "steps": [],
     }
 
     assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
@@ -2651,6 +2655,25 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
             "retriever_one": {"docs": ["doc1", "doc2"]},
         },
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+
+    assert [
+        c
+        async for c in app.astream(
+            {"query": "what is weather in sf"}, stream_mode="values"
+        )
+    ] == [
+        {"query": "what is weather in sf", "docs": []},
+        {"query": "query: what is weather in sf", "docs": []},
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+        },
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+            "answer": "doc1,doc2,doc3,doc4",
+        },
     ]
 
 
