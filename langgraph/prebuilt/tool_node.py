@@ -22,7 +22,7 @@ def str_output(output: Any) -> str:
 
 class ToolNode(RunnableCallable):
     """
-    A node that runs the tols requested in the last AIMessage. It can be used
+    A node that runs the tools requested in the last AIMessage. It can be used
     either in StateGraph with a "messages" key or in MessageGraph. If multiple
     tool calls are requested, they will be run in parallel. The output will be
     a list of ToolMessages, one for each tool call.
