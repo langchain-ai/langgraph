@@ -75,8 +75,7 @@ async def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> No
     graph.set_entry_point("return_falsy_const")
     graph.set_finish_point("return_falsy_const")
     gapp = graph.compile()
-    assert (await gapp.ainvoke(1, allow_falsy_output=True)) == falsy_value
-    assert (await gapp.ainvoke(1)) is None
+    assert falsy_value == await gapp.ainvoke(1)
 
 
 async def test_invoke_single_process_in_out_implicit_channels(
