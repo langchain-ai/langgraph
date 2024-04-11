@@ -947,6 +947,69 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
 
     # Check that agent (one of the nodes) has its output streamed to the logs
     assert "/logs/agent/streamed_output/-" in patch_paths
+    assert "/logs/agent:2/streamed_output/-" in patch_paths
+    assert "/logs/agent:3/streamed_output/-" in patch_paths
+    # Check that agent (one of the nodes) has its final output set in the logs
+    assert "/logs/agent/final_output" in patch_paths
+    assert "/logs/agent:2/final_output" in patch_paths
+    assert "/logs/agent:3/final_output" in patch_paths
+    assert [
+        p["value"]
+        for log in patches
+        for p in log.ops
+        if p["path"] == "/logs/agent/final_output"
+        or p["path"] == "/logs/agent:2/final_output"
+        or p["path"] == "/logs/agent:3/final_output"
+    ] == [
+        {
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+        },
+        {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                    "result for query",
+                )
+            ],
+            "agent_outcome": AgentAction(
+                tool="search_api",
+                tool_input="another",
+                log="tool:search_api:another",
+            ),
+        },
+        {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                    "result for query",
+                ),
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="another",
+                        log="tool:search_api:another",
+                    ),
+                    "result for another",
+                ),
+            ],
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "answer"}, log="finish:answer"
+            ),
+        },
+    ]
 
     # test state get/update methods with interrupt_after
 
@@ -1531,6 +1594,38 @@ async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
                     return_values={"answer": "answer"}, log="finish:answer"
                 ),
             }
+        },
+    ]
+
+    patches = [c async for c in app.astream_log({"input": "what is weather in sf"})]
+    patch_paths = {op["path"] for log in patches for op in log.ops}
+
+    # Check that agent (one of the nodes) has its output streamed to the logs
+    assert "/logs/agent/streamed_output/-" in patch_paths
+    # Check that agent (one of the ndoes) has its final output set in the logs
+    assert "/logs/agent/final_output" in patch_paths
+    assert [
+        p["value"]
+        for log in patches
+        for p in log.ops
+        if p["path"] == "/logs/agent/final_output"
+        or p["path"] == "/logs/agent:2/final_output"
+        or p["path"] == "/logs/agent:3/final_output"
+    ] == [
+        {
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            )
+        },
+        {
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="another", log="tool:search_api:another"
+            )
+        },
+        {
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "answer"}, log="finish:answer"
+            ),
         },
     ]
 
