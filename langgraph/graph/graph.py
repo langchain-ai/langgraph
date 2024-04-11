@@ -62,10 +62,10 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[], Any]],
-        writer: Callable[[str], Optional[Runnable]],
+        writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
         result = self.condition.invoke(reader(config) if reader else input, config)
-        if isinstance(result, str):
+        if not isinstance(result, list):
             result = [result]
         if self.ends:
             destinations = [self.ends[r] for r in result]
@@ -79,12 +79,12 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[], Any]],
-        writer: Callable[[str], Optional[Runnable]],
+        writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
         result = await self.condition.ainvoke(
             reader(config) if reader else input, config
         )
-        if isinstance(result, str):
+        if not isinstance(result, list):
             result = [result]
         if self.ends:
             destinations = [self.ends[r] for r in result]
