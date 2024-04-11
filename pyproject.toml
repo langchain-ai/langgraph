@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gigagraph"
-version = "0.0.26"
+version = "0.0.34"
 description = "gigagraph"
 authors = []
 license = "MIT"
@@ -12,7 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-gigachain_core = "^0.1.28"
+gigachain-core = "^0.1.38"
 
 
 [tool.poetry.group.test.dependencies]
