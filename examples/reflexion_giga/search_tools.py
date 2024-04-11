@@ -1,4 +1,4 @@
-from typing import Optional, Any
+from typing import Any, Optional
 
 from langchain_community.tools.ddg_search.tool import DuckDuckGoSearchResults
 from langchain_core.callbacks import (
