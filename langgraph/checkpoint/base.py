@@ -57,10 +57,12 @@ class BaseCheckpointSaver(Serializable, ABC):
         return []
 
     @abstractmethod
-    def get(self, config: RunnableConfig) -> Optional[Checkpoint]: ...
+    def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
+        ...
 
     @abstractmethod
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> None: ...
+    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> None:
+        ...
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         return await asyncio.get_running_loop().run_in_executor(None, self.get, config)
