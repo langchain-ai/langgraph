@@ -10,6 +10,9 @@ how_tos_dir = docs_dir / "how-tos"
 tutorials_dir = docs_dir / "tutorials"
 
 _HOW_TOS = {"agent_executor", "chat_agent_executor_with_function_calling", "docs"}
+_MAP = {
+    "persistence_postgres.ipynb": "tutorial",
+}
 _IGNORE = (".ipynb_checkpoints", ".venv", ".cache")
 
 
@@ -39,18 +42,23 @@ def copy_notebooks():
             path.startswith(".") or path.startswith("__") for path in root.split(os.sep)
         ):
             continue
+
         if any(path in _HOW_TOS for path in root.split(os.sep)):
             dst_dir = how_tos_dir
         else:
             dst_dir = tutorials_dir
         for file in files:
+            dst_dir_ = dst_dir
             if file.endswith(".ipynb"):
+                if file in _MAP:
+                    dst_dir = os.path.join(dst_dir, _MAP[file])
                 src_path = os.path.join(root, file)
                 dst_path = os.path.join(
                     dst_dir, os.path.relpath(src_path, examples_dir)
                 )
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                 shutil.copy(src_path, dst_path)
+                dst_dir = dst_dir_
     # Top level notebooks are "how-to's"
     # for file in examples_dir.iterdir():
     #     if file.suffix.endswith(".ipynb") and not os.path.isdir(

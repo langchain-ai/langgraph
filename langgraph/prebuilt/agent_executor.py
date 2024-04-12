@@ -5,6 +5,7 @@ from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.utils import RunnableCallable
 
@@ -39,7 +40,7 @@ def _get_agent_state(input_schema=None):
     return AgentState
 
 
-def create_agent_executor(agent_runnable, tools, input_schema=None):
+def create_agent_executor(agent_runnable, tools, input_schema=None) -> CompiledStateGraph:
     """This is a helper function for creating a graph that works with LangChain Agents.
 
     Args:

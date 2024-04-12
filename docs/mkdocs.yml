@@ -84,7 +84,7 @@ plugins:
 nav:
   - Home: 
       - 'index.md'
-      - Quick Start: quick_start.ipynb
+      - Quick Start: how-tos/docs/quick_start.ipynb
 
   - Tutorials:
       - 'tutorials/index.md'
@@ -140,6 +140,7 @@ nav:
           - Base: how-tos/chat_agent_executor_with_function_calling/base.ipynb
           - High-Level: how-tos/chat_agent_executor_with_function_calling/high-level.ipynb
           - High-Level Tools: how-tos/chat_agent_executor_with_function_calling/high-level-tools.ipynb
+          - "Tool Node": how-tos/chat_agent_executor_with_function_calling/prebuilt-tool-node.ipynb
           - Modifications:
               - Human-in-the-Loop: how-tos/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb
               - Force Tool First: how-tos/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb
@@ -153,6 +154,8 @@ nav:
               - Human-in-the-Loop: how-tos/agent_executor/human-in-the-loop.ipynb
               - Force Tool First: how-tos/agent_executor/force-calling-a-tool-first.ipynb
               - Manage Agent Steps: how-tos/agent_executor/managing-agent-steps.ipynb
+      - Persistance:
+          - "Persistance in Postgres": tutorials/persistence_postgres.ipynb
 
   - Reference:
       - Graphs: reference/graphs.md
