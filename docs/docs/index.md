@@ -102,15 +102,15 @@ Consult the [Tutorials](tutorials/index.md) to learn more about building with La
 
 Check out the [How-To Guides](how-tos/index.md) for instructions on handling common tasks with LangGraph
 
-# Concepts
+## Concepts
 
-## Graphs
+#### Graphs
 
 Inspired by [Google's Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/), a `graph` represents a workflow or a set of steps to be executed. The graph consists of [nodes](#nodes) and [edges](#edges) that define the data and control flow.
 
 The main entrypoint for creating a graph is a [`StateGraph`](reference/graphs.md#StateGraph), which lets you define a [state](#state) machine.
 
-## Nodes
+#### Nodes
 
 Nodes represent individual units of work to be performed. Each node is associated with a unique key (a string) and a function.
 
@@ -118,7 +118,7 @@ When a node is executed, it receives the current state of the graph as input and
 
 To add a node to a graph, you can use the `add_node` method, specifying the node's key and action.
 
-## Edges
+#### Edges
 
 Edges define the graph's control flow. Edges are directed, connecting a start node to one or more end nodes.
 
@@ -128,13 +128,13 @@ There are two types of edges in LangGraph:
 
 2. Conditional Edges: These edges allow for conditional branching based on the output of the start node. A `condition` function is passed to the `add_conditional_edges` method and returns the key(s) of the next node(s) to transition to.
 
-## State
+#### State
 
 The state object represents the mutable components of the graph. The state is defined using a schema (a `type`,  typically a TypedDict or BaseModel class).
 
 The typing annotations of the values in the schema can influence how the graph performs updates. For instance, using `Annotated[list, operator.add]` instructs the graph that this value is _append-only_.
 
-## Persistence
+#### Persistence
 
 LangGraph defines [checkpointers](reference/checkpoints.md#checkpoints) to help you save the state of the graph at any point and resume execution from that point later.
 
