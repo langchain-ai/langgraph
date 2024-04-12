@@ -20,6 +20,7 @@ from langgraph.prebuilt.tool_node import ToolNode
 # So we annotate the messages attribute with operator.add
 class AgentState(TypedDict):
     """The state of the agent."""
+
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
@@ -145,7 +146,7 @@ def create_tool_calling_executor(
         Runnable: A compiled LangChain runnable that can be used for chat interactions.
 
     Examples:
-            
+
             from langgraph.prebuilt import chat_agent_executor
             from langchain_openai import ChatOpenAI
             from langchain_community.tools.tavily_search import TavilySearchResults

@@ -40,7 +40,9 @@ def _get_agent_state(input_schema=None):
     return AgentState
 
 
-def create_agent_executor(agent_runnable, tools, input_schema=None) -> CompiledStateGraph:
+def create_agent_executor(
+    agent_runnable, tools, input_schema=None
+) -> CompiledStateGraph:
     """This is a helper function for creating a graph that works with LangChain Agents.
 
     Args:

@@ -26,8 +26,9 @@ Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthrou
 
 
 #### Chatbots
-    - [Customer Support](chatbots/customer-support.ipynb): Building a customer support chatbot
-    - [Info Gathering](chatbots/information-gather-prompting.ipynb): Building an information gathering chatbot  
+
+- [Customer Support](chatbots/customer-support.ipynb): Building a customer support chatbot
+- [Info Gathering](chatbots/information-gather-prompting.ipynb): Building an information gathering chatbot  
 - [Code Assistant](code_assistant/langgraph_code_assistant.ipynb): Building a code analysis and generation assistant
 - [Web Navigation](web-navigation/web_voyager.ipynb): Building an agent that can navigate and interact with websites
 
@@ -41,15 +42,16 @@ Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthrou
 
 #### RAG
 
-- **Retrieval-Augmented Generation**
-    - [langgraph_adaptive_rag.ipynb](rag/langgraph_adaptive_rag.ipynb)
-    - [langgraph_adaptive_rag_cohere.ipynb](rag/langgraph_adaptive_rag_cohere.ipynb) 
-    - [langgraph_adaptive_rag_local.ipynb](rag/langgraph_adaptive_rag_local.ipynb)
-    - [langgraph_agentic_rag.ipynb](rag/langgraph_agentic_rag.ipynb)
-    - [langgraph_crag.ipynb](rag/langgraph_crag.ipynb)
-    - [langgraph_crag_local.ipynb](rag/langgraph_crag_local.ipynb)
-    - [langgraph_self_rag.ipynb](rag/langgraph_self_rag.ipynb)
-    - [langgraph_self_rag_local.ipynb](rag/langgraph_self_rag_local.ipynb)
+**Retrieval-Augmented Generation**
+
+- [Adaptive RAG](rag/langgraph_adaptive_rag.ipynb)
+    - [Adaptive RAG using Cohere](rag/langgraph_adaptive_rag_cohere.ipynb) 
+    - [Adaptive RAG using local models](rag/langgraph_adaptive_rag_local.ipynb)
+- [Agentic RAG.ipynb](rag/langgraph_agentic_rag.ipynb)
+- [Corrective RAG](rag/langgraph_crag.ipynb)
+    - [Corrective RAG with local models](rag/langgraph_crag_local.ipynb)
+- [Self-RAG](rag/langgraph_self_rag.ipynb)
+    - [Self-RAG with local models](rag/langgraph_self_rag_local.ipynb)
 
 - [Web Research (STORM)](storm/storm.ipynb): Generating Wikipedia-like articles via research and multi-perspective QA
 
@@ -70,6 +72,7 @@ Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthrou
 
 ### Evaluation & Analysis
 
-- **Chatbot Evaluation via Simulation**  
-    - [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluating chatbots via simulated user interactions
-    - [Dataset-based](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluating chatbots over a dialog dataset
+**Chatbot Evaluation via Simulation**  
+
+- [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluating chatbots via simulated user interactions
+- [Dataset-based](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluating chatbots over a dialog dataset

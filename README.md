@@ -3,6 +3,7 @@
 [![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
 [![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
 [![](https://dcbadge.vercel.app/api/server/6adMQxSpJS?compact=true&style=flat)](https://discord.com/channels/1038097195422978059/1170024642245832774)
+[![Docs](https://img.shields.io/badge/docs-latest-blue)](https://langchain-ai.github.io/langgraph/)
 
 ⚡ Building language agents as graphs ⚡
 
@@ -524,92 +525,7 @@ content='' additional_kwargs={'function_call': {'arguments': '{\n', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': ' ', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': ' "', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': 'query', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': '":', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' "', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': 'weather', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' in', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' San', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' Francisco', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': '"\n', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': '}', 'name': ''}}
-content=''
-content=''
-content='I'
-content="'m"
-content=' sorry'
-content=','
-content=' but'
-content=' I'
-content=' couldn'
-content="'t"
-content=' find'
-content=' the'
-content=' current'
-content=' weather'
-content=' in'
-content=' San'
-content=' Francisco'
-content='.'
-content=' However'
-content=','
-content=' you'
-content=' can'
-content=' check'
-content=' the'
-content=' historical'
-content=' weather'
-content=' data'
-content=' for'
-content=' January'
-content=' '
-content='202'
-content='4'
-content=' in'
-content=' San'
-content=' Francisco'
-content=' ['
-content='here'
-content=']('
-content='https'
-content='://'
-content='we'
-content='athers'
-content='park'
-content='.com'
-content='/h'
-content='/m'
-content='/'
-content='557'
-content='/'
-content='202'
-content='4'
-content='/'
-content='1'
-content='/H'
-content='istorical'
-content='-'
-content='Weather'
-content='-in'
-content='-Jan'
-content='uary'
-content='-'
-content='202'
-content='4'
-content='-in'
-content='-S'
-content='an'
-content='-F'
-content='r'
-content='anc'
-content='isco'
-content='-Cal'
-content='ifornia'
-content='-'
-content='United'
-content='-'
-content='States'
-content=').'
-content=''
+...
 ```
 
 ## When to Use
