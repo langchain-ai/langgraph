@@ -33,8 +33,8 @@ def clean_notebooks():
 def copy_notebooks():
     # Nested ones are mostly tutorials rn
     for root, dirs, files in os.walk(examples_dir):
-        if root == str(examples_dir):
-            continue
+        # if root == str(examples_dir):
+        #     continue
         if any(
             path.startswith(".") or path.startswith("__") for path in root.split(os.sep)
         ):
@@ -52,13 +52,13 @@ def copy_notebooks():
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                 shutil.copy(src_path, dst_path)
     # Top level notebooks are "how-to's"
-    for file in examples_dir.iterdir():
-        if file.suffix.endswith(".ipynb") and not os.path.isdir(
-            os.path.join(examples_dir, file)
-        ):
-            src_path = os.path.join(examples_dir, file)
-            dst_path = os.path.join(docs_dir, "how-tos", file.name)
-            shutil.copy(src_path, dst_path)
+    # for file in examples_dir.iterdir():
+    #     if file.suffix.endswith(".ipynb") and not os.path.isdir(
+    #         os.path.join(examples_dir, file)
+    #     ):
+    #         src_path = os.path.join(examples_dir, file)
+    #         dst_path = os.path.join(docs_dir, "how-tos", file.name)
+    #         shutil.copy(src_path, dst_path)
 
 
 if __name__ == "__main__":

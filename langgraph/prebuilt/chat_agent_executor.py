@@ -8,6 +8,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 from langgraph.prebuilt.tool_node import ToolNode
@@ -18,12 +19,13 @@ from langgraph.prebuilt.tool_node import ToolNode
 # We want steps to return messages to append to the list
 # So we annotate the messages attribute with operator.add
 class AgentState(TypedDict):
+    """The state of the agent."""
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
 def create_function_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
-):
+) -> CompiledGraph:
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
         tool_classes = tools.tools
@@ -132,7 +134,7 @@ def create_function_calling_executor(
 
 def create_tool_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
-):
+) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
     Args:
@@ -140,7 +142,7 @@ def create_tool_calling_executor(
         tools (Union[ToolExecutor, Sequence[BaseTool]]): A list of tools or a ToolExecutor instance.
 
     Returns:
-        LangChainRunnable: A compiled LangChain runnable that can be used for chat interactions.
+        Runnable: A compiled LangChain runnable that can be used for chat interactions.
 
     Examples:
         .. code-block:: python
