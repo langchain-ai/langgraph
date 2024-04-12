@@ -133,6 +133,32 @@ def create_function_calling_executor(
 def create_tool_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
 ):
+    """Creates a graph that works with a chat model that utilizes tool calling.
+
+    Args:
+        model (LanguageModelLike): The chat model that supports OpenAI tool calling.
+        tools (Union[ToolExecutor, Sequence[BaseTool]]): A list of tools or a ToolExecutor instance.
+
+    Returns:
+        LangChainRunnable: A compiled LangChain runnable that can be used for chat interactions.
+
+    Examples:
+        .. code-block:: python
+            from langgraph.prebuilt import chat_agent_executor
+            from langchain_openai import ChatOpenAI
+            from langchain_community.tools.tavily_search import TavilySearchResults
+            from langchain_core.messages import HumanMessage
+
+            tools = [TavilySearchResults(max_results=1)]
+            model = ChatOpenAI()
+
+            app = chat_agent_executor.create_tool_calling_executor(model, tools)
+
+            inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
+            for s in app.stream(inputs):
+                print(list(s.values())[0])
+                print("----")
+    """
     if isinstance(tools, ToolExecutor):
         tool_classes = tools.tools
     else:

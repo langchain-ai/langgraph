@@ -4,7 +4,6 @@
 
 ⚡ Build language agents as graphs ⚡
 
-
 ## Overview
 
 Suppose you're building a customer support assistant. You want your assistant to be able to:
@@ -15,7 +14,7 @@ Suppose you're building a customer support assistant. You want your assistant to
 
 LangGraph makes this all easy. First install:
 
-```shell
+```bash
 pip install -U langgraph
 ```
 
@@ -61,20 +60,25 @@ workflow.add_conditional_edges(
 # Always transition `action` -> `agent`
 workflow.add_edge("action", "agent")
 
-memory = SqliteSaver.from_conn_string(":memory:")
+memory = SqliteSaver.from_conn_string(":memory:") # Here we only save in-memory
 
 # Setting the interrupt means that any time an action is called, the machine will stop
 app = workflow.compile(checkpointer=memory, interrupt_before=["action"])
+```
 
+Now, run the graph:
+
+```python
 # Run the graph
 thread = {"configurable": {"thread_id": "4"}}
 for event in app.stream("what is the weather in sf currently", thread):
     for v in event.values():
         print(v)
 
-# The graph has paused before the 'action' node and can be resumed at any time
-# ...
-# Resume from where you left off
+```
+We configured the graph to **wait** before executing the `action`. The `SqliteSaver` persists the state. Resume at any time.
+
+```python
 for event in app.stream(None, thread):
     for v in event.values():
         print(v)
@@ -92,6 +96,16 @@ With LangGraph, you can build complex, stateful agents without getting bogged do
 ## Tutorials
 
 Consult the [Tutorials](tutorials/index.md) to learn more about implementing advanced 
+
+- persistence.ipynb
+- async.ipynb
+- streaming-tokens.ipynb
+- human-in-the-loop.ipynb
+- visualization.ipynb
+- state-model.ipynb
+- time-travel.ipynb
+
+#### Use Cases
 
 - **Agent Executors**: Chat and Langchain agents
 - **Planning Agents**: Plan-and-Execute, ReWOO, LLMCompiler  
@@ -115,14 +129,50 @@ Check out the [How-To Guides](how-tos/index.md) for instructions on handling com
 - Persistence, Visualization, Time Travel 
 - Benchmarking
 
-## Concepts
+# Concepts
 
-- [Graphs](concepts.md#graphs)
-- [State](concepts.md#state): The data structure passed between nodes, allowing you to persist context 
-- [Nodes](concepts.#nodes): The building blocks of your graph - LLMs, tools, or custom logic 
-- [Edges](concepts.md#edges): The connections that define the flow of data between your nodes
-- [Conditional Edges](concepts.md#conditional_edges): Special edges that let you dynamically route between nodes based on state
-- [Persistence](concepts.md#persistence): Save and resume your graph's state for long-running applications
+## Graphs
+
+Inspired by [Google's Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/), a `graph` represents a workflow or a set of steps to be executed. The graph consists of [nodes](#nodes) and [edges](#edges) that define the data and control flow.
+
+The main entrypoint for creating a graph is a [`StateGraph`](./reference/graphs.md#StateGraph), which lets you define a [state](#state) machine.
+
+## Nodes
+
+Nodes represent individual units of work to be performed. Each node is associated with a unique key (a string) and a function.
+
+When a node is executed, it receives the current state of the graph as input and returns an update to the state (usually a dictionary or list). The output of the node is then used to update the graph's state according to the schema.
+
+To add a node to a graph, you can use the `add_node` method, specifying the node's key and action.
+
+## Edges
+
+Edges define the graph's control flow. Edges are directed, connecting a start node to one or more end nodes.
+
+There are two types of edges in LangGraph:
+
+1. Normal Edges: These edges represent a direct connection between two nodes. The output of the start node is passed as input to the end node unconditionally. You can add a normal edge using the `add_edge` method.
+
+2. Conditional Edges: These edges allow for conditional branching based on the output of the start node. A `condition` function is passed to the `add_conditional_edges` method and returns the key(s) of the next node(s) to transition to.
+
+## State
+
+The state object represents the mutable components of the graph. The state is defined using a schema (a `type`,  typically a TypedDict or BaseModel class).
+
+The typing annotations of the values in the schema can influence how the graph performs updates. For instance, using `Annotated[list, operator.add]` instructs the graph that this value is _append-only_.
+
+## Persistence
+
+LangGraph defines [checkpointers](./reference/checkpoints) to help you save the state of the graph at any point and resume execution from that point later.
+
+Persistence is useful for several scenarios, such as:
+
+
+- Time-travel debugging: You can rewind an graph's actions to a previous state, mutate it, then continue to better control the final outcome. 
+
+- Recovering from failures: If the execution of the graph is interrupted due to an error or system failure, you can resume from the last persisted state instead of starting from scratch.
+
+- Human-in-the-loop execution: Your agent can persist its full state, wait indefinitely until a human can weigh in, then resume.
 
 
 ## Why LangGraph?

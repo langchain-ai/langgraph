@@ -153,6 +153,24 @@ class Graph:
         ],
         conditional_edge_mapping: Optional[dict[str, str]] = None,
     ) -> None:
+        """Add a conditional edge from the starting node to any number of destination nodes.
+
+
+        Args:
+            start_key (str): The key of the starting node.
+            condition (Union[Callable, Runnable]): The condition that determines the destination of the edge.
+            conditional_edge_mapping (Optional[dict[str, str]]): A dictionary that maps the response of the condition to a name of
+                the destination node(s). If the condition returns a list, the response will be matched against the keys of the
+                dictionary. If the condition returns a string, the response will be matched against the values of the dictionary.
+                If the condition returns a string and the dictionary contains a key with the value of `END` ("__end__"`),
+                the graph will finish.
+
+        Raises:
+            ValueError: If the starting node is not found in the graph or if the conditional edge mapping contains missing nodes.
+
+        Returns:
+            None
+        """ # noqa: E501
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
@@ -182,18 +200,45 @@ class Graph:
         self.branches[start_key][name] = Branch(condition, conditional_edge_mapping)
 
     def set_entry_point(self, key: str) -> None:
+        """Specifies the first node to be called in the graph.
+
+        Parameters:
+            key (str): The key of the node to set as the entry point.
+
+        Returns:
+            None
+        """
         return self.add_edge(START, key)
 
     def set_conditional_entry_point(
-        self,
-        condition: Union[
-            Callable[..., str], Callable[..., Awaitable[str]], Runnable[Any, str]
-        ],
-        conditional_edge_mapping: Optional[Dict[str, str]] = None,
-    ) -> None:
-        return self.add_conditional_edges(START, condition, conditional_edge_mapping)
+            self,
+            condition: Union[
+                Callable[..., str], Callable[..., Awaitable[str]], Runnable[Any, str]
+            ],
+            conditional_edge_mapping: Optional[Dict[str, str]] = None,
+        ) -> None:
+            """Sets a conditional entry point in the graph.
+
+            Args:
+                condition: A callable object that takes any number of arguments and returns a string or an awaitable string.
+                conditional_edge_mapping: A dictionary that maps condition names to edge names.
+
+            Returns:
+                None
+            """
+            return self.add_conditional_edges(START, condition, conditional_edge_mapping)
 
     def set_finish_point(self, key: str) -> None:
+        """Marks a node as a finish point of the graph.
+
+        If the graph reaches this node, it will cease execution.
+
+        Parameters:
+            key (str): The key of the node to set as the finish point.
+
+        Returns:
+            None
+        """
         return self.add_edge(key, END)
 
     def validate(self, interrupt: Optional[Sequence[str]] = None) -> None:
