@@ -1047,7 +1047,7 @@ class Pregel(
             The result of the computation. If stream_mode is "values", it returns the latest value.
             If stream_mode is "chunks", it returns a list of chunks.
         """
-    
+
         output_keys = output_keys if output_keys is not None else self.output_channels
         if stream_mode == "values":
             latest: Union[dict[str, Any], Any] = None

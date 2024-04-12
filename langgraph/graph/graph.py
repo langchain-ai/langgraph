@@ -170,7 +170,7 @@ class Graph:
 
         Returns:
             None
-        """ # noqa: E501
+        """  # noqa: E501
         if self.compiled:
             logger.warning(
                 "Adding an edge to a graph that has already been compiled. This will "
@@ -211,22 +211,22 @@ class Graph:
         return self.add_edge(START, key)
 
     def set_conditional_entry_point(
-            self,
-            condition: Union[
-                Callable[..., str], Callable[..., Awaitable[str]], Runnable[Any, str]
-            ],
-            conditional_edge_mapping: Optional[Dict[str, str]] = None,
-        ) -> None:
-            """Sets a conditional entry point in the graph.
+        self,
+        condition: Union[
+            Callable[..., str], Callable[..., Awaitable[str]], Runnable[Any, str]
+        ],
+        conditional_edge_mapping: Optional[Dict[str, str]] = None,
+    ) -> None:
+        """Sets a conditional entry point in the graph.
 
-            Args:
-                condition: A callable object that takes any number of arguments and returns a string or an awaitable string.
-                conditional_edge_mapping: A dictionary that maps condition names to edge names.
+        Args:
+            condition: A callable object that takes any number of arguments and returns a string or an awaitable string.
+            conditional_edge_mapping: A dictionary that maps condition names to edge names.
 
-            Returns:
-                None
-            """
-            return self.add_conditional_edges(START, condition, conditional_edge_mapping)
+        Returns:
+            None
+        """
+        return self.add_conditional_edges(START, condition, conditional_edge_mapping)
 
     def set_finish_point(self, key: str) -> None:
         """Marks a node as a finish point of the graph.

@@ -35,7 +35,9 @@ def copy_notebooks():
     for root, dirs, files in os.walk(examples_dir):
         if root == str(examples_dir):
             continue
-        if any(path.startswith(".") or path.startswith("__") for path in root.split(os.sep)):
+        if any(
+            path.startswith(".") or path.startswith("__") for path in root.split(os.sep)
+        ):
             continue
         if any(path in _HOW_TOS for path in root.split(os.sep)):
             dst_dir = how_tos_dir

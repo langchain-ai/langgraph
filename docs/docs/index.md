@@ -135,7 +135,7 @@ Check out the [How-To Guides](how-tos/index.md) for instructions on handling com
 
 Inspired by [Google's Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/), a `graph` represents a workflow or a set of steps to be executed. The graph consists of [nodes](#nodes) and [edges](#edges) that define the data and control flow.
 
-The main entrypoint for creating a graph is a [`StateGraph`](./reference/graphs.md#StateGraph), which lets you define a [state](#state) machine.
+The main entrypoint for creating a graph is a [`StateGraph`](reference/graphs.md#StateGraph), which lets you define a [state](#state) machine.
 
 ## Nodes
 
@@ -163,7 +163,7 @@ The typing annotations of the values in the schema can influence how the graph p
 
 ## Persistence
 
-LangGraph defines [checkpointers](./reference/checkpoints) to help you save the state of the graph at any point and resume execution from that point later.
+LangGraph defines [checkpointers](reference/checkpoints.md#checkpoints) to help you save the state of the graph at any point and resume execution from that point later.
 
 Persistence is useful for several scenarios, such as:
 

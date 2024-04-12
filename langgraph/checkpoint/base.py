@@ -65,6 +65,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
 
 class CheckpointAt(StrEnum):
     """When to take a checkpoint."""
+
     END_OF_STEP = "end_of_step"
     """Take a checkpoint at the end of each step."""
     END_OF_RUN = "end_of_run"

@@ -75,9 +75,9 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
         for s in app.stream(inputs):
             print(list(s.values())[0])
             print("----")
-        
+
     """
-    
+
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
     else:
