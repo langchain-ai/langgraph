@@ -84,7 +84,7 @@ plugins:
 nav:
   - Home: 
       - 'index.md'
-      - Quick Start: how-tos/docs/quick_start.ipynb
+      - Quick Start: how-tos/docs/quickstart.ipynb
 
   - Tutorials:
       - 'tutorials/index.md'
