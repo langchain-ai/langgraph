@@ -1,5 +1,5 @@
 from collections import defaultdict
-from typing import Any
+from typing import Any, Optional
 
 from langgraph.checkpoint.base import (
     Checkpoint,
@@ -26,7 +26,10 @@ class MemorySaverAssertImmutable(MemorySaver):
     storage_for_copies: defaultdict[str, dict[str, Checkpoint]]
 
     def __init__(
-        self, *, serde: SerializerProtocol | None = None, at: CheckpointAt | None = None
+        self,
+        *,
+        serde: Optional[SerializerProtocol] = None,
+        at: Optional[CheckpointAt] = None,
     ) -> None:
         super().__init__(serde=serde, at=at)
         self.storage_for_copies = defaultdict(dict)
