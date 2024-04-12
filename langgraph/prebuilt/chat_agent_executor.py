@@ -145,7 +145,7 @@ def create_tool_calling_executor(
         Runnable: A compiled LangChain runnable that can be used for chat interactions.
 
     Examples:
-        .. code-block:: python
+            
             from langgraph.prebuilt import chat_agent_executor
             from langchain_openai import ChatOpenAI
             from langchain_community.tools.tavily_search import TavilySearchResults

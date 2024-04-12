@@ -49,7 +49,7 @@ def copy_notebooks():
             dst_dir = tutorials_dir
         for file in files:
             dst_dir_ = dst_dir
-            if file.endswith(".ipynb"):
+            if file.endswith((".ipynb", ".png")):
                 if file in _MAP:
                     dst_dir = os.path.join(dst_dir, _MAP[file])
                 src_path = os.path.join(root, file)
