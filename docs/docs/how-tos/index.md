@@ -2,24 +2,22 @@
 
 Welcome to the LangGraph How-To Guides! These guides provide practical, step-by-step instructions for accomplishing key tasks in LangGraph.
 
-## Basics
 
-- [State Management](state-model.ipynb): How to define and manage complex state in your graphs
-- [Tool Integration](sql_example.ipynb): How to integrate external tools and data sources
-- [Human-in-the-Loop](human-in-the-loop.ipynb): How to incorporate human feedback and intervention
+- **Chat Agent (Function Calling)**
+    - [Base](chat_agent_executor_with_function_calling/base.ipynb): Implementing a chat agent executor with function calling
+    - [High-Level](chat_agent_executor_with_function_calling/high-level.ipynb): Using the high-level chat agent executor API
+    - [High-Level Tools](chat_agent_executor_with_function_calling/high-level-tools.ipynb): Integrating tools into the high-level chat agent executor
+    - **Modifications**
+        - [Human-in-the-Loop](chat_agent_executor_with_function_calling/human-in-the-loop.ipynb)
+        - [Force Tool First](chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb)
+        - [Respond in Format](chat_agent_executor_with_function_calling/respond-in-format.ipynb)
+        - [Dynamic Direct Return](chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb)
+        - [Manage Agent Steps](chat_agent_executor_with_function_calling/managing-agent-steps.ipynb)
 
-## Performance
-
-- [Async Execution](async.ipynb): How to run nodes asynchronously for improved performance
-- [Streaming Responses](streaming-tokens.ipynb): How to stream agent responses in real-time
-
-## Graph Structure
-
-- [Subgraphs](subgraph.ipynb): How to modularize your graphs with subgraphs
-- [Branching](branching.ipynb): How to create branching logic in your graphs
-
-## Development
-
-- [Persistence](persistence.ipynb): How to save and load graph state for long-running applications
-- [Visualization](visualization.ipynb): How to visualize your graphs
-- [Time Travel](time-travel.ipynb): How to navigate and manipulate graph execution history
+- **LangChain Agent**
+    - [Base](agent_executor/base.ipynb): Implementing an agent executor with Langchain agents  
+    - [High-Level](agent_executor/high-level.ipynb): Using the high-level Langchain agent executor API
+    - **Modifications** 
+        - [Human-in-the-Loop](agent_executor/human-in-the-loop.ipynb)
+        - [Force Tool First](agent_executor/force-calling-a-tool-first.ipynb)
+        - [Manage Agent Steps](agent_executor/managing-agent-steps.ipynb)

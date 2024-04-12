@@ -87,7 +87,7 @@ nav:
       - Quick Start: quick_start.ipynb
 
   - Tutorials:
-      - 'index.md'
+      - 'how-tos/index.md'
       - Agent Executors:
           - Chat Agent (Function Calling):
               - Base: tutorials/chat_agent_executor_with_function_calling/base.ipynb
@@ -142,7 +142,7 @@ nav:
           - Self-Discovering Agent: tutorials/self-discover/self-discover.ipynb
           - Swarm: tutorials/gptswarm/swarm.ipynb  
   - "How-to Guides":
-      - 'index.md'
+      - 'how-tos/index.md'
       - Basics:
           - State Management: how-tos/state-model.ipynb
           - Tool Integration: how-tos/sql_example.ipynb
