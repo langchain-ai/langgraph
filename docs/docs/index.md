@@ -95,39 +95,12 @@ With LangGraph, you can build complex, stateful agents without getting bogged do
 
 ## Tutorials
 
-Consult the [Tutorials](tutorials/index.md) to learn more about implementing advanced 
-
-- persistence.ipynb
-- async.ipynb
-- streaming-tokens.ipynb
-- human-in-the-loop.ipynb
-- visualization.ipynb
-- state-model.ipynb
-- time-travel.ipynb
-
-#### Use Cases
-
-- **Agent Executors**: Chat and Langchain agents
-- **Planning Agents**: Plan-and-Execute, ReWOO, LLMCompiler  
-- **Reflection & Critique**: Improving quality via reflection
-- **Multi-Agent Systems**: Collaboration, supervision, teams
-- **Research & QA**: Web research, retrieval-augmented QA  
-- **Applications**: Chatbots, code assist, web tasks
-- **Evaluation & Analysis**: Simulation, self-discovery, swarms
+Consult the [Tutorials](tutorials/index.md) to learn more about building with LangGraph, including advanced use cases.
 
 
 ## How-To Guides
 
-Check out the [How-To Guides](how-tos/index.md) for instructions on handling common tasks with LangGraph.
-
-- Manage State
-- Tool Integration  
-- Human-in-the-Loop
-- Async Execution
-- Streaming Responses
-- Subgraphs & Branching
-- Persistence, Visualization, Time Travel 
-- Benchmarking
+Check out the [How-To Guides](how-tos/index.md) for instructions on handling common tasks with LangGraph
 
 # Concepts
 
