@@ -291,9 +291,9 @@ After we've done this, we should make sure the model knows that it has these too
 We can do this by converting the LangChain tools into the format for OpenAI function calling, and then bind them to the model class.
 
 ```python
-from langchain.tools.render import format_tool_to_openai_function
+from langchain_core.utils.function_calling import convert_to_openai_function
 
-functions = [format_tool_to_openai_function(t) for t in tools]
+functions = [convert_to_openai_function(t) for t in tools]
 model = model.bind_functions(functions)
 ```
 
