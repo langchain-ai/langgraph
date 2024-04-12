@@ -4,20 +4,35 @@ from types import TracebackType
 from typing import AsyncIterator, Optional
 
 import aiosqlite
-from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
-from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, CheckpointTuple
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    CheckpointAt,
+    CheckpointTuple,
+    SerializerProtocol,
+)
 
 
 class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
+    serde = pickle
+
     conn: aiosqlite.Connection
 
-    is_setup: bool = Field(False, init=False, repr=False)
+    is_setup: bool
 
-    class Config:
-        arbitrary_types_allowed = True
+    def __init__(
+        self,
+        conn: aiosqlite.Connection,
+        *,
+        serde: Optional[SerializerProtocol] = None,
+        at: Optional[CheckpointAt] = None,
+    ):
+        super().__init__(serde=serde, at=at)
+        self.conn = conn
+        self.is_setup = False
 
     @classmethod
     def from_conn_string(cls, conn_string: str) -> "AsyncSqliteSaver":
@@ -67,7 +82,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 if value := await cursor.fetchone():
                     return CheckpointTuple(
                         config,
-                        pickle.loads(value[0]),
+                        self.serde.loads(value[0]),
                         {
                             "configurable": {
                                 "thread_id": config["configurable"]["thread_id"],
@@ -90,7 +105,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                                 "thread_ts": value[1],
                             }
                         },
-                        pickle.loads(value[3]),
+                        self.serde.loads(value[3]),
                         {
                             "configurable": {
                                 "thread_id": value[0],
@@ -110,7 +125,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             async for thread_id, thread_ts, parent_ts, value in cursor:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
-                    pickle.loads(value),
+                    self.serde.loads(value),
                     {"configurable": {"thread_id": thread_id, "thread_ts": parent_ts}}
                     if parent_ts
                     else None,
@@ -126,7 +141,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 config["configurable"]["thread_id"],
                 checkpoint["ts"],
                 config["configurable"].get("thread_ts"),
-                pickle.dumps(checkpoint),
+                self.serde.dumps(checkpoint),
             ),
         ):
             await self.conn.commit()
