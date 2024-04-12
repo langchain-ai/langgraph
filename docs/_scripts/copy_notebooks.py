@@ -58,6 +58,13 @@ def copy_notebooks():
                 )
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                 shutil.copy(src_path, dst_path)
+                # Convert all ./img/* to ../img/*
+                if file.endswith(".ipynb"):
+                    with open(dst_path, "r") as f:
+                        content = f.read()
+                    content = content.replace("(./img/", "(../img/")
+                    with open(dst_path, "w") as f:
+                        f.write(content)
                 dst_dir = dst_dir_
     # Top level notebooks are "how-to's"
     # for file in examples_dir.iterdir():
