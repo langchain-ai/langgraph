@@ -46,7 +46,7 @@
         }
       },
       {
-        "id": "__start___should_start",
+        "id": "should_start",
         "type": "runnable",
         "data": {
           "id": [
@@ -59,7 +59,7 @@
         }
       },
       {
-        "id": "left_condition",
+        "id": "condition",
         "type": "runnable",
         "data": {
           "id": [
@@ -79,34 +79,34 @@
       },
       {
         "source": "__start__",
-        "target": "__start___should_start"
+        "target": "should_start"
       },
       {
-        "source": "__start___should_start",
+        "source": "should_start",
         "target": "left",
         "data": "go-left"
       },
       {
-        "source": "__start___should_start",
+        "source": "should_start",
         "target": "right",
         "data": "go-right"
       },
       {
         "source": "left",
-        "target": "left_condition"
+        "target": "condition"
       },
       {
-        "source": "left_condition",
+        "source": "condition",
         "target": "left",
         "data": "left"
       },
       {
-        "source": "left_condition",
+        "source": "condition",
         "target": "right",
         "data": "right"
       },
       {
-        "source": "left_condition",
+        "source": "condition",
         "target": "__end__",
         "data": "__end__"
       }
@@ -116,39 +116,39 @@
 # ---
 # name: test_conditional_entrypoint_graph.3
   '''
-                +-----------+            
-                | __start__ |            
-                +-----------+            
-                       *                 
-                       *                 
-                       *                 
-          +------------------------+     
-          | __start___should_start |     
-          +------------------------+     
-                ***         **           
-               *              **         
-             **                 **       
-       +------+                   *      
-       | left |                   *      
-       +------+                   *      
-           *                      *      
-           *                      *      
-           *                      *      
-  +----------------+              *      
-  | left_condition |              *      
-  +----------------+*             *      
-           *         *****        *      
-           *              ***     *      
-           *                 ***  *      
-           **                 +-------+  
-             *                | right |  
-              ***             +-------+  
-                 *          ***          
-                  ***      *             
-                     *   **              
-                 +---------+             
-                 | __end__ |             
-                 +---------+             
+            +-----------+          
+            | __start__ |          
+            +-----------+          
+                   *               
+                   *               
+                   *               
+           +--------------+        
+           | should_start |        
+           +--------------+        
+             **         **         
+           **             **       
+          *                 **     
+    +------+                  *    
+    | left |                  *    
+    +------+                  *    
+        *                     *    
+        *                     *    
+        *                     *    
+  +-----------+               *    
+  | condition |               *    
+  +-----------+***            *    
+        *         ***         *    
+        *            ****     *    
+        *                **   *    
+        *                +-------+ 
+         **              | right | 
+           **            +-------+ 
+             **         **         
+               **     **           
+                 *   *             
+              +---------+          
+              | __end__ |          
+              +---------+          
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
@@ -198,7 +198,7 @@
         }
       },
       {
-        "id": "__start___should_start",
+        "id": "should_start",
         "type": "runnable",
         "data": {
           "id": [
@@ -211,7 +211,7 @@
         }
       },
       {
-        "id": "left_condition",
+        "id": "condition",
         "type": "runnable",
         "data": {
           "id": [
@@ -231,34 +231,34 @@
       },
       {
         "source": "__start__",
-        "target": "__start___should_start"
+        "target": "should_start"
       },
       {
-        "source": "__start___should_start",
+        "source": "should_start",
         "target": "left",
         "data": "go-left"
       },
       {
-        "source": "__start___should_start",
+        "source": "should_start",
         "target": "right",
         "data": "go-right"
       },
       {
         "source": "left",
-        "target": "left_condition"
+        "target": "condition"
       },
       {
-        "source": "left_condition",
+        "source": "condition",
         "target": "left",
         "data": "left"
       },
       {
-        "source": "left_condition",
+        "source": "condition",
         "target": "right",
         "data": "right"
       },
       {
-        "source": "left_condition",
+        "source": "condition",
         "target": "__end__",
         "data": "__end__"
       }
@@ -268,39 +268,39 @@
 # ---
 # name: test_conditional_entrypoint_graph_state.3
   '''
-                +-----------+            
-                | __start__ |            
-                +-----------+            
-                       *                 
-                       *                 
-                       *                 
-          +------------------------+     
-          | __start___should_start |     
-          +------------------------+     
-                ***         **           
-               *              **         
-             **                 **       
-       +------+                   *      
-       | left |                   *      
-       +------+                   *      
-           *                      *      
-           *                      *      
-           *                      *      
-  +----------------+              *      
-  | left_condition |              *      
-  +----------------+*             *      
-           *         *****        *      
-           *              ***     *      
-           *                 ***  *      
-           **                 +-------+  
-             *                | right |  
-              ***             +-------+  
-                 *          ***          
-                  ***      *             
-                     *   **              
-                 +---------+             
-                 | __end__ |             
-                 +---------+             
+            +-----------+          
+            | __start__ |          
+            +-----------+          
+                   *               
+                   *               
+                   *               
+           +--------------+        
+           | should_start |        
+           +--------------+        
+             **         **         
+           **             **       
+          *                 **     
+    +------+                  *    
+    | left |                  *    
+    +------+                  *    
+        *                     *    
+        *                     *    
+        *                     *    
+  +-----------+               *    
+  | condition |               *    
+  +-----------+***            *    
+        *         ***         *    
+        *            ****     *    
+        *                **   *    
+        *                +-------+ 
+         **              | right | 
+           **            +-------+ 
+             **         **         
+               **     **           
+                 *   *             
+              +---------+          
+              | __end__ |          
+              +---------+          
   '''
 # ---
 # name: test_conditional_graph[end_of_run]
@@ -344,7 +344,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -368,15 +368,15 @@
       },
       {
         "source": "agent",
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "tools",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "exit"
       }
@@ -386,27 +386,27 @@
 # ---
 # name: test_conditional_graph[end_of_run].1
   '''
-                      +-----------+            
-                      | __start__ |            
-                      +-----------+            
-                            *                  
-                            *                  
-                            *                  
-                        +-------+              
-                        | agent |              
-                       *+-------+*             
-                     **           ***          
-                   **                **        
-                 **                    **      
-  +-----------------------+              **    
-  | agent_should_continue |               *    
-  +-----------------------+               *    
-              *            ****           *    
-              *                *****      *    
-              *                     ***   *    
-         +---------+                 +-------+ 
-         | __end__ |                 | tools | 
-         +---------+                 +-------+ 
+                 +-----------+            
+                 | __start__ |            
+                 +-----------+            
+                        *                 
+                        *                 
+                        *                 
+                   +-------+              
+                   | agent |              
+                   +-------+*             
+                 ***         ***          
+                *               *         
+              **                 ***      
+  +-----------------+               *     
+  | should_continue |               *     
+  +-----------------+*              *     
+            *         *****         *     
+            *              ***      *     
+            *                 ***   *     
+      +---------+              +-------+  
+      | __end__ |              | tools |  
+      +---------+              +-------+  
   '''
 # ---
 # name: test_conditional_graph[end_of_run].2
@@ -499,7 +499,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -547,15 +547,15 @@
       },
       {
         "source": 3,
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "tools",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "exit"
       }
@@ -565,51 +565,51 @@
 # ---
 # name: test_conditional_graph[end_of_run].3
   '''
-                                           +-----------+                                 
-                                           | __start__ |                                 
-                                           +-----------+                                 
-                                                 *                                       
-                                                 *                                       
-                                                 *                                       
-                                 +------------------------------+                        
-                                 | Parallel<agent_outcome>Input |                        
-                                 +------------------------------+                        
-                             ******             *               *****                    
-                       ******                   *                    *****               
-                    ***                        *                          ******         
-     +----------------+                        *                                ***      
-     | PromptTemplate |                        *                                  *      
-     +----------------+                        *                                  *      
-              *                                *                                  *      
-              *                                *                                  *      
-              *                                *                                  *      
-  +----------------------+                     *                                  *      
-  | FakeStreamingListLLM |                     *                                  *      
-  +----------------------+                     *                                  *      
-              *                                *                                  *      
-              *                                *                                  *      
-              *                                *                                  *      
-  +----------------------+              +-------------+                           *      
-  | Lambda(agent_parser) |              | Passthrough |                           *      
-  +----------------------+              +-------------+                           *      
-                      **              **                                          *      
-                        ***        ***                                            *      
-                           **    **                                               *      
-              +-------------------------------+                                   *      
-              | Parallel<agent_outcome>Output |                                   *      
-              +-------------------------------+                                   *      
-                              *                                                   *      
-                              *                                                   *      
-                              *                                                   *      
-                  +-----------------------+                                       *      
-                  | agent_should_continue |                                       *      
-                  +-----------------------+********                               *      
-                              *                    ********                       *      
-                              *                            ********               *      
-                              *                                    ********       *      
-                         +---------+                                       ***+-------+  
-                         | __end__ |                                          | tools |  
-                         +---------+                                          +-------+  
+                                        +-----------+                             
+                                        | __start__ |                             
+                                        +-----------+                             
+                                               *                                  
+                                               *                                  
+                                               *                                  
+                               +------------------------------+                   
+                               | Parallel<agent_outcome>Input |                   
+                               +------------------------------+                   
+                            *****            *              *****                 
+                      ******                 *                   ****             
+                   ***                      *                        *****        
+     +----------------+                     *                             ***     
+     | PromptTemplate |                     *                               *     
+     +----------------+                     *                               *     
+              *                             *                               *     
+              *                             *                               *     
+              *                             *                               *     
+  +----------------------+                  *                               *     
+  | FakeStreamingListLLM |                  *                               *     
+  +----------------------+                  *                               *     
+              *                             *                               *     
+              *                             *                               *     
+              *                             *                               *     
+  +----------------------+           +-------------+                        *     
+  | Lambda(agent_parser) |           | Passthrough |                        *     
+  +----------------------+           +-------------+                        *     
+                     ***            ***                                     *     
+                        **        **                                        *     
+                          **    **                                          *     
+             +-------------------------------+                              *     
+             | Parallel<agent_outcome>Output |                              *     
+             +-------------------------------+                              *     
+                             *                                              *     
+                             *                                              *     
+                             *                                              *     
+                    +-----------------+                                     *     
+                    | should_continue |***                                  *     
+                    +-----------------+   *********                         *     
+                             *                     ********                 *     
+                             *                             *********        *     
+                             *                                      *****   *     
+                        +---------+                                     +-------+ 
+                        | __end__ |                                     | tools | 
+                        +---------+                                     +-------+ 
   '''
 # ---
 # name: test_conditional_graph[end_of_step]
@@ -653,7 +653,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -677,15 +677,15 @@
       },
       {
         "source": "agent",
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "tools",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "exit"
       }
@@ -695,27 +695,27 @@
 # ---
 # name: test_conditional_graph[end_of_step].1
   '''
-                      +-----------+            
-                      | __start__ |            
-                      +-----------+            
-                            *                  
-                            *                  
-                            *                  
-                        +-------+              
-                        | agent |              
-                       *+-------+*             
-                     **           ***          
-                   **                **        
-                 **                    **      
-  +-----------------------+              **    
-  | agent_should_continue |               *    
-  +-----------------------+               *    
-              *            ****           *    
-              *                *****      *    
-              *                     ***   *    
-         +---------+                 +-------+ 
-         | __end__ |                 | tools | 
-         +---------+                 +-------+ 
+                 +-----------+            
+                 | __start__ |            
+                 +-----------+            
+                        *                 
+                        *                 
+                        *                 
+                   +-------+              
+                   | agent |              
+                   +-------+*             
+                 ***         ***          
+                *               *         
+              **                 ***      
+  +-----------------+               *     
+  | should_continue |               *     
+  +-----------------+*              *     
+            *         *****         *     
+            *              ***      *     
+            *                 ***   *     
+      +---------+              +-------+  
+      | __end__ |              | tools |  
+      +---------+              +-------+  
   '''
 # ---
 # name: test_conditional_graph[end_of_step].2
@@ -808,7 +808,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -856,15 +856,15 @@
       },
       {
         "source": 3,
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "tools",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "exit"
       }
@@ -874,51 +874,51 @@
 # ---
 # name: test_conditional_graph[end_of_step].3
   '''
-                                           +-----------+                                 
-                                           | __start__ |                                 
-                                           +-----------+                                 
-                                                 *                                       
-                                                 *                                       
-                                                 *                                       
-                                 +------------------------------+                        
-                                 | Parallel<agent_outcome>Input |                        
-                                 +------------------------------+                        
-                             ******             *               *****                    
-                       ******                   *                    *****               
-                    ***                        *                          ******         
-     +----------------+                        *                                ***      
-     | PromptTemplate |                        *                                  *      
-     +----------------+                        *                                  *      
-              *                                *                                  *      
-              *                                *                                  *      
-              *                                *                                  *      
-  +----------------------+                     *                                  *      
-  | FakeStreamingListLLM |                     *                                  *      
-  +----------------------+                     *                                  *      
-              *                                *                                  *      
-              *                                *                                  *      
-              *                                *                                  *      
-  +----------------------+              +-------------+                           *      
-  | Lambda(agent_parser) |              | Passthrough |                           *      
-  +----------------------+              +-------------+                           *      
-                      **              **                                          *      
-                        ***        ***                                            *      
-                           **    **                                               *      
-              +-------------------------------+                                   *      
-              | Parallel<agent_outcome>Output |                                   *      
-              +-------------------------------+                                   *      
-                              *                                                   *      
-                              *                                                   *      
-                              *                                                   *      
-                  +-----------------------+                                       *      
-                  | agent_should_continue |                                       *      
-                  +-----------------------+********                               *      
-                              *                    ********                       *      
-                              *                            ********               *      
-                              *                                    ********       *      
-                         +---------+                                       ***+-------+  
-                         | __end__ |                                          | tools |  
-                         +---------+                                          +-------+  
+                                        +-----------+                             
+                                        | __start__ |                             
+                                        +-----------+                             
+                                               *                                  
+                                               *                                  
+                                               *                                  
+                               +------------------------------+                   
+                               | Parallel<agent_outcome>Input |                   
+                               +------------------------------+                   
+                            *****            *              *****                 
+                      ******                 *                   ****             
+                   ***                      *                        *****        
+     +----------------+                     *                             ***     
+     | PromptTemplate |                     *                               *     
+     +----------------+                     *                               *     
+              *                             *                               *     
+              *                             *                               *     
+              *                             *                               *     
+  +----------------------+                  *                               *     
+  | FakeStreamingListLLM |                  *                               *     
+  +----------------------+                  *                               *     
+              *                             *                               *     
+              *                             *                               *     
+              *                             *                               *     
+  +----------------------+           +-------------+                        *     
+  | Lambda(agent_parser) |           | Passthrough |                        *     
+  +----------------------+           +-------------+                        *     
+                     ***            ***                                     *     
+                        **        **                                        *     
+                          **    **                                          *     
+             +-------------------------------+                              *     
+             | Parallel<agent_outcome>Output |                              *     
+             +-------------------------------+                              *     
+                             *                                              *     
+                             *                                              *     
+                             *                                              *     
+                    +-----------------+                                     *     
+                    | should_continue |***                                  *     
+                    +-----------------+   *********                         *     
+                             *                     ********                 *     
+                             *                             *********        *     
+                             *                                      *****   *     
+                        +---------+                                     +-------+ 
+                        | __end__ |                                     | tools | 
+                        +---------+                                     +-------+ 
   '''
 # ---
 # name: test_conditional_graph_state[end_of_run]
@@ -968,7 +968,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -992,15 +992,15 @@
       },
       {
         "source": "agent",
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "tools",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "exit"
       }
@@ -1010,27 +1010,27 @@
 # ---
 # name: test_conditional_graph_state[end_of_run].3
   '''
-                      +-----------+            
-                      | __start__ |            
-                      +-----------+            
-                            *                  
-                            *                  
-                            *                  
-                        +-------+              
-                        | agent |              
-                       *+-------+*             
-                     **           ***          
-                   **                **        
-                 **                    **      
-  +-----------------------+              **    
-  | agent_should_continue |               *    
-  +-----------------------+               *    
-              *            ****           *    
-              *                *****      *    
-              *                     ***   *    
-         +---------+                 +-------+ 
-         | __end__ |                 | tools | 
-         +---------+                 +-------+ 
+                 +-----------+            
+                 | __start__ |            
+                 +-----------+            
+                        *                 
+                        *                 
+                        *                 
+                   +-------+              
+                   | agent |              
+                   +-------+*             
+                 ***         ***          
+                *               *         
+              **                 ***      
+  +-----------------+               *     
+  | should_continue |               *     
+  +-----------------+*              *     
+            *         *****         *     
+            *              ***      *     
+            *                 ***   *     
+      +---------+              +-------+  
+      | __end__ |              | tools |  
+      +---------+              +-------+  
   '''
 # ---
 # name: test_conditional_graph_state[end_of_step]
@@ -1080,7 +1080,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -1104,15 +1104,15 @@
       },
       {
         "source": "agent",
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "tools",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "exit"
       }
@@ -1122,27 +1122,27 @@
 # ---
 # name: test_conditional_graph_state[end_of_step].3
   '''
-                      +-----------+            
-                      | __start__ |            
-                      +-----------+            
-                            *                  
-                            *                  
-                            *                  
-                        +-------+              
-                        | agent |              
-                       *+-------+*             
-                     **           ***          
-                   **                **        
-                 **                    **      
-  +-----------------------+              **    
-  | agent_should_continue |               *    
-  +-----------------------+               *    
-              *            ****           *    
-              *                *****      *    
-              *                     ***   *    
-         +---------+                 +-------+ 
-         | __end__ |                 | tools | 
-         +---------+                 +-------+ 
+                 +-----------+            
+                 | __start__ |            
+                 +-----------+            
+                        *                 
+                        *                 
+                        *                 
+                   +-------+              
+                   | agent |              
+                   +-------+*             
+                 ***         ***          
+                *               *         
+              **                 ***      
+  +-----------------+               *     
+  | should_continue |               *     
+  +-----------------+*              *     
+            *         *****         *     
+            *              ***      *     
+            *                 ***   *     
+      +---------+              +-------+  
+      | __end__ |              | tools |  
+      +---------+              +-------+  
   '''
 # ---
 # name: test_message_graph[end_of_run]
@@ -1191,7 +1191,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -1215,15 +1215,15 @@
       },
       {
         "source": "agent",
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "action",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "end"
       }
@@ -1233,27 +1233,27 @@
 # ---
 # name: test_message_graph[end_of_run].3
   '''
-                      +-----------+             
-                      | __start__ |             
-                      +-----------+             
-                            *                   
-                            *                   
-                            *                   
-                        +-------+               
-                        | agent |               
-                       *+-------+*              
-                     **           ***           
-                   **                **         
-                 **                    **       
-  +-----------------------+              **     
-  | agent_should_continue |               *     
-  +-----------------------+               *     
-              *           *****           *     
-              *                ****       *     
-              *                    ***    *     
-         +---------+                +--------+  
-         | __end__ |                | action |  
-         +---------+                +--------+  
+                 +-----------+            
+                 | __start__ |            
+                 +-----------+            
+                        *                 
+                        *                 
+                        *                 
+                   +-------+              
+                   | agent |              
+                   +-------+*             
+                 ***         ***          
+                *               *         
+              **                 ***      
+  +-----------------+               *     
+  | should_continue |               *     
+  +-----------------+*              *     
+            *         *****         *     
+            *              ***      *     
+            *                 ***   *     
+      +---------+             +--------+  
+      | __end__ |             | action |  
+      +---------+             +--------+  
   '''
 # ---
 # name: test_message_graph[end_of_step]
@@ -1302,7 +1302,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -1326,15 +1326,15 @@
       },
       {
         "source": "agent",
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "action",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "end"
       }
@@ -1344,27 +1344,27 @@
 # ---
 # name: test_message_graph[end_of_step].3
   '''
-                      +-----------+             
-                      | __start__ |             
-                      +-----------+             
-                            *                   
-                            *                   
-                            *                   
-                        +-------+               
-                        | agent |               
-                       *+-------+*              
-                     **           ***           
-                   **                **         
-                 **                    **       
-  +-----------------------+              **     
-  | agent_should_continue |               *     
-  +-----------------------+               *     
-              *           *****           *     
-              *                ****       *     
-              *                    ***    *     
-         +---------+                +--------+  
-         | __end__ |                | action |  
-         +---------+                +--------+  
+                 +-----------+            
+                 | __start__ |            
+                 +-----------+            
+                        *                 
+                        *                 
+                        *                 
+                   +-------+              
+                   | agent |              
+                   +-------+*             
+                 ***         ***          
+                *               *         
+              **                 ***      
+  +-----------------+               *     
+  | should_continue |               *     
+  +-----------------+*              *     
+            *         *****         *     
+            *              ***      *     
+            *                 ***   *     
+      +---------+             +--------+  
+      | __end__ |             | action |  
+      +---------+             +--------+  
   '''
 # ---
 # name: test_prebuilt_chat
@@ -1414,7 +1414,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -1438,15 +1438,15 @@
       },
       {
         "source": "agent",
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "action",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "end"
       }
@@ -1456,27 +1456,27 @@
 # ---
 # name: test_prebuilt_chat.3
   '''
-                      +-----------+             
-                      | __start__ |             
-                      +-----------+             
-                            *                   
-                            *                   
-                            *                   
-                        +-------+               
-                        | agent |               
-                       *+-------+*              
-                     **           ***           
-                   **                **         
-                 **                    **       
-  +-----------------------+              **     
-  | agent_should_continue |               *     
-  +-----------------------+               *     
-              *           *****           *     
-              *                ****       *     
-              *                    ***    *     
-         +---------+                +--------+  
-         | __end__ |                | action |  
-         +---------+                +--------+  
+                 +-----------+            
+                 | __start__ |            
+                 +-----------+            
+                        *                 
+                        *                 
+                        *                 
+                   +-------+              
+                   | agent |              
+                   +-------+*             
+                 ***         ***          
+                *               *         
+              **                 ***      
+  +-----------------+               *     
+  | should_continue |               *     
+  +-----------------+*              *     
+            *         *****         *     
+            *              ***      *     
+            *                 ***   *     
+      +---------+             +--------+  
+      | __end__ |             | action |  
+      +---------+             +--------+  
   '''
 # ---
 # name: test_prebuilt_tool_chat
@@ -1526,7 +1526,7 @@
         }
       },
       {
-        "id": "agent_should_continue",
+        "id": "should_continue",
         "type": "runnable",
         "data": {
           "id": [
@@ -1550,15 +1550,15 @@
       },
       {
         "source": "agent",
-        "target": "agent_should_continue"
+        "target": "should_continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "action",
         "data": "continue"
       },
       {
-        "source": "agent_should_continue",
+        "source": "should_continue",
         "target": "__end__",
         "data": "end"
       }
@@ -1568,26 +1568,26 @@
 # ---
 # name: test_prebuilt_tool_chat.3
   '''
-                      +-----------+             
-                      | __start__ |             
-                      +-----------+             
-                            *                   
-                            *                   
-                            *                   
-                        +-------+               
-                        | agent |               
-                       *+-------+*              
-                     **           ***           
-                   **                **         
-                 **                    **       
-  +-----------------------+              **     
-  | agent_should_continue |               *     
-  +-----------------------+               *     
-              *           *****           *     
-              *                ****       *     
-              *                    ***    *     
-         +---------+                +--------+  
-         | __end__ |                | action |  
-         +---------+                +--------+  
+                 +-----------+            
+                 | __start__ |            
+                 +-----------+            
+                        *                 
+                        *                 
+                        *                 
+                   +-------+              
+                   | agent |              
+                   +-------+*             
+                 ***         ***          
+                *               *         
+              **                 ***      
+  +-----------------+               *     
+  | should_continue |               *     
+  +-----------------+*              *     
+            *         *****         *     
+            *              ***      *     
+            *                 ***   *     
+      +---------+             +--------+  
+      | __end__ |             | action |  
+      +---------+             +--------+  
   '''
 # ---
