@@ -176,7 +176,7 @@ graph.add_edge("multiply", END)
 graph.set_entry_point("oracle")
 ```
 
-Now let's think - what do we want to have happen?
+Now let's think - what do we want to have happened?
 
 - If the `"oracle"` node returns a message expecting a tool call, we want to execute the `"multiply"` node
 - If not, we can just end execution
@@ -648,7 +648,7 @@ For a walkthrough on how to do that, see [this documentation](https://github.com
 ### Visualizing the graph
 
 Agents you create with LangGraph can be complex. In order to make it easier to understand what is happening under the hood, we've added methods to print out and visualize the graph.
-This can create both ascii art as well as pngs.
+This can create both ascii art and pngs.
 For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/visualization.ipynb)
 
 ### "Time Travel"
@@ -708,7 +708,7 @@ The following notebooks implement agent architectures prototypical of the "plan-
 When output quality is a major concern, it's common to incorporate some combination of self-critique or reflection and external validation to refine your system's outputs. The following examples demonstrate research that implement this type of design.
 
 - [Basic Reflection](./examples/reflection/reflection.ipynb): add a simple "reflect" step in your graph to prompt your system to revise its outputs.
-- [Reflexion](./examples/reflexion/reflexion.ipynb): critique missing and superflous aspects of the agent's response to guide subsequent steps. Based on [Reflexion](https://arxiv.org/abs/2303.11366), by Shinn, et. al.
+- [Reflexion](./examples/reflexion/reflexion.ipynb): critique missing and superfluous aspects of the agent's response to guide subsequent steps. Based on [Reflexion](https://arxiv.org/abs/2303.11366), by Shinn, et. al.
 - [Language Agent Tree Search](./examples/lats/lats.ipynb): execute multiple agents in parallel, using reflection and environmental rewards to drive a Monte Carlo Tree Search. Based on [LATS](https://arxiv.org/abs/2310.04406), by Zhou, et. al.
 
 ### Multi-agent Examples
