@@ -14,7 +14,7 @@ from langgraph.channels.topic import Topic
 
 
 def test_last_value() -> None:
-    with LastValue(int).empty() as channel:
+    with LastValue(int).from_checkpoint() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
@@ -28,12 +28,12 @@ def test_last_value() -> None:
         channel.update([4])
         assert channel.get() == 4
         checkpoint = channel.checkpoint()
-    with LastValue(int).empty(checkpoint) as channel:
+    with LastValue(int).from_checkpoint(checkpoint) as channel:
         assert channel.get() == 4
 
 
 async def test_last_value_async() -> None:
-    async with LastValue(int).aempty() as channel:
+    async with LastValue(int).afrom_checkpoint() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
@@ -47,12 +47,12 @@ async def test_last_value_async() -> None:
         channel.update([4])
         assert channel.get() == 4
         checkpoint = channel.checkpoint()
-    async with LastValue(int).aempty(checkpoint) as channel:
+    async with LastValue(int).afrom_checkpoint(checkpoint) as channel:
         assert channel.get() == 4
 
 
 def test_topic() -> None:
-    with Topic(str).empty() as channel:
+    with Topic(str).from_checkpoint() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
@@ -65,12 +65,16 @@ def test_topic() -> None:
         channel.update(["e"])
         assert channel.get() == ["e"]
         checkpoint = channel.checkpoint()
-    with Topic(str).empty(checkpoint) as channel:
+    with Topic(str).from_checkpoint(checkpoint) as channel:
         assert channel.get() == ["e"]
+        with Topic(str).from_checkpoint(checkpoint) as channel_copy:
+            channel_copy.update(["f"])
+            assert channel_copy.get() == ["f"]
+            assert channel.get() == ["e"]
 
 
 async def test_topic_async() -> None:
-    async with Topic(str).aempty() as channel:
+    async with Topic(str).afrom_checkpoint() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
@@ -83,12 +87,12 @@ async def test_topic_async() -> None:
         channel.update(["e"])
         assert channel.get() == ["e"]
         checkpoint = channel.checkpoint()
-    async with Topic(str).aempty(checkpoint) as channel:
+    async with Topic(str).afrom_checkpoint(checkpoint) as channel:
         assert channel.get() == ["e"]
 
 
 def test_topic_unique() -> None:
-    with Topic(str, unique=True).empty() as channel:
+    with Topic(str, unique=True).from_checkpoint() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
@@ -101,14 +105,14 @@ def test_topic_unique() -> None:
         channel.update(["e"])
         assert channel.get() == ["e"]
         checkpoint = channel.checkpoint()
-    with Topic(str, unique=True).empty(checkpoint) as channel:
+    with Topic(str, unique=True).from_checkpoint(checkpoint) as channel:
         assert channel.get() == ["e"]
         channel.update(["d", "f"])
         assert channel.get() == ["f"], "de-dupes from checkpoint"
 
 
 async def test_topic_unique_async() -> None:
-    async with Topic(str, unique=True).aempty() as channel:
+    async with Topic(str, unique=True).afrom_checkpoint() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
@@ -121,14 +125,14 @@ async def test_topic_unique_async() -> None:
         channel.update(["e"])
         assert channel.get() == ["e"]
         checkpoint = channel.checkpoint()
-    async with Topic(str, unique=True).aempty(checkpoint) as channel:
+    async with Topic(str, unique=True).afrom_checkpoint(checkpoint) as channel:
         assert channel.get() == ["e"]
         channel.update(["d", "f"])
         assert channel.get() == ["f"], "de-dupes from checkpoint"
 
 
 def test_topic_accumulate() -> None:
-    with Topic(str, accumulate=True).empty() as channel:
+    with Topic(str, accumulate=True).from_checkpoint() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
@@ -139,14 +143,14 @@ def test_topic_accumulate() -> None:
         channel.update([])
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
         checkpoint = channel.checkpoint()
-    with Topic(str, accumulate=True).empty(checkpoint) as channel:
+    with Topic(str, accumulate=True).from_checkpoint(checkpoint) as channel:
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
         channel.update(["e"])
         assert channel.get() == ["a", "b", "b", "c", "d", "d", "e"]
 
 
 async def test_topic_accumulate_async() -> None:
-    async with Topic(str, accumulate=True).aempty() as channel:
+    async with Topic(str, accumulate=True).afrom_checkpoint() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
@@ -157,14 +161,14 @@ async def test_topic_accumulate_async() -> None:
         channel.update([])
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
         checkpoint = channel.checkpoint()
-    async with Topic(str, accumulate=True).aempty(checkpoint) as channel:
+    async with Topic(str, accumulate=True).afrom_checkpoint(checkpoint) as channel:
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
         channel.update(["e"])
         assert channel.get() == ["a", "b", "b", "c", "d", "d", "e"]
 
 
 def test_topic_unique_accumulate() -> None:
-    with Topic(str, unique=True, accumulate=True).empty() as channel:
+    with Topic(str, unique=True, accumulate=True).from_checkpoint() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
@@ -175,14 +179,16 @@ def test_topic_unique_accumulate() -> None:
         channel.update([])
         assert channel.get() == ["a", "b", "c", "d"]
         checkpoint = channel.checkpoint()
-    with Topic(str, unique=True, accumulate=True).empty(checkpoint) as channel:
+    with Topic(str, unique=True, accumulate=True).from_checkpoint(
+        checkpoint
+    ) as channel:
         assert channel.get() == ["a", "b", "c", "d"]
         channel.update(["d", "e"])
         assert channel.get() == ["a", "b", "c", "d", "e"]
 
 
 async def test_topic_unique_accumulate_async() -> None:
-    async with Topic(str, unique=True, accumulate=True).aempty() as channel:
+    async with Topic(str, unique=True, accumulate=True).afrom_checkpoint() as channel:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
@@ -193,14 +199,16 @@ async def test_topic_unique_accumulate_async() -> None:
         channel.update([])
         assert channel.get() == ["a", "b", "c", "d"]
         checkpoint = channel.checkpoint()
-    async with Topic(str, unique=True, accumulate=True).aempty(checkpoint) as channel:
+    async with Topic(str, unique=True, accumulate=True).afrom_checkpoint(
+        checkpoint
+    ) as channel:
         assert channel.get() == ["a", "b", "c", "d"]
         channel.update(["d", "e"])
         assert channel.get() == ["a", "b", "c", "d", "e"]
 
 
 def test_binop() -> None:
-    with BinaryOperatorAggregate(int, operator.add).empty() as channel:
+    with BinaryOperatorAggregate(int, operator.add).from_checkpoint() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
@@ -211,12 +219,14 @@ def test_binop() -> None:
         channel.update([4])
         assert channel.get() == 10
         checkpoint = channel.checkpoint()
-    with BinaryOperatorAggregate(int, operator.add).empty(checkpoint) as channel:
+    with BinaryOperatorAggregate(int, operator.add).from_checkpoint(
+        checkpoint
+    ) as channel:
         assert channel.get() == 10
 
 
 async def test_binop_async() -> None:
-    async with BinaryOperatorAggregate(int, operator.add).aempty() as channel:
+    async with BinaryOperatorAggregate(int, operator.add).afrom_checkpoint() as channel:
         assert channel.ValueType is int
         assert channel.UpdateType is int
 
@@ -227,7 +237,9 @@ async def test_binop_async() -> None:
         channel.update([4])
         assert channel.get() == 10
         checkpoint = channel.checkpoint()
-    async with BinaryOperatorAggregate(int, operator.add).aempty(checkpoint) as channel:
+    async with BinaryOperatorAggregate(int, operator.add).afrom_checkpoint(
+        checkpoint
+    ) as channel:
         assert channel.get() == 10
 
 
@@ -243,7 +255,7 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    with Context(an_int, None, int).empty() as channel:
+    with Context(an_int, None, int).from_checkpoint() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 
@@ -261,7 +273,7 @@ def test_ctx_manager(mocker: MockerFixture) -> None:
 
 
 def test_ctx_manager_ctx(mocker: MockerFixture) -> None:
-    with Context(httpx.Client).empty() as channel:
+    with Context(httpx.Client).from_checkpoint() as channel:
         assert channel.ValueType is httpx.Client
         with pytest.raises(InvalidUpdateError):
             assert channel.UpdateType is None
@@ -294,7 +306,7 @@ async def test_ctx_manager_async(mocker: MockerFixture) -> None:
         finally:
             cleanup()
 
-    async with Context(an_int_sync, an_int, int).aempty() as channel:
+    async with Context(an_int_sync, an_int, int).afrom_checkpoint() as channel:
         assert setup.call_count == 1
         assert cleanup.call_count == 0
 

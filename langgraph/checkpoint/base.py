@@ -1,23 +1,47 @@
-import asyncio
-from abc import ABC, abstractmethod
+from abc import ABC
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, Optional, TypedDict
+from typing import (
+    Any,
+    AsyncIterator,
+    Iterator,
+    NamedTuple,
+    Optional,
+    Protocol,
+    TypedDict,
+)
 
-from langchain_core.load.serializable import Serializable
-from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.utils import ConfigurableFieldSpec
+from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
 from langgraph.utils import StrEnum
 
 
 class Checkpoint(TypedDict):
+    """State snapshot at a given point in time."""
+
     v: int
+    """The version of the checkpoint format. Currently 1."""
     ts: str
+    """The timestamp of the checkpoint in ISO 8601 format."""
     channel_values: dict[str, Any]
+    """The values of the channels at the time of the checkpoint.
+    
+    Mapping from channel name to channel snapshot value.
+    """
     channel_versions: defaultdict[str, int]
+    """The versions of the channels at the time of the checkpoint.
+    
+    The keys are channel names and the values are the logical time step
+    at which the channel was last updated.
+    """
     versions_seen: defaultdict[str, defaultdict[str, int]]
+    """Map from node ID to map from channel name to version seen.
+    
+    This keeps track of the versions of the channels that each node has seen.
+    
+    Used to determine which nodes to execute next.
+    """
 
 
 def _seen_dict():
@@ -49,25 +73,79 @@ class CheckpointAt(StrEnum):
     END_OF_RUN = "end_of_run"
 
 
-class BaseCheckpointSaver(Serializable, ABC):
-    at: CheckpointAt = CheckpointAt.END_OF_RUN
+class CheckpointTuple(NamedTuple):
+    config: RunnableConfig
+    checkpoint: Checkpoint
+    parent_config: Optional[RunnableConfig] = None
+
+
+CheckpointThreadId = ConfigurableFieldSpec(
+    id="thread_id",
+    annotation=str,
+    name="Thread ID",
+    description=None,
+    default="",
+    is_shared=True,
+)
+
+CheckpointThreadTs = ConfigurableFieldSpec(
+    id="thread_ts",
+    annotation=Optional[str],
+    name="Thread Timestamp",
+    description="Pass to fetch a past checkpoint. If None, fetches the latest checkpoint.",
+    default=None,
+    is_shared=True,
+)
+
+
+class SerializerProtocol(Protocol):
+    def dumps(self, obj: Any) -> bytes: ...
+
+    def loads(self, data: bytes) -> Any: ...
+
+
+class BaseCheckpointSaver(ABC):
+    at: CheckpointAt = CheckpointAt.END_OF_STEP
+
+    serde: SerializerProtocol
+
+    def __init__(
+        self,
+        *,
+        serde: Optional[SerializerProtocol] = None,
+        at: Optional[CheckpointAt] = None,
+    ) -> None:
+        self.serde = serde or self.serde
+        self.at = at or self.at
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
-        return []
+        return [CheckpointThreadId, CheckpointThreadTs]
 
-    @abstractmethod
     def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
-        ...
+        if value := self.get_tuple(config):
+            return value.checkpoint
 
-    @abstractmethod
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> None:
-        ...
+    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        raise NotImplementedError
+
+    def list(self, config: RunnableConfig) -> Iterator[CheckpointTuple]:
+        raise NotImplementedError
+
+    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+        raise NotImplementedError
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
-        return await asyncio.get_running_loop().run_in_executor(None, self.get, config)
+        if value := await self.aget_tuple(config):
+            return value.checkpoint
 
-    async def aput(self, config: RunnableConfig, checkpoint: Checkpoint) -> None:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint
-        )
+    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        raise NotImplementedError
+
+    async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
+        raise NotImplementedError
+
+    async def aput(
+        self, config: RunnableConfig, checkpoint: Checkpoint
+    ) -> RunnableConfig:
+        raise NotImplementedError
