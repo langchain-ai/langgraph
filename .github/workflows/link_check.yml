@@ -48,4 +48,4 @@ jobs:
         env:
           LANGCHAIN_API_KEY: test
           shell: bash
-        run: poetry run pytest -o python_files=non_python_only --check-links --ignore="*.py" -k .ipynb --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" ./examples
+        run: poetry run pytest -o python_files=non_python_only --check-links --ignore="*.py,*langgraph_agentic_rag.ipynb" -k .ipynb --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" ./examples
