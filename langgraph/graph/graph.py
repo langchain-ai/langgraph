@@ -400,7 +400,6 @@ class CompiledGraph(Pregel):
             graph.add_edge(start_nodes[start], end_nodes[end])
         for start, branches in self.graph.branches.items():
             for name, branch in branches.items():
-                name = f"{start}_{name}"
                 cond = graph.add_node(branch.condition, name)
                 graph.add_edge(start_nodes[start], cond)
                 ends = branch.ends or {

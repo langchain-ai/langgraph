@@ -1,9 +1,15 @@
-from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, CheckpointAt
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    CheckpointAt,
+    SerializerProtocol,
+)
 from langgraph.checkpoint.memory import MemorySaver
 
 __all__ = [
+    "BaseCheckpointSaver",
     "Checkpoint",
     "CheckpointAt",
-    "BaseCheckpointSaver",
     "MemorySaver",
+    "SerializerProtocol",
 ]
