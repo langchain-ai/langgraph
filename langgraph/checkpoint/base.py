@@ -99,11 +99,9 @@ CheckpointThreadTs = ConfigurableFieldSpec(
 
 
 class SerializerProtocol(Protocol):
-    def dumps(self, obj: Any) -> bytes:
-        ...
+    def dumps(self, obj: Any) -> bytes: ...
 
-    def loads(self, data: bytes) -> Any:
-        ...
+    def loads(self, data: bytes) -> Any: ...
 
 
 class BaseCheckpointSaver(ABC):

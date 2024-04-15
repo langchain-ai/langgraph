@@ -12,7 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-gigachain-core = "^0.1.40"
+gigachain-core = "^0.1.42rc1"
 
 
 [tool.poetry.group.test.dependencies]
