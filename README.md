@@ -435,6 +435,18 @@ For a walkthrough on how to do that, see [this documentation](https://github.com
 LangGraph comes with built-in support for human-in-the-loop workflows. This is useful when you want to have a human review the current state before proceeding to a particular node.
 For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/human-in-the-loop.ipynb)
 
+### Visualizing the graph
+
+Agents you create with LangGraph can be complex. In order to make it easier to understand what is happening under the hood, we've added methods to print out and visualize the graph.
+This can create both ascii art as well as pngs.
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/visualization.ipynb)
+
+### "Time Travel"
+
+With "time travel" functionality you can jump to any point in the graph execution, modify the state, and rerun from there.
+This is useful for both debugging workflows, as well as end user-facing workflows to allow them to correct the state.
+For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/time-travel.ipynb)
+
 
 ## Примеры
 
@@ -476,7 +488,6 @@ We also have a lot of examples highlighting how to slightly modify the base chat
 - [Принудительный вызов инструмента](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/force-calling-a-tool-first.ipynb). Пример демонстрирует как всегда вызывать определенный инструмент в первую очередь.
 - [Управление этапами работы агента](https://github.com/langchain-ai/langgraph/blob/main/examples/agent_executor/managing-agent-steps.ipynb). Пример демонстрирует, как можно более детально управлять промежуточными этапами работы агента.
 
-
 ### Planning Agent Examples
 
 The following notebooks implement agent architectures prototypical of the "plan-and-execute" style, where an LLM planner decomposes a user request into a program, an executor executes the program, and an LLM synthesizes a response (and/or dynamically replans) based on the program outputs.
@@ -485,13 +496,13 @@ The following notebooks implement agent architectures prototypical of the "plan-
 - [Reasoning without Observation](https://github.com/langchain-ai/langgraph/blob/main/examples/rewoo/rewoo.ipynb): planner generates a task list whose observations are saved as **variables**. Variables can be used in subsequent tasks to reduce the need for further re-planning. Based on the [ReWOO](https://arxiv.org/abs/2305.18323) paper by Xu, et. al.
 - [LLMCompiler](https://github.com/langchain-ai/langgraph/blob/main/examples/llm-compiler/LLMCompiler.ipynb): planner generates a **DAG** of tasks with variable responses. Tasks are **streamed** and executed eagerly to minimize tool execution runtime. Based on the [paper](https://arxiv.org/abs/2312.04511) by Kim, et. al.
 
-
 ### Reflection / Self-Critique
 
 When output quality is a major concern, it's common to incorporate some combination of self-critique or reflection and external validation to refine your system's outputs. The following examples demonstrate research that implement this type of design.
 
 - [Basic Reflection](./examples/reflection/reflection.ipynb): add a simple "reflect" step in your graph to prompt your system to revise its outputs.
 - [Reflexion](./examples/reflexion/reflexion.ipynb): critique missing and superflous aspects of the agent's response to guide subsequent steps. Based on [Reflexion](https://arxiv.org/abs/2303.11366), by Shinn, et. al.
+- [Giga Reflexion](./examples/reflexion_giga/reflexion.ipynb): реализация Reflexion на GigaChat
 - [Language Agent Tree Search](./examples/lats/lats.ipynb): execute multiple agents in parallel, using reflection and environmental rewards to drive a Monte Carlo Tree Search. Based on [LATS](https://arxiv.org/abs/2310.04406/LanguageAgentTreeSearch/), by Zhou, et. al.
 
 ### Multi-agent Examples
@@ -512,7 +523,8 @@ When output quality is a major concern, it's common to incorporate some combinat
 При работе с асинхронными процессами вам может потребоваться создать с помощью GigaGraph граф с вершинами, которые будут асинхронными по умолчанию.
 [Пример](https://github.com/langchain-ai/langgraph/blob/main/examples/async.ipynb).
 
-### Потоковая передача токенов
+- [Chat bot evaluation as multi-agent simulation](https://github.com/langchain-ai/langgraph/blob/main/examples/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): how to simulate a dialogue between a "virtual user" and your chat bot
+- [Evaluating over a dataset](./examples/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): benchmark your assistant over a LangSmith dataset, which tasks a simulated customer to red-team your chat bot.
 
 Ответ модели может занимать продолжительное время и вам может потребоваться на лету отображать пользователям результат работы модели.
 [Пример](https://github.com/langchain-ai/langgraph/blob/main/examples/streaming-tokens.ipynb).
@@ -661,7 +673,7 @@ This method adds a node to the graph.
 
 - `key` — название вершины, которую нужно вызывать в первую очередь.
 
-#### `.add_conditional_edges`
+#### `.set_conditional_entry_point`
 
 ```python
     def set_conditional_entry_point(
@@ -676,7 +688,6 @@ What this means is that when the graph is called, it will call the `condition` C
 
 - `condition`: A function to call to decide what to do next. The input will be the input to the graph. It should return a string that is present in `conditional_edge_mapping` and represents the edge to take.
 - `conditional_edge_mapping`: A mapping of string to string. The keys should be strings that may be returned by `condition`. The values should be the downstream node to call if that condition is returned.
-
 
 #### `.set_finish_point`
 
@@ -772,7 +783,7 @@ for s in app.stream(inputs):
     print("----")
 ```
 
-### create_tool_calling_executor
+### chat_agent_executor.create_tool_calling_executor
 
 ```python
 from langgraph.prebuilt import chat_agent_executor

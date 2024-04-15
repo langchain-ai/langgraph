@@ -939,20 +939,19 @@ extended-testing = ["jinja2 (>=3,<4)"]
 
 [[package]]
 name = "gigachain-openai"
-version = "0.0.5"
+version = "0.1.3rc1"
 description = "An integration package connecting OpenAI and LangChain"
 optional = false
-python-versions = ">=3.8.1,<4.0"
+python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "gigachain_openai-0.0.5-py3-none-any.whl", hash = "sha256:0bb1fcbc76087cd5884d5a7b4696d62433a32c53f47d2015ae86f66d08a17a19"},
-    {file = "gigachain_openai-0.0.5.tar.gz", hash = "sha256:299afc8409eeefd52493c6a5d32cee5f7aadee7a1eae127ed6f3adce6d3e0d4c"},
+    {file = "gigachain_openai-0.1.3rc1-py3-none-any.whl", hash = "sha256:3e6fbca728846e370e2516e97868cd3dfeca2b9b238d777dd783c284bb997c46"},
+    {file = "gigachain_openai-0.1.3rc1.tar.gz", hash = "sha256:eaef8d9598620d54dd068b7a2966fc39424d08c6505097d50875056acc9e9f02"},
 ]
 
 [package.dependencies]
-gigachain-core = ">=0.1.16,<0.2"
-numpy = ">=1,<2"
+gigachain-core = ">=0.1.42rc1,<0.2.0"
 openai = ">=1.10.0,<2.0.0"
-tiktoken = ">=0.5.2,<0.6.0"
+tiktoken = ">=0.5.2,<1"
 
 [[package]]
 name = "gigachain-text-splitters"
@@ -3867,4 +3866,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "b3a876123c17e2e42d2c80e1c214ba264d9114d73984311992c41293a03c9174"
+content-hash = "c36c73412a08a940c7e030ce2e466993ad4f90be18858a25250b12d017d9005a"

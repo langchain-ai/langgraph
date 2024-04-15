@@ -1,9 +1,9 @@
 [tool.poetry]
 name = "gigagraph"
-version = "0.0.26"
-description = "gigagraph"
+version = "0.0.37"
+description = "langgraph"
 authors = []
-license = "LangGraph License"
+license = "MIT"
 readme = "README.md"
 repository = "https://github.com/ai-forever/gigagraph"
 packages = [
@@ -12,7 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-gigachain_core = "^0.1.28"
+gigachain-core = "^0.1.42rc1"
 
 
 [tool.poetry.group.test.dependencies]
@@ -44,7 +44,7 @@ optional = true
 jupyter = "^1.0.0"
 gigachain = "^0.1.0"
 langchainhub = "^0.1.14"
-gigachain-openai = "^0.0.5"
+gigachain-openai = "^0.1.2"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]

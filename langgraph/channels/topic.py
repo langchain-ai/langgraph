@@ -49,14 +49,17 @@ class Topic(
         """The type of the update received by the channel."""
         return Union[self.typ, list[self.typ]]  # type: ignore[name-defined]
 
+    def checkpoint(self) -> tuple[set[Value], list[Value]]:
+        return (self.seen, self.values)
+
     @contextmanager
-    def empty(
+    def from_checkpoint(
         self, checkpoint: Optional[tuple[set[Value], list[Value]]] = None
     ) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ, self.unique, self.accumulate)
         if checkpoint is not None:
-            empty.seen = checkpoint[0]
-            empty.values = checkpoint[1]
+            empty.seen = checkpoint[0].copy()
+            empty.values = checkpoint[1].copy()
         try:
             yield empty
         finally:
@@ -76,6 +79,3 @@ class Topic(
 
     def get(self) -> Sequence[Value]:
         return list(self.values)
-
-    def checkpoint(self) -> tuple[set[Value], list[Value]]:
-        return (self.seen, self.values)

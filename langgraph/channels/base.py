@@ -45,18 +45,32 @@ class BaseChannel(Generic[Value, Update, C], ABC):
     def UpdateType(self) -> Any:
         """The type of the update received by the channel."""
 
+    # ser/de methods
+
+    @abstractmethod
+    def checkpoint(self) -> Optional[C]:
+        """Return a serializable representation of the channel's current state.
+        Raises EmptyChannelError if the channel is empty (never updated yet),
+        or doesn't support checkpoints."""
+
     @contextmanager
     @abstractmethod
-    def empty(self, checkpoint: Optional[C] = None) -> Generator[Self, None, None]:
-        """Return a new identical channel, optionally initialized from a checkpoint."""
+    def from_checkpoint(
+        self, checkpoint: Optional[C] = None
+    ) -> Generator[Self, None, None]:
+        """Return a new identical channel, optionally initialized from a checkpoint.
+        If the checkpoint contains complex data structures, they should be copied."""
 
     @asynccontextmanager
-    async def aempty(
+    async def afrom_checkpoint(
         self, checkpoint: Optional[C] = None
     ) -> AsyncGenerator[Self, None]:
-        """Return a new identical channel, optionally initialized from a checkpoint."""
-        with self.empty(checkpoint) as value:
+        """Return a new identical channel, optionally initialized from a checkpoint.
+        If the checkpoint contains complex data structures, they should be copied."""
+        with self.from_checkpoint(checkpoint) as value:
             yield value
+
+    # state methods
 
     @abstractmethod
     def update(self, values: Sequence[Update]) -> None:
@@ -71,13 +85,6 @@ class BaseChannel(Generic[Value, Update, C], ABC):
 
         Raises EmptyChannelError if the channel is empty (never updated yet)."""
 
-    @abstractmethod
-    def checkpoint(self) -> Optional[C]:
-        """Return a string representation of the channel's current state.
-
-        Raises EmptyChannelError if the channel is empty (never updated yet),
-        or doesn't supportcheckpoints."""
-
 
 @contextmanager
 def ChannelsManager(
@@ -87,7 +94,8 @@ def ChannelsManager(
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     # TODO use https://docs.python.org/3/library/contextlib.html#contextlib.ExitStack
     empty = {
-        k: v.empty(checkpoint["channel_values"].get(k)) for k, v in channels.items()
+        k: v.from_checkpoint(checkpoint["channel_values"].get(k))
+        for k, v in channels.items()
     }
     try:
         yield {k: v.__enter__() for k, v in empty.items()}
@@ -103,7 +111,8 @@ async def AsyncChannelsManager(
 ) -> AsyncGenerator[Mapping[str, BaseChannel], None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
     empty = {
-        k: v.aempty(checkpoint["channel_values"].get(k)) for k, v in channels.items()
+        k: v.afrom_checkpoint(checkpoint["channel_values"].get(k))
+        for k, v in channels.items()
     }
     try:
         yield {k: await v.__aenter__() for k, v in empty.items()}

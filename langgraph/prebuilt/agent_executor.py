@@ -3,10 +3,10 @@ from typing import Annotated, Sequence, TypedDict, Union
 
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
-from langchain_core.runnables import RunnableLambda
 
 from langgraph.graph import END, StateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
+from langgraph.utils import RunnableCallable
 
 
 def _get_agent_state(input_schema=None):
@@ -72,21 +72,33 @@ def create_agent_executor(agent_runnable, tools, input_schema=None):
     def execute_tools(data):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
-        output = tool_executor.invoke(agent_action)
-        return {"intermediate_steps": [(agent_action, str(output))]}
+        if not isinstance(agent_action, list):
+            agent_action = [agent_action]
+        output = tool_executor.batch(agent_action, return_exceptions=True)
+        return {
+            "intermediate_steps": [
+                (action, str(out)) for action, out in zip(agent_action, output)
+            ]
+        }
 
     async def aexecute_tools(data):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
-        output = await tool_executor.ainvoke(agent_action)
-        return {"intermediate_steps": [(agent_action, str(output))]}
+        if not isinstance(agent_action, list):
+            agent_action = [agent_action]
+        output = await tool_executor.abatch(agent_action, return_exceptions=True)
+        return {
+            "intermediate_steps": [
+                (action, str(out)) for action, out in zip(agent_action, output)
+            ]
+        }
 
     # Define a new graph
     workflow = StateGraph(state)
 
     # Define the two nodes we will cycle between
-    workflow.add_node("agent", RunnableLambda(run_agent, arun_agent))
-    workflow.add_node("action", RunnableLambda(execute_tools, aexecute_tools))
+    workflow.add_node("agent", RunnableCallable(run_agent, arun_agent))
+    workflow.add_node("action", RunnableCallable(execute_tools, aexecute_tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
