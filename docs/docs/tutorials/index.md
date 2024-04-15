@@ -4,11 +4,14 @@ Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthrou
 
 #### Basics
 
-- [State Management](state-model.ipynb): How to define and manage complex state in your graphs
-- [Async Execution](async.ipynb): How to run nodes asynchronously for improved performance
-- [Streaming Responses](streaming-tokens.ipynb): How to stream agent responses in real-time
-- [Human-in-the-Loop](human-in-the-loop.ipynb): How to incorporate human feedback and intervention
-- [Persistence](persistence.ipynb): How to save and load graph state for long-running applications
+- [Base](chat_agent_executor_with_function_calling/base.ipynb): Implementing a chat agent executor with function calling
+- [High-Level](chat_agent_executor_with_function_calling/high-level.ipynb): Using the high-level chat agent executor API
+- [High-Level Tools](chat_agent_executor_with_function_calling/high-level-tools.ipynb): Integrating tools into the high-level chat agent executor
+
+## AgentExecutor
+
+- [Base](agent_executor/base.ipynb): Build a LangGraph agent "from scratch"
+- [High-Level](agent_executor/high-level.ipynb): Using the high-level `create_agent_executor` function
 
 #### Graph Structure
 
@@ -16,14 +19,7 @@ Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthrou
 - [Branching](branching.ipynb): How to create branching logic in your graphs
 
 
-#### Development
-
-- [Visualization](visualization.ipynb): How to visualize your graphs
-- [Time Travel](time-travel.ipynb): How to navigate and manipulate graph execution history
-
-
 ## Use cases
-
 
 #### Chatbots
 
@@ -38,7 +34,6 @@ Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthrou
 - [Collaboration](multi_agent/multi-agent-collaboration.ipynb): Enabling two agents to collaborate on a task  
 - [Supervision](multi_agent/agent_supervisor.ipynb): Using an LLM to orchestrate and delegate to individual agents
 - [Hierarchical Teams](multi_agent/hierarchical_agent_teams.ipynb): Orchestrating nested teams of agents to solve problems
-
 
 #### RAG
 

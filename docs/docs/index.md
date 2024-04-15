@@ -140,7 +140,6 @@ LangGraph defines [checkpointers](reference/checkpoints.md#checkpoints) to help 
 
 Persistence is useful for several scenarios, such as:
 
-
 - Time-travel debugging: You can rewind an graph's actions to a previous state, mutate it, then continue to better control the final outcome. 
 
 - Recovering from failures: If the execution of the graph is interrupted due to an error or system failure, you can resume from the last persisted state instead of starting from scratch.
