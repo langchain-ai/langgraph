@@ -408,14 +408,15 @@ class CompiledGraph(Pregel):
                     **{k: k for k in self.graph.nodes},
                     END: END,
                 }
-
                 if add_condition_nodes is True:
                     cond = graph.add_node(branch.condition, name)
                     graph.add_edge(start_nodes[start], cond)
                     for label, end in ends.items():
-                        graph.add_edge(cond, end_nodes[end], label)
+                        graph.add_edge(cond, end_nodes[end], label, conditional=True)
                 else:
                     for label, end in ends.items():
-                        graph.add_edge(start_nodes[start], end_nodes[end], label)
+                        graph.add_edge(
+                            start_nodes[start], end_nodes[end], label, conditional=True
+                        )
 
         return graph

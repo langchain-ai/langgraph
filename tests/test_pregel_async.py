@@ -2840,9 +2840,9 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 +--------------+         +-----------+   
 | analyzer_one |         | condition |   
 +--------------+         +-----------+   
-        *                       *        
-        *                       *        
-        *                       *        
+        *                       .        
+        *                       .        
+        *                       .        
 +---------------+      +---------------+ 
 | retriever_one |      | retriever_two | 
 +---------------+      +---------------+ 
@@ -2977,9 +2977,9 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 +--------------+          +---------+    
 | analyzer_one |          | decider |    
 +--------------+          +---------+    
-        *                       *        
-        *                       *        
-        *                       *        
+        *                       .        
+        *                       .        
+        *                       .        
 +---------------+      +---------------+ 
 | retriever_one |      | retriever_two | 
 +---------------+      +---------------+ 
