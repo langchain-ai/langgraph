@@ -65,6 +65,19 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert await gapp.ainvoke(2) == 3
 
 
+@pytest.mark.parametrize(
+    "falsy_value",
+    [None, False, 0, "", [], {}, set(), frozenset(), 0.0, 0j],
+)
+async def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
+    graph = Graph()
+    graph.add_node("return_falsy_const", lambda *args, **kwargs: falsy_value)
+    graph.set_entry_point("return_falsy_const")
+    graph.set_finish_point("return_falsy_const")
+    gapp = graph.compile()
+    assert falsy_value == await gapp.ainvoke(1)
+
+
 async def test_invoke_single_process_in_out_implicit_channels(
     mocker: MockerFixture,
 ) -> None:
@@ -151,7 +164,7 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["inbox", "output"])
 
     assert await app.ainvoke(2) == 4
 
@@ -169,6 +182,7 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
             }
         elif step == 2:
             assert values == {
+                "inbox": 3,
                 "output": 4,
             }
     assert step == 2
@@ -267,6 +281,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
         nodes={"one": one, "two": two},
         channels={"inbox": Topic(int)},
         input_channels=["input", "inbox"],
+        stream_channels=["inbox", "output"],
     )
 
     # [12 + 1, 2 + 1 + 1]
@@ -291,7 +306,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
     assert [c async for c in app.astream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
-        {"output": 4},
+        {"inbox": [], "output": 4},
     ]
 
 
@@ -656,12 +671,12 @@ async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> Non
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["output", "between"])
 
     # Then invoke pubsub
     assert [c async for c in app.astream(2)] == [
         {"between": 3, "output": 3},
-        {"output": 4},
+        {"between": 3, "output": 4},
     ]
 
 
@@ -714,6 +729,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             "ctx": Context(an_int, an_int_async, typ=int),
         },
         output_channels=["inbox", "output"],
+        stream_channels=["inbox", "output"],
     )
 
     async def aenumerate(aiter: AsyncIterator[Any]) -> AsyncIterator[tuple[int, Any]]:
@@ -734,7 +750,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
-            assert chunk == {"output": 4}
+            assert chunk == {"inbox": [], "output": 4}
         else:
             assert False, "Expected only two chunks"
     assert setup_sync.call_count == 0
@@ -1943,6 +1959,7 @@ async def test_conditional_entrypoint_graph_state() -> None:
     assert await app.ainvoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
         "output": "what is weather in sf->right",
+        "steps": [],
     }
 
     assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
@@ -1956,7 +1973,7 @@ async def test_prebuilt_tool_chat() -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list):
+        def bind_tools(self, functions: list):
             return self
 
     @tool()
@@ -1971,41 +1988,28 @@ async def test_prebuilt_tool_chat() -> None:
             responses=[
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "tool_calls": [
-                            {
-                                "id": "tool_call123",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": json.dumps("query"),
-                                },
-                            }
-                        ]
-                    },
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
                 ),
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "tool_calls": [
-                            {
-                                "id": "tool_call234",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": json.dumps("another"),
-                                },
-                            },
-                            {
-                                "id": "tool_call567",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": '"a third one"',
-                                },
-                            },
-                        ]
-                    },
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another"},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one"},
+                        },
+                    ],
                 ),
                 AIMessage(content="answer"),
             ]
@@ -2017,50 +2021,52 @@ async def test_prebuilt_tool_chat() -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf"),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call123",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            },
-                        }
-                    ]
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
             ),
-            ToolMessage(content="result for query", tool_call_id="tool_call123"),
+            ToolMessage(
+                content="result for query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
             AIMessage(
                 id=AnyStr(),
                 content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call234",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            },
-                        },
-                        {
-                            "id": "tool_call567",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"a third one"',
-                            },
-                        },
-                    ]
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call234",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    },
+                    {
+                        "id": "tool_call567",
+                        "name": "search_api",
+                        "args": {"query": "a third one"},
+                    },
+                ],
             ),
-            ToolMessage(content="result for another", tool_call_id="tool_call234"),
-            ToolMessage(content="result for a third one", tool_call_id="tool_call567"),
+            ToolMessage(
+                content="result for another",
+                name="search_api",
+                tool_call_id="tool_call234",
+                id=AnyStr(),
+            ),
+            ToolMessage(
+                content="result for a third one",
+                name="search_api",
+                tool_call_id="tool_call567",
+                id=AnyStr(),
+            ),
             AIMessage(content="answer", id=AnyStr()),
         ]
     }
@@ -2077,18 +2083,13 @@ async def test_prebuilt_tool_chat() -> None:
                     AIMessage(
                         id=AnyStr(),
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call123",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"query"',
-                                    },
-                                }
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                            },
+                        ],
                     )
                 ]
             }
@@ -2096,7 +2097,12 @@ async def test_prebuilt_tool_chat() -> None:
         {
             "action": {
                 "messages": [
-                    ToolMessage(content="result for query", tool_call_id="tool_call123")
+                    ToolMessage(
+                        content="result for query",
+                        name="search_api",
+                        tool_call_id="tool_call123",
+                        id=AnyStr(),
+                    )
                 ]
             }
         },
@@ -2106,26 +2112,18 @@ async def test_prebuilt_tool_chat() -> None:
                     AIMessage(
                         id=AnyStr(),
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call234",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"another"',
-                                    },
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"a third one"',
-                                    },
-                                },
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call234",
+                                "name": "search_api",
+                                "args": {"query": "another"},
+                            },
+                            {
+                                "id": "tool_call567",
+                                "name": "search_api",
+                                "args": {"query": "a third one"},
+                            },
+                        ],
                     )
                 ]
             }
@@ -2134,10 +2132,16 @@ async def test_prebuilt_tool_chat() -> None:
             "action": {
                 "messages": [
                     ToolMessage(
-                        content="result for another", tool_call_id="tool_call234"
+                        content="result for another",
+                        tool_call_id="tool_call234",
+                        name="search_api",
+                        id=AnyStr(),
                     ),
                     ToolMessage(
-                        content="result for a third one", tool_call_id="tool_call567"
+                        content="result for a third one",
+                        tool_call_id="tool_call567",
+                        name="search_api",
+                        id=AnyStr(),
                     ),
                 ]
             }
@@ -2193,7 +2197,7 @@ async def test_prebuilt_chat() -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf"),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -2201,7 +2205,7 @@ async def test_prebuilt_chat() -> None:
                     "function_call": {"name": "search_api", "arguments": '"query"'}
                 },
             ),
-            FunctionMessage(content="result for query", name="search_api"),
+            FunctionMessage(content="result for query", name="search_api", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -2209,7 +2213,9 @@ async def test_prebuilt_chat() -> None:
                     "function_call": {"name": "search_api", "arguments": '"another"'}
                 },
             ),
-            FunctionMessage(content="result for another", name="search_api"),
+            FunctionMessage(
+                content="result for another", name="search_api", id=AnyStr()
+            ),
             AIMessage(content="answer", id=AnyStr()),
         ]
     }
@@ -2239,7 +2245,9 @@ async def test_prebuilt_chat() -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for query", name="search_api")
+                    FunctionMessage(
+                        content="result for query", name="search_api", id=AnyStr()
+                    )
                 ]
             }
         },
@@ -2262,7 +2270,9 @@ async def test_prebuilt_chat() -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for another", name="search_api")
+                    FunctionMessage(
+                        content="result for another", name="search_api", id=AnyStr()
+                    )
                 ]
             }
         },
@@ -2645,6 +2655,25 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
             "retriever_one": {"docs": ["doc1", "doc2"]},
         },
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+
+    assert [
+        c
+        async for c in app.astream(
+            {"query": "what is weather in sf"}, stream_mode="values"
+        )
+    ] == [
+        {"query": "what is weather in sf", "docs": []},
+        {"query": "query: what is weather in sf", "docs": []},
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+        },
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+            "answer": "doc1,doc2,doc3,doc4",
+        },
     ]
 
 
