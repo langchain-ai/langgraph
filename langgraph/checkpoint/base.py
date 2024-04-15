@@ -1,13 +1,18 @@
-import asyncio
 from abc import ABC
 from collections import defaultdict
 from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Iterator, NamedTuple, Optional, TypedDict
+from typing import (
+    Any,
+    AsyncIterator,
+    Iterator,
+    NamedTuple,
+    Optional,
+    Protocol,
+    TypedDict,
+)
 
-from langchain_core.load.serializable import Serializable
-from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.utils import ConfigurableFieldSpec
+from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
 from langgraph.utils import StrEnum
 
@@ -93,8 +98,27 @@ CheckpointThreadTs = ConfigurableFieldSpec(
 )
 
 
-class BaseCheckpointSaver(Serializable, ABC):
-    at: CheckpointAt = CheckpointAt.END_OF_RUN
+class SerializerProtocol(Protocol):
+    def dumps(self, obj: Any) -> bytes:
+        ...
+
+    def loads(self, data: bytes) -> Any:
+        ...
+
+
+class BaseCheckpointSaver(ABC):
+    at: CheckpointAt = CheckpointAt.END_OF_STEP
+
+    serde: SerializerProtocol
+
+    def __init__(
+        self,
+        *,
+        serde: Optional[SerializerProtocol] = None,
+        at: Optional[CheckpointAt] = None,
+    ) -> None:
+        self.serde = serde or self.serde
+        self.at = at or self.at
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -118,22 +142,12 @@ class BaseCheckpointSaver(Serializable, ABC):
             return value.checkpoint
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.get_tuple, config
-        )
+        raise NotImplementedError
 
     async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
-        loop = asyncio.get_running_loop()
-        iter = loop.run_in_executor(None, self.list, config)
-        while True:
-            try:
-                yield await loop.run_in_executor(None, next, iter)
-            except StopIteration:
-                return
+        raise NotImplementedError
 
     async def aput(
         self, config: RunnableConfig, checkpoint: Checkpoint
     ) -> RunnableConfig:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint
-        )
+        raise NotImplementedError
