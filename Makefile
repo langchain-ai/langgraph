@@ -51,7 +51,7 @@ spell_fix:
 
 build-docs:
 	poetry run python docs/_scripts/copy_notebooks.py
-	poetry run mkdocs build --clean -f docs/mkdocs.yml
+	poetry run mkdocs build --clean -f docs/mkdocs.yml --strict
 
 serve-docs: build-docs
 	poetry run mkdocs serve -f docs/mkdocs.yml

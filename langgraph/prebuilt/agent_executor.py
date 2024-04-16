@@ -5,6 +5,7 @@ from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.utils import RunnableCallable
 
@@ -39,7 +40,47 @@ def _get_agent_state(input_schema=None):
     return AgentState
 
 
-def create_agent_executor(agent_runnable, tools, input_schema=None):
+def create_agent_executor(
+    agent_runnable, tools, input_schema=None
+) -> CompiledStateGraph:
+    """This is a helper function for creating a graph that works with LangChain Agents.
+
+    Args:
+        agent_runnable (RunnableLike): The agent runnable.
+        tools (list): A list of tools to be used by the agent.
+        input_schema (dict, optional): The input schema for the agent. Defaults to None.
+
+    Returns:
+        The `CompiledStateGraph` object.
+
+    Examples:
+
+        from langgraph.prebuilt import create_agent_executor
+        from langchain_openai import ChatOpenAI
+        from langchain import hub
+        from langchain.agents import create_openai_functions_agent
+        from langchain_community.tools.tavily_search import TavilySearchResults
+
+        tools = [TavilySearchResults(max_results=1)]
+
+        # Get the prompt to use - you can modify this!
+        prompt = hub.pull("hwchase17/openai-functions-agent")
+
+        # Choose the LLM that will drive the agent
+        llm = ChatOpenAI(model="gpt-3.5-turbo-1106")
+
+        # Construct the OpenAI Functions agent
+        agent_runnable = create_openai_functions_agent(llm, tools, prompt)
+
+        app = create_agent_executor(agent_runnable, tools)
+
+        inputs = {"input": "what is the weather in sf", "chat_history": []}
+        for s in app.stream(inputs):
+            print(list(s.values())[0])
+            print("----")
+
+    """
+
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
     else:
