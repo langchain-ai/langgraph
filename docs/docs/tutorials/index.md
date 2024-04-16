@@ -1,7 +1,6 @@
 # Tutorials
 
-Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthroughs for building various types of language agents and applications using LangGraph.
-
+Welcome to the LangGraph Tutorials! These notebooks introduce LangGraph through building various language agents and applications.
 
 ## AgentExecutor
 

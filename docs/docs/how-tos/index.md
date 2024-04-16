@@ -2,7 +2,6 @@
 
 Welcome to the LangGraph How-To Guides! These guides provide practical, step-by-step instructions for accomplishing key tasks in LangGraph.
 
-
 ## Core
 
 - [Async Execution](async.ipynb): How to run nodes asynchronously for improved performance
