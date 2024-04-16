@@ -1,5 +1,5 @@
 import json
-from typing import Annotated, Sequence, TypedDict, Union
+from typing import Annotated, Callable, Optional, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import BaseMessage, FunctionMessage
@@ -131,7 +131,9 @@ def create_function_calling_executor(
 
 
 def create_tool_calling_executor(
-    model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
+    model: LanguageModelLike,
+    tools: Union[ToolExecutor, Sequence[BaseTool]],
+    handle_parsing_errors: Optional[Callable] = None,
 ):
     if isinstance(tools, ToolExecutor):
         tool_classes = tools.tools
@@ -143,8 +145,11 @@ def create_tool_calling_executor(
     def should_continue(state: AgentState):
         messages = state["messages"]
         last_message = messages[-1]
+        # Optionally handle invalid tool calls
+        if last_message.invalid_tool_calls and handle_parsing_errors is not None:
+            return "retry"
         # If there is no function call, then we finish
-        if not last_message.tool_calls:
+        elif not last_message.tool_calls:
             return "end"
         # Otherwise if there is, we continue
         else:
@@ -163,12 +168,19 @@ def create_tool_calling_executor(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
+    def add_retry_message(state: AgentState):
+        messages = state["messages"]
+        last_message = messages[-1]
+        retry_message = handle_parsing_errors(last_message)
+        return {"messages": [retry_message]}
+
     # Define a new graph
     workflow = StateGraph(AgentState)
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
     workflow.add_node("action", ToolNode(tools))
+    workflow.add_node("retry", RunnableLambda(add_retry_message))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -188,6 +200,8 @@ def create_tool_calling_executor(
         # will be matched against the keys in this mapping.
         # Based on which one it matches, that node will then be called.
         {
+            # Optionally retry invalid tool calls
+            "retry": "retry",
             # If `tools`, then we call the tool node.
             "continue": "action",
             # Otherwise we finish.
@@ -198,6 +212,9 @@ def create_tool_calling_executor(
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
     workflow.add_edge("action", "agent")
+
+    # We add an edge from `retry` to `agent` to handle retries.
+    workflow.add_edge("retry", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,

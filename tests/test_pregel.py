@@ -2107,6 +2107,83 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
     ]
 
+    # Invalid tool call handling
+    def _make_error_message(message: AIMessage) -> AIMessage:
+        return AIMessage(
+            content=f"Error with {[tc['id'] for tc in message.invalid_tool_calls]}"
+        )
+
+    app = create_tool_calling_executor(
+        FakeFuntionChatModel(
+            responses=[
+                AIMessage(
+                    content="",
+                    invalid_tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": '{"query": "query',
+                            "error": "parsing error",
+                        },
+                    ],
+                ),
+                AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                ),
+                AIMessage(content="answer"),
+            ]
+        ),
+        tools,
+        _make_error_message,
+    )
+    result = app.invoke({"messages": [HumanMessage(content="what is weather in sf")]})
+    assert result == {
+        "messages": [
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            AIMessage(
+                id=AnyStr(),
+                content="",
+                invalid_tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": '{"query": "query',
+                        "error": "parsing error",
+                    },
+                ],
+            ),
+            AIMessage(
+                id=AnyStr(),
+                content="Error with ['tool_call123']",
+            ),
+            AIMessage(
+                id=AnyStr(),
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
+            ),
+            ToolMessage(
+                content="result for query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
+            AIMessage(content="answer", id=AnyStr()),
+        ]
+    }
+
 
 def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
