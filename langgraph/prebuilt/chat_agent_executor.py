@@ -134,7 +134,8 @@ def create_function_calling_executor(
 
 
 def create_tool_calling_executor(
-    model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]],
+    model: LanguageModelLike,
+    tools: Union[ToolExecutor, Sequence[BaseTool]],
     handle_parsing_errors: Optional[Callable] = None,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
