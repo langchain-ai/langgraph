@@ -5,16 +5,22 @@ Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthrou
 
 ## AgentExecutor
 
+Learn to build a simple agent in LangGraph.
+
 - [Base](agent_executor/base.ipynb): Learn to build a LangGraph agent "from scratch"
 - [High-Level](agent_executor/high-level.ipynb): Learn to use the `create_agent_executor`
 
 ## Chat Agent Executor
+
+Learn to build a simple chat agent executor, which is a basic graph with an agentic loop that also supports dialog with a user.
 
 - [Base](chat_agent_executor_with_function_calling/base.ipynb): Build a chat agent executor with function calling
 - [High-Level](chat_agent_executor_with_function_calling/high-level.ipynb): Using the high-level chat agent executor API
 - [High-Level Tools](chat_agent_executor_with_function_calling/high-level-tools.ipynb): Integrating tools into the high-level chat agent executor
 
 ## Use cases
+
+Learn from example implementations of graphs designed for specific scenarios and that implement common design patterns.
 
 #### Chatbots
 
@@ -31,8 +37,6 @@ Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthrou
 - [Hierarchical Teams](multi_agent/hierarchical_agent_teams.ipynb): Orchestrating nested teams of agents to solve problems
 
 #### RAG
-
-**Retrieval-Augmented Generation**
 
 - [Adaptive RAG](rag/langgraph_adaptive_rag.ipynb)
     - [Adaptive RAG using Cohere](rag/langgraph_adaptive_rag_cohere.ipynb) 
@@ -60,9 +64,9 @@ Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthrou
 - [Self-Discovering Agent](self-discover/self-discover.ipynb): Analyzing an agent that learns about its own capabilities
 
 
-### Evaluation & Analysis
+### Evaluation
 
 **Chatbot Evaluation via Simulation**  
 
 - [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluating chatbots via simulated user interactions
-- [Dataset-based](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluating chatbots over a dialog dataset
+- [Dataset-based](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluating chatbots in LangSmith over a dialog dataset

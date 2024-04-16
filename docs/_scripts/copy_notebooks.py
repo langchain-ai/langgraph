@@ -26,7 +26,7 @@ _MANUAL = {
         "chat_agent_executor_with_function_calling/base.ipynb",
         "chat_agent_executor_with_function_calling/high-level.ipynb",
         "chat_agent_executor_with_function_calling/high-level-tools.ipynb",
-        "chat_agent_executor_with_function_calling/prebuilt-tool-node.ipynb"
+        "chat_agent_executor_with_function_calling/prebuilt-tool-node.ipynb",
         "agent_executor/base.ipynb",
         "agent_executor/high-level.ipynb",
     ],
