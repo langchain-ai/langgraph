@@ -64,9 +64,7 @@ Learn from example implementations of graphs designed for specific scenarios and
 - [Self-Discovering Agent](self-discover/self-discover.ipynb): Analyzing an agent that learns about its own capabilities
 
 
-### Evaluation
-
-**Chatbot Evaluation via Simulation**  
+#### Evaluation
 
 - [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluating chatbots via simulated user interactions
 - [Dataset-based](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluating chatbots in LangSmith over a dialog dataset
