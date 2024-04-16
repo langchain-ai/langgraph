@@ -18,11 +18,15 @@ _MANUAL = {
         "time-travel.ipynb",
         "visualization.ipynb",
         "state-model.ipynb",
+        "subgraph.ipynb",
+        "persistence_postgres.ipynb",
+        "branching.ipynb",
     ],
     "tutorials": [
         "chat_agent_executor_with_function_calling/base.ipynb",
         "chat_agent_executor_with_function_calling/high-level.ipynb",
         "chat_agent_executor_with_function_calling/high-level-tools.ipynb",
+        "chat_agent_executor_with_function_calling/prebuilt-tool-node.ipynb"
         "agent_executor/base.ipynb",
         "agent_executor/high-level.ipynb",
     ],
