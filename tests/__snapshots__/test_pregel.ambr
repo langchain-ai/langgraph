@@ -84,12 +84,14 @@
       {
         "source": "should_start",
         "target": "left",
-        "data": "go-left"
+        "data": "go-left",
+        "conditional": true
       },
       {
         "source": "should_start",
         "target": "right",
-        "data": "go-right"
+        "data": "go-right",
+        "conditional": true
       },
       {
         "source": "left",
@@ -97,18 +99,9 @@
       },
       {
         "source": "condition",
-        "target": "left",
-        "data": "left"
-      },
-      {
-        "source": "condition",
-        "target": "right",
-        "data": "right"
-      },
-      {
-        "source": "condition",
         "target": "__end__",
-        "data": "__end__"
+        "data": "__end__",
+        "conditional": true
       }
     ]
   }
@@ -116,39 +109,55 @@
 # ---
 # name: test_conditional_entrypoint_graph.3
   '''
-            +-----------+          
-            | __start__ |          
-            +-----------+          
-                   *               
-                   *               
-                   *               
-           +--------------+        
-           | should_start |        
-           +--------------+        
-             ..         ..         
-           ..             ..       
-          .                 ..     
-    +------+                  .    
-    | left |                  .    
-    +------+                  .    
-        .                     .    
-        .                     .    
-        .                     .    
-  +-----------+               .    
-  | condition |               .    
-  +-----------+...            .    
-        .         ...         .    
-        .            ....     .    
-        .                ..   .    
-        .                +-------+ 
-         ..              | right | 
-           ..            +-------+ 
-             ..         **         
-               ..     **           
-                 .   *             
-              +---------+          
-              | __end__ |          
-              +---------+          
+            +-----------+        
+            | __start__ |        
+            +-----------+        
+                  *              
+                  *              
+                  *              
+          +--------------+       
+          | should_start |       
+          +--------------+       
+             .         ..        
+           ..            .       
+          .               ..     
+    +------+                .    
+    | left |                .    
+    +------+                .    
+        *                   .    
+        *                   .    
+        *                   .    
+  +-----------+        +-------+ 
+  | condition |        | right | 
+  +-----------+        +-------+ 
+             .         *         
+              ..     **          
+                .   *            
+            +---------+          
+            | __end__ |          
+            +---------+          
+  '''
+# ---
+# name: test_conditional_entrypoint_graph.4
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	left([left]):::otherclass;
+  	right([right]):::otherclass;
+  	should_start([should_start]):::otherclass;
+  	condition([condition]):::otherclass;
+  	right --> __end__;
+  	__start__ --> should_start;
+  	should_start -. go-left .-> left;
+  	should_start -. go-right .-> right;
+  	left --> condition;
+  	condition -. __end__ .-> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
@@ -236,12 +245,14 @@
       {
         "source": "should_start",
         "target": "left",
-        "data": "go-left"
+        "data": "go-left",
+        "conditional": true
       },
       {
         "source": "should_start",
         "target": "right",
-        "data": "go-right"
+        "data": "go-right",
+        "conditional": true
       },
       {
         "source": "left",
@@ -249,18 +260,9 @@
       },
       {
         "source": "condition",
-        "target": "left",
-        "data": "left"
-      },
-      {
-        "source": "condition",
-        "target": "right",
-        "data": "right"
-      },
-      {
-        "source": "condition",
         "target": "__end__",
-        "data": "__end__"
+        "data": "__end__",
+        "conditional": true
       }
     ]
   }
@@ -268,39 +270,55 @@
 # ---
 # name: test_conditional_entrypoint_graph_state.3
   '''
-            +-----------+          
-            | __start__ |          
-            +-----------+          
-                   *               
-                   *               
-                   *               
-           +--------------+        
-           | should_start |        
-           +--------------+        
-             ..         ..         
-           ..             ..       
-          .                 ..     
-    +------+                  .    
-    | left |                  .    
-    +------+                  .    
-        .                     .    
-        .                     .    
-        .                     .    
-  +-----------+               .    
-  | condition |               .    
-  +-----------+...            .    
-        .         ...         .    
-        .            ....     .    
-        .                ..   .    
-        .                +-------+ 
-         ..              | right | 
-           ..            +-------+ 
-             ..         **         
-               ..     **           
-                 .   *             
-              +---------+          
-              | __end__ |          
-              +---------+          
+            +-----------+        
+            | __start__ |        
+            +-----------+        
+                  *              
+                  *              
+                  *              
+          +--------------+       
+          | should_start |       
+          +--------------+       
+             .         ..        
+           ..            .       
+          .               ..     
+    +------+                .    
+    | left |                .    
+    +------+                .    
+        *                   .    
+        *                   .    
+        *                   .    
+  +-----------+        +-------+ 
+  | condition |        | right | 
+  +-----------+        +-------+ 
+             .         *         
+              ..     **          
+                .   *            
+            +---------+          
+            | __end__ |          
+            +---------+          
+  '''
+# ---
+# name: test_conditional_entrypoint_graph_state.4
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	left([left]):::otherclass;
+  	right([right]):::otherclass;
+  	should_start([should_start]):::otherclass;
+  	condition([condition]):::otherclass;
+  	right --> __end__;
+  	__start__ --> should_start;
+  	should_start -. go-left .-> left;
+  	should_start -. go-right .-> right;
+  	left --> condition;
+  	condition -. __end__ .-> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
   '''
 # ---
 # name: test_conditional_graph[end_of_run]
@@ -373,12 +391,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -571,12 +591,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -744,12 +766,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -942,12 +966,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -1121,12 +1147,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -1155,6 +1183,26 @@
       +---------+              +-------+  
       | __end__ |              | tools |  
       +---------+              +-------+  
+  '''
+# ---
+# name: test_conditional_graph_state[end_of_run].4
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	agent([agent]):::otherclass;
+  	tools([tools]):::otherclass;
+  	should_continue([should_continue]):::otherclass;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent --> should_continue;
+  	should_continue -. continue .-> tools;
+  	should_continue -. exit .-> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
   '''
 # ---
 # name: test_conditional_graph_state[end_of_step]
@@ -1233,12 +1281,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -1267,6 +1317,26 @@
       +---------+              +-------+  
       | __end__ |              | tools |  
       +---------+              +-------+  
+  '''
+# ---
+# name: test_conditional_graph_state[end_of_step].4
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	agent([agent]):::otherclass;
+  	tools([tools]):::otherclass;
+  	should_continue([should_continue]):::otherclass;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent --> should_continue;
+  	should_continue -. continue .-> tools;
+  	should_continue -. exit .-> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
   '''
 # ---
 # name: test_message_graph[end_of_run]
@@ -1344,12 +1414,14 @@
       {
         "source": "should_continue",
         "target": "action",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "end"
+        "data": "end",
+        "conditional": true
       }
     ]
   }
@@ -1378,6 +1450,26 @@
       +---------+             +--------+  
       | __end__ |             | action |  
       +---------+             +--------+  
+  '''
+# ---
+# name: test_message_graph[end_of_run].4
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	agent([agent]):::otherclass;
+  	action([action]):::otherclass;
+  	should_continue([should_continue]):::otherclass;
+  	__start__ --> agent;
+  	action --> agent;
+  	agent --> should_continue;
+  	should_continue -. continue .-> action;
+  	should_continue -. end .-> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
   '''
 # ---
 # name: test_message_graph[end_of_step]
@@ -1455,12 +1547,14 @@
       {
         "source": "should_continue",
         "target": "action",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "end"
+        "data": "end",
+        "conditional": true
       }
     ]
   }
@@ -1489,6 +1583,26 @@
       +---------+             +--------+  
       | __end__ |             | action |  
       +---------+             +--------+  
+  '''
+# ---
+# name: test_message_graph[end_of_step].4
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	agent([agent]):::otherclass;
+  	action([action]):::otherclass;
+  	should_continue([should_continue]):::otherclass;
+  	__start__ --> agent;
+  	action --> agent;
+  	agent --> should_continue;
+  	should_continue -. continue .-> action;
+  	should_continue -. end .-> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
   '''
 # ---
 # name: test_prebuilt_chat
@@ -1567,12 +1681,14 @@
       {
         "source": "should_continue",
         "target": "action",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "end"
+        "data": "end",
+        "conditional": true
       }
     ]
   }
@@ -1601,6 +1717,26 @@
       +---------+             +--------+  
       | __end__ |             | action |  
       +---------+             +--------+  
+  '''
+# ---
+# name: test_prebuilt_chat.4
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	agent([agent]):::otherclass;
+  	action([action]):::otherclass;
+  	should_continue([should_continue]):::otherclass;
+  	__start__ --> agent;
+  	action --> agent;
+  	agent --> should_continue;
+  	should_continue -. continue .-> action;
+  	should_continue -. end .-> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
   '''
 # ---
 # name: test_prebuilt_tool_chat
@@ -1679,12 +1815,14 @@
       {
         "source": "should_continue",
         "target": "action",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "end"
+        "data": "end",
+        "conditional": true
       }
     ]
   }
@@ -1713,5 +1851,25 @@
       +---------+             +--------+  
       | __end__ |             | action |  
       +---------+             +--------+  
+  '''
+# ---
+# name: test_prebuilt_tool_chat.4
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	agent([agent]):::otherclass;
+  	action([action]):::otherclass;
+  	should_continue([should_continue]):::otherclass;
+  	__start__ --> agent;
+  	action --> agent;
+  	agent --> should_continue;
+  	should_continue -. continue .-> action;
+  	should_continue -. end .-> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
   '''
 # ---

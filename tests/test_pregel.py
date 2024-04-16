@@ -1367,7 +1367,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()
@@ -1376,6 +1376,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid() == snapshot
 
     assert (
         app.invoke("what is weather in sf", debug=True)
@@ -1476,6 +1477,7 @@ def test_conditional_graph_state(
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid() == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1819,7 +1821,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()
@@ -1828,6 +1830,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid() == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1894,6 +1897,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid() == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -2157,6 +2161,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid() == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -2372,6 +2377,7 @@ def test_message_graph(
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid() == snapshot
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
         HumanMessage(
@@ -2994,6 +3000,29 @@ def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) ->
               | __end__ |                
               +---------+                """
     )
+    assert (
+        app.get_graph().draw_mermaid()
+        == """%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD;
+\t__start__[__start__]:::startclass;
+\t__end__[__end__]:::endclass;
+\trewrite_query([rewrite_query]):::otherclass;
+\tanalyzer_one([analyzer_one]):::otherclass;
+\tretriever_one([retriever_one]):::otherclass;
+\tretriever_two([retriever_two]):::otherclass;
+\tqa([qa]):::otherclass;
+\t__start__ --> rewrite_query;
+\tanalyzer_one --> retriever_one;
+\tqa --> __end__;
+\tretriever_one --> qa;
+\tretriever_two --> qa;
+\trewrite_query --> analyzer_one;
+\trewrite_query --> retriever_two;
+\tclassDef startclass fill:#ffdfba;
+\tclassDef endclass fill:#baffc9;
+\tclassDef otherclass fill:#fad7de;
+"""
+    )
 
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
@@ -3121,6 +3150,31 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
               +---------+                
               | __end__ |                
               +---------+                """
+    )
+    assert (
+        app.get_graph().draw_mermaid()
+        == """%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD;
+\t__start__[__start__]:::startclass;
+\t__end__[__end__]:::endclass;
+\trewrite_query([rewrite_query]):::otherclass;
+\tanalyzer_one([analyzer_one]):::otherclass;
+\tretriever_one([retriever_one]):::otherclass;
+\tretriever_two([retriever_two]):::otherclass;
+\tqa([qa]):::otherclass;
+\tcondition([condition]):::otherclass;
+\t__start__ --> rewrite_query;
+\tanalyzer_one --> retriever_one;
+\tqa --> __end__;
+\tretriever_one --> qa;
+\tretriever_two --> qa;
+\trewrite_query --> analyzer_one;
+\trewrite_query --> condition;
+\tcondition -. retriever_two .-> retriever_two;
+\tclassDef startclass fill:#ffdfba;
+\tclassDef endclass fill:#baffc9;
+\tclassDef otherclass fill:#fad7de;
+"""
     )
 
     assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
@@ -3255,6 +3309,31 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
               +---------+                
               | __end__ |                
               +---------+                """
+    )
+    assert (
+        app.get_graph().draw_mermaid()
+        == """%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD;
+\t__start__[__start__]:::startclass;
+\t__end__[__end__]:::endclass;
+\trewrite_query([rewrite_query]):::otherclass;
+\tanalyzer_one([analyzer_one]):::otherclass;
+\tretriever_one([retriever_one]):::otherclass;
+\tretriever_two([retriever_two]):::otherclass;
+\tqa([qa]):::otherclass;
+\tdecider([decider]):::otherclass;
+\t__start__ --> rewrite_query;
+\tanalyzer_one --> retriever_one;
+\tqa --> __end__;
+\tretriever_one --> qa;
+\tretriever_two --> qa;
+\trewrite_query --> analyzer_one;
+\trewrite_query --> decider;
+\tdecider -. retriever_two .-> retriever_two;
+\tclassDef startclass fill:#ffdfba;
+\tclassDef endclass fill:#baffc9;
+\tclassDef otherclass fill:#fad7de;
+"""
     )
 
     with pytest.raises(ValidationError):
@@ -3621,4 +3700,34 @@ def test_simple_multi_edge() -> None:
       | __end__ |  
       +---------+  """
     )
+    assert (
+        app.get_graph().draw_mermaid()
+        == """%%{init: {'flowchart': {'curve': 'linear'}}}%%
+graph TD;
+\t__start__[__start__]:::startclass;
+\t__end__[__end__]:::endclass;
+\tup([up]):::otherclass;
+\tside([side]):::otherclass;
+\tdown([down]):::otherclass;
+\t__start__ --> up;
+\tdown --> __end__;
+\tside --> down;
+\tup --> down;
+\tup --> side;
+\tclassDef startclass fill:#ffdfba;
+\tclassDef endclass fill:#baffc9;
+\tclassDef otherclass fill:#fad7de;
+"""
+    )
+    assert (
+        app.get_graph().draw_mermaid(with_styles=False)
+        == """graph TD;
+\t__start__ --> up;
+\tdown --> __end__;
+\tside --> down;
+\tup --> down;
+\tup --> side;
+"""
+    )
+
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}
