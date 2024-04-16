@@ -85,21 +85,15 @@ nav:
   - Home: 
       - 'index.md'
       - Quick Start: how-tos/docs/quickstart.ipynb
-
   - Tutorials:
       - 'tutorials/index.md'
-      - Basics:
-          - State Management: tutorials/state-model.ipynb
-          - Async Execution: tutorials/async.ipynb
-          - Streaming Responses: tutorials/streaming-tokens.ipynb
-          - Human-in-the-Loop: tutorials/human-in-the-loop.ipynb
-          - Persistence: tutorials/persistence.ipynb
-      - Graph Structure:
-          - Subgraphs: tutorials/subgraph.ipynb
-          - Branching: tutorials/branching.ipynb
-      - Development:
-          - Visualization: tutorials/visualization.ipynb
-          - Time Travel: tutorials/time-travel.ipynb
+      - Agent Executor:
+            - "Base": tutorials/agent_executor/base.ipynb
+            - "High-Level": tutorials/agent_executor/high-level.ipynb
+      - Chat Agent Executor:
+            - "Base": tutorials/chat_agent_executor_with_function_calling/base.ipynb
+            - "High-Level": tutorials/chat_agent_executor_with_function_calling/high-level.ipynb
+            - "High-Level Tools": tutorials/chat_agent_executor_with_function_calling/high-level-tools.ipynb
       - Use cases:
           - Chatbots:
               - Customer Support: tutorials/chatbots/customer-support.ipynb
@@ -136,6 +130,18 @@ nav:
 
   - "How-to Guides":
       - 'how-tos/index.md'
+      - Core:
+          - "Quick Start": how-tos/docs/quickstart.ipynb
+          - "State Management": how-tos/state-model.ipynb
+          - "Async Execution": how-tos/async.ipynb
+          - "Streaming Responses": how-tos/streaming-tokens.ipynb
+          - "Human-in-the-Loop": how-tos/human-in-the-loop.ipynb
+          - "Persistence": how-tos/persistence.ipynb
+          - "Time Travel": how-tos/time-travel.ipynb
+          - "Visualization": how-tos/visualization.ipynb
+          - "Pydantic State": how-tos/state-model.ipynb
+          - "Subgraphs": how-tos/subgraph.ipynb
+          - "Branching": how-tos/branching.ipynb
       - Chat Agent (Function Calling):
           - Base: how-tos/chat_agent_executor_with_function_calling/base.ipynb
           - High-Level: how-tos/chat_agent_executor_with_function_calling/high-level.ipynb
@@ -148,14 +154,11 @@ nav:
               - Dynamic Direct Return: how-tos/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb
               - Manage Agent Steps: how-tos/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb
       - AgentExecutor:
-          - Base: how-tos/agent_executor/base.ipynb
-          - High-Level: how-tos/agent_executor/high-level.ipynb
-          - Modifications:
-              - Human-in-the-Loop: how-tos/agent_executor/human-in-the-loop.ipynb
-              - Force Tool First: how-tos/agent_executor/force-calling-a-tool-first.ipynb
-              - Manage Agent Steps: how-tos/agent_executor/managing-agent-steps.ipynb
+          - Human-in-the-Loop: how-tos/agent_executor/human-in-the-loop.ipynb
+          - Force Tool First: how-tos/agent_executor/force-calling-a-tool-first.ipynb
+          - Manage Agent Steps: how-tos/agent_executor/managing-agent-steps.ipynb
       - Persistance:
-          - "Persistance in Postgres": tutorials/persistence_postgres.ipynb
+          - "Persistance in Postgres": how-tos/persistence_postgres.ipynb
 
   - Reference:
       - Graphs: reference/graphs.md

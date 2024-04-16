@@ -9,6 +9,25 @@ docs_dir = root_dir / "docs/docs"
 how_tos_dir = docs_dir / "how-tos"
 tutorials_dir = docs_dir / "tutorials"
 
+_MANUAL = {
+    "how-tos": [
+        "async.ipynb",
+        "streaming-tokens.ipynb",
+        "human-in-the-loop.ipynb",
+        "persistence.ipynb",
+        "time-travel.ipynb",
+        "visualization.ipynb",
+        "state-model.ipynb",
+    ],
+    "tutorials": [
+        "chat_agent_executor_with_function_calling/base.ipynb",
+        "chat_agent_executor_with_function_calling/high-level.ipynb",
+        "chat_agent_executor_with_function_calling/high-level-tools.ipynb",
+        "agent_executor/base.ipynb",
+        "agent_executor/high-level.ipynb",
+    ],
+}
+_MANUAL_INVERSE = {v: docs_dir / k for k, vs in _MANUAL.items() for v in vs}
 _HOW_TOS = {"agent_executor", "chat_agent_executor_with_function_calling", "docs"}
 _MAP = {
     "persistence_postgres.ipynb": "tutorial",
@@ -36,13 +55,10 @@ def clean_notebooks():
 def copy_notebooks():
     # Nested ones are mostly tutorials rn
     for root, dirs, files in os.walk(examples_dir):
-        # if root == str(examples_dir):
-        #     continue
         if any(
             path.startswith(".") or path.startswith("__") for path in root.split(os.sep)
         ):
             continue
-
         if any(path in _HOW_TOS for path in root.split(os.sep)):
             dst_dir = how_tos_dir
         else:
@@ -56,6 +72,13 @@ def copy_notebooks():
                 dst_path = os.path.join(
                     dst_dir, os.path.relpath(src_path, examples_dir)
                 )
+                for k in _MANUAL_INVERSE:
+                    if src_path.endswith(k):
+                        overridden_dir = _MANUAL_INVERSE[k]
+                        dst_path = os.path.join(overridden_dir, os.path.relpath(src_path, examples_dir))
+                        print(f"Overriding {src_path} to {dst_path}")
+                        break
+
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                 shutil.copy(src_path, dst_path)
                 # Convert all ./img/* to ../img/*

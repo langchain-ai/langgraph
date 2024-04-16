@@ -2,22 +2,17 @@
 
 Welcome to the LangGraph Tutorials! These notebooks provide end-to-end walkthroughs for building various types of language agents and applications using LangGraph.
 
-#### Basics
-
-- [Base](chat_agent_executor_with_function_calling/base.ipynb): Implementing a chat agent executor with function calling
-- [High-Level](chat_agent_executor_with_function_calling/high-level.ipynb): Using the high-level chat agent executor API
-- [High-Level Tools](chat_agent_executor_with_function_calling/high-level-tools.ipynb): Integrating tools into the high-level chat agent executor
 
 ## AgentExecutor
 
-- [Base](agent_executor/base.ipynb): Build a LangGraph agent "from scratch"
-- [High-Level](agent_executor/high-level.ipynb): Using the high-level `create_agent_executor` function
+- [Base](agent_executor/base.ipynb): Learn to build a LangGraph agent "from scratch"
+- [High-Level](agent_executor/high-level.ipynb): Learn to use the `create_agent_executor`
 
-#### Graph Structure
+## Chat Agent Executor
 
-- [Subgraphs](subgraph.ipynb): How to modularize your graphs with subgraphs
-- [Branching](branching.ipynb): How to create branching logic in your graphs
-
+- [Base](chat_agent_executor_with_function_calling/base.ipynb): Build a chat agent executor with function calling
+- [High-Level](chat_agent_executor_with_function_calling/high-level.ipynb): Using the high-level chat agent executor API
+- [High-Level Tools](chat_agent_executor_with_function_calling/high-level-tools.ipynb): Integrating tools into the high-level chat agent executor
 
 ## Use cases
 
