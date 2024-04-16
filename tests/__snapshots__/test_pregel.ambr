@@ -1526,6 +1526,19 @@
         }
       },
       {
+        "id": "retry",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "add_retry_message"
+        }
+      },
+      {
         "id": "should_continue",
         "type": "runnable",
         "data": {
@@ -1549,8 +1562,17 @@
         "target": "agent"
       },
       {
+        "source": "retry",
+        "target": "agent"
+      },
+      {
         "source": "agent",
         "target": "should_continue"
+      },
+      {
+        "source": "should_continue",
+        "target": "retry",
+        "data": "retry"
       },
       {
         "source": "should_continue",
@@ -1568,26 +1590,26 @@
 # ---
 # name: test_prebuilt_tool_chat.3
   '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+*              *     
-            *         *****         *     
-            *              ***      *     
-            *                 ***   *     
-      +---------+             +--------+  
-      | __end__ |             | action |  
-      +---------+             +--------+  
+                           +-----------+                      
+                           | __start__ |                      
+                           +-----------+                      
+                                  *                           
+                                  *                           
+                                  *                           
+                             +-------+                        
+                             | agent |*                       
+                         ****+-------+ ****                   
+                     ****          *       ****               
+                 ****              *           ****           
+               **                   *              ****       
+  +-----------------+               *                  **     
+  | should_continue |***            *                   *     
+  +-----------------+   ********   *                    *     
+            *        ****       ********                *     
+             *           ****     *     ********        *     
+             *               **   *             *****   *     
+        +---------+         +--------+             +-------+  
+        | __end__ |         | action |             | retry |  
+        +---------+         +--------+             +-------+  
   '''
 # ---
