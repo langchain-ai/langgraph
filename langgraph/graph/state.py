@@ -295,7 +295,7 @@ def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
     }
 
 
-def _get_channel(annotation: Any) -> Optional[BaseChannel]:
+def _get_channel(annotation: Any) -> BaseChannel:
     if channel := _is_field_binop(annotation):
         return channel
     return LastValue(annotation)
