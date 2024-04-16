@@ -8,6 +8,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
 from langgraph.graph import END, StateGraph
+from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 from langgraph.prebuilt.tool_node import ToolNode
@@ -18,12 +19,14 @@ from langgraph.prebuilt.tool_node import ToolNode
 # We want steps to return messages to append to the list
 # So we annotate the messages attribute with operator.add
 class AgentState(TypedDict):
+    """The state of the agent."""
+
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
 def create_function_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
-):
+) -> CompiledGraph:
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
         tool_classes = tools.tools
@@ -131,10 +134,38 @@ def create_function_calling_executor(
 
 
 def create_tool_calling_executor(
-    model: LanguageModelLike,
-    tools: Union[ToolExecutor, Sequence[BaseTool]],
+    model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]],
     handle_parsing_errors: Optional[Callable] = None,
-):
+) -> CompiledGraph:
+    """Creates a graph that works with a chat model that utilizes tool calling.
+
+    Args:
+        model (LanguageModelLike): The chat model that supports OpenAI tool calling.
+        tools (Union[ToolExecutor, Sequence[BaseTool]]): A list of tools or a ToolExecutor instance.
+        handle_parsing_errors (Optional[Callable]): If provided, this function will be
+            called on messages with tool call parsing errors. It should return a new message
+            to be sent to the agent. If not provided, invalid tool calls are ignored.
+
+    Returns:
+        Runnable: A compiled LangChain runnable that can be used for chat interactions.
+
+    Examples:
+
+            from langgraph.prebuilt import chat_agent_executor
+            from langchain_openai import ChatOpenAI
+            from langchain_community.tools.tavily_search import TavilySearchResults
+            from langchain_core.messages import HumanMessage
+
+            tools = [TavilySearchResults(max_results=1)]
+            model = ChatOpenAI()
+
+            app = chat_agent_executor.create_tool_calling_executor(model, tools)
+
+            inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
+            for s in app.stream(inputs):
+                print(list(s.values())[0])
+                print("----")
+    """
     if isinstance(tools, ToolExecutor):
         tool_classes = tools.tools
     else:
