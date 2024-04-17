@@ -316,7 +316,7 @@ class Pregel(
             )
             values = read_channels(channels, self.stream_channels_list)
             return StateSnapshot(
-                values[self.stream_channels]
+                values.get(self.stream_channels, None)
                 if isinstance(self.stream_channels, str)
                 else values,
                 tuple(name for name, _ in next_tasks),
@@ -337,7 +337,7 @@ class Pregel(
             )
             values = read_channels(channels, self.stream_channels_list)
             return StateSnapshot(
-                values[self.stream_channels]
+                values.get(self.stream_channels, None)
                 if isinstance(self.stream_channels, str)
                 else values,
                 tuple(name for name, _ in next_tasks),
@@ -356,7 +356,7 @@ class Pregel(
                 )
                 values = read_channels(channels, self.stream_channels_list)
                 yield StateSnapshot(
-                    values[self.stream_channels]
+                    values.get(self.stream_channels, None)
                     if isinstance(self.stream_channels, str)
                     else values,
                     tuple(name for name, _ in next_tasks),
@@ -378,7 +378,7 @@ class Pregel(
                 )
                 values = read_channels(channels, self.stream_channels_list)
                 yield StateSnapshot(
-                    values[self.stream_channels]
+                    values.get(self.stream_channels, None)
                     if isinstance(self.stream_channels, str)
                     else values,
                     tuple(name for name, _ in next_tasks),
