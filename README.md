@@ -3,6 +3,7 @@
 [![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
 [![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
 [![](https://dcbadge.vercel.app/api/server/6adMQxSpJS?compact=true&style=flat)](https://discord.com/channels/1038097195422978059/1170024642245832774)
+[![Docs](https://img.shields.io/badge/docs-latest-blue)](https://langchain-ai.github.io/langgraph/)
 
 ⚡ Building language agents as graphs ⚡
 
@@ -176,7 +177,7 @@ graph.add_edge("multiply", END)
 graph.set_entry_point("oracle")
 ```
 
-Now let's think - what do we want to have happen?
+Now let's think - what do we want to have happened?
 
 - If the `"oracle"` node returns a message expecting a tool call, we want to execute the `"multiply"` node
 - If not, we can just end execution
@@ -524,92 +525,7 @@ content='' additional_kwargs={'function_call': {'arguments': '{\n', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': ' ', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': ' "', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': 'query', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': '":', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' "', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': 'weather', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' in', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' San', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' Francisco', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': '"\n', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': '}', 'name': ''}}
-content=''
-content=''
-content='I'
-content="'m"
-content=' sorry'
-content=','
-content=' but'
-content=' I'
-content=' couldn'
-content="'t"
-content=' find'
-content=' the'
-content=' current'
-content=' weather'
-content=' in'
-content=' San'
-content=' Francisco'
-content='.'
-content=' However'
-content=','
-content=' you'
-content=' can'
-content=' check'
-content=' the'
-content=' historical'
-content=' weather'
-content=' data'
-content=' for'
-content=' January'
-content=' '
-content='202'
-content='4'
-content=' in'
-content=' San'
-content=' Francisco'
-content=' ['
-content='here'
-content=']('
-content='https'
-content='://'
-content='we'
-content='athers'
-content='park'
-content='.com'
-content='/h'
-content='/m'
-content='/'
-content='557'
-content='/'
-content='202'
-content='4'
-content='/'
-content='1'
-content='/H'
-content='istorical'
-content='-'
-content='Weather'
-content='-in'
-content='-Jan'
-content='uary'
-content='-'
-content='202'
-content='4'
-content='-in'
-content='-S'
-content='an'
-content='-F'
-content='r'
-content='anc'
-content='isco'
-content='-Cal'
-content='ifornia'
-content='-'
-content='United'
-content='-'
-content='States'
-content=').'
-content=''
+...
 ```
 
 ## When to Use
@@ -648,7 +564,7 @@ For a walkthrough on how to do that, see [this documentation](https://github.com
 ### Visualizing the graph
 
 Agents you create with LangGraph can be complex. In order to make it easier to understand what is happening under the hood, we've added methods to print out and visualize the graph.
-This can create both ascii art as well as pngs.
+This can create both ascii art and pngs.
 For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/visualization.ipynb)
 
 ### "Time Travel"
@@ -708,7 +624,7 @@ The following notebooks implement agent architectures prototypical of the "plan-
 When output quality is a major concern, it's common to incorporate some combination of self-critique or reflection and external validation to refine your system's outputs. The following examples demonstrate research that implement this type of design.
 
 - [Basic Reflection](./examples/reflection/reflection.ipynb): add a simple "reflect" step in your graph to prompt your system to revise its outputs.
-- [Reflexion](./examples/reflexion/reflexion.ipynb): critique missing and superflous aspects of the agent's response to guide subsequent steps. Based on [Reflexion](https://arxiv.org/abs/2303.11366), by Shinn, et. al.
+- [Reflexion](./examples/reflexion/reflexion.ipynb): critique missing and superfluous aspects of the agent's response to guide subsequent steps. Based on [Reflexion](https://arxiv.org/abs/2303.11366), by Shinn, et. al.
 - [Language Agent Tree Search](./examples/lats/lats.ipynb): execute multiple agents in parallel, using reflection and environmental rewards to drive a Monte Carlo Tree Search. Based on [LATS](https://arxiv.org/abs/2310.04406), by Zhou, et. al.
 
 ### Multi-agent Examples

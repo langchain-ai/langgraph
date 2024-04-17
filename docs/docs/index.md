@@ -4,119 +4,111 @@
 
 ⚡ Build language agents as graphs ⚡
 
-
 ## Overview
 
-Suppose you're building a customer support assistant. You want your assistant to:
+Suppose you're building a customer support assistant. You want your assistant to be able to:
 
-1. Try to answer user questions using a knowledge base
-2. Escalate to a human if it's not confident in its answer
-3. Relay the human's resolution back to the user
-4. Remember the full conversation context across multiple user messages
+1. Use tools to respond to questions
+2. Connect with a human if needed
+3. Be able to pause the process indefinitely and resume whenever the human responds
 
-With raw LLMs, the code to control the agentic loop, conversation state, route between the chatbot and human, and checkpoint the full application state can get complex.
+LangGraph makes this all easy. First install:
 
-LangGraph makes it simple. First install:
-
-```shell
+```bash
 pip install -U langgraph
 ```
 
 Then define your assistant:
 
 ```python
-from langgraph.graph import StateGraph
+import json
+
+from langchain_anthropic import ChatAnthropic
+from langchain_community.tools.tavily_search import TavilySearchResults
+
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.graph import END, MessageGraph
+from langgraph.prebuilt.tool_node import ToolNode
 
-from langchain_anthropic
 
-
-# Define the chatbot state 
-class ChatbotState(TypedDict):
-    conversation_history: Annotated[ConversationHistory, operator.add]
-    pending_human_request: Optional[HumanRequest]
-
-# Create nodes for the chatbot and human
-def chatbot(state: ChatbotState):
-    # TODO
-
-def human(state: ChatbotState):
-    # TODO
-
-# Create the graph
-graph = StateGraph(ChatbotState)
-graph.add_node("chatbot", chatbot)
-graph.add_node("human", human)
-
-# Define routing logic between chatbot and human
-def should_escalate(state):
-    if state['pending_human_request']:
-        return "human"
+# Define the function that determines whether to continue or not
+def should_continue(messages):
+    last_message = messages[-1]
+    # If there is no function call, then we finish
+    if not last_message.tool_calls:
+        return END
     else:
-        return "chatbot"
+        return "action"
 
-graph.add_conditional_edges("chatbot", should_escalate, {
-    "human": "human", 
-    "chatbot": "chatbot"
-})
 
-graph.add_edge("human", "chatbot")
+# Define a new graph
+workflow = MessageGraph()
 
-memory = SqliteSaver.from_conn_string(":memory:")
-app = graph.compile(checkpointer=memory)
-# Run the graph
-result = app.invoke(new_user_message)
+tools = [TavilySearchResults(max_results=1)]
+model = ChatAnthropic(model="claude-3-haiku-20240307").bind_tools(tools)
+workflow.add_node("agent", model)
+workflow.add_node("action", ToolNode(tools))
+
+workflow.set_entry_point("agent")
+
+# Conditional agent -> action OR agent -> END
+workflow.add_conditional_edges(
+    "agent",
+    should_continue,
+)
+
+# Always transition `action` -> `agent`
+workflow.add_edge("action", "agent")
+
+memory = SqliteSaver.from_conn_string(":memory:") # Here we only save in-memory
+
+# Setting the interrupt means that any time an action is called, the machine will stop
+app = workflow.compile(checkpointer=memory, interrupt_before=["action"])
 ```
 
-The graph handles all the hard parts:
+Now, run the graph:
 
-- `conversation_history` in the state contains the assistant's "memory"
-- Conditional edges enable dynamic routing between the chatbot and human based on the chatbot's confidence
-- Persistence makes it easy to route to a human so they can respond and resume at any time
+```python
+# Run the graph
+thread = {"configurable": {"thread_id": "4"}}
+for event in app.stream("what is the weather in sf currently", thread):
+    for v in event.values():
+        print(v)
+
+```
+We configured the graph to **wait** before executing the `action`. The `SqliteSaver` persists the state. Resume at any time.
+
+```python
+for event in app.stream(None, thread):
+    for v in event.values():
+        print(v)
+```
+
+The graph orchestrates everything:
+
+- The `MessageGraph` contains the agent's "Memory"
+- Conditional edges enable dynamic routing between the chatbot, tools, and the user
+- Persistence makes it easy to stop, resume, and even rewind for full control over your application
 
 With LangGraph, you can build complex, stateful agents without getting bogged down in manual state and interrupt management. Just define your nodes, edges, and state schema - and let the graph take care of the rest.
 
-## Concepts
-
-- [Graphs](concepts.md#graphs)
-- [State](concepts.md#state): The data structure passed between nodes, allowing you to persist context 
-- [Nodes](concepts.#nodes): The building blocks of your graph - LLMs, tools, or custom logic 
-- [Edges](concepts.md#edges): The connections that define the flow of data between your nodes
-- [Conditional Edges](concepts.md#conditional_edges): Special edges that let you dynamically route between nodes based on state
-- [Persistence](concepts.md#persistence): Save and resume your graph's state for long-running applications
-
-## How-To Guides
-
-Check out the [How-To Guides](how-tos/index.md) for instructions on handling common tasks with LangGraph.
-
-- Manage State
-- Tool Integration  
-- Human-in-the-Loop
-- Async Execution
-- Streaming Responses
-- Subgraphs & Branching
-- Persistence, Visualization, Time Travel 
-- Benchmarking
 
 ## Tutorials
 
-Consult the [Tutorials](tutorials/index.md) to learn more about implementing advanced 
+Consult the [Tutorials](tutorials/index.md) to learn more about building with LangGraph, including advanced use cases.
 
-- **Agent Executors**: Chat and Langchain agents
-- **Planning Agents**: Plan-and-Execute, ReWOO, LLMCompiler  
-- **Reflection & Critique**: Improving quality via reflection
-- **Multi-Agent Systems**: Collaboration, supervision, teams
-- **Research & QA**: Web research, retrieval-augmented QA  
-- **Applications**: Chatbots, code assist, web tasks
-- **Evaluation & Analysis**: Simulation, self-discovery, swarms
+
+## How-To Guides
+
+Check out the [How-To Guides](how-tos/index.md) for instructions on handling common tasks with LangGraph
 
 ## Why LangGraph?
 
-LangGraph extends the core strengths of LangChain Runnables (shared interface for streaming, async, and batch calls) to make it easy to:
+LangGraph is framework agnostic (each node is a regular python function). It extends the core Runnable API (shared interface for streaming, async, and batch calls) to make it easy to:
 
 - Seamless state management across multiple turns of conversation or tool usage
 - The ability to flexibly route between nodes based on dynamic criteria 
 - Smooth switching between LLMs and human intervention  
 - Persistence for long-running, multi-session applications
 
-If you're building a straightforward DAG,, LangChain expression language is a great fit. But for more complex, stateful applications with nonlinear flows, LangGraph is the perfect tool for the job.
+If you're building a straightforward DAG, Runnables are a great fit. But for more complex, stateful applications with nonlinear flows, LangGraph is the perfect tool for the job.
