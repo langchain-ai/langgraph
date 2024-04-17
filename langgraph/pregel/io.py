@@ -1,5 +1,7 @@
 from typing import Any, Iterator, Mapping, Optional, Sequence, Union
 
+from langchain_core.runnables.utils import AddableDict
+
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel.log import logger
@@ -61,6 +63,14 @@ def map_input(
                 logger.warning(f"Input channel {k} not found in {input_channels}")
 
 
+class AddableValuesDict(AddableDict):
+    def __add__(self, other: dict[str, Any]) -> "AddableValuesDict":
+        return self | other
+
+    def __radd__(self, other: dict[str, Any]) -> "AddableValuesDict":
+        return other | self
+
+
 def map_output_values(
     output_channels: Union[str, Sequence[str]],
     pending_writes: Sequence[tuple[str, Any]],
@@ -72,7 +82,15 @@ def map_output_values(
             yield read_channel(channels, output_channels)
     else:
         if {c for c, _ in pending_writes if c in output_channels}:
-            yield read_channels(channels, output_channels)
+            yield AddableValuesDict(read_channels(channels, output_channels))
+
+
+class AddableUpdatesDict(AddableDict):
+    def __add__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
+        return [self, other]
+
+    def __radd__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
+        raise TypeError("AddableUpdatesDict does not support right-side addition")
 
 
 def map_output_updates(
@@ -84,17 +102,21 @@ def map_output_updates(
         t for t in tasks if not t.config or TAG_HIDDEN not in t.config.get("tags")
     ]
     if isinstance(output_channels, str):
-        if updated := {
-            node: value
-            for node, _, _, writes, _ in output_tasks
-            for chan, value in writes
-            if chan == output_channels
-        }:
+        if updated := AddableUpdatesDict(
+            {
+                node: value
+                for node, _, _, writes, _ in output_tasks
+                for chan, value in writes
+                if chan == output_channels
+            }
+        ):
             yield updated
     else:
-        if updated := {
-            node: {chan: value for chan, value in writes if chan in output_channels}
-            for node, _, _, writes, _ in output_tasks
-            if any(chan in output_channels for chan, _ in writes)
-        }:
+        if updated := AddableUpdatesDict(
+            {
+                node: {chan: value for chan, value in writes if chan in output_channels}
+                for node, _, _, writes, _ in output_tasks
+                if any(chan in output_channels for chan, _ in writes)
+            }
+        ):
             yield updated

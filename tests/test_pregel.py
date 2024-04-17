@@ -3622,3 +3622,55 @@ def test_simple_multi_edge() -> None:
       +---------+  """
     )
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}
+
+
+def test_nested_graph() -> None:
+    class State(TypedDict):
+        my_key: str
+
+    def up(state: State):
+        return {"my_key": state["my_key"] + " there"}
+
+    inner = StateGraph(State)
+    inner.add_node("up", up)
+    inner.set_entry_point("up")
+    inner.set_finish_point("up")
+
+    def side(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile())
+    graph.add_node("side", side)
+    graph.set_entry_point("inner")
+    graph.add_edge("inner", "side")
+    graph.set_finish_point("side")
+
+    app = graph.compile()
+
+    assert app.get_graph().draw_ascii() == (
+        """+-----------+  
+| __start__ |  
++-----------+  
+      *        
+      *        
+      *        
+  +-------+    
+  | inner |    
+  +-------+    
+      *        
+      *        
+      *        
+  +------+     
+  | side |     
+  +------+     
+      *        
+      *        
+      *        
+ +---------+   
+ | __end__ |   
+ +---------+   """
+    )
+    assert app.invoke({"my_key": "my value"}) == {
+        "my_key": "my value there and back again"
+    }
