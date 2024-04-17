@@ -1,7 +1,7 @@
 import logging
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union
+from typing import Any, Optional, Sequence, Type, Union, get_type_hints
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
@@ -286,18 +286,16 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
 
 def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
     if not hasattr(schema, "__annotations__"):
-        return {
-            "__root__": _get_channel(schema),
-        }
+        return {"__root__": _get_channel(schema)}
 
-    channels: dict[str, BaseChannel] = {}
-    for name, typ in schema.__annotations__.items():
-        channels[name] = _get_channel(typ)
-
-    return channels
+    return {
+        name: _get_channel(typ)
+        for name, typ in get_type_hints(schema, include_extras=True).items()
+        if name != "__slots__"
+    }
 
 
-def _get_channel(annotation: Any) -> Optional[BaseChannel]:
+def _get_channel(annotation: Any) -> BaseChannel:
     if channel := _is_field_binop(annotation):
         return channel
     return LastValue(annotation)
