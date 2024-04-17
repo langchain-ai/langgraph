@@ -8,12 +8,12 @@ from typing import (
     Iterator,
     NamedTuple,
     Optional,
-    Protocol,
     TypedDict,
 )
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
+from langgraph.serde.base import SerializerProtocol
 from langgraph.utils import StrEnum
 
 
@@ -100,14 +100,6 @@ CheckpointThreadTs = ConfigurableFieldSpec(
     default=None,
     is_shared=True,
 )
-
-
-class SerializerProtocol(Protocol):
-    def dumps(self, obj: Any) -> bytes:
-        ...
-
-    def loads(self, data: bytes) -> Any:
-        ...
 
 
 class BaseCheckpointSaver(ABC):
