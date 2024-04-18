@@ -79,7 +79,9 @@ def copy_notebooks():
                 for k in _MANUAL_INVERSE:
                     if src_path.endswith(k):
                         overridden_dir = _MANUAL_INVERSE[k]
-                        dst_path = os.path.join(overridden_dir, os.path.relpath(src_path, examples_dir))
+                        dst_path = os.path.join(
+                            overridden_dir, os.path.relpath(src_path, examples_dir)
+                        )
                         print(f"Overriding {src_path} to {dst_path}")
                         break
 
