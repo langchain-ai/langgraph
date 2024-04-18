@@ -5,6 +5,7 @@ Welcome to the LangGraph Tutorials! These notebooks introduce LangGraph through 
 ## Introduction to LangGraph
 
 Learn the basics of LangGraph through the onboarding tutorials.
+
 - [Introduction to LangGraph](introduction.ipynb)
 
 
