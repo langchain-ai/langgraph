@@ -144,7 +144,7 @@ def create_tool_calling_executor(
         model (LanguageModelLike): The chat model that supports OpenAI tool calling.
         tools (Union[ToolExecutor, Sequence[BaseTool]]): A list of tools or a ToolExecutor instance.
         handle_parsing_errors (Optional[Callable]): If provided, this function will be
-            called on messages with tool call parsing errors. It should return a new message
+            called on messages with tool call parsing errors. It should return a (list of) messages
             to be sent to the agent. If not provided, invalid tool calls are ignored.
 
     Returns:
@@ -204,7 +204,9 @@ def create_tool_calling_executor(
         messages = state["messages"]
         last_message = messages[-1]
         retry_message = handle_parsing_errors(last_message)
-        return {"messages": [retry_message]}
+        if not isinstance(retry_message, list):
+            retry_message = [retry_message]
+        return {"messages": retry_message}
 
     # Define a new graph
     workflow = StateGraph(AgentState)
