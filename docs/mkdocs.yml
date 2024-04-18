@@ -85,8 +85,10 @@ nav:
   - Home: 
       - 'index.md'
       - Quick Start: how-tos/docs/quickstart.ipynb
+      - Intro to LangGraph: tutorials/introduction.ipynb
   - Tutorials:
       - 'tutorials/index.md'
+      - Introduction: tutorials/introduction.ipynb
       - Agent Executor:
             - "Base": tutorials/agent_executor/base.ipynb
             - "High-Level": tutorials/agent_executor/high-level.ipynb
