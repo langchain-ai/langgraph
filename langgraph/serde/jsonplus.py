@@ -1,6 +1,8 @@
+import dataclasses
 import importlib
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
+from enum import Enum
 from typing import Any, Optional
 from uuid import UUID
 
@@ -43,14 +45,31 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(type(obj), args=[list(obj)])
         elif isinstance(obj, datetime):
             return self._encode_constructor_args(
-                datetime, method="fromisoformat", args=[obj.isoformat(), obj.tzinfo]
+                datetime, method="fromisoformat", args=[obj.isoformat()]
             )
+        elif isinstance(obj, timezone):
+            return self._encode_constructor_args(timezone, args=obj.__getinitargs__())
+        elif isinstance(obj, timedelta):
+            return self._encode_constructor_args(
+                timedelta, args=[obj.days, obj.seconds, obj.microseconds]
+            )
+        elif dataclasses.is_dataclass(obj):
+            return self._encode_constructor_args(
+                obj.__class__,
+                kwargs={
+                    field.name: getattr(obj, field.name)
+                    for field in dataclasses.fields(obj)
+                },
+            )
+        elif isinstance(obj, Enum):
+            return self._encode_constructor_args(obj.__class__, args=[obj.value])
         else:
             raise TypeError(
                 f"Object of type {obj.__class__.__name__} is not JSON serializable"
             )
 
     def _reviver(self, value: dict[str, Any]) -> Any:
+        print(value)
         if (
             value.get("lc", None) == 2
             and value.get("type", None) == "constructor"
@@ -75,4 +94,4 @@ class JsonPlusSerializer(SerializerProtocol):
         return json.dumps(obj, default=self._default, sort_keys=True)
 
     def loads(self, data: bytes) -> Any:
-        return json.loads(data)
+        return json.loads(data, object_hook=self._reviver)
