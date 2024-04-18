@@ -416,6 +416,8 @@ class CompiledGraph(Pregel):
                         graph.add_edge(cond, end_nodes[end], label, conditional=True)
                 else:
                     for label, end in ends.items():
-                        graph.add_edge(start_nodes[start], end_nodes[end], label, conditional=True)
+                        graph.add_edge(
+                            start_nodes[start], end_nodes[end], label, conditional=True
+                        )
 
         return graph
