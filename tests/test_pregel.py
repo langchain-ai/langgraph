@@ -1367,7 +1367,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()
@@ -1819,7 +1819,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()

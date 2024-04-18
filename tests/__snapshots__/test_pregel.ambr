@@ -99,18 +99,6 @@
       },
       {
         "source": "condition",
-        "target": "left",
-        "data": "left",
-        "conditional": true
-      },
-      {
-        "source": "condition",
-        "target": "right",
-        "data": "right",
-        "conditional": true
-      },
-      {
-        "source": "condition",
         "target": "__end__",
         "data": "__end__",
         "conditional": true
@@ -121,39 +109,33 @@
 # ---
 # name: test_conditional_entrypoint_graph.3
   '''
-            +-----------+          
-            | __start__ |          
-            +-----------+          
-                   *               
-                   *               
-                   *               
-           +--------------+        
-           | should_start |        
-           +--------------+        
-             ..         ..         
-           ..             ..       
-          .                 ..     
-    +------+                  .    
-    | left |                  .    
-    +------+                  .    
-        *                     .    
-        *                     .    
-        *                     .    
-  +-----------+               .    
-  | condition |               .    
-  +-----------+...            .    
-        .         ...         .    
-        .            ....     .    
-        .                ..   .    
-        .                +-------+ 
-         ..              | right | 
-           ..            +-------+ 
-             ..         **         
-               ..     **           
-                 .   *             
-              +---------+          
-              | __end__ |          
-              +---------+          
+            +-----------+        
+            | __start__ |        
+            +-----------+        
+                  *              
+                  *              
+                  *              
+          +--------------+       
+          | should_start |       
+          +--------------+       
+             .         ..        
+           ..            .       
+          .               ..     
+    +------+                .    
+    | left |                .    
+    +------+                .    
+        *                   .    
+        *                   .    
+        *                   .    
+  +-----------+        +-------+ 
+  | condition |        | right | 
+  +-----------+        +-------+ 
+             .         *         
+              ..     **          
+                .   *            
+            +---------+          
+            | __end__ |          
+            +---------+          
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
@@ -256,18 +238,6 @@
       },
       {
         "source": "condition",
-        "target": "left",
-        "data": "left",
-        "conditional": true
-      },
-      {
-        "source": "condition",
-        "target": "right",
-        "data": "right",
-        "conditional": true
-      },
-      {
-        "source": "condition",
         "target": "__end__",
         "data": "__end__",
         "conditional": true
@@ -278,39 +248,33 @@
 # ---
 # name: test_conditional_entrypoint_graph_state.3
   '''
-            +-----------+          
-            | __start__ |          
-            +-----------+          
-                   *               
-                   *               
-                   *               
-           +--------------+        
-           | should_start |        
-           +--------------+        
-             ..         ..         
-           ..             ..       
-          .                 ..     
-    +------+                  .    
-    | left |                  .    
-    +------+                  .    
-        *                     .    
-        *                     .    
-        *                     .    
-  +-----------+               .    
-  | condition |               .    
-  +-----------+...            .    
-        .         ...         .    
-        .            ....     .    
-        .                ..   .    
-        .                +-------+ 
-         ..              | right | 
-           ..            +-------+ 
-             ..         **         
-               ..     **           
-                 .   *             
-              +---------+          
-              | __end__ |          
-              +---------+          
+            +-----------+        
+            | __start__ |        
+            +-----------+        
+                  *              
+                  *              
+                  *              
+          +--------------+       
+          | should_start |       
+          +--------------+       
+             .         ..        
+           ..            .       
+          .               ..     
+    +------+                .    
+    | left |                .    
+    +------+                .    
+        *                   .    
+        *                   .    
+        *                   .    
+  +-----------+        +-------+ 
+  | condition |        | right | 
+  +-----------+        +-------+ 
+             .         *         
+              ..     **          
+                .   *            
+            +---------+          
+            | __end__ |          
+            +---------+          
   '''
 # ---
 # name: test_conditional_graph[end_of_run]
@@ -807,9 +771,9 @@
             +-------+           
             | agent |           
             +-------+           
-           *         .          
-         **           ..        
-        *               .       
+           .         .          
+         ..           ..        
+        .               .       
   +-------+         +---------+ 
   | tools |         | __end__ | 
   +-------+         +---------+ 
