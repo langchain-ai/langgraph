@@ -316,7 +316,7 @@ class Pregel(
             )
             values = read_channels(channels, self.stream_channels_list)
             return StateSnapshot(
-                values[self.stream_channels]
+                values.get(self.stream_channels, None)
                 if isinstance(self.stream_channels, str)
                 else values,
                 tuple(name for name, _ in next_tasks),
@@ -337,7 +337,7 @@ class Pregel(
             )
             values = read_channels(channels, self.stream_channels_list)
             return StateSnapshot(
-                values[self.stream_channels]
+                values.get(self.stream_channels, None)
                 if isinstance(self.stream_channels, str)
                 else values,
                 tuple(name for name, _ in next_tasks),
@@ -356,7 +356,7 @@ class Pregel(
                 )
                 values = read_channels(channels, self.stream_channels_list)
                 yield StateSnapshot(
-                    values[self.stream_channels]
+                    values.get(self.stream_channels, None)
                     if isinstance(self.stream_channels, str)
                     else values,
                     tuple(name for name, _ in next_tasks),
@@ -378,7 +378,7 @@ class Pregel(
                 )
                 values = read_channels(channels, self.stream_channels_list)
                 yield StateSnapshot(
-                    values[self.stream_channels]
+                    values.get(self.stream_channels, None)
                     if isinstance(self.stream_channels, str)
                     else values,
                     tuple(name for name, _ in next_tasks),
@@ -512,6 +512,7 @@ class Pregel(
 
     def _defaults(
         self,
+        config: Optional[RunnableConfig] = None,
         *,
         stream_mode: Optional[StreamMode] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
@@ -542,9 +543,13 @@ class Pregel(
             validate_keys(input_keys, self.channels)
         interrupt_before_nodes = interrupt_before_nodes or self.interrupt_before_nodes
         interrupt_after_nodes = interrupt_after_nodes or self.interrupt_after_nodes
+        stream_mode = stream_mode if stream_mode is not None else self.stream_mode
+        if config is not None and config.get("configurable", {}).get(CONFIG_KEY_READ):
+            # if being called as a node in another graph, always use values mode
+            stream_mode = "values"
         return (
             debug,
-            stream_mode if stream_mode is not None else self.stream_mode,
+            stream_mode,
             input_keys,
             output_keys,
             interrupt_before_nodes,
@@ -567,7 +572,10 @@ class Pregel(
         config = ensure_config(config)
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
-            dumpd(self), input, name=config.get("run_name", self.get_name())
+            dumpd(self),
+            input,
+            name=config.get("run_name", self.get_name()),
+            run_id=config.get("run_id"),
         )
         try:
             if config["recursion_limit"] < 1:
@@ -581,6 +589,7 @@ class Pregel(
                 interrupt_before_nodes,
                 interrupt_after_nodes,
             ) = self._defaults(
+                config,
                 stream_mode=stream_mode,
                 input_keys=input_keys,
                 output_keys=output_keys,
@@ -763,7 +772,10 @@ class Pregel(
         config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
-            dumpd(self), input, name=config.get("run_name", self.get_name())
+            dumpd(self),
+            input,
+            name=config.get("run_name", self.get_name()),
+            run_id=config.get("run_id"),
         )
         # if running from astream_log() run each proc with streaming
         do_stream = next(
@@ -786,6 +798,7 @@ class Pregel(
                 interrupt_before_nodes,
                 interrupt_after_nodes,
             ) = self._defaults(
+                config,
                 stream_mode=stream_mode,
                 input_keys=input_keys,
                 output_keys=output_keys,

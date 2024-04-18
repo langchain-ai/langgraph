@@ -84,12 +84,14 @@
       {
         "source": "should_start",
         "target": "left",
-        "data": "go-left"
+        "data": "go-left",
+        "conditional": true
       },
       {
         "source": "should_start",
         "target": "right",
-        "data": "go-right"
+        "data": "go-right",
+        "conditional": true
       },
       {
         "source": "left",
@@ -97,18 +99,9 @@
       },
       {
         "source": "condition",
-        "target": "left",
-        "data": "left"
-      },
-      {
-        "source": "condition",
-        "target": "right",
-        "data": "right"
-      },
-      {
-        "source": "condition",
         "target": "__end__",
-        "data": "__end__"
+        "data": "__end__",
+        "conditional": true
       }
     ]
   }
@@ -116,39 +109,33 @@
 # ---
 # name: test_conditional_entrypoint_graph.3
   '''
-            +-----------+          
-            | __start__ |          
-            +-----------+          
-                   *               
-                   *               
-                   *               
-           +--------------+        
-           | should_start |        
-           +--------------+        
-             **         **         
-           **             **       
-          *                 **     
-    +------+                  *    
-    | left |                  *    
-    +------+                  *    
-        *                     *    
-        *                     *    
-        *                     *    
-  +-----------+               *    
-  | condition |               *    
-  +-----------+***            *    
-        *         ***         *    
-        *            ****     *    
-        *                **   *    
-        *                +-------+ 
-         **              | right | 
-           **            +-------+ 
-             **         **         
-               **     **           
-                 *   *             
-              +---------+          
-              | __end__ |          
-              +---------+          
+            +-----------+        
+            | __start__ |        
+            +-----------+        
+                  *              
+                  *              
+                  *              
+          +--------------+       
+          | should_start |       
+          +--------------+       
+             .         ..        
+           ..            .       
+          .               ..     
+    +------+                .    
+    | left |                .    
+    +------+                .    
+        *                   .    
+        *                   .    
+        *                   .    
+  +-----------+        +-------+ 
+  | condition |        | right | 
+  +-----------+        +-------+ 
+             .         *         
+              ..     **          
+                .   *            
+            +---------+          
+            | __end__ |          
+            +---------+          
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
@@ -236,12 +223,14 @@
       {
         "source": "should_start",
         "target": "left",
-        "data": "go-left"
+        "data": "go-left",
+        "conditional": true
       },
       {
         "source": "should_start",
         "target": "right",
-        "data": "go-right"
+        "data": "go-right",
+        "conditional": true
       },
       {
         "source": "left",
@@ -249,18 +238,9 @@
       },
       {
         "source": "condition",
-        "target": "left",
-        "data": "left"
-      },
-      {
-        "source": "condition",
-        "target": "right",
-        "data": "right"
-      },
-      {
-        "source": "condition",
         "target": "__end__",
-        "data": "__end__"
+        "data": "__end__",
+        "conditional": true
       }
     ]
   }
@@ -268,39 +248,33 @@
 # ---
 # name: test_conditional_entrypoint_graph_state.3
   '''
-            +-----------+          
-            | __start__ |          
-            +-----------+          
-                   *               
-                   *               
-                   *               
-           +--------------+        
-           | should_start |        
-           +--------------+        
-             **         **         
-           **             **       
-          *                 **     
-    +------+                  *    
-    | left |                  *    
-    +------+                  *    
-        *                     *    
-        *                     *    
-        *                     *    
-  +-----------+               *    
-  | condition |               *    
-  +-----------+***            *    
-        *         ***         *    
-        *            ****     *    
-        *                **   *    
-        *                +-------+ 
-         **              | right | 
-           **            +-------+ 
-             **         **         
-               **     **           
-                 *   *             
-              +---------+          
-              | __end__ |          
-              +---------+          
+            +-----------+        
+            | __start__ |        
+            +-----------+        
+                  *              
+                  *              
+                  *              
+          +--------------+       
+          | should_start |       
+          +--------------+       
+             .         ..        
+           ..            .       
+          .               ..     
+    +------+                .    
+    | left |                .    
+    +------+                .    
+        *                   .    
+        *                   .    
+        *                   .    
+  +-----------+        +-------+ 
+  | condition |        | right | 
+  +-----------+        +-------+ 
+             .         *         
+              ..     **          
+                .   *            
+            +---------+          
+            | __end__ |          
+            +---------+          
   '''
 # ---
 # name: test_conditional_graph[end_of_run]
@@ -373,12 +347,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -400,16 +376,26 @@
               **                 ***      
   +-----------------+               *     
   | should_continue |               *     
-  +-----------------+*              *     
-            *         *****         *     
-            *              ***      *     
-            *                 ***   *     
+  +-----------------+.              *     
+            .         .....         *     
+            .              ...      *     
+            .                 ...   *     
       +---------+              +-------+  
       | __end__ |              | tools |  
       +---------+              +-------+  
   '''
 # ---
 # name: test_conditional_graph[end_of_run].2
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. continue .-> tools;
+  	agent -. exit .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[end_of_run].3
   '''
   {
     "nodes": [
@@ -552,18 +538,20 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
   '''
 # ---
-# name: test_conditional_graph[end_of_run].3
+# name: test_conditional_graph[end_of_run].4
   '''
                                         +-----------+                             
                                         | __start__ |                             
@@ -602,14 +590,30 @@
                              *                                              *     
                              *                                              *     
                     +-----------------+                                     *     
-                    | should_continue |***                                  *     
-                    +-----------------+   *********                         *     
-                             *                     ********                 *     
-                             *                             *********        *     
-                             *                                      *****   *     
+                    | should_continue |...                                  *     
+                    +-----------------+   .........                         *     
+                             .                     ........                 *     
+                             .                             .........        *     
+                             .                                      .....   *     
                         +---------+                                     +-------+ 
                         | __end__ |                                     | tools | 
                         +---------+                                     +-------+ 
+  '''
+# ---
+# name: test_conditional_graph[end_of_run].5
+  '''
+  graph TD;
+  	PromptTemplate --> FakeStreamingListLLM;
+  	FakeStreamingListLLM --> Lambda_agent_parser_;
+  	Parallel_agent_outcome_Input --> PromptTemplate;
+  	Lambda_agent_parser_ --> Parallel_agent_outcome_Output;
+  	Parallel_agent_outcome_Input --> Passthrough;
+  	Passthrough --> Parallel_agent_outcome_Output;
+  	__start__ --> Parallel_agent_outcome_Input;
+  	tools --> Parallel_agent_outcome_Input;
+  	Parallel_agent_outcome_Output -. continue .-> tools;
+  	Parallel_agent_outcome_Output -. exit .-> __end__;
+  
   '''
 # ---
 # name: test_conditional_graph[end_of_step]
@@ -682,12 +686,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -709,16 +715,26 @@
               **                 ***      
   +-----------------+               *     
   | should_continue |               *     
-  +-----------------+*              *     
-            *         *****         *     
-            *              ***      *     
-            *                 ***   *     
+  +-----------------+.              *     
+            .         .....         *     
+            .              ...      *     
+            .                 ...   *     
       +---------+              +-------+  
       | __end__ |              | tools |  
       +---------+              +-------+  
   '''
 # ---
 # name: test_conditional_graph[end_of_step].2
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. continue .-> tools;
+  	agent -. exit .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[end_of_step].3
   '''
   {
     "nodes": [
@@ -861,18 +877,20 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
   '''
 # ---
-# name: test_conditional_graph[end_of_step].3
+# name: test_conditional_graph[end_of_step].4
   '''
                                         +-----------+                             
                                         | __start__ |                             
@@ -911,14 +929,30 @@
                              *                                              *     
                              *                                              *     
                     +-----------------+                                     *     
-                    | should_continue |***                                  *     
-                    +-----------------+   *********                         *     
-                             *                     ********                 *     
-                             *                             *********        *     
-                             *                                      *****   *     
+                    | should_continue |...                                  *     
+                    +-----------------+   .........                         *     
+                             .                     ........                 *     
+                             .                             .........        *     
+                             .                                      .....   *     
                         +---------+                                     +-------+ 
                         | __end__ |                                     | tools | 
                         +---------+                                     +-------+ 
+  '''
+# ---
+# name: test_conditional_graph[end_of_step].5
+  '''
+  graph TD;
+  	PromptTemplate --> FakeStreamingListLLM;
+  	FakeStreamingListLLM --> Lambda_agent_parser_;
+  	Parallel_agent_outcome_Input --> PromptTemplate;
+  	Lambda_agent_parser_ --> Parallel_agent_outcome_Output;
+  	Parallel_agent_outcome_Input --> Passthrough;
+  	Passthrough --> Parallel_agent_outcome_Output;
+  	__start__ --> Parallel_agent_outcome_Input;
+  	tools --> Parallel_agent_outcome_Input;
+  	Parallel_agent_outcome_Output -. continue .-> tools;
+  	Parallel_agent_outcome_Output -. exit .-> __end__;
+  
   '''
 # ---
 # name: test_conditional_graph_state[end_of_run]
@@ -997,12 +1031,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -1024,10 +1060,10 @@
               **                 ***      
   +-----------------+               *     
   | should_continue |               *     
-  +-----------------+*              *     
-            *         *****         *     
-            *              ***      *     
-            *                 ***   *     
+  +-----------------+.              *     
+            .         .....         *     
+            .              ...      *     
+            .                 ...   *     
       +---------+              +-------+  
       | __end__ |              | tools |  
       +---------+              +-------+  
@@ -1109,12 +1145,14 @@
       {
         "source": "should_continue",
         "target": "tools",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "exit"
+        "data": "exit",
+        "conditional": true
       }
     ]
   }
@@ -1136,13 +1174,235 @@
               **                 ***      
   +-----------------+               *     
   | should_continue |               *     
-  +-----------------+*              *     
-            *         *****         *     
-            *              ***      *     
-            *                 ***   *     
+  +-----------------+.              *     
+            .         .....         *     
+            .              ...      *     
+            .                 ...   *     
       +---------+              +-------+  
       | __end__ |              | tools |  
       +---------+              +-------+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge[end_of_run]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ***             
+              *               *            
+            **                 ***         
+  +--------------+                *        
+  | analyzer_one |                *        
+  +--------------+                *        
+          *                       *        
+          *                       *        
+          *                       *        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge[end_of_step]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ***             
+              *               *            
+            **                 ***         
+  +--------------+                *        
+  | analyzer_one |                *        
+  +--------------+                *        
+          *                       *        
+          *                       *        
+          *                       *        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[end_of_run]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ***             
+              *               *            
+            **                 **          
+  +--------------+          +---------+    
+  | analyzer_one |          | decider |    
+  +--------------+          +---------+    
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[end_of_step]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ***             
+              *               *            
+            **                 **          
+  +--------------+          +---------+    
+  | analyzer_one |          | decider |    
+  +--------------+          +---------+    
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[end_of_run]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ***             
+              *               *            
+            **                 **          
+  +--------------+         +-----------+   
+  | analyzer_one |         | condition |   
+  +--------------+         +-----------+   
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[end_of_step]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ***             
+              *               *            
+            **                 **          
+  +--------------+         +-----------+   
+  | analyzer_one |         | condition |   
+  +--------------+         +-----------+   
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
   '''
 # ---
 # name: test_message_graph[end_of_run]
@@ -1220,12 +1480,14 @@
       {
         "source": "should_continue",
         "target": "action",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "end"
+        "data": "end",
+        "conditional": true
       }
     ]
   }
@@ -1247,10 +1509,10 @@
               **                 ***      
   +-----------------+               *     
   | should_continue |               *     
-  +-----------------+*              *     
-            *         *****         *     
-            *              ***      *     
-            *                 ***   *     
+  +-----------------+.              *     
+            .         .....         *     
+            .              ...      *     
+            .                 ...   *     
       +---------+             +--------+  
       | __end__ |             | action |  
       +---------+             +--------+  
@@ -1331,12 +1593,14 @@
       {
         "source": "should_continue",
         "target": "action",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "end"
+        "data": "end",
+        "conditional": true
       }
     ]
   }
@@ -1358,13 +1622,38 @@
               **                 ***      
   +-----------------+               *     
   | should_continue |               *     
-  +-----------------+*              *     
-            *         *****         *     
-            *              ***      *     
-            *                 ***   *     
+  +-----------------+.              *     
+            .         .....         *     
+            .              ...      *     
+            .                 ...   *     
       +---------+             +--------+  
       | __end__ |             | action |  
       +---------+             +--------+  
+  '''
+# ---
+# name: test_nested_graph
+  '''
+  +-----------+  
+  | __start__ |  
+  +-----------+  
+        *        
+        *        
+        *        
+    +-------+    
+    | inner |    
+    +-------+    
+        *        
+        *        
+        *        
+    +------+     
+    | side |     
+    +------+     
+        *        
+        *        
+        *        
+   +---------+   
+   | __end__ |   
+   +---------+   
   '''
 # ---
 # name: test_prebuilt_chat
@@ -1443,12 +1732,14 @@
       {
         "source": "should_continue",
         "target": "action",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "end"
+        "data": "end",
+        "conditional": true
       }
     ]
   }
@@ -1470,10 +1761,10 @@
               **                 ***      
   +-----------------+               *     
   | should_continue |               *     
-  +-----------------+*              *     
-            *         *****         *     
-            *              ***      *     
-            *                 ***   *     
+  +-----------------+.              *     
+            .         .....         *     
+            .              ...      *     
+            .                 ...   *     
       +---------+             +--------+  
       | __end__ |             | action |  
       +---------+             +--------+  
@@ -1577,14 +1868,72 @@
       {
         "source": "should_continue",
         "target": "action",
-        "data": "continue"
+        "data": "continue",
+        "conditional": true
       },
       {
         "source": "should_continue",
         "target": "__end__",
-        "data": "end"
+        "data": "end",
+        "conditional": true
       }
     ]
   }
+  '''
+# ---
+# name: test_prebuilt_tool_chat.3
+  '''
+                 +-----------+            
+                 | __start__ |            
+                 +-----------+            
+                        *                 
+                        *                 
+                        *                 
+                   +-------+              
+                   | agent |              
+                   +-------+*             
+                 ***         ***          
+                *               *         
+              **                 ***      
+  +-----------------+               *     
+  | should_continue |               *     
+  +-----------------+.              *     
+            .         .....         *     
+            .              ...      *     
+            .                 ...   *     
+      +---------+             +--------+  
+      | __end__ |             | action |  
+      +---------+             +--------+  
+  '''
+# ---
+# name: test_simple_multi_edge
+  '''
+      +-----------+  
+      | __start__ |  
+      +-----------+  
+             *       
+             *       
+             *       
+          +----+     
+          | up |     
+          +----+     
+         **     **   
+        *         *  
+       *           * 
+  +------+          *
+  | side |         * 
+  +------+        *  
+         **     **   
+           *   *     
+            * *      
+         +------+    
+         | down |    
+         +------+    
+             *       
+             *       
+             *       
+        +---------+  
+        | __end__ |  
+        +---------+  
   '''
 # ---

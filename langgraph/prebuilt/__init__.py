@@ -1,7 +1,7 @@
 from langgraph.prebuilt import chat_agent_executor
 from langgraph.prebuilt.agent_executor import create_agent_executor
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
-from langgraph.prebuilt.tool_node import ToolNode
+from langgraph.prebuilt.tool_node import ToolNode, tools_condition
 
 __all__ = [
     "create_agent_executor",
@@ -9,4 +9,5 @@ __all__ = [
     "ToolExecutor",
     "ToolInvocation",
     "ToolNode",
+    "tools_condition",
 ]

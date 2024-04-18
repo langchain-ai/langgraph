@@ -796,8 +796,18 @@ def test_conditional_graph(
 
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
+    assert (
+        app.get_graph(add_condition_nodes=False).draw_mermaid(with_styles=False)
+        == snapshot
+    )
     assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
     assert app.get_graph(xray=True).draw_ascii() == snapshot
+    assert (
+        app.get_graph(xray=True, add_condition_nodes=False).draw_mermaid(
+            with_styles=False
+        )
+        == snapshot
+    )
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1365,7 +1375,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()
@@ -1817,7 +1827,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()
@@ -2986,7 +2996,9 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
 @pytest.mark.parametrize(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
-def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) -> None:
+def test_in_one_fan_out_state_graph_waiting_edge(
+    snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
+) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -3033,41 +3045,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) ->
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 ***         
-+--------------+                *        
-| analyzer_one |                *        
-+--------------+                *        
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
@@ -3111,6 +3089,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) ->
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     def sorted_add(
@@ -3161,41 +3140,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+         +-----------+   
-| analyzer_one |         | condition |   
-+--------------+         +-----------+   
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -3239,6 +3184,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     from langchain_core.pydantic_v1 import BaseModel, ValidationError
@@ -3295,41 +3241,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+          +---------+    
-| analyzer_one |          | decider |    
-+--------------+          +---------+    
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     with pytest.raises(ValidationError):
         app.invoke({"query": {}})
@@ -3640,7 +3552,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
     ]
 
 
-def test_simple_multi_edge() -> None:
+def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
 
@@ -3666,33 +3578,35 @@ def test_simple_multi_edge() -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """    +-----------+  
-    | __start__ |  
-    +-----------+  
-           *       
-           *       
-           *       
-        +----+     
-        | up |     
-        +----+     
-       **     **   
-      *         *  
-     *           * 
-+------+          *
-| side |         * 
-+------+        *  
-       **     **   
-         *   *     
-          * *      
-       +------+    
-       | down |    
-       +------+    
-           *       
-           *       
-           *       
-      +---------+  
-      | __end__ |  
-      +---------+  """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}
+
+
+def test_nested_graph(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        my_key: str
+
+    def up(state: State):
+        return {"my_key": state["my_key"] + " there"}
+
+    inner = StateGraph(State)
+    inner.add_node("up", up)
+    inner.set_entry_point("up")
+    inner.set_finish_point("up")
+
+    def side(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile())
+    graph.add_node("side", side)
+    graph.set_entry_point("inner")
+    graph.add_edge("inner", "side")
+    graph.set_finish_point("side")
+
+    app = graph.compile()
+
+    assert app.get_graph().draw_ascii() == snapshot
+    assert app.invoke({"my_key": "my value"}) == {
+        "my_key": "my value there and back again"
+    }
