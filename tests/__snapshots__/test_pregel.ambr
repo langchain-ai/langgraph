@@ -1863,7 +1863,8 @@
       {
         "source": "should_continue",
         "target": "retry",
-        "data": "retry"
+        "data": "retry",
+        "conditional": true
       },
       {
         "source": "should_continue",
@@ -1879,31 +1880,6 @@
       }
     ]
   }
-  '''
-# ---
-# name: test_prebuilt_tool_chat.3
-  '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+.              *     
-            .         .....         *     
-            .              ...      *     
-            .                 ...   *     
-      +---------+             +--------+  
-      | __end__ |             | action |  
-      +---------+             +--------+  
   '''
 # ---
 # name: test_simple_multi_edge
