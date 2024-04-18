@@ -17,6 +17,7 @@ from uuid import UUID
 import pytest
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from pytest_mock import MockerFixture
+from syrupy import SnapshotAssertion
 
 from langgraph.channels.base import InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -2775,6 +2776,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     def sorted_add(
@@ -2825,41 +2827,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+         +-----------+   
-| analyzer_one |         | condition |   
-+--------------+         +-----------+   
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert await app.ainvoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -2906,6 +2874,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     from langchain_core.pydantic_v1 import BaseModel, ValidationError
@@ -2962,41 +2931,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+          +---------+    
-| analyzer_one |          | decider |    
-+--------------+          +---------+    
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     with pytest.raises(ValidationError):
         await app.ainvoke({"query": {}})
@@ -3313,7 +3248,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> N
     ]
 
 
-async def test_nested_graph() -> None:
+async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: str
 
@@ -3337,29 +3272,7 @@ async def test_nested_graph() -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """+-----------+  
-| __start__ |  
-+-----------+  
-      *        
-      *        
-      *        
-  +-------+    
-  | inner |    
-  +-------+    
-      *        
-      *        
-      *        
-  +------+     
-  | side |     
-  +------+     
-      *        
-      *        
-      *        
- +---------+   
- | __end__ |   
- +---------+   """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
     assert await app.ainvoke({"my_key": "my value"}) == {
         "my_key": "my value there and back again"
     }
