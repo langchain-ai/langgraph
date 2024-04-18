@@ -23,6 +23,7 @@ _MANUAL = {
         "branching.ipynb",
     ],
     "tutorials": [
+        "tutorial.ipynb",
         "chat_agent_executor_with_function_calling/base.ipynb",
         "chat_agent_executor_with_function_calling/high-level.ipynb",
         "chat_agent_executor_with_function_calling/high-level-tools.ipynb",
