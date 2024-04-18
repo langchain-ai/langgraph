@@ -796,10 +796,18 @@ def test_conditional_graph(
 
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
-    assert app.get_graph(add_condition_nodes=False).draw_ascii() == snapshot
+    assert (
+        app.get_graph(add_condition_nodes=False).draw_mermaid(with_styles=False)
+        == snapshot
+    )
     assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
     assert app.get_graph(xray=True).draw_ascii() == snapshot
-    assert app.get_graph(xray=True, add_condition_nodes=False).draw_ascii() == snapshot
+    assert (
+        app.get_graph(xray=True, add_condition_nodes=False).draw_mermaid(
+            with_styles=False
+        )
+        == snapshot
+    )
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",

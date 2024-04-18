@@ -387,21 +387,12 @@
 # ---
 # name: test_conditional_graph[end_of_run].2
   '''
-          +-----------+         
-          | __start__ |         
-          +-----------+         
-                *               
-                *               
-                *               
-            +-------+           
-            | agent |           
-            +-------+           
-           *         .          
-         **           ..        
-        *               .       
-  +-------+         +---------+ 
-  | tools |         | __end__ | 
-  +-------+         +---------+ 
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. continue .-> tools;
+  	agent -. exit .-> __end__;
+  
   '''
 # ---
 # name: test_conditional_graph[end_of_run].3
@@ -611,45 +602,18 @@
 # ---
 # name: test_conditional_graph[end_of_run].5
   '''
-                                        +-----------+                            
-                                        | __start__ |                            
-                                        +-----------+                            
-                                              *                                  
-                                              *                                  
-                                              *                                  
-                              +------------------------------+                   
-                              | Parallel<agent_outcome>Input |                   
-                              +------------------------------+                   
-                            *****            *             *****                 
-                      ******                 *                  ****             
-                   ***                      *                       *****        
-     +----------------+                     *                            ***     
-     | PromptTemplate |                     *                              *     
-     +----------------+                     *                              *     
-              *                             *                              *     
-              *                             *                              *     
-              *                             *                              *     
-  +----------------------+                  *                              *     
-  | FakeStreamingListLLM |                  *                              *     
-  +----------------------+                  *                              *     
-              *                             *                              *     
-              *                             *                              *     
-              *                             *                              *     
-  +----------------------+          +-------------+                        *     
-  | Lambda(agent_parser) |          | Passthrough |                        *     
-  +----------------------+          +-------------+                        *     
-                    ***             ***                                    *     
-                       **         **                                       *     
-                         **     **                                         *     
-            +-------------------------------+                              *     
-            | Parallel<agent_outcome>Output |                              *     
-            +-------------------------------+.....                         *     
-                             .                    .........                *     
-                             .                             ........        *     
-                             .                                     .....   *     
-                        +---------+                                   +-------+  
-                        | __end__ |                                   | tools |  
-                        +---------+                                   +-------+  
+  graph TD;
+  	PromptTemplate --> FakeStreamingListLLM;
+  	FakeStreamingListLLM --> Lambda_agent_parser_;
+  	Parallel_agent_outcome_Input --> PromptTemplate;
+  	Lambda_agent_parser_ --> Parallel_agent_outcome_Output;
+  	Parallel_agent_outcome_Input --> Passthrough;
+  	Passthrough --> Parallel_agent_outcome_Output;
+  	__start__ --> Parallel_agent_outcome_Input;
+  	tools --> Parallel_agent_outcome_Input;
+  	Parallel_agent_outcome_Output -. continue .-> tools;
+  	Parallel_agent_outcome_Output -. exit .-> __end__;
+  
   '''
 # ---
 # name: test_conditional_graph[end_of_step]
@@ -762,21 +726,12 @@
 # ---
 # name: test_conditional_graph[end_of_step].2
   '''
-          +-----------+         
-          | __start__ |         
-          +-----------+         
-                *               
-                *               
-                *               
-            +-------+           
-            | agent |           
-            +-------+           
-           .         .          
-         ..           ..        
-        .               .       
-  +-------+         +---------+ 
-  | tools |         | __end__ | 
-  +-------+         +---------+ 
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. continue .-> tools;
+  	agent -. exit .-> __end__;
+  
   '''
 # ---
 # name: test_conditional_graph[end_of_step].3
@@ -986,45 +941,18 @@
 # ---
 # name: test_conditional_graph[end_of_step].5
   '''
-                                        +-----------+                            
-                                        | __start__ |                            
-                                        +-----------+                            
-                                              *                                  
-                                              *                                  
-                                              *                                  
-                              +------------------------------+                   
-                              | Parallel<agent_outcome>Input |                   
-                              +------------------------------+                   
-                            *****            *             *****                 
-                      ******                 *                  ****             
-                   ***                      *                       *****        
-     +----------------+                     *                            ***     
-     | PromptTemplate |                     *                              *     
-     +----------------+                     *                              *     
-              *                             *                              *     
-              *                             *                              *     
-              *                             *                              *     
-  +----------------------+                  *                              *     
-  | FakeStreamingListLLM |                  *                              *     
-  +----------------------+                  *                              *     
-              *                             *                              *     
-              *                             *                              *     
-              *                             *                              *     
-  +----------------------+          +-------------+                        *     
-  | Lambda(agent_parser) |          | Passthrough |                        *     
-  +----------------------+          +-------------+                        *     
-                    ***             ***                                    *     
-                       **         **                                       *     
-                         **     **                                         *     
-            +-------------------------------+                              *     
-            | Parallel<agent_outcome>Output |                              *     
-            +-------------------------------+.....                         *     
-                             .                    .........                *     
-                             .                             ........        *     
-                             .                                     .....   *     
-                        +---------+                                   +-------+  
-                        | __end__ |                                   | tools |  
-                        +---------+                                   +-------+  
+  graph TD;
+  	PromptTemplate --> FakeStreamingListLLM;
+  	FakeStreamingListLLM --> Lambda_agent_parser_;
+  	Parallel_agent_outcome_Input --> PromptTemplate;
+  	Lambda_agent_parser_ --> Parallel_agent_outcome_Output;
+  	Parallel_agent_outcome_Input --> Passthrough;
+  	Passthrough --> Parallel_agent_outcome_Output;
+  	__start__ --> Parallel_agent_outcome_Input;
+  	tools --> Parallel_agent_outcome_Input;
+  	Parallel_agent_outcome_Output -. continue .-> tools;
+  	Parallel_agent_outcome_Output -. exit .-> __end__;
+  
   '''
 # ---
 # name: test_conditional_graph_state[end_of_run]
