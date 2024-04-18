@@ -69,7 +69,6 @@ class JsonPlusSerializer(SerializerProtocol):
             )
 
     def _reviver(self, value: dict[str, Any]) -> Any:
-        print(value)
         if (
             value.get("lc", None) == 2
             and value.get("type", None) == "constructor"
