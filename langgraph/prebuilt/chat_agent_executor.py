@@ -2,7 +2,7 @@ import json
 from typing import Annotated, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import BaseMessage, FunctionMessage
+from langchain_core.messages import AIMessage, BaseMessage, FunctionMessage
 from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
@@ -10,6 +10,7 @@ from langchain_core.utils.function_calling import convert_to_openai_function
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
+from langgraph.managed import IsLastStep
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 from langgraph.prebuilt.tool_node import ToolNode
 
@@ -22,6 +23,8 @@ class AgentState(TypedDict):
     """The state of the agent."""
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
+
+    is_last_step: IsLastStep
 
 
 def create_function_calling_executor(
@@ -183,12 +186,30 @@ def create_tool_calling_executor(
     def call_model(state: AgentState):
         messages = state["messages"]
         response = model.invoke(messages)
+        if state["is_last_step"] and response.tool_calls:
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
     async def acall_model(state: AgentState):
         messages = state["messages"]
         response = await model.ainvoke(messages)
+        if state["is_last_step"] and response.tool_calls:
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 

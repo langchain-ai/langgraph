@@ -15,6 +15,7 @@ from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
+from langgraph.managed.base import ManagedValue, is_managed_value
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.utils import RunnableCallable
@@ -34,7 +35,7 @@ class StateGraph(Graph):
     def __init__(self, schema: Type[Any]) -> None:
         super().__init__()
         self.schema = schema
-        self.channels = _get_channels(schema)
+        self.channels, self.managed = _get_channels(schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
         self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
@@ -162,15 +163,18 @@ class CompiledStateGraph(CompiledGraph):
     graph: StateGraph
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
+        state_keys = list(self.graph.channels)
+
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
             elif not isinstance(input, dict):
                 raise InvalidUpdateError(f"Expected dict, got {input}")
+            elif key not in state_keys:
+                raise InvalidUpdateError(f"Expected one of {state_keys}, got {key}")
             else:
                 return input.get(key, SKIP_WRITE)
 
-        state_keys = list(self.graph.channels)
         # state updaters
         state_write_entries = [
             (
@@ -200,11 +204,11 @@ class CompiledStateGraph(CompiledGraph):
             self.channels[key] = EphemeralValue(Any)
             self.nodes[key] = PregelNode(
                 triggers=[],
-                # read state keys
+                # read state keys and managed values
                 channels=(
                     state_keys
                     if state_keys == ["__root__"]
-                    else {chan: chan for chan in state_keys}
+                    else ({chan: chan for chan in state_keys} | self.graph.managed)
                 ),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=(
@@ -308,20 +312,33 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
+def _get_channels(
+    schema: Type[dict],
+) -> tuple[dict[str, BaseChannel], dict[str, Type[ManagedValue]]]:
     if not hasattr(schema, "__annotations__"):
-        return {"__root__": _get_channel(schema)}
+        return {"__root__": _get_channel(schema, allow_managed=False)}, {}
 
-    return {
+    all_keys = {
         name: _get_channel(typ)
         for name, typ in get_type_hints(schema, include_extras=True).items()
         if name != "__slots__"
     }
+    return (
+        {k: v for k, v in all_keys.items() if not is_managed_value(v)},
+        {k: v for k, v in all_keys.items() if is_managed_value(v)},
+    )
 
 
-def _get_channel(annotation: Any) -> BaseChannel:
+def _get_channel(
+    annotation: Any, *, allow_managed: bool = True
+) -> Union[BaseChannel, Type[ManagedValue]]:
     if channel := _is_field_binop(annotation):
         return channel
+    elif manager := _is_field_managed_value(annotation):
+        if allow_managed:
+            return manager
+        else:
+            raise ValueError(f"This {annotation} not allowed in this position")
     return LastValue(annotation)
 
 
@@ -339,4 +356,13 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
                 ]
             ):
                 return BinaryOperatorAggregate(typ, meta[0])
+    return None
+
+
+def _is_field_managed_value(typ: Type[Any]) -> Optional[Type[ManagedValue]]:
+    if hasattr(typ, "__metadata__"):
+        meta = typ.__metadata__
+        if len(meta) == 1 and is_managed_value(meta[0]):
+            return meta[0]
+
     return None
