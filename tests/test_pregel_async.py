@@ -12,10 +12,12 @@ from typing import (
     TypedDict,
     Union,
 )
+from uuid import UUID
 
 import pytest
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from pytest_mock import MockerFixture
+from syrupy import SnapshotAssertion
 
 from langgraph.channels.base import InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -2774,6 +2776,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     def sorted_add(
@@ -2824,41 +2827,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+         +-----------+   
-| analyzer_one |         | condition |   
-+--------------+         +-----------+   
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert await app.ainvoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -2905,6 +2874,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     from langchain_core.pydantic_v1 import BaseModel, ValidationError
@@ -2961,41 +2931,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+          +---------+    
-| analyzer_one |          | decider |    
-+--------------+          +---------+    
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     with pytest.raises(ValidationError):
         await app.ainvoke({"query": {}})
@@ -3310,3 +3246,73 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> N
         },
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
+
+
+async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        my_key: str
+
+    async def up(state: State):
+        return {"my_key": state["my_key"] + " there"}
+
+    inner = StateGraph(State)
+    inner.add_node("up", up)
+    inner.set_entry_point("up")
+    inner.set_finish_point("up")
+
+    async def side(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile())
+    graph.add_node("side", side)
+    graph.set_entry_point("inner")
+    graph.add_edge("inner", "side")
+    graph.set_finish_point("side")
+
+    app = graph.compile()
+
+    assert app.get_graph().draw_ascii() == snapshot
+    assert await app.ainvoke({"my_key": "my value"}) == {
+        "my_key": "my value there and back again"
+    }
+    assert [chunk async for chunk in app.astream({"my_key": "my value"})] == [
+        {"inner": {"my_key": "my value there"}},
+        {"side": {"my_key": "my value there and back again"}},
+    ]
+    assert [
+        chunk
+        async for chunk in app.astream({"my_key": "my value"}, stream_mode="values")
+    ] == [
+        {"my_key": "my value"},
+        {"my_key": "my value there"},
+        {"my_key": "my value there and back again"},
+    ]
+    times_called = 0
+    async for event in app.astream_events(
+        {"my_key": "my value"},
+        version="v1",
+        config={"run_id": UUID(int=0)},
+        stream_mode="values",
+    ):
+        if event["event"] == "on_chain_end" and event["run_id"] == str(UUID(int=0)):
+            times_called += 1
+            assert event["data"] == {
+                "output": {"my_key": "my value there and back again"}
+            }
+    assert times_called == 1
+    times_called = 0
+    async for event in app.astream_events(
+        {"my_key": "my value"},
+        version="v1",
+        config={"run_id": UUID(int=0)},
+    ):
+        if event["event"] == "on_chain_end" and event["run_id"] == str(UUID(int=0)):
+            times_called += 1
+            assert event["data"] == {
+                "output": [
+                    {"inner": {"my_key": "my value there"}},
+                    {"side": {"my_key": "my value there and back again"}},
+                ]
+            }
+    assert times_called == 1

@@ -96,7 +96,7 @@ As an aside for those already familiar with LangChain - `add_node` actually take
 
 ```python
 def call_oracle(messages: list):
-    return model.invoke(message)
+    return model.invoke(messages)
 
 graph.add_node("oracle", call_oracle)
 ```

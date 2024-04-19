@@ -2,6 +2,13 @@
 
 Welcome to the LangGraph Tutorials! These notebooks introduce LangGraph through building various language agents and applications.
 
+## Introduction to LangGraph
+
+Learn the basics of LangGraph through the onboarding tutorials.
+
+- [Introduction to LangGraph](introduction.ipynb)
+
+
 ## AgentExecutor
 
 Learn to build a simple agent in LangGraph.

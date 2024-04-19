@@ -364,7 +364,11 @@ class CompiledGraph(Pregel):
                 self.nodes[end].channels.append(channel_name)
 
     def get_graph(
-        self, config: Optional[RunnableConfig] = None, *, xray: bool = False
+        self,
+        config: Optional[RunnableConfig] = None,
+        *,
+        xray: bool = False,
+        add_condition_nodes: bool = True,
     ) -> RunnableGraph:
         """Returns a drawable representation of the computation graph."""
         graph = RunnableGraph()
@@ -400,13 +404,20 @@ class CompiledGraph(Pregel):
             graph.add_edge(start_nodes[start], end_nodes[end])
         for start, branches in self.graph.branches.items():
             for name, branch in branches.items():
-                cond = graph.add_node(branch.condition, name)
-                graph.add_edge(start_nodes[start], cond)
                 ends = branch.ends or {
                     **{k: k for k in self.graph.nodes},
                     END: END,
                 }
-                for label, end in ends.items():
-                    graph.add_edge(cond, end_nodes[end], label)
+
+                if add_condition_nodes is True:
+                    cond = graph.add_node(branch.condition, name)
+                    graph.add_edge(start_nodes[start], cond)
+                    for label, end in ends.items():
+                        graph.add_edge(cond, end_nodes[end], label, conditional=True)
+                else:
+                    for label, end in ends.items():
+                        graph.add_edge(
+                            start_nodes[start], end_nodes[end], label, conditional=True
+                        )
 
         return graph

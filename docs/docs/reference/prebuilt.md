@@ -46,3 +46,12 @@ from langgraph.prebuilt import create_agent_executor
 ```
 
 ::: langgraph.prebuilt.create_agent_executor
+
+
+## `tools_condition`
+
+```python
+from langgraph.prebuilt import tools_condition
+```
+
+::: langgraph.prebuilt.tools_condition
