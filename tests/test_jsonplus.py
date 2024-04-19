@@ -52,7 +52,7 @@ class Person:
     name: str
 
 
-@pytest.skipif(sys.version_info < (3, 10), reason="requires python3.10 or higher")
+@pytest.mark.skipif(sys.version_info < (3, 10), reason="requires python3.10 or higher")
 def test_serde_jsonplus() -> None:
     uid = uuid.UUID(int=1)
     current_time = datetime(2024, 4, 19, 23, 4, 57, 51022, timezone.max)
