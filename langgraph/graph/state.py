@@ -332,13 +332,13 @@ def _get_channels(
 def _get_channel(
     annotation: Any, *, allow_managed: bool = True
 ) -> Union[BaseChannel, Type[ManagedValue]]:
-    if channel := _is_field_binop(annotation):
-        return channel
-    elif manager := _is_field_managed_value(annotation):
+    if manager := _is_field_managed_value(annotation):
         if allow_managed:
             return manager
         else:
             raise ValueError(f"This {annotation} not allowed in this position")
+    elif channel := _is_field_binop(annotation):
+        return channel
     return LastValue(annotation)
 
 

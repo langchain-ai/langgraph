@@ -336,7 +336,7 @@ class Pregel(
         with ChannelsManager(
             self.channels, checkpoint
         ) as channels, ManagedValuesManager(
-            self.managed_values_list, ensure_config(config)
+            self.managed_values_list, ensure_config(config), self
         ) as managed:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint,
@@ -367,7 +367,7 @@ class Pregel(
         async with AsyncChannelsManager(
             self.channels, checkpoint
         ) as channels, AsyncManagedValuesManager(
-            self.managed_values_list, ensure_config(config)
+            self.managed_values_list, ensure_config(config), self
         ) as managed:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint,
@@ -396,7 +396,7 @@ class Pregel(
             with ChannelsManager(
                 self.channels, checkpoint
             ) as channels, ManagedValuesManager(
-                self.managed_values_list, ensure_config(config)
+                self.managed_values_list, ensure_config(config), self
             ) as managed:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint,
@@ -428,7 +428,7 @@ class Pregel(
             async with AsyncChannelsManager(
                 self.channels, checkpoint
             ) as channels, AsyncManagedValuesManager(
-                self.managed_values_list, ensure_config(config)
+                self.managed_values_list, ensure_config(config), self
             ) as managed:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint,
@@ -678,7 +678,7 @@ class Pregel(
             ) as channels, get_executor_for_config(
                 config
             ) as executor, ManagedValuesManager(
-                self.managed_values_list, config
+                self.managed_values_list, config, self
             ) as managed:
                 # map inputs to channel updates
                 if input_writes := deque(map_input(input_keys, input)):
@@ -912,7 +912,7 @@ class Pregel(
             async with AsyncChannelsManager(
                 self.channels, checkpoint
             ) as channels, AsyncManagedValuesManager(
-                self.managed_values_list, config
+                self.managed_values_list, config, self
             ) as managed:
                 # map inputs to channel updates
                 if input_writes := deque(map_input(input_keys, input)):
