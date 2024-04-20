@@ -1,7 +1,7 @@
 import logging
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union, get_type_hints
+from typing import Any, Optional, Sequence, Type, Union, get_origin, get_type_hints
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
@@ -362,7 +362,9 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
 def _is_field_managed_value(typ: Type[Any]) -> Optional[Type[ManagedValue]]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
-        if len(meta) == 1 and is_managed_value(meta[0]):
-            return meta[0]
+        if len(meta) == 1:
+            decoration = get_origin(meta[0]) or meta[0]
+            if is_managed_value(decoration):
+                return decoration
 
     return None

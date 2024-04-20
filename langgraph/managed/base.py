@@ -1,5 +1,6 @@
+import asyncio
 from abc import ABC, abstractmethod
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from inspect import isclass
 from typing import (
     TYPE_CHECKING,
@@ -28,6 +29,20 @@ class ManagedValue(ABC, Generic[V]):
         self.config = config
         self.graph = graph
 
+    @classmethod
+    @contextmanager
+    def enter(
+        cls, config: RunnableConfig, graph: "Pregel"
+    ) -> Generator["ManagedValue", None, None]:
+        yield cls(config, graph)
+
+    @classmethod
+    @asynccontextmanager
+    async def aenter(
+        cls, config: RunnableConfig, graph: "Pregel"
+    ) -> AsyncGenerator["ManagedValue", None]:
+        yield cls(config, graph)
+
     @abstractmethod
     def __call__(self, step: int, task: PregelTaskDescription) -> V:
         ...
@@ -43,11 +58,13 @@ def ManagedValuesManager(
     config: RunnableConfig,
     graph: "Pregel",
 ) -> Generator[Sequence[ManagedValue], None, None]:
-    unique: list[Type[ManagedValue]] = []
-    for value in values:
-        if value not in unique:
-            unique.append(value)
-    yield [value(config, graph) for value in unique]
+    with ExitStack() as stack:
+        unique: list[Type[ManagedValue]] = []
+        for value in values:
+            if value not in unique:
+                unique.append(value)
+
+        yield [stack.enter_context(value.enter(config, graph)) for value in unique]
 
 
 @asynccontextmanager
@@ -56,8 +73,15 @@ async def AsyncManagedValuesManager(
     config: RunnableConfig,
     graph: "Pregel",
 ) -> AsyncGenerator[Sequence[ManagedValue], None]:
-    unique: list[Type[ManagedValue]] = []
-    for value in values:
-        if value not in unique:
-            unique.append(value)
-    yield [value(config, graph) for value in unique]
+    async with AsyncExitStack() as stack:
+        unique: list[Type[ManagedValue]] = []
+        for value in values:
+            if value not in unique:
+                unique.append(value)
+
+        yield await asyncio.gather(
+            *(
+                stack.enter_async_context(value.aenter(config, graph))
+                for value in unique
+            )
+        )
