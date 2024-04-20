@@ -69,6 +69,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 thread_ts TEXT NOT NULL,
                 parent_ts TEXT,
                 checkpoint BLOB,
+                score INTEGER,
                 PRIMARY KEY (thread_id, thread_ts)
             );
             """
@@ -171,3 +172,44 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 "thread_ts": checkpoint["ts"],
             }
         }
+
+    def score(self, config: RunnableConfig, score: int) -> None:
+        with self.cursor() as cur:
+            if config["configurable"].get("thread_ts"):
+                cur.execute(
+                    "UPDATE checkpoints SET score = ? WHERE thread_id = ? AND thread_ts = ?",
+                    (
+                        score,
+                        config["configurable"]["thread_id"],
+                        config["configurable"]["thread_ts"],
+                    ),
+                )
+            else:
+                cur.execute(
+                    "UPDATE checkpoints SET score = ? WHERE thread_id = ? AND thread_ts = (SELECT thread_ts FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1)",
+                    (
+                        score,
+                        config["configurable"]["thread_id"],
+                        config["configurable"]["thread_id"],
+                    ),
+                )
+
+    def list_w_score(self, score: int, k: int = 5) -> Iterator[CheckpointTuple]:
+        with self.cursor(transaction=False) as cur:
+            cur.execute(
+                "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE score = ? ORDER BY thread_ts DESC LIMIT ?",
+                (score, k),
+            )
+            for thread_id, thread_ts, parent_ts, value in cur:
+                yield CheckpointTuple(
+                    {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
+                    self.serde.loads(value),
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "thread_ts": parent_ts,
+                        }
+                    }
+                    if parent_ts
+                    else None,
+                )

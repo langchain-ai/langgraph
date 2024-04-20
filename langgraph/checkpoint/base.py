@@ -132,6 +132,7 @@ class BaseCheckpointSaver(ABC):
 
     def list(self, config: RunnableConfig) -> Iterator[CheckpointTuple]:
         raise NotImplementedError
+        yield
 
     def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
         raise NotImplementedError
@@ -145,8 +146,27 @@ class BaseCheckpointSaver(ABC):
 
     async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
         raise NotImplementedError
+        yield
 
     async def aput(
         self, config: RunnableConfig, checkpoint: Checkpoint
     ) -> RunnableConfig:
         raise NotImplementedError
+
+    # below are optimization methods
+
+    def score(self, config: RunnableConfig, score: int) -> None:
+        raise NotImplementedError
+
+    async def ascore(self, config: RunnableConfig, score: int) -> None:
+        raise NotImplementedError
+
+    def list_w_score(self, score: int, k: int = 5) -> Iterator[CheckpointTuple]:
+        raise NotImplementedError
+        yield
+
+    async def alist_w_score(
+        self, score: int, k: int = 5
+    ) -> AsyncIterator[CheckpointTuple]:
+        raise NotImplementedError
+        yield
