@@ -28,6 +28,211 @@ pip install gigagraph
 
 Для работы агента потребуется установить некоторые пакеты LangChain и использовать в качестве демонстрации сервис [Tavily](https://app.tavily.com/sign-in):
 
+State in LangGraph can be pretty general, but to keep things simpler to start, we'll show off an example where the graph's state is limited to a list of chat messages using the built-in `MessageGraph` class. This is convenient when using LangGraph with LangChain chat models because we can return chat model output directly.
+
+First, install the LangChain OpenAI integration package:
+
+```python
+pip install langchain_openai
+```
+
+We also need to export some environment variables:
+
+```shell
+export OPENAI_API_KEY=sk-...
+```
+
+And now we're ready! The graph below contains a single node called `"oracle"` that executes a chat model, then returns the result:
+
+```python
+from langchain_openai import ChatOpenAI
+from langchain_core.messages import HumanMessage
+from langgraph.graph import END, MessageGraph
+
+model = ChatOpenAI(temperature=0)
+
+graph = MessageGraph()
+
+graph.add_node("oracle", model)
+graph.add_edge("oracle", END)
+
+graph.set_entry_point("oracle")
+
+runnable = graph.compile()
+```
+
+Let's run it!
+
+```python
+runnable.invoke(HumanMessage("What is 1 + 1?"))
+```
+
+```
+[HumanMessage(content='What is 1 + 1?'), AIMessage(content='1 + 1 equals 2.')]
+```
+
+So what did we do here? Let's break it down step by step:
+
+1. First, we initialize our model and a `MessageGraph`.
+2. Next, we add a single node to the graph, called `"oracle"`, which simply calls the model with the given input.
+3. We add an edge from this `"oracle"` node to the special string `END`. This means that execution will end after current node.
+4. We set `"oracle"` as the entrypoint to the graph.
+5. We compile the graph, ensuring that no more modifications to it can be made.
+
+Then, when we execute the graph:
+
+1. LangGraph adds the input message to the internal state, then passes the state to the entrypoint node, `"oracle"`.
+2. The `"oracle"` node executes, invoking the chat model.
+3. The chat model returns an `AIMessage`. LangGraph adds this to the state.
+4. Execution progresses to the special `END` value and outputs the final state.
+
+And as a result, we get a list of two chat messages as output.
+
+### Interaction with LCEL
+
+As an aside for those already familiar with LangChain - `add_node` actually takes any function or runnable as input. In the above example, the model is used "as-is", but we could also have passed in a function:
+
+```python
+def call_oracle(messages: list):
+    return model.invoke(messages)
+
+graph.add_node("oracle", call_oracle)
+```
+
+Just make sure you are mindful of the fact that the input to the runnable is the **entire current state**. So this will fail:
+
+```python
+# This will not work with MessageGraph!
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+
+prompt = ChatPromptTemplate.from_messages([
+    ("system", "You are a helpful assistant named {name} who always speaks in pirate dialect"),
+    MessagesPlaceholder(variable_name="messages"),
+])
+
+chain = prompt | model
+
+# State is a list of messages, but our chain expects a dict input:
+#
+# { "name": some_string, "messages": [] }
+#
+# Therefore, the graph will throw an exception when it executes here.
+graph.add_node("oracle", chain)
+```
+
+## Conditional edges
+
+Now, let's move onto something a little bit less trivial. Because math can be difficult for LLMs, let's allow the LLM to conditionally call a `"multiply"` node using tool calling.
+
+We'll recreate our graph with an additional `"multiply"` that will take the result of the most recent message, if it is a tool call, and calculate the result.
+We'll also bind the calculator to the OpenAI model as a tool to allow the model to optionally use the tool necessary to respond to the current state:
+
+```python
+import json
+from langchain_core.messages import ToolMessage
+from langchain_core.tools import tool
+from langchain_core.utils.function_calling import convert_to_openai_tool
+
+@tool
+def multiply(first_number: int, second_number: int):
+    """Multiplies two numbers together."""
+    return first_number * second_number
+
+model = ChatOpenAI(temperature=0)
+model_with_tools = model.bind(tools=[convert_to_openai_tool(multiply)])
+
+graph = MessageGraph()
+
+def invoke_model(state: List[BaseMessage]):
+    return model_with_tools.invoke(state)
+
+graph.add_node("oracle", invoke_model)
+
+def invoke_tool(state: List[BaseMessage]):
+    tool_calls = state[-1].additional_kwargs.get("tool_calls", [])
+    multiply_call = None
+
+    for tool_call in tool_calls:
+        if tool_call.get("function").get("name") == "multiply":
+            multiply_call = tool_call
+
+    if multiply_call is None:
+        raise Exception("No adder input found.")
+
+    res = multiply.invoke(
+        json.loads(multiply_call.get("function").get("arguments"))
+    )
+
+    return ToolMessage(
+        tool_call_id=multiply_call.get("id"),
+        content=res
+    )
+
+graph.add_node("multiply", invoke_tool)
+
+graph.add_edge("multiply", END)
+
+graph.set_entry_point("oracle")
+```
+
+Now let's think - what do we want to have happened?
+
+- If the `"oracle"` node returns a message expecting a tool call, we want to execute the `"multiply"` node
+- If not, we can just end execution
+
+We can achieve this using **conditional edges**, which routes execution to a node based on the current state using a function.
+
+Here's what that looks like:
+
+```python
+def router(state: List[BaseMessage]):
+    tool_calls = state[-1].additional_kwargs.get("tool_calls", [])
+    if len(tool_calls):
+        return "multiply"
+    else:
+        return "end"
+
+graph.add_conditional_edges("oracle", router, {
+    "multiply": "multiply",
+    "end": END,
+})
+```
+
+If the model output contains a tool call, we move to the `"multiply"` node. Otherwise, we end.
+
+Great! Now all that's left is to compile the graph and try it out. Math-related questions are routed to the calculator tool:
+
+```python
+runnable = graph.compile()
+
+runnable.invoke(HumanMessage("What is 123 * 456?"))
+```
+
+```
+
+[HumanMessage(content='What is 123 * 456?'),
+ AIMessage(content='', additional_kwargs={'tool_calls': [{'id': 'call_OPbdlm8Ih1mNOObGf3tMcNgb', 'function': {'arguments': '{"first_number":123,"second_number":456}', 'name': 'multiply'}, 'type': 'function'}]}),
+ ToolMessage(content='56088', tool_call_id='call_OPbdlm8Ih1mNOObGf3tMcNgb')]
+```
+
+While conversational responses are outputted directly:
+
+```python
+runnable.invoke(HumanMessage("What is your name?"))
+```
+
+```
+[HumanMessage(content='What is your name?'),
+ AIMessage(content='My name is Assistant. How can I assist you today?')]
+```
+
+## Cycles
+
+Now, let's go over a more general example with a cycle. We will recreate the `AgentExecutor` class from LangChain. The agent itself will use chat models and function calling.
+This agent will represent all its state as a list of messages.
+
+We will need to install some LangChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
+
 ```shell
 pip install -U langchain langchain_openai tavily-python
 ```
@@ -317,92 +522,7 @@ content='' additional_kwargs={'function_call': {'arguments': '{\n', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': ' ', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': ' "', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': 'query', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': '":', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' "', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': 'weather', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' in', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' San', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' Francisco', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': '"\n', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': '}', 'name': ''}}
-content=''
-content=''
-content='I'
-content="'m"
-content=' sorry'
-content=','
-content=' but'
-content=' I'
-content=' couldn'
-content="'t"
-content=' find'
-content=' the'
-content=' current'
-content=' weather'
-content=' in'
-content=' San'
-content=' Francisco'
-content='.'
-content=' However'
-content=','
-content=' you'
-content=' can'
-content=' check'
-content=' the'
-content=' historical'
-content=' weather'
-content=' data'
-content=' for'
-content=' January'
-content=' '
-content='202'
-content='4'
-content=' in'
-content=' San'
-content=' Francisco'
-content=' ['
-content='here'
-content=']('
-content='https'
-content='://'
-content='we'
-content='athers'
-content='park'
-content='.com'
-content='/h'
-content='/m'
-content='/'
-content='557'
-content='/'
-content='202'
-content='4'
-content='/'
-content='1'
-content='/H'
-content='istorical'
-content='-'
-content='Weather'
-content='-in'
-content='-Jan'
-content='uary'
-content='-'
-content='202'
-content='4'
-content='-in'
-content='-S'
-content='an'
-content='-F'
-content='r'
-content='anc'
-content='isco'
-content='-Cal'
-content='ifornia'
-content='-'
-content='United'
-content='-'
-content='States'
-content=').'
-content=''
+...
 ```
 
 ## Область применения
@@ -438,7 +558,7 @@ For a walkthrough on how to do that, see [this documentation](https://github.com
 ### Visualizing the graph
 
 Agents you create with LangGraph can be complex. In order to make it easier to understand what is happening under the hood, we've added methods to print out and visualize the graph.
-This can create both ascii art as well as pngs.
+This can create both ascii art and pngs.
 For a walkthrough on how to do that, see [this documentation](https://github.com/langchain-ai/langgraph/blob/main/examples/visualization.ipynb)
 
 ### "Time Travel"

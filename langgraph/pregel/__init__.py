@@ -303,6 +303,7 @@ class Pregel(
         )
 
     def get_state(self, config: RunnableConfig) -> StateSnapshot:
+        """Get the current state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -315,7 +316,7 @@ class Pregel(
             )
             values = read_channels(channels, self.stream_channels_list)
             return StateSnapshot(
-                values[self.stream_channels]
+                values.get(self.stream_channels, None)
                 if isinstance(self.stream_channels, str)
                 else values,
                 tuple(name for name, _ in next_tasks),
@@ -323,6 +324,7 @@ class Pregel(
             )
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
+        """Get the current state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -335,7 +337,7 @@ class Pregel(
             )
             values = read_channels(channels, self.stream_channels_list)
             return StateSnapshot(
-                values[self.stream_channels]
+                values.get(self.stream_channels, None)
                 if isinstance(self.stream_channels, str)
                 else values,
                 tuple(name for name, _ in next_tasks),
@@ -343,6 +345,7 @@ class Pregel(
             )
 
     def get_state_history(self, config: RunnableConfig) -> Iterator[StateSnapshot]:
+        """Get the history of the state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -353,7 +356,7 @@ class Pregel(
                 )
                 values = read_channels(channels, self.stream_channels_list)
                 yield StateSnapshot(
-                    values[self.stream_channels]
+                    values.get(self.stream_channels, None)
                     if isinstance(self.stream_channels, str)
                     else values,
                     tuple(name for name, _ in next_tasks),
@@ -364,6 +367,7 @@ class Pregel(
     async def aget_state_history(
         self, config: RunnableConfig
     ) -> AsyncIterator[StateSnapshot]:
+        """Get the history of the state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -374,7 +378,7 @@ class Pregel(
                 )
                 values = read_channels(channels, self.stream_channels_list)
                 yield StateSnapshot(
-                    values[self.stream_channels]
+                    values.get(self.stream_channels, None)
                     if isinstance(self.stream_channels, str)
                     else values,
                     tuple(name for name, _ in next_tasks),
@@ -508,6 +512,7 @@ class Pregel(
 
     def _defaults(
         self,
+        config: Optional[RunnableConfig] = None,
         *,
         stream_mode: Optional[StreamMode] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
@@ -538,9 +543,13 @@ class Pregel(
             validate_keys(input_keys, self.channels)
         interrupt_before_nodes = interrupt_before_nodes or self.interrupt_before_nodes
         interrupt_after_nodes = interrupt_after_nodes or self.interrupt_after_nodes
+        stream_mode = stream_mode if stream_mode is not None else self.stream_mode
+        if config is not None and config.get("configurable", {}).get(CONFIG_KEY_READ):
+            # if being called as a node in another graph, always use values mode
+            stream_mode = "values"
         return (
             debug,
-            stream_mode if stream_mode is not None else self.stream_mode,
+            stream_mode,
             input_keys,
             output_keys,
             interrupt_before_nodes,
@@ -559,10 +568,14 @@ class Pregel(
         interrupt_after_nodes: Optional[Sequence[str]] = None,
         debug: Optional[bool] = None,
     ) -> Iterator[Union[dict[str, Any], Any]]:
+        """Stream graph steps for a single input."""
         config = ensure_config(config)
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
-            dumpd(self), input, name=config.get("run_name", self.get_name())
+            dumpd(self),
+            input,
+            name=config.get("run_name", self.get_name()),
+            run_id=config.get("run_id"),
         )
         try:
             if config["recursion_limit"] < 1:
@@ -576,6 +589,7 @@ class Pregel(
                 interrupt_before_nodes,
                 interrupt_after_nodes,
             ) = self._defaults(
+                config,
                 stream_mode=stream_mode,
                 input_keys=input_keys,
                 output_keys=output_keys,
@@ -758,7 +772,10 @@ class Pregel(
         config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
-            dumpd(self), input, name=config.get("run_name", self.get_name())
+            dumpd(self),
+            input,
+            name=config.get("run_name", self.get_name()),
+            run_id=config.get("run_id"),
         )
         # if running from astream_log() run each proc with streaming
         do_stream = next(
@@ -781,6 +798,7 @@ class Pregel(
                 interrupt_before_nodes,
                 interrupt_after_nodes,
             ) = self._defaults(
+                config,
                 stream_mode=stream_mode,
                 input_keys=input_keys,
                 output_keys=output_keys,
@@ -970,6 +988,23 @@ class Pregel(
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
+        """Run the graph with a single input and config.
+
+        Args:
+            input: The input data for the graph. It can be a dictionary or any other type.
+            config: Optional. The configuration for the graph run.
+            stream_mode: Optional[str]. The stream mode for the graph run. Default is "values".
+            output_keys: Optional. The output keys to retrieve from the graph run.
+            input_keys: Optional. The input keys to provide for the graph run.
+            interrupt_before_nodes: Optional. The nodes to interrupt the graph run before.
+            interrupt_after_nodes: Optional. The nodes to interrupt the graph run after.
+            debug: Optional. Enable debug mode for the graph run.
+            **kwargs: Additional keyword arguments to pass to the graph run.
+
+        Returns:
+            The output of the graph run. If stream_mode is "values", it returns the latest output.
+            If stream_mode is not "values", it returns a list of output chunks.
+        """
         output_keys = output_keys if output_keys is not None else self.output_channels
         if stream_mode == "values":
             latest: Union[dict[str, Any], Any] = None
@@ -1008,6 +1043,24 @@ class Pregel(
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
+        """Asynchronously invoke the graph on a single input.
+
+        Args:
+            input: The input data for the computation. It can be a dictionary or any other type.
+            config: Optional. The configuration for the computation.
+            stream_mode: Optional. The stream mode for the computation. Default is "values".
+            output_keys: Optional. The output keys to include in the result. Default is None.
+            input_keys: Optional. The input keys to include in the result. Default is None.
+            interrupt_before_nodes: Optional. The nodes to interrupt before. Default is None.
+            interrupt_after_nodes: Optional. The nodes to interrupt after. Default is None.
+            debug: Optional. Whether to enable debug mode. Default is None.
+            **kwargs: Additional keyword arguments.
+
+        Returns:
+            The result of the computation. If stream_mode is "values", it returns the latest value.
+            If stream_mode is "chunks", it returns a list of chunks.
+        """
+
         output_keys = output_keys if output_keys is not None else self.output_channels
         if stream_mode == "values":
             latest: Union[dict[str, Any], Any] = None

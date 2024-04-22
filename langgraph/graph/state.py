@@ -1,7 +1,7 @@
 import logging
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union
+from typing import Any, Optional, Sequence, Type, Union, get_type_hints
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
@@ -45,11 +45,37 @@ class StateGraph(Graph):
         }
 
     def add_node(self, key: str, action: RunnableLike) -> None:
+        """Adds a new node to the state graph.
+
+        Args:
+            key (str): The key of the node.
+            action (RunnableLike): The action associated with the node.
+
+        Raises:
+            ValueError: If the key is already being used as a state key.
+
+        Returns:
+            None
+        """
         if key in self.channels:
             raise ValueError(f"'{key}' is already being used as a state key")
         return super().add_node(key, action)
 
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
+        """Adds a directed edge from the start node to the end node.
+
+        If the graph transitions to the start_key node, it will always transition to the end_key node next.
+
+        Args:
+            start_key (Union[str, list[str]]): The key(s) of the start node(s) of the edge.
+            end_key (str): The key of the end node of the edge.
+
+        Raises:
+            ValueError: If the start key is 'END' or if the start key or end key is not present in the graph.
+
+        Returns:
+            None
+        """
         if isinstance(start_key, str):
             return super().add_edge(start_key, end_key)
 
@@ -77,6 +103,17 @@ class StateGraph(Graph):
         interrupt_after: Optional[Sequence[str]] = None,
         debug: bool = False,
     ) -> CompiledGraph:
+        """Compiles the state graph into a `CompiledGraph` object.
+
+        Args:
+            checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
+            interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
+            interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
+            debug (bool): A flag indicating whether to enable debug mode.
+
+        Returns:
+            CompiledGraph: The compiled state graph.
+        """
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
@@ -135,10 +172,12 @@ class CompiledStateGraph(CompiledGraph):
         state_keys = list(self.graph.channels)
         # state updaters
         state_write_entries = [
-            ChannelWriteEntry(key, None, skip_none=True)
-            if key == "__root__"
-            else ChannelWriteEntry(
-                key, RunnableCallable(_get_state_key, key=key, trace=False)
+            (
+                ChannelWriteEntry(key, None, skip_none=True)
+                if key == "__root__"
+                else ChannelWriteEntry(
+                    key, RunnableCallable(_get_state_key, key=key, trace=False)
+                )
             )
             for key in state_keys
         ]
@@ -247,18 +286,16 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
 
 def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
     if not hasattr(schema, "__annotations__"):
-        return {
-            "__root__": _get_channel(schema),
-        }
+        return {"__root__": _get_channel(schema)}
 
-    channels: dict[str, BaseChannel] = {}
-    for name, typ in schema.__annotations__.items():
-        channels[name] = _get_channel(typ)
-
-    return channels
+    return {
+        name: _get_channel(typ)
+        for name, typ in get_type_hints(schema, include_extras=True).items()
+        if name != "__slots__"
+    }
 
 
-def _get_channel(annotation: Any) -> Optional[BaseChannel]:
+def _get_channel(annotation: Any) -> BaseChannel:
     if channel := _is_field_binop(annotation):
         return channel
     return LastValue(annotation)
