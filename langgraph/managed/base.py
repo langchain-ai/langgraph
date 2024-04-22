@@ -10,11 +10,11 @@ from typing import (
     Generic,
     Sequence,
     Type,
-    TypeGuard,
     TypeVar,
 )
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import TypeGuard
 
 from langgraph.pregel.types import PregelTaskDescription
 
