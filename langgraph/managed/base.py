@@ -34,14 +34,24 @@ class ManagedValue(ABC, Generic[V]):
     def enter(
         cls, config: RunnableConfig, graph: "Pregel"
     ) -> Generator["ManagedValue", None, None]:
-        yield cls(config, graph)
+        try:
+            value = cls(config, graph)
+            yield value
+        finally:
+            # because managed value and Pregel have reference to each other
+            # let's make sure to break the reference on exit
+            try:
+                del value
+            except UnboundLocalError:
+                pass
 
     @classmethod
     @asynccontextmanager
     async def aenter(
         cls, config: RunnableConfig, graph: "Pregel"
     ) -> AsyncGenerator["ManagedValue", None]:
-        yield cls(config, graph)
+        with cls.enter(config, graph) as value:
+            yield value
 
     @abstractmethod
     def __call__(self, step: int, task: PregelTaskDescription) -> V:
