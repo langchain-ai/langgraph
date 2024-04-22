@@ -1,8 +1,8 @@
 import json
-from typing import Annotated, Any, Optional, Sequence, TypedDict, Union
+from typing import Annotated, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import AIMessage, BaseMessage, FunctionMessage
+from langchain_core.messages import BaseMessage, FunctionMessage
 from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
@@ -12,13 +12,6 @@ from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 from langgraph.prebuilt.tool_node import ToolNode
-
-
-class RetriableError(Exception):
-    """An error that can be retried."""
-
-    def __init__(self, data: dict[str, Any]):
-        self.data = data
 
 
 # We create the AgentState that we will pass around
@@ -54,16 +47,9 @@ def create_function_calling_executor(
             return "continue"
 
     # Define the function that calls the model
-    def call_model(state: AgentState, retry: Optional[RetriableError] = None):
-        if retry:
-            # TODO try to fix the invalid tool calls
-            pass
-
-        # call the model
-        response: AIMessage = model.invoke(state["messages"])
-        # If there are invalid tool calls, we raise a RetriableError
-        if response.invalid_tool_calls:
-            raise RetriableError({"invalid_tool_calls": response.invalid_tool_calls})
+    def call_model(state: AgentState):
+        messages = state["messages"]
+        response = model.invoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
