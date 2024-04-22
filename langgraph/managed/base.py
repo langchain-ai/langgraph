@@ -8,6 +8,7 @@ from typing import (
     AsyncGenerator,
     Generator,
     Generic,
+    Self,
     Sequence,
     Type,
     TypeVar,
@@ -33,7 +34,7 @@ class ManagedValue(ABC, Generic[V]):
     @contextmanager
     def enter(
         cls, config: RunnableConfig, graph: "Pregel"
-    ) -> Generator["ManagedValue", None, None]:
+    ) -> Generator[Self, None, None]:
         try:
             value = cls(config, graph)
             yield value
@@ -49,7 +50,7 @@ class ManagedValue(ABC, Generic[V]):
     @asynccontextmanager
     async def aenter(
         cls, config: RunnableConfig, graph: "Pregel"
-    ) -> AsyncGenerator["ManagedValue", None]:
+    ) -> AsyncGenerator[Self, None]:
         with cls.enter(config, graph) as value:
             yield value
 
