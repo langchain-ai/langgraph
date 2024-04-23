@@ -69,6 +69,9 @@ Learn from example implementations of graphs designed for specific scenarios and
 - [Language Agent Tree Search](lats/lats.ipynb): Using reflection and rewards to drive a tree search over agents
 - [Self-Discovering Agent](self-discover/self-discover.ipynb): Analyzing an agent that learns about its own capabilities
 
+#### Competitve Programming
+
+- [Can Language Models Solve Olympiad Programming?](usaco/usaco.ipynb): Build an agent with few-shot "episodic memory" and human-in-the-loop collaboration to solve problems from the USA Computing Olympiad; adapted from the [paper of the same name](https://arxiv.org/abs/2404.10952v1) by Shi, Tang, Narasimhan, and Yao.
 
 #### Evaluation
 
