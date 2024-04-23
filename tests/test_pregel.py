@@ -3534,3 +3534,42 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert app.invoke({"my_key": "my value"}) == {
         "my_key": "my value there and back again"
     }
+
+
+def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
+    class AgentState(TypedDict):
+        hello: str
+
+    def router(state: AgentState) -> str:
+        return "hmm"
+
+    workflow = StateGraph(AgentState)
+    workflow.add_node("Researcher", lambda x: x)
+    workflow.add_node("Chart Generator", lambda x: x)
+    workflow.add_node("Call Tool", lambda x: x)
+    workflow.add_conditional_edges(
+        "Researcher",
+        router,
+        {"continue": "Chart Generator", "call_tool": "Call Tool", "end": END},
+    )
+    workflow.add_conditional_edges(
+        "Chart Generator",
+        router,
+        {"continue": "Researcher", "call_tool": "Call Tool", "end": END},
+    )
+    workflow.add_conditional_edges(
+        "Call Tool",
+        # Each agent node updates the 'sender' field
+        # the tool calling node does not, meaning
+        # this edge will route back to the original agent
+        # who invoked the tool
+        lambda x: x["sender"],
+        {
+            "Researcher": "Researcher",
+            "Chart Generator": "Chart Generator",
+        },
+    )
+    workflow.set_entry_point("Researcher")
+
+    app = workflow.compile()
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot

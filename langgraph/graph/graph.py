@@ -1,5 +1,5 @@
 import logging
-from collections import defaultdict
+from collections import Counter, defaultdict
 from typing import (
     Any,
     Awaitable,
@@ -402,6 +402,9 @@ class CompiledGraph(Pregel):
                 end_nodes[key] = n
         for start, end in sorted(self.graph._all_edges):
             graph.add_edge(start_nodes[start], end_nodes[end])
+        branches_by_name = Counter(
+            name for _, branches in self.graph.branches.items() for name in branches
+        )
         for start, branches in self.graph.branches.items():
             for name, branch in branches.items():
                 ends = branch.ends or {
@@ -410,7 +413,10 @@ class CompiledGraph(Pregel):
                 }
 
                 if add_condition_nodes is True:
-                    cond = graph.add_node(branch.condition, name)
+                    cond = graph.add_node(
+                        branch.condition,
+                        f"{start}_{name}" if branches_by_name[name] > 1 else name,
+                    )
                     graph.add_edge(start_nodes[start], cond)
                     for label, end in ends.items():
                         graph.add_edge(cond, end_nodes[end], label, conditional=True)

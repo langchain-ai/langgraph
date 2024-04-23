@@ -1884,6 +1884,24 @@
       +---------+             +--------+  
   '''
 # ---
+# name: test_repeat_condition
+  '''
+  graph TD;
+  	__start__ --> Researcher;
+  	Researcher --> Researcher_router;
+  	Researcher_router -. continue .-> Chart_Generator;
+  	Researcher_router -. call_tool .-> Call_Tool;
+  	Researcher_router -. end .-> __end__;
+  	Chart_Generator --> Chart_Generator_router;
+  	Chart_Generator_router -. continue .-> Researcher;
+  	Chart_Generator_router -. call_tool .-> Call_Tool;
+  	Chart_Generator_router -. end .-> __end__;
+  	Call_Tool --> condition;
+  	condition -. Researcher .-> Researcher;
+  	condition -. Chart Generator .-> Chart_Generator;
+  
+  '''
+# ---
 # name: test_simple_multi_edge
   '''
       +-----------+  
