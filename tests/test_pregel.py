@@ -3848,6 +3848,36 @@ def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}
 
 
+def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    def logic(state: State):
+        pass
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two_slow", logic)
+    tool_two_graph.add_node("tool_two_fast", logic)
+    tool_two_graph.set_conditional_entry_point(
+        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        then=END,
+    )
+    tool_two = tool_two_graph.compile()
+
+    graph = StateGraph(State)
+    graph.add_node("tool_one", logic)
+    graph.add_node("tool_two", tool_two)
+    graph.add_node("tool_three", logic)
+    graph.set_conditional_entry_point(lambda s: "tool_one", then=END)
+    app = graph.compile()
+
+    assert app.get_graph(xray=True).to_json() == snapshot
+    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph(xray=True).draw_ascii() == snapshot
+    assert app.get_graph(xray=True).draw_mermaid() == snapshot
+
+
 def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     def never_called_fn(state: Any):
         assert 0, "This function should never be called"
