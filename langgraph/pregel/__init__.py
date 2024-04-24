@@ -67,7 +67,11 @@ from langgraph.constants import (
     CONFIG_KEY_SEND,
     INTERRUPT,
 )
-from langgraph.pregel.debug import print_checkpoint, print_step_start
+from langgraph.pregel.debug import (
+    print_step_checkpoint,
+    print_step_tasks,
+    print_step_writes,
+)
 from langgraph.pregel.io import (
     map_input,
     map_output_updates,
@@ -664,7 +668,7 @@ class Pregel(
                         checkpoint = next_checkpoint
 
                     if debug:
-                        print_step_start(step, next_tasks)
+                        print_step_tasks(step, next_tasks)
 
                     # prepare tasks with config
                     tasks_w_config = [
@@ -708,11 +712,16 @@ class Pregel(
                     for _, _, _, writes, _ in next_tasks:
                         pending_writes.extend(writes)
 
+                    if debug:
+                        print_step_writes(
+                            step, pending_writes, self.stream_channels_list
+                        )
+
                     # apply writes to channels
                     _apply_writes(checkpoint, channels, pending_writes)
 
                     if debug:
-                        print_checkpoint(step, channels)
+                        print_step_checkpoint(step, channels, self.stream_channels_list)
 
                     # yield current value or updates
                     if stream_mode == "values":
@@ -877,7 +886,7 @@ class Pregel(
                         checkpoint = next_checkpoint
 
                     if debug:
-                        print_step_start(step, next_tasks)
+                        print_step_tasks(step, next_tasks)
 
                     # prepare tasks with config
                     tasks_w_config = [
@@ -928,11 +937,16 @@ class Pregel(
                     for _, _, _, writes, _ in next_tasks:
                         pending_writes.extend(writes)
 
+                    if debug:
+                        print_step_writes(
+                            step, pending_writes, self.stream_channels_list
+                        )
+
                     # apply writes to channels
                     _apply_writes(checkpoint, channels, pending_writes)
 
                     if debug:
-                        print_checkpoint(step, channels)
+                        print_step_checkpoint(step, channels, self.stream_channels_list)
 
                     # yield current value or updates
                     if stream_mode == "values":
