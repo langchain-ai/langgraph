@@ -580,6 +580,10 @@ class Pregel(
         try:
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
+            if self.checkpointer and not config.get("configurable"):
+                raise ValueError(
+                    f"Checkpointer requires one or more of the following 'configurable' keys: {[s.id for s in self.checkpointer.config_specs]}"
+                )
             # assign defaults
             (
                 debug,
@@ -789,6 +793,10 @@ class Pregel(
         try:
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
+            if self.checkpointer and not config.get("configurable"):
+                raise ValueError(
+                    f"Checkpointer requires one or more of the following 'configurable' keys: {[s.id for s in self.checkpointer.config_specs]}"
+                )
             # assign defaults
             (
                 debug,
