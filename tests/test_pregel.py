@@ -31,6 +31,93 @@ from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
 
 
+def test_graph_validation() -> None:
+    def logic(inp: str) -> str:
+        return ""
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.set_entry_point("agent")
+    workflow.set_finish_point("agent")
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.set_entry_point("agent")
+    with pytest.raises(ValueError, match="dead-end"):
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.set_finish_point("agent")
+    with pytest.raises(ValueError, match="not reachable"):
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.set_entry_point("tools")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.set_entry_point("tools")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.set_entry_point("tools")
+    workflow.add_conditional_edges(
+        "agent", logic, {"continue": "tools", "exit": END, "hmm": "extra"}
+    )
+    workflow.add_edge("tools", "agent")
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "extra")
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.add_node("extra", logic)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    with pytest.raises(ValueError):  # extra is dead-end / not reachable
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.add_node("extra", logic)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic)
+    workflow.add_edge("tools", "agent")
+    with pytest.raises(ValueError):  # extra is dead-end
+        workflow.compile()
+
+
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
