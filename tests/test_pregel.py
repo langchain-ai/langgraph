@@ -3849,16 +3849,26 @@ def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
 
 
 def test_nested_graph(snapshot: SnapshotAssertion) -> None:
-    class State(TypedDict):
+    def never_called_fn(state: Any):
+        assert 0, "This function should never be called"
+
+    never_called = RunnableLambda(never_called_fn)
+
+    class InnerState(TypedDict):
         my_key: str
+        my_other_key: str
 
-    def up(state: State):
-        return {"my_key": state["my_key"] + " there"}
+    def up(state: InnerState):
+        return {"my_key": state["my_key"] + " there", "my_other_key": state["my_key"]}
 
-    inner = StateGraph(State)
+    inner = StateGraph(InnerState)
     inner.add_node("up", up)
     inner.set_entry_point("up")
     inner.set_finish_point("up")
+
+    class State(TypedDict):
+        my_key: str
+        never_called: Any
 
     def side(state: State):
         return {"my_key": state["my_key"] + " and back again"}
@@ -3873,9 +3883,35 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     app = graph.compile()
 
     assert app.get_graph().draw_ascii() == snapshot
-    assert app.invoke({"my_key": "my value"}) == {
-        "my_key": "my value there and back again"
+    assert app.get_graph(xray=True).draw_mermaid() == snapshot
+    assert app.invoke(
+        {"my_key": "my value", "never_called": never_called}, debug=True
+    ) == {
+        "my_key": "my value there and back again",
+        "never_called": never_called,
     }
+    assert [*app.stream({"my_key": "my value", "never_called": never_called})] == [
+        {"inner": {"my_key": "my value there"}},
+        {"side": {"my_key": "my value there and back again"}},
+    ]
+    assert [
+        *app.stream(
+            {"my_key": "my value", "never_called": never_called}, stream_mode="values"
+        )
+    ] == [
+        {
+            "my_key": "my value",
+            "never_called": never_called,
+        },
+        {
+            "my_key": "my value there",
+            "never_called": never_called,
+        },
+        {
+            "my_key": "my value there and back again",
+            "never_called": never_called,
+        },
+    ]
 
 
 def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
