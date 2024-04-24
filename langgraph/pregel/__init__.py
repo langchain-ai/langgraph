@@ -167,7 +167,9 @@ class Channel:
         return ChannelWrite(
             [ChannelWriteEntry(c) for c in channels]
             + [
-                ChannelWriteEntry(k, _coerce_write_value(v), True)
+                ChannelWriteEntry(k, skip_none=True, mapper=coerce_to_runnable(v))
+                if isinstance(v, Runnable) or callable(v)
+                else ChannelWriteEntry(k, value=v)
                 for k, v in kwargs.items()
             ]
         )

@@ -174,10 +174,13 @@ class CompiledStateGraph(CompiledGraph):
         # state updaters
         state_write_entries = [
             (
-                ChannelWriteEntry(key, None, skip_none=True)
+                ChannelWriteEntry(key, skip_none=True)
                 if key == "__root__"
                 else ChannelWriteEntry(
-                    key, RunnableCallable(_get_state_key, key=key, trace=False)
+                    key,
+                    mapper=RunnableCallable(
+                        _get_state_key, key=key, trace=False, recurse=False
+                    ),
                 )
             )
             for key in state_keys

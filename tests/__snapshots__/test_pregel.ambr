@@ -1884,6 +1884,23 @@
    +---------+   
   '''
 # ---
+# name: test_nested_graph.1
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	inner([inner]):::otherclass;
+  	side([side]):::otherclass;
+  	__start__ --> inner;
+  	inner --> side;
+  	side --> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
+  '''
+# ---
 # name: test_prebuilt_chat
   '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
 # ---
