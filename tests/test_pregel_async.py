@@ -3475,16 +3475,26 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> N
 
 
 async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
-    class State(TypedDict):
+    def never_called_fn(state: Any):
+        assert 0, "This function should never be called"
+
+    never_called = RunnableLambda(never_called_fn)
+
+    class InnerState(TypedDict):
         my_key: str
+        my_other_key: str
 
-    async def up(state: State):
-        return {"my_key": state["my_key"] + " there"}
+    def up(state: InnerState):
+        return {"my_key": state["my_key"] + " there", "my_other_key": state["my_key"]}
 
-    inner = StateGraph(State)
+    inner = StateGraph(InnerState)
     inner.add_node("up", up)
     inner.set_entry_point("up")
     inner.set_finish_point("up")
+
+    class State(TypedDict):
+        my_key: str
+        never_called: Any
 
     async def side(state: State):
         return {"my_key": state["my_key"] + " and back again"}
@@ -3499,24 +3509,32 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     app = graph.compile()
 
     assert app.get_graph().draw_ascii() == snapshot
-    assert await app.ainvoke({"my_key": "my value"}) == {
-        "my_key": "my value there and back again"
+    assert await app.ainvoke({"my_key": "my value", "never_called": never_called}) == {
+        "my_key": "my value there and back again",
+        "never_called": never_called,
     }
-    assert [chunk async for chunk in app.astream({"my_key": "my value"})] == [
+    assert [
+        chunk
+        async for chunk in app.astream(
+            {"my_key": "my value", "never_called": never_called}
+        )
+    ] == [
         {"inner": {"my_key": "my value there"}},
         {"side": {"my_key": "my value there and back again"}},
     ]
     assert [
         chunk
-        async for chunk in app.astream({"my_key": "my value"}, stream_mode="values")
+        async for chunk in app.astream(
+            {"my_key": "my value", "never_called": never_called}, stream_mode="values"
+        )
     ] == [
-        {"my_key": "my value"},
-        {"my_key": "my value there"},
-        {"my_key": "my value there and back again"},
+        {"my_key": "my value", "never_called": never_called},
+        {"my_key": "my value there", "never_called": never_called},
+        {"my_key": "my value there and back again", "never_called": never_called},
     ]
     times_called = 0
     async for event in app.astream_events(
-        {"my_key": "my value"},
+        {"my_key": "my value", "never_called": never_called},
         version="v1",
         config={"run_id": UUID(int=0)},
         stream_mode="values",
@@ -3524,12 +3542,15 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
         if event["event"] == "on_chain_end" and event["run_id"] == str(UUID(int=0)):
             times_called += 1
             assert event["data"] == {
-                "output": {"my_key": "my value there and back again"}
+                "output": {
+                    "my_key": "my value there and back again",
+                    "never_called": never_called,
+                }
             }
     assert times_called == 1
     times_called = 0
     async for event in app.astream_events(
-        {"my_key": "my value"},
+        {"my_key": "my value", "never_called": never_called},
         version="v1",
         config={"run_id": UUID(int=0)},
     ):

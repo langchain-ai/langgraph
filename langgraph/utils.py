@@ -23,6 +23,7 @@ class RunnableCallable(Runnable):
         name: Optional[str] = None,
         tags: Optional[list[str]] = None,
         trace: bool = True,
+        recurse: bool = True,
         **kwargs: Any,
     ) -> None:
         self.name = name or func.__name__
@@ -31,6 +32,7 @@ class RunnableCallable(Runnable):
         self.config = {"tags": tags} if tags else None
         self.kwargs = kwargs
         self.trace = trace
+        self.recurse = recurse
 
     def __repr__(self) -> str:
         repr_args = {
@@ -47,7 +49,7 @@ class RunnableCallable(Runnable):
             )
         else:
             ret = self.func(input, merge_configs(self.config, config), **self.kwargs)
-        if isinstance(ret, Runnable):
+        if isinstance(ret, Runnable) and self.recurse:
             return ret.invoke(input, config)
         return ret
 
@@ -62,6 +64,6 @@ class RunnableCallable(Runnable):
             ret = await self.afunc(
                 input, merge_configs(self.config, config), **self.kwargs
             )
-        if isinstance(ret, Runnable):
+        if isinstance(ret, Runnable) and self.recurse:
             return await ret.ainvoke(input, config)
         return ret
