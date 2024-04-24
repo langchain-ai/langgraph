@@ -521,8 +521,8 @@ class Pregel(
         stream_mode: Optional[StreamMode] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Sequence[str]] = None,
+        interrupt_after: Optional[Sequence[str]] = None,
         debug: Optional[bool] = None,
     ) -> tuple[
         bool,
@@ -545,8 +545,8 @@ class Pregel(
             input_keys = self.input_channels
         else:
             validate_keys(input_keys, self.channels)
-        interrupt_before_nodes = interrupt_before_nodes or self.interrupt_before_nodes
-        interrupt_after_nodes = interrupt_after_nodes or self.interrupt_after_nodes
+        interrupt_before = interrupt_before or self.interrupt_before_nodes
+        interrupt_after = interrupt_after or self.interrupt_after_nodes
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if config is not None and config.get("configurable", {}).get(CONFIG_KEY_READ):
             # if being called as a node in another graph, always use values mode
@@ -556,8 +556,8 @@ class Pregel(
             stream_mode,
             input_keys,
             output_keys,
-            interrupt_before_nodes,
-            interrupt_after_nodes,
+            interrupt_before,
+            interrupt_after,
         )
 
     def stream(
@@ -568,8 +568,8 @@ class Pregel(
         stream_mode: Optional[StreamMode] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Sequence[str]] = None,
+        interrupt_after: Optional[Sequence[str]] = None,
         debug: Optional[bool] = None,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input."""
@@ -594,15 +594,15 @@ class Pregel(
                 stream_mode,
                 input_keys,
                 output_keys,
-                interrupt_before_nodes,
-                interrupt_after_nodes,
+                interrupt_before,
+                interrupt_after,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
                 input_keys=input_keys,
                 output_keys=output_keys,
-                interrupt_before_nodes=interrupt_before_nodes,
-                interrupt_after_nodes=interrupt_after_nodes,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
                 debug=debug,
             )
             # copy nodes to ignore mutations during execution
@@ -659,7 +659,7 @@ class Pregel(
                     # before execution, check if we should interrupt
                     if _should_interrupt(
                         checkpoint,
-                        interrupt_before_nodes,
+                        interrupt_before,
                         self.stream_channels_list,
                         next_tasks,
                     ):
@@ -743,7 +743,7 @@ class Pregel(
                     # after execution, check if we should interrupt
                     if _should_interrupt(
                         checkpoint,
-                        interrupt_after_nodes,
+                        interrupt_after,
                         self.stream_channels_list,
                         next_tasks,
                     ):
@@ -778,8 +778,8 @@ class Pregel(
         stream_mode: Optional[StreamMode] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Sequence[str]] = None,
+        interrupt_after: Optional[Sequence[str]] = None,
         debug: Optional[bool] = None,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         config = ensure_config(config)
@@ -812,15 +812,15 @@ class Pregel(
                 stream_mode,
                 input_keys,
                 output_keys,
-                interrupt_before_nodes,
-                interrupt_after_nodes,
+                interrupt_before,
+                interrupt_after,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
                 input_keys=input_keys,
                 output_keys=output_keys,
-                interrupt_before_nodes=interrupt_before_nodes,
-                interrupt_after_nodes=interrupt_after_nodes,
+                interrupt_before=interrupt_before,
+                interrupt_after=interrupt_after,
                 debug=debug,
             )
             # copy nodes to ignore mutations during execution
@@ -877,7 +877,7 @@ class Pregel(
                     # before execution, check if we should interrupt
                     if _should_interrupt(
                         checkpoint,
-                        interrupt_before_nodes,
+                        interrupt_before,
                         self.stream_channels_list,
                         next_tasks,
                     ):
@@ -970,7 +970,7 @@ class Pregel(
                     # after execution, check if we should interrupt
                     if _should_interrupt(
                         checkpoint,
-                        interrupt_after_nodes,
+                        interrupt_after,
                         self.stream_channels_list,
                         next_tasks,
                     ):
@@ -1038,8 +1038,8 @@ class Pregel(
             stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
-            interrupt_before_nodes=interrupt_before_nodes,
-            interrupt_after_nodes=interrupt_after_nodes,
+            interrupt_before=interrupt_before_nodes,
+            interrupt_after=interrupt_after_nodes,
             debug=debug,
             **kwargs,
         ):
@@ -1094,8 +1094,8 @@ class Pregel(
             stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
-            interrupt_before_nodes=interrupt_before_nodes,
-            interrupt_after_nodes=interrupt_after_nodes,
+            interrupt_before=interrupt_before_nodes,
+            interrupt_after=interrupt_after_nodes,
             debug=debug,
             **kwargs,
         ):
