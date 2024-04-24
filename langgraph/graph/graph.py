@@ -113,7 +113,7 @@ class Graph:
             )
         if key in self.nodes:
             raise ValueError(f"Node `{key}` already present.")
-        if key == END:
+        if key == END or key == START:
             raise ValueError(f"Node `{key}` is reserved.")
 
         self.nodes[key] = coerce_to_runnable(action)
