@@ -90,7 +90,7 @@ class JsonPlusSerializer(SerializerProtocol):
         return LC_REVIVER(value)
 
     def dumps(self, obj: Any) -> bytes:
-        return json.dumps(obj, default=self._default, sort_keys=True)
+        return json.dumps(obj, default=self._default, sort_keys=True).encode()
 
     def loads(self, data: bytes) -> Any:
         return json.loads(data, object_hook=self._reviver)

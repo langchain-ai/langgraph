@@ -1,5 +1,4 @@
 import asyncio
-import pickle
 from collections import defaultdict
 from typing import AsyncIterator, Iterator, Optional
 
@@ -15,8 +14,6 @@ from langgraph.checkpoint.base import (
 
 
 class MemorySaver(BaseCheckpointSaver):
-    serde = pickle
-
     storage: defaultdict[str, dict[str, Checkpoint]]
 
     def __init__(
