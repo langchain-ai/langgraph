@@ -83,8 +83,6 @@ class DynamicBarrierValue(
                 else:
                     raise InvalidUpdateError(f"Value {value} not in {self.names}")
 
-        print(self.seen != self.names, self.seen, self.names, values)
-
     def get(self) -> Value:
         if self.seen != self.names:
             raise EmptyChannelError()
