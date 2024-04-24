@@ -150,7 +150,6 @@ class Graph:
     ) -> None:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
-
         Args:
             start_key (str): The key of the starting node.
             condition (Union[Callable, Runnable]): The condition that determines the destination of the edge.
