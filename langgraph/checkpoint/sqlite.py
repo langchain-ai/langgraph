@@ -2,7 +2,7 @@ import pickle
 import sqlite3
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
-from typing import Iterator, Optional
+from typing import Any, Iterator, Optional
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
@@ -19,7 +19,7 @@ from langgraph.serde.jsonplus import JsonPlusSerializer
 
 # for backwards compat we continue to support loading pickled checkpoints
 class JsonPlusSerializerCompat(JsonPlusSerializer):
-    def loads(self, data: bytes) -> pickle.Any:
+    def loads(self, data: bytes) -> Any:
         if data.startswith(b"\x80") and data.endswith(b"."):
             return pickle.loads(data)
         return super().loads(data)
