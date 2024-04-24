@@ -14,15 +14,20 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
 )
+from langgraph.serde.jsonplus import JsonPlusSerializer
 
 
 # for backwards compat we continue to support loading pickled checkpoints
-def is_pickled(value: bytes) -> bool:
-    print(value, type(value))
-    return value.startswith(b"\x80") and value.endswith(b".")
+class JsonPlusSerializerCompat(JsonPlusSerializer):
+    def loads(self, data: bytes) -> pickle.Any:
+        if data.startswith(b"\x80") and data.endswith(b"."):
+            return pickle.loads(data)
+        return super().loads(data)
 
 
 class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
+    serde = JsonPlusSerializerCompat
+
     conn: sqlite3.Connection
 
     is_setup: bool
@@ -82,11 +87,6 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 self.conn.commit()
             cur.close()
 
-    def _loads(self, value: bytes) -> Checkpoint:
-        if is_pickled(value):
-            return pickle.loads(value)
-        return self.serde.loads(value)
-
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         with self.cursor(transaction=False) as cur:
             if config["configurable"].get("thread_ts"):
@@ -100,7 +100,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 if value := cur.fetchone():
                     return CheckpointTuple(
                         config,
-                        self._loads(value[0]),
+                        self.serde.loads(value[0]),
                         {
                             "configurable": {
                                 "thread_id": config["configurable"]["thread_id"],
@@ -123,7 +123,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                                 "thread_ts": value[1],
                             }
                         },
-                        self._loads(value[3]),
+                        self.serde.loads(value[3]),
                         {
                             "configurable": {
                                 "thread_id": value[0],
@@ -143,7 +143,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             for thread_id, thread_ts, parent_ts, value in cur:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
-                    self._loads(value),
+                    self.serde.loads(value),
                     {
                         "configurable": {
                             "thread_id": thread_id,
