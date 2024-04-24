@@ -170,8 +170,6 @@ class CompiledStateGraph(CompiledGraph):
                 return SKIP_WRITE
             elif not isinstance(input, dict):
                 raise InvalidUpdateError(f"Expected dict, got {input}")
-            elif key not in state_keys:
-                raise InvalidUpdateError(f"Expected one of {state_keys}, got {key}")
             else:
                 return input.get(key, SKIP_WRITE)
 
