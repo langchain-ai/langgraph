@@ -16,9 +16,13 @@ from langgraph.checkpoint.base import (
 )
 
 
-class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
-    serde = pickle
+# for backwards compat we continue to support loading pickled checkpoints
+def is_pickled(value: bytes) -> bool:
+    print(value, type(value))
+    return value.startswith(b"\x80") and value.endswith(b".")
 
+
+class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
     conn: sqlite3.Connection
 
     is_setup: bool
@@ -78,6 +82,11 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 self.conn.commit()
             cur.close()
 
+    def _loads(self, value: bytes) -> Checkpoint:
+        if is_pickled(value):
+            return pickle.loads(value)
+        return self.serde.loads(value)
+
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         with self.cursor(transaction=False) as cur:
             if config["configurable"].get("thread_ts"):
@@ -91,7 +100,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 if value := cur.fetchone():
                     return CheckpointTuple(
                         config,
-                        self.serde.loads(value[0]),
+                        self._loads(value[0]),
                         {
                             "configurable": {
                                 "thread_id": config["configurable"]["thread_id"],
@@ -114,7 +123,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                                 "thread_ts": value[1],
                             }
                         },
-                        self.serde.loads(value[3]),
+                        self._loads(value[3]),
                         {
                             "configurable": {
                                 "thread_id": value[0],
@@ -134,7 +143,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             for thread_id, thread_ts, parent_ts, value in cur:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
-                    self.serde.loads(value),
+                    self._loads(value),
                     {
                         "configurable": {
                             "thread_id": thread_id,
