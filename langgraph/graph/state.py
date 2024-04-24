@@ -8,6 +8,7 @@ from langchain_core.runnables.base import RunnableLike
 
 from langgraph.channels.base import BaseChannel, InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
@@ -211,7 +212,7 @@ class CompiledStateGraph(CompiledGraph):
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
-                        [ChannelWriteEntry(key)] + state_write_entries,
+                        [ChannelWriteEntry(key, key)] + state_write_entries,
                         tags=[TAG_HIDDEN],
                     ),
                 ],
@@ -247,24 +248,44 @@ class CompiledStateGraph(CompiledGraph):
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(ends: list[str]) -> Optional[ChannelWrite]:
             if filtered_ends := [end for end in ends if end != END]:
-                return ChannelWrite(
-                    [
-                        ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)
-                        for end in filtered_ends
-                    ],
-                    tags=[TAG_HIDDEN],
-                )
+                writes = [
+                    ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)
+                    for end in filtered_ends
+                ]
+                if branch.then and branch.then != END:
+                    writes.append(
+                        ChannelWriteEntry(
+                            f"branch:{start}:{name}:then",
+                            WaitForNames(set(filtered_ends)),
+                        )
+                    )
+                return ChannelWrite(writes, tags=[TAG_HIDDEN])
 
         # attach branch publisher
         self.nodes[start] |= branch.run(branch_writer, _get_state_reader(self.graph))
 
         # attach branch subscribers
-        ends = branch.ends.values() if branch.ends else [node for node in self.nodes]
+        ends = (
+            branch.ends.values()
+            if branch.ends
+            else [node for node in self.graph.nodes if node != branch.then]
+        )
         for end in ends:
             if end != END:
                 channel_name = f"branch:{start}:{name}:{end}"
                 self.channels[channel_name] = EphemeralValue(Any)
                 self.nodes[end].triggers.append(channel_name)
+
+        # attach then subscriber
+        if branch.then and branch.then != END:
+            channel_name = f"branch:{start}:{name}:then"
+            self.channels[channel_name] = DynamicBarrierValue(str)
+            self.nodes[branch.then].triggers.append(channel_name)
+            for end in ends:
+                if end != END:
+                    self.nodes[end] |= ChannelWrite(
+                        [ChannelWriteEntry(channel_name, end)], tags=[TAG_HIDDEN]
+                    )
 
 
 def _get_state_reader(graph: StateGraph) -> ChannelRead:

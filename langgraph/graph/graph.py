@@ -37,8 +37,9 @@ END = "__end__"
 
 
 class Branch(NamedTuple):
-    condition: Runnable[Any, Union[str, list[str]]]
+    path: Runnable[Any, Union[str, list[str]]]
     ends: Optional[dict[str, str]]
+    then: Optional[str] = None
 
     def run(
         self,
@@ -64,7 +65,7 @@ class Branch(NamedTuple):
         reader: Optional[Callable[[], Any]],
         writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
-        result = self.condition.invoke(reader(config) if reader else input, config)
+        result = self.path.invoke(reader(config) if reader else input, config)
         if not isinstance(result, list):
             result = [result]
         if self.ends:
@@ -81,9 +82,7 @@ class Branch(NamedTuple):
         reader: Optional[Callable[[], Any]],
         writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
-        result = await self.condition.ainvoke(
-            reader(config) if reader else input, config
-        )
+        result = await self.path.ainvoke(reader(config) if reader else input, config)
         if not isinstance(result, list):
             result = [result]
         if self.ends:
@@ -140,27 +139,27 @@ class Graph:
 
     def add_conditional_edges(
         self,
-        start_key: str,
-        condition: Union[
+        source: str,
+        path: Union[
             Callable[..., Union[str, list[str]]],
             Callable[..., Awaitable[Union[str, list[str]]]],
             Runnable[Any, Union[str, list[str]]],
         ],
-        conditional_edge_mapping: Optional[dict[str, str]] = None,
+        path_map: Optional[dict[str, str]] = None,
+        then: Optional[str] = None,
     ) -> None:
         """Add a conditional edge from the starting node to any number of destination nodes.
 
         Args:
-            start_key (str): The key of the starting node.
-            condition (Union[Callable, Runnable]): The condition that determines the destination of the edge.
-            conditional_edge_mapping (Optional[dict[str, str]]): A dictionary that maps the response of the condition to a name of
-                the destination node(s). If the condition returns a list, the response will be matched against the keys of the
-                dictionary. If the condition returns a string, the response will be matched against the values of the dictionary.
-                If the condition returns a string and the dictionary contains a key with the value of `END` ("__end__"`),
-                the graph will finish.
-
-        Raises:
-            ValueError: If the starting node is not found in the graph or if the conditional edge mapping contains missing nodes.
+            source (str): The starting node. This conditional edge will run when
+                exiting this node.
+            path (Union[Callable, Runnable]): The callable that determines the next
+                node or nodes. If not specifying `path_map` it should return one or
+                more nodes. If it returns END, the graph will stop execution.
+            path_map (Optional[dict[str, str]]): Optional mapping of paths to node
+                names. If ommitted the paths returned by `path` should be node names.
+            then (Optional[str]): The name of a node to execute after the nodes
+                selected by `path`.
 
         Returns:
             None
@@ -171,16 +170,15 @@ class Graph:
                 "not be reflected in the compiled graph."
             )
         # find a name for the condition
-        condition = coerce_to_runnable(condition)
-        name = condition.name or "condition"
+        path = coerce_to_runnable(path)
+        name = path.name or "condition"
         # validate the condition
-        if name in self.branches[start_key]:
+        if name in self.branches[source]:
             raise ValueError(
-                f"Branch with name `{condition.name}` already exists for node "
-                f"`{start_key}`"
+                f"Branch with name `{path.name}` already exists for node " f"`{source}`"
             )
         # save it
-        self.branches[start_key][name] = Branch(condition, conditional_edge_mapping)
+        self.branches[source][name] = Branch(path, path_map, then)
 
     def set_entry_point(self, key: str) -> None:
         """Specifies the first node to be called in the graph.
@@ -195,21 +193,27 @@ class Graph:
 
     def set_conditional_entry_point(
         self,
-        condition: Union[
+        path: Union[
             Callable[..., str], Callable[..., Awaitable[str]], Runnable[Any, str]
         ],
-        conditional_edge_mapping: Optional[Dict[str, str]] = None,
+        path_map: Optional[Dict[str, str]] = None,
+        then: Optional[str] = None,
     ) -> None:
         """Sets a conditional entry point in the graph.
 
         Args:
-            condition: A callable object that takes any number of arguments and returns a string or an awaitable string.
-            conditional_edge_mapping: A dictionary that maps condition names to edge names.
+            path (Union[Callable, Runnable]): The callable that determines the next
+                node or nodes. If not specifying `path_map` it should return one or
+                more nodes. If it returns END, the graph will stop execution.
+            path_map (Optional[dict[str, str]]): Optional mapping of paths to node
+                names. If ommitted the paths returned by `path` should be node names.
+            then (Optional[str]): The name of a node to execute after the nodes
+                selected by `path`.
 
         Returns:
             None
         """
-        return self.add_conditional_edges(START, condition, conditional_edge_mapping)
+        return self.add_conditional_edges(START, path, path_map, then)
 
     def set_finish_point(self, key: str) -> None:
         """Marks a node as a finish point of the graph.
@@ -226,9 +230,18 @@ class Graph:
 
     def validate(self, interrupt: Optional[Sequence[str]] = None) -> None:
         # assemble sources
-        all_sources = {src for src, _ in self._all_edges} | {
-            src for src in self.branches
-        }
+        all_sources = {src for src, _ in self._all_edges}
+        for start, branches in self.branches.items():
+            for cond, branch in branches.items():
+                all_sources.add(start)
+                if branch.then is not None:
+                    if branch.ends is not None:
+                        for end in branch.ends.values():
+                            all_sources.add(end)
+                    else:
+                        for node in self.nodes:
+                            if node != start and node != branch.then:
+                                all_sources.add(node)
         # validate sources
         for node in self.nodes:
             if node not in all_sources:
@@ -241,6 +254,8 @@ class Graph:
         all_targets = {end for _, end in self._all_edges}
         for start, branches in self.branches.items():
             for cond, branch in branches.items():
+                if branch.then is not None:
+                    all_targets.add(branch.then)
                 if branch.ends is not None:
                     for end in branch.ends.values():
                         if end not in self.nodes and end != END:
@@ -251,7 +266,7 @@ class Graph:
                 else:
                     all_targets.add(END)
                     for node in self.nodes:
-                        if node != start:
+                        if node != start and node != branch.then:
                             all_targets.add(node)
         # validate targets
         for node in self.nodes:
@@ -404,24 +419,34 @@ class CompiledGraph(Pregel):
             name for _, branches in self.graph.branches.items() for name in branches
         )
         for start, branches in self.graph.branches.items():
+            default_ends = {
+                **{k: k for k in self.graph.nodes if k != start},
+                END: END,
+            }
             for name, branch in branches.items():
-                ends = branch.ends or {
-                    **{k: k for k in self.graph.nodes},
-                    END: END,
-                }
+                if branch.ends is not None:
+                    ends = branch.ends
+                elif branch.then is not None:
+                    ends = {k: k for k in default_ends if k not in (END, branch.then)}
+                else:
+                    ends = default_ends
 
                 if add_condition_nodes is True:
                     cond = graph.add_node(
-                        branch.condition,
+                        branch.path,
                         f"{start}_{name}" if branches_by_name[name] > 1 else name,
                     )
                     graph.add_edge(start_nodes[start], cond)
                     for label, end in ends.items():
                         graph.add_edge(cond, end_nodes[end], label, conditional=True)
+                        if branch.then is not None:
+                            graph.add_edge(start_nodes[end], end_nodes[branch.then])
                 else:
                     for label, end in ends.items():
                         graph.add_edge(
                             start_nodes[start], end_nodes[end], label, conditional=True
                         )
+                        if branch.then is not None:
+                            graph.add_edge(start_nodes[end], end_nodes[branch.then])
 
         return graph
