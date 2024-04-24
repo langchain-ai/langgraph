@@ -1,4 +1,3 @@
-import pickle
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
 from typing import AsyncIterator, Optional
@@ -14,10 +13,11 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
 )
+from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
 
 
 class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
-    serde = pickle
+    serde = JsonPlusSerializerCompat()
 
     conn: aiosqlite.Connection
 

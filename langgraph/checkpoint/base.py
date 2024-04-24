@@ -1,6 +1,5 @@
 from abc import ABC
 from collections import defaultdict
-from copy import deepcopy
 from datetime import datetime, timezone
 from typing import (
     Any,
@@ -8,12 +7,13 @@ from typing import (
     Iterator,
     NamedTuple,
     Optional,
-    Protocol,
     TypedDict,
 )
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
+from langgraph.serde.base import SerializerProtocol
+from langgraph.serde.jsonplus import JsonPlusSerializer
 from langgraph.utils import StrEnum
 
 
@@ -63,8 +63,11 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         v=checkpoint["v"],
         ts=checkpoint["ts"],
         channel_values=checkpoint["channel_values"].copy(),
-        channel_versions=checkpoint["channel_versions"].copy(),
-        versions_seen=deepcopy(checkpoint["versions_seen"]),
+        channel_versions=defaultdict(int, checkpoint["channel_versions"]),
+        versions_seen=defaultdict(
+            _seen_dict,
+            {k: defaultdict(int, v) for k, v in checkpoint["versions_seen"].items()},
+        ),
     )
 
 
@@ -102,18 +105,10 @@ CheckpointThreadTs = ConfigurableFieldSpec(
 )
 
 
-class SerializerProtocol(Protocol):
-    def dumps(self, obj: Any) -> bytes:
-        ...
-
-    def loads(self, data: bytes) -> Any:
-        ...
-
-
 class BaseCheckpointSaver(ABC):
     at: CheckpointAt = CheckpointAt.END_OF_STEP
 
-    serde: SerializerProtocol
+    serde: SerializerProtocol = JsonPlusSerializer()
 
     def __init__(
         self,
