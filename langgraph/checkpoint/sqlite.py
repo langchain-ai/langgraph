@@ -26,7 +26,7 @@ class JsonPlusSerializerCompat(JsonPlusSerializer):
 
 
 class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
-    serde = JsonPlusSerializerCompat
+    serde = JsonPlusSerializerCompat()
 
     conn: sqlite3.Connection
 
