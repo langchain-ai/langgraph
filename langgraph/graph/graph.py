@@ -113,7 +113,7 @@ class Graph:
             )
         if key in self.nodes:
             raise ValueError(f"Node `{key}` already present.")
-        if key == END:
+        if key == END or key == START:
             raise ValueError(f"Node `{key}` is reserved.")
 
         self.nodes[key] = coerce_to_runnable(action)
@@ -128,11 +128,6 @@ class Graph:
             raise ValueError("END cannot be a start node")
         if end_key == START:
             raise ValueError("START cannot be an end node")
-        if start_key not in self.nodes and start_key != START:
-            raise ValueError(f"Need to add_node `{start_key}` first")
-        if end_key not in self.nodes and end_key != END:
-            raise ValueError(f"Need to add_node `{end_key}` first")
-
         if not self.support_multiple_edges and start_key in set(
             start for start, _ in self.edges
         ):
@@ -154,7 +149,6 @@ class Graph:
         conditional_edge_mapping: Optional[dict[str, str]] = None,
     ) -> None:
         """Add a conditional edge from the starting node to any number of destination nodes.
-
 
         Args:
             start_key (str): The key of the starting node.
@@ -180,17 +174,6 @@ class Graph:
         condition = coerce_to_runnable(condition)
         name = condition.name or "condition"
         # validate the condition
-        if start_key not in self.nodes and start_key != START:
-            raise ValueError(f"Need to add_node `{start_key}` first")
-        if conditional_edge_mapping and set(
-            conditional_edge_mapping.values()
-        ).difference([END]).difference(self.nodes):
-            raise ValueError(
-                f"Missing nodes which are in conditional edge mapping. Mapping "
-                f"contains possible destinations: "
-                f"{list(conditional_edge_mapping.values())}. Possible nodes are "
-                f"{list(self.nodes.keys())}."
-            )
         if name in self.branches[start_key]:
             raise ValueError(
                 f"Branch with name `{condition.name}` already exists for node "
@@ -242,31 +225,46 @@ class Graph:
         return self.add_edge(key, END)
 
     def validate(self, interrupt: Optional[Sequence[str]] = None) -> None:
-        all_starts = {src for src, _ in self._all_edges} | {
+        # assemble sources
+        all_sources = {src for src, _ in self._all_edges} | {
             src for src in self.branches
         }
+        # validate sources
         for node in self.nodes:
-            if node not in all_starts:
-                raise ValueError(f"Node `{node}` is a dead-end")
+            if node not in all_sources:
+                raise ValueError(f"Node '{node}' is a dead-end")
+        for source in all_sources:
+            if node not in self.nodes and node != START:
+                raise ValueError(f"Found edge starting at unkown node '{source}'")
 
-        all_branches = [
-            branch
-            for branches in self.branches.values()
-            for branch in branches.values()
-        ]
-        if all(branch.ends is not None for branch in all_branches):
-            all_ends = {end for _, end in self._all_edges} | {
-                end for branch in all_branches for end in branch.ends.values()
-            }
-
-            for node in self.nodes:
-                if node not in all_ends:
-                    raise ValueError(f"Node `{node}` is not reachable")
-
+        # assemble targets
+        all_targets = {end for _, end in self._all_edges}
+        for start, branches in self.branches.items():
+            for cond, branch in branches.items():
+                if branch.ends is not None:
+                    for end in branch.ends.values():
+                        if end not in self.nodes and end != END:
+                            raise ValueError(
+                                f"At '{start}' node, '{cond}' branch found unknown target '{end}'"
+                            )
+                        all_targets.add(end)
+                else:
+                    all_targets.add(END)
+                    for node in self.nodes:
+                        if node != start:
+                            all_targets.add(node)
+        # validate targets
+        for node in self.nodes:
+            if node not in all_targets:
+                raise ValueError(f"Node `{node}` is not reachable")
+        for target in all_targets:
+            if target not in self.nodes and target != END:
+                raise ValueError(f"Found edge ending at unknown node `{target}`")
+        # validate interrupts
         if interrupt:
             for node in interrupt:
                 if node not in self.nodes:
-                    raise ValueError(f"Node `{node}` is not present")
+                    raise ValueError(f"Interrupt node `{node}` not found")
 
         self.compiled = True
 
