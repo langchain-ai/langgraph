@@ -6,9 +6,8 @@ from typing import Any, Dict, Iterator, List, Optional, Union, cast
 
 import aiohttp
 import requests
-from langchain_core.documents import Document
-
 from langchain_community.document_loaders.base import BaseLoader
+from langchain_core.documents import Document
 
 logger = logging.getLogger(__name__)
 

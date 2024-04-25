@@ -1,8 +1,8 @@
 import logging
-from typing import List, Any
+from typing import Any, List
 
-from langchain.retrievers import WebResearchRetriever
 from async_html import AsyncHtmlLoader
+from langchain.retrievers import WebResearchRetriever
 from langchain_community.document_transformers.html2text import Html2TextTransformer
 from langchain_core.callbacks import CallbackManagerForRetrieverRun
 from langchain_core.documents import Document
