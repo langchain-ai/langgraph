@@ -2,13 +2,14 @@ import os
 import re
 import sqlite3
 from datetime import datetime
-from typing import Annotated, Optional
+from typing import Annotated, Callable, Optional
 
 import numpy as np
 import openai
 import pandas as pd
 import pytest
 import requests
+from evals.utils import create_openai_logprobs_classification_chain
 from langchain_anthropic import ChatAnthropic
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_core.prompts import ChatPromptTemplate
@@ -20,7 +21,8 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.message import AnyMessage, add_messages
 from langgraph.prebuilt import ToolNode, tools_condition
-from langsmith import unit
+from langsmith import unit, expect
+from langchain_openai import ChatOpenAI
 
 db_url = "https://storage.googleapis.com/benchmarks-artifacts/travel-db/travel2.sqlite"
 local_file = "travel2.sqlite"
@@ -315,22 +317,44 @@ graph = builder.compile(interrupt_before=["sensitive_tools"], checkpointer=check
 
 
 questions = [
-    ["Hi there, what time is my flight?"],
-    [
-        "Am i allowed to update my flight to something sooner? I want to leave later today.",
-        "Okkk, what options are there for me to change my flight?",
-        "Update my flight to something later actually.",
-    ],
+    (["Hi there, what time is my flight?"], None),
+    (
+        [
+            "Am i allowed to update my flight to something sooner? I want to leave later today.",
+            "Okkk, what options are there for me to change my flight?",
+            "Update my flight to something later actually.",
+        ],
+        None,
+    ),
+    ("Hi there, i want to cancel my flight.", None),
+    ("find flights boston to sf", None),
 ]
+test_cases = [(i, *args) for i, args in enumerate(questions)]
 
 
 @pytest.fixture
 def passenger_id():
     return "3442 587242"
 
+
+def _create_classifier(positive_examples, negative_examples):
+    return create_openai_logprobs_classification_chain(
+        ChatOpenAI(model="gpt-4-turbo"),
+        classes={
+            "pass": f"The end state matches the expected value. Examples:\n\n{positive_examples}",
+            "fail": f"The end state does not match the expected value. Examples:\n\n{negative_examples}",
+        },
+    )
+
+
 @unit
-@pytest.mark.parametrize("thread_num, questions", enumerate(questions))
-def test_customer_support_bot(thread_num: int, questions: list[str], passenger_id: str):
+@pytest.mark.parametrize("thread_num, questions, check_state", test_cases)
+def test_customer_support_bot(
+    thread_num: int,
+    questions: list[str],
+    check_state: Optional[Callable],
+    passenger_id: str,
+):
     config = {
         "configurable": {
             "passenger_id": passenger_id,
@@ -342,4 +366,9 @@ def test_customer_support_bot(thread_num: int, questions: list[str], passenger_i
             {"messages": [("user", question)]},
             config,
         )
+    end_state = graph.get_state(config)
+    expect(end_state).against(check_state)
     return results
+
+
+@unit
