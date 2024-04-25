@@ -16,9 +16,6 @@ from langchain_core.runnables import Runnable
 from langchain_core.runnables.base import RunnableLike, coerce_to_runnable
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import (
-    Graph as RunnableGraph,
-)
-from langchain_core.runnables.graph import (
     Node as RunnableGraphNode,
 )
 
@@ -28,7 +25,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
-from langgraph.utils import RunnableCallable
+from langgraph.utils import DrawableGraph, RunnableCallable
 
 logger = logging.getLogger(__name__)
 
@@ -380,11 +377,11 @@ class CompiledGraph(Pregel):
         self,
         config: Optional[RunnableConfig] = None,
         *,
-        xray: bool = False,
+        xray: Union[int, bool] = False,
         add_condition_nodes: bool = True,
-    ) -> RunnableGraph:
+    ) -> DrawableGraph:
         """Returns a drawable representation of the computation graph."""
-        graph = RunnableGraph()
+        graph = DrawableGraph()
         start_nodes: dict[str, RunnableGraphNode] = {
             START: graph.add_node(self.get_input_schema(config), START)
         }
@@ -395,16 +392,19 @@ class CompiledGraph(Pregel):
         for key, node in self.graph.nodes.items():
             if xray:
                 subgraph = (
-                    node.get_graph(config=config, xray=xray)
+                    node.get_graph(
+                        config=config,
+                        xray=xray - 1 if isinstance(xray, int) and xray > 0 else xray,
+                    )
                     if isinstance(node, CompiledGraph)
                     else node.get_graph(config=config)
                 )
                 subgraph.trim_first_node()
                 subgraph.trim_last_node()
                 if len(subgraph.nodes) > 1:
-                    graph.extend(subgraph)
-                    start_nodes[key] = subgraph.last_node()
-                    end_nodes[key] = subgraph.first_node()
+                    end_nodes[key], start_nodes[key] = graph.extend(
+                        subgraph, prefix=key
+                    )
                 else:
                     n = graph.add_node(node, key)
                     start_nodes[key] = n

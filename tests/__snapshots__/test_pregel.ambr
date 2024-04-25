@@ -1901,6 +1901,218 @@
   
   '''
 # ---
+# name: test_nested_graph_xray
+  dict({
+    'edges': list([
+      dict({
+        'conditional': True,
+        'data': 'tool_two_slow',
+        'source': 'tool_two:condition',
+        'target': 'tool_two:tool_two_slow',
+      }),
+      dict({
+        'source': 'tool_two:tool_two_slow',
+        'target': 'tool_two:__end__',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'tool_two_fast',
+        'source': 'tool_two:condition',
+        'target': 'tool_two:tool_two_fast',
+      }),
+      dict({
+        'source': 'tool_two:tool_two_fast',
+        'target': 'tool_two:__end__',
+      }),
+      dict({
+        'source': '__start__',
+        'target': 'condition',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'tool_one',
+        'source': 'condition',
+        'target': 'tool_one',
+      }),
+      dict({
+        'source': 'tool_one',
+        'target': '__end__',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'tool_two',
+        'source': 'condition',
+        'target': 'tool_two:condition',
+      }),
+      dict({
+        'source': 'tool_two:__end__',
+        'target': '__end__',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'tool_three',
+        'source': 'condition',
+        'target': 'tool_three',
+      }),
+      dict({
+        'source': 'tool_three',
+        'target': '__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain_core',
+            'runnables',
+            'base',
+            'RunnableLambda',
+          ]),
+          'name': 'logic',
+        }),
+        'id': 'tool_one',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': 'tool_two:__end__',
+        'id': 'tool_two:__end__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain_core',
+            'runnables',
+            'base',
+            'RunnableLambda',
+          ]),
+          'name': 'logic',
+        }),
+        'id': 'tool_two:tool_two_slow',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain_core',
+            'runnables',
+            'base',
+            'RunnableLambda',
+          ]),
+          'name': 'logic',
+        }),
+        'id': 'tool_two:tool_two_fast',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain_core',
+            'runnables',
+            'base',
+            'RunnableLambda',
+          ]),
+          'name': 'RunnableLambda',
+        }),
+        'id': 'tool_two:condition',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain_core',
+            'runnables',
+            'base',
+            'RunnableLambda',
+          ]),
+          'name': 'logic',
+        }),
+        'id': 'tool_three',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain_core',
+            'runnables',
+            'base',
+            'RunnableLambda',
+          ]),
+          'name': 'RunnableLambda',
+        }),
+        'id': 'condition',
+        'type': 'runnable',
+      }),
+    ]),
+  })
+# ---
+# name: test_nested_graph_xray.1
+  '''
+                         +-----------+                          
+                         | __start__ |                          
+                         +-----------+                          
+                                *                               
+                                *                               
+                                *                               
+                         +-----------+                          
+                         | condition |                          
+                       ..+-----------+...                       
+                  .....        .         .....                  
+               ...             .              ...               
+            ...                .                 ...            
+  +----------+           +----------+           +------------+  
+  | tool_one |*          | tool_two |           | tool_three |  
+  +----------+ ***       +----------+         **+------------+  
+                  *****        *         *****                  
+                       ***     *      ***                       
+                          ***  *   ***                          
+                          +---------+                           
+                          | __end__ |                           
+                          +---------+                           
+  '''
+# ---
+# name: test_nested_graph_xray.2
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	tool_one([tool_one]):::otherclass;
+  	tool_two___end__([__end__]):::otherclass;
+  	tool_two_tool_two_slow([tool_two_slow]):::otherclass;
+  	tool_two_tool_two_fast([tool_two_fast]):::otherclass;
+  	tool_two_condition([condition]):::otherclass;
+  	tool_three([tool_three]):::otherclass;
+  	condition([condition]):::otherclass;
+  	subgraph tool_two
+  	tool_two_condition -. tool_two_slow .-> tool_two_tool_two_slow;
+  	tool_two_tool_two_slow --> tool_two___end__;
+  	tool_two_condition -. tool_two_fast .-> tool_two_tool_two_fast;
+  	tool_two_tool_two_fast --> tool_two___end__;
+  	end
+  	__start__ --> condition;
+  	condition -. tool_one .-> tool_one;
+  	tool_one --> __end__;
+  	condition -. tool_two .-> tool_two_condition;
+  	tool_two___end__ --> __end__;
+  	condition -. tool_three .-> tool_three;
+  	tool_three --> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
+  '''
+# ---
 # name: test_prebuilt_chat
   '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
 # ---
