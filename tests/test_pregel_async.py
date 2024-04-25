@@ -17,6 +17,7 @@ from uuid import UUID
 import pytest
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from pytest_mock import MockerFixture
+from syrupy import SnapshotAssertion
 
 from langgraph.channels.base import InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -2681,6 +2682,232 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
 @pytest.mark.parametrize(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
+async def test_start_branch_then(
+    snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
+) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
+    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    tool_two_graph.set_conditional_entry_point(
+        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
+    )
+    tool_two = tool_two_graph.compile()
+
+    assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}) == {
+        "my_key": "value slow",
+        "market": "DE",
+    }
+    assert await tool_two.ainvoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value fast",
+        "market": "US",
+    }
+
+    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+        saver.at = checkpoint_at
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value",
+            "market": "DE",
+        }
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value", "market": "DE"},
+            next=("tool_two_slow",),
+            config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+        )
+        # resume, for same result as above
+        assert await tool_two.ainvoke(None, thread1, debug=1) == {
+            "my_key": "value slow",
+            "market": "DE",
+        }
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value slow", "market": "DE"},
+            next=(),
+            config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+        )
+
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
+            "my_key": "value",
+            "market": "US",
+        }
+        assert await tool_two.aget_state(thread2) == StateSnapshot(
+            values={"my_key": "value", "market": "US"},
+            next=("tool_two_fast",),
+            config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+        )
+        # resume, for same result as above
+        assert await tool_two.ainvoke(None, thread2, debug=1) == {
+            "my_key": "value fast",
+            "market": "US",
+        }
+        assert await tool_two.aget_state(thread2) == StateSnapshot(
+            values={"my_key": "value fast", "market": "US"},
+            next=(),
+            config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+        )
+
+
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+async def test_branch_then(
+    snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
+) -> None:
+    pass
+
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.set_entry_point("prepare")
+    tool_two_graph.set_finish_point("finish")
+    tool_two_graph.add_conditional_edges(
+        source="prepare",
+        path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        then="finish",
+    )
+    tool_two_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
+    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
+    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    tool_two_graph.add_node("finish", lambda s: {"my_key": " finished"})
+    tool_two = tool_two_graph.compile()
+
+    assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, debug=1) == {
+        "my_key": "value prepared slow finished",
+        "market": "DE",
+    }
+    assert await tool_two.ainvoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value prepared fast finished",
+        "market": "US",
+    }
+
+    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+        saver.at = checkpoint_at
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value prepared",
+            "market": "DE",
+        }
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "DE"},
+            next=("tool_two_slow",),
+            config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+        )
+        # resume, for same result as above
+        assert await tool_two.ainvoke(None, thread1, debug=1) == {
+            "my_key": "value prepared slow finished",
+            "market": "DE",
+        }
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared slow finished", "market": "DE"},
+            next=(),
+            config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+        )
+
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
+            "my_key": "value prepared",
+            "market": "US",
+        }
+        assert await tool_two.aget_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "US"},
+            next=("tool_two_fast",),
+            config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+        )
+        # resume, for same result as above
+        assert await tool_two.ainvoke(None, thread2, debug=1) == {
+            "my_key": "value prepared fast finished",
+            "market": "US",
+        }
+        assert await tool_two.aget_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared fast finished", "market": "US"},
+            next=(),
+            config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+        )
+
+    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+        saver.at = checkpoint_at
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_after=["prepare"]
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value prepared",
+            "market": "DE",
+        }
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "DE"},
+            next=("tool_two_slow",),
+            config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+        )
+        # resume, for same result as above
+        assert await tool_two.ainvoke(None, thread1, debug=1) == {
+            "my_key": "value prepared slow finished",
+            "market": "DE",
+        }
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared slow finished", "market": "DE"},
+            next=(),
+            config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+        )
+
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
+            "my_key": "value prepared",
+            "market": "US",
+        }
+        assert await tool_two.aget_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "US"},
+            next=("tool_two_fast",),
+            config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+        )
+        # resume, for same result as above
+        assert await tool_two.ainvoke(None, thread2, debug=1) == {
+            "my_key": "value prepared fast finished",
+            "market": "US",
+        }
+        assert await tool_two.aget_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared fast finished", "market": "US"},
+            next=(),
+            config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+        )
+
+
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
 async def test_in_one_fan_out_state_graph_waiting_edge(
     checkpoint_at: CheckpointAt,
 ) -> None:
@@ -2775,6 +3002,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     def sorted_add(
@@ -2825,41 +3053,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+         +-----------+   
-| analyzer_one |         | condition |   
-+--------------+         +-----------+   
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert await app.ainvoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -2906,6 +3100,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     from langchain_core.pydantic_v1 import BaseModel, ValidationError
@@ -2962,41 +3157,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+          +---------+    
-| analyzer_one |          | decider |    
-+--------------+          +---------+    
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     with pytest.raises(ValidationError):
         await app.ainvoke({"query": {}})
@@ -3313,17 +3474,27 @@ async def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> N
     ]
 
 
-async def test_nested_graph() -> None:
-    class State(TypedDict):
+async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
+    def never_called_fn(state: Any):
+        assert 0, "This function should never be called"
+
+    never_called = RunnableLambda(never_called_fn)
+
+    class InnerState(TypedDict):
         my_key: str
+        my_other_key: str
 
-    async def up(state: State):
-        return {"my_key": state["my_key"] + " there"}
+    def up(state: InnerState):
+        return {"my_key": state["my_key"] + " there", "my_other_key": state["my_key"]}
 
-    inner = StateGraph(State)
+    inner = StateGraph(InnerState)
     inner.add_node("up", up)
     inner.set_entry_point("up")
     inner.set_finish_point("up")
+
+    class State(TypedDict):
+        my_key: str
+        never_called: Any
 
     async def side(state: State):
         return {"my_key": state["my_key"] + " and back again"}
@@ -3337,47 +3508,33 @@ async def test_nested_graph() -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """+-----------+  
-| __start__ |  
-+-----------+  
-      *        
-      *        
-      *        
-  +-------+    
-  | inner |    
-  +-------+    
-      *        
-      *        
-      *        
-  +------+     
-  | side |     
-  +------+     
-      *        
-      *        
-      *        
- +---------+   
- | __end__ |   
- +---------+   """
-    )
-    assert await app.ainvoke({"my_key": "my value"}) == {
-        "my_key": "my value there and back again"
+    assert app.get_graph().draw_ascii() == snapshot
+    assert await app.ainvoke({"my_key": "my value", "never_called": never_called}) == {
+        "my_key": "my value there and back again",
+        "never_called": never_called,
     }
-    assert [chunk async for chunk in app.astream({"my_key": "my value"})] == [
+    assert [
+        chunk
+        async for chunk in app.astream(
+            {"my_key": "my value", "never_called": never_called}
+        )
+    ] == [
         {"inner": {"my_key": "my value there"}},
         {"side": {"my_key": "my value there and back again"}},
     ]
     assert [
         chunk
-        async for chunk in app.astream({"my_key": "my value"}, stream_mode="values")
+        async for chunk in app.astream(
+            {"my_key": "my value", "never_called": never_called}, stream_mode="values"
+        )
     ] == [
-        {"my_key": "my value"},
-        {"my_key": "my value there"},
-        {"my_key": "my value there and back again"},
+        {"my_key": "my value", "never_called": never_called},
+        {"my_key": "my value there", "never_called": never_called},
+        {"my_key": "my value there and back again", "never_called": never_called},
     ]
     times_called = 0
     async for event in app.astream_events(
-        {"my_key": "my value"},
+        {"my_key": "my value", "never_called": never_called},
         version="v1",
         config={"run_id": UUID(int=0)},
         stream_mode="values",
@@ -3385,12 +3542,15 @@ async def test_nested_graph() -> None:
         if event["event"] == "on_chain_end" and event["run_id"] == str(UUID(int=0)):
             times_called += 1
             assert event["data"] == {
-                "output": {"my_key": "my value there and back again"}
+                "output": {
+                    "my_key": "my value there and back again",
+                    "never_called": never_called,
+                }
             }
     assert times_called == 1
     times_called = 0
     async for event in app.astream_events(
-        {"my_key": "my value"},
+        {"my_key": "my value", "never_called": never_called},
         version="v1",
         config={"run_id": UUID(int=0)},
     ):

@@ -31,6 +31,93 @@ from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
 
 
+def test_graph_validation() -> None:
+    def logic(inp: str) -> str:
+        return ""
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.set_entry_point("agent")
+    workflow.set_finish_point("agent")
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.set_entry_point("agent")
+    with pytest.raises(ValueError, match="dead-end"):
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.set_finish_point("agent")
+    with pytest.raises(ValueError, match="not reachable"):
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.set_entry_point("tools")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.set_entry_point("tools")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.set_entry_point("tools")
+    workflow.add_conditional_edges(
+        "agent", logic, {"continue": "tools", "exit": END, "hmm": "extra"}
+    )
+    workflow.add_edge("tools", "agent")
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "extra")
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.add_node("extra", logic)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    with pytest.raises(ValueError):  # extra is dead-end / not reachable
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.add_node("extra", logic)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic)
+    workflow.add_edge("tools", "agent")
+    with pytest.raises(ValueError):  # extra is dead-end
+        workflow.compile()
+
+
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
@@ -796,10 +883,18 @@ def test_conditional_graph(
 
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_ascii() == snapshot
-    assert app.get_graph(add_condition_nodes=False).draw_ascii() == snapshot
+    assert (
+        app.get_graph(add_condition_nodes=False).draw_mermaid(with_styles=False)
+        == snapshot
+    )
     assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
     assert app.get_graph(xray=True).draw_ascii() == snapshot
-    assert app.get_graph(xray=True, add_condition_nodes=False).draw_ascii() == snapshot
+    assert (
+        app.get_graph(xray=True, add_condition_nodes=False).draw_mermaid(
+            with_styles=False
+        )
+        == snapshot
+    )
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1367,7 +1462,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()
@@ -1819,7 +1914,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()
@@ -2912,7 +3007,264 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
 @pytest.mark.parametrize(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
-def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) -> None:
+def test_start_branch_then(
+    snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
+) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    # this graph is invalid because there is no path to END
+    invalid_graph = StateGraph(State)
+    invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": "slow"})
+    invalid_graph.add_node("tool_two_fast", lambda s: {"my_key": "fast"})
+    invalid_graph.set_conditional_entry_point(
+        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast"
+    )
+    with pytest.raises(ValueError):
+        invalid_graph.compile()
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
+    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    tool_two_graph.set_conditional_entry_point(
+        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
+    )
+    tool_two = tool_two_graph.compile()
+    assert tool_two.get_graph().draw_ascii() == snapshot
+    assert tool_two.get_graph(add_condition_nodes=False).draw_ascii() == snapshot
+    assert tool_two.get_graph().draw_mermaid() == snapshot
+    assert tool_two.get_graph(add_condition_nodes=False).draw_mermaid() == snapshot
+
+    assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
+        "my_key": "value slow",
+        "market": "DE",
+    }
+    assert tool_two.invoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value fast",
+        "market": "US",
+    }
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        saver.at = checkpoint_at
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            tool_two.invoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value", "market": "DE"},
+            next=("tool_two_slow",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread1, debug=1) == {
+            "my_key": "value slow",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value slow", "market": "DE"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+        )
+
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "US"}, thread2) == {
+            "my_key": "value",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread2, debug=1) == {
+            "my_key": "value fast",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value fast", "market": "US"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+        )
+
+
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    # this graph is invalid because there is no path to "finish"
+    invalid_graph = StateGraph(State)
+    invalid_graph.set_entry_point("prepare")
+    invalid_graph.set_finish_point("finish")
+    invalid_graph.add_conditional_edges(
+        source="prepare",
+        path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+    )
+    invalid_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
+    invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
+    invalid_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    invalid_graph.add_node("finish", lambda s: {"my_key": " finished"})
+    with pytest.raises(ValueError):
+        invalid_graph.compile()
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.set_entry_point("prepare")
+    tool_two_graph.set_finish_point("finish")
+    tool_two_graph.add_conditional_edges(
+        source="prepare",
+        path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        then="finish",
+    )
+    tool_two_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
+    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
+    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    tool_two_graph.add_node("finish", lambda s: {"my_key": " finished"})
+    tool_two = tool_two_graph.compile()
+    assert tool_two.get_graph().draw_ascii() == snapshot
+    assert tool_two.get_graph(add_condition_nodes=False).draw_ascii() == snapshot
+    assert tool_two.get_graph().draw_mermaid() == snapshot
+    assert tool_two.get_graph(add_condition_nodes=False).draw_mermaid() == snapshot
+
+    assert tool_two.invoke({"my_key": "value", "market": "DE"}, debug=1) == {
+        "my_key": "value prepared slow finished",
+        "market": "DE",
+    }
+    assert tool_two.invoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value prepared fast finished",
+        "market": "US",
+    }
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        saver.at = checkpoint_at
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            tool_two.invoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value prepared",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "DE"},
+            next=("tool_two_slow",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread1, debug=1) == {
+            "my_key": "value prepared slow finished",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared slow finished", "market": "DE"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+        )
+
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "US"}, thread2) == {
+            "my_key": "value prepared",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread2, debug=1) == {
+            "my_key": "value prepared fast finished",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared fast finished", "market": "US"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+        )
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        saver.at = checkpoint_at
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_after=["prepare"]
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            tool_two.invoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value prepared",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "DE"},
+            next=("tool_two_slow",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread1, debug=1) == {
+            "my_key": "value prepared slow finished",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared slow finished", "market": "DE"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+        )
+
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "US"}, thread2) == {
+            "my_key": "value prepared",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread2, debug=1) == {
+            "my_key": "value prepared fast finished",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared fast finished", "market": "US"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+        )
+
+
+@pytest.mark.parametrize(
+    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
+)
+def test_in_one_fan_out_state_graph_waiting_edge(
+    snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
+) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -2959,41 +3311,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) ->
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 ***         
-+--------------+                *        
-| analyzer_one |                *        
-+--------------+                *        
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
@@ -3037,6 +3355,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) ->
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     def sorted_add(
@@ -3087,41 +3406,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+         +-----------+   
-| analyzer_one |         | condition |   
-+--------------+         +-----------+   
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -3165,6 +3450,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
+    snapshot: SnapshotAssertion,
     checkpoint_at: CheckpointAt,
 ) -> None:
     from langchain_core.pydantic_v1 import BaseModel, ValidationError
@@ -3221,41 +3507,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 **          
-+--------------+          +---------+    
-| analyzer_one |          | decider |    
-+--------------+          +---------+    
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
 
     with pytest.raises(ValidationError):
         app.invoke({"query": {}})
@@ -3566,7 +3818,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
     ]
 
 
-def test_simple_multi_edge() -> None:
+def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
 
@@ -3592,49 +3844,31 @@ def test_simple_multi_edge() -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """    +-----------+  
-    | __start__ |  
-    +-----------+  
-           *       
-           *       
-           *       
-        +----+     
-        | up |     
-        +----+     
-       **     **   
-      *         *  
-     *           * 
-+------+          *
-| side |         * 
-+------+        *  
-       **     **   
-         *   *     
-          * *      
-       +------+    
-       | down |    
-       +------+    
-           *       
-           *       
-           *       
-      +---------+  
-      | __end__ |  
-      +---------+  """
-    )
+    assert app.get_graph().draw_ascii() == snapshot
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}
 
 
-def test_nested_graph() -> None:
-    class State(TypedDict):
+def test_nested_graph(snapshot: SnapshotAssertion) -> None:
+    def never_called_fn(state: Any):
+        assert 0, "This function should never be called"
+
+    never_called = RunnableLambda(never_called_fn)
+
+    class InnerState(TypedDict):
         my_key: str
+        my_other_key: str
 
-    def up(state: State):
-        return {"my_key": state["my_key"] + " there"}
+    def up(state: InnerState):
+        return {"my_key": state["my_key"] + " there", "my_other_key": state["my_key"]}
 
-    inner = StateGraph(State)
+    inner = StateGraph(InnerState)
     inner.add_node("up", up)
     inner.set_entry_point("up")
     inner.set_finish_point("up")
+
+    class State(TypedDict):
+        my_key: str
+        never_called: Any
 
     def side(state: State):
         return {"my_key": state["my_key"] + " and back again"}
@@ -3648,29 +3882,72 @@ def test_nested_graph() -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """+-----------+  
-| __start__ |  
-+-----------+  
-      *        
-      *        
-      *        
-  +-------+    
-  | inner |    
-  +-------+    
-      *        
-      *        
-      *        
-  +------+     
-  | side |     
-  +------+     
-      *        
-      *        
-      *        
- +---------+   
- | __end__ |   
- +---------+   """
-    )
-    assert app.invoke({"my_key": "my value"}) == {
-        "my_key": "my value there and back again"
+    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph(xray=True).draw_mermaid() == snapshot
+    assert app.invoke(
+        {"my_key": "my value", "never_called": never_called}, debug=True
+    ) == {
+        "my_key": "my value there and back again",
+        "never_called": never_called,
     }
+    assert [*app.stream({"my_key": "my value", "never_called": never_called})] == [
+        {"inner": {"my_key": "my value there"}},
+        {"side": {"my_key": "my value there and back again"}},
+    ]
+    assert [
+        *app.stream(
+            {"my_key": "my value", "never_called": never_called}, stream_mode="values"
+        )
+    ] == [
+        {
+            "my_key": "my value",
+            "never_called": never_called,
+        },
+        {
+            "my_key": "my value there",
+            "never_called": never_called,
+        },
+        {
+            "my_key": "my value there and back again",
+            "never_called": never_called,
+        },
+    ]
+
+
+def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
+    class AgentState(TypedDict):
+        hello: str
+
+    def router(state: AgentState) -> str:
+        return "hmm"
+
+    workflow = StateGraph(AgentState)
+    workflow.add_node("Researcher", lambda x: x)
+    workflow.add_node("Chart Generator", lambda x: x)
+    workflow.add_node("Call Tool", lambda x: x)
+    workflow.add_conditional_edges(
+        "Researcher",
+        router,
+        {"continue": "Chart Generator", "call_tool": "Call Tool", "end": END},
+    )
+    workflow.add_conditional_edges(
+        "Chart Generator",
+        router,
+        {"continue": "Researcher", "call_tool": "Call Tool", "end": END},
+    )
+    workflow.add_conditional_edges(
+        "Call Tool",
+        # Each agent node updates the 'sender' field
+        # the tool calling node does not, meaning
+        # this edge will route back to the original agent
+        # who invoked the tool
+        lambda x: x["sender"],
+        {
+            "Researcher": "Researcher",
+            "Chart Generator": "Chart Generator",
+        },
+    )
+    workflow.set_entry_point("Researcher")
+
+    app = workflow.compile()
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
