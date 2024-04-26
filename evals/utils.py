@@ -1,5 +1,5 @@
-import math
 import bisect
+import math
 from typing import Dict, List, Optional, Sequence, Union
 
 from langchain_core.language_models import BaseChatModel
@@ -9,7 +9,6 @@ from langchain_core.prompts import (
     ChatPromptTemplate,
 )
 from langchain_core.runnables import Runnable, RunnableLambda
-
 
 _DEFAULT_OPENAI_LOGPROBS_PROMPT = ChatPromptTemplate.from_messages(
     [
