@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
 from typing import AsyncIterator, Optional
@@ -21,6 +22,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
     conn: aiosqlite.Connection
 
+    lock: asyncio.Lock
+
     is_setup: bool
 
     def __init__(
@@ -32,6 +35,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     ):
         super().__init__(serde=serde, at=at)
         self.conn = conn
+        self.lock = asyncio.Lock()
         self.is_setup = False
 
     @classmethod
@@ -39,7 +43,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         return AsyncSqliteSaver(conn=aiosqlite.connect(conn_string))
 
     async def __aenter__(self) -> Self:
-        await self.setup()
         return self
 
     async def __aexit__(
@@ -48,24 +51,32 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         __exc_value: Optional[BaseException],
         __traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        return await self.conn.close()
+        if self.is_setup:
+            return await self.conn.close()
 
     async def setup(self) -> None:
-        await self.conn
-        async with self.conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS checkpoints (
-                thread_id TEXT NOT NULL,
-                thread_ts TEXT NOT NULL,
-                parent_ts TEXT,
-                checkpoint BLOB,
-                PRIMARY KEY (thread_id, thread_ts)
-            );
-            """
-        ):
-            await self.conn.commit()
+        async with self.lock:
+            if self.is_setup:
+                return
+
+            await self.conn
+            async with self.conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS checkpoints (
+                    thread_id TEXT NOT NULL,
+                    thread_ts TEXT NOT NULL,
+                    parent_ts TEXT,
+                    checkpoint BLOB,
+                    PRIMARY KEY (thread_id, thread_ts)
+                );
+                """
+            ):
+                await self.conn.commit()
+
+            self.is_setup = True
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        await self.setup()
         if config["configurable"].get("thread_ts"):
             async with self.conn.execute(
                 "SELECT checkpoint, parent_ts FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
@@ -112,6 +123,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     )
 
     async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
+        await self.setup()
         async with self.conn.execute(
             "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC",
             (config["configurable"]["thread_id"],),
@@ -128,6 +140,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     async def aput(
         self, config: RunnableConfig, checkpoint: Checkpoint
     ) -> RunnableConfig:
+        await self.setup()
         async with self.conn.execute(
             "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint) VALUES (?, ?, ?, ?)",
             (
