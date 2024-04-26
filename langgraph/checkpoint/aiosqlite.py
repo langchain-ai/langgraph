@@ -1,3 +1,4 @@
+import asyncio
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
 from typing import AsyncIterator, Optional
@@ -21,6 +22,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
     conn: aiosqlite.Connection
 
+    lock: asyncio.Lock
+
     is_setup: bool
 
     def __init__(
@@ -32,6 +35,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     ):
         super().__init__(serde=serde, at=at)
         self.conn = conn
+        self.lock = asyncio.Lock()
         self.is_setup = False
 
     @classmethod
@@ -47,27 +51,29 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         __exc_value: Optional[BaseException],
         __traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        return await self.conn.close()
+        if self.is_setup:
+            return await self.conn.close()
 
     async def setup(self) -> None:
-        if self.is_setup:
-            return
-        if not self.conn.is_alive():
-            await self.conn
-        async with self.conn.executescript(
-            """
-            CREATE TABLE IF NOT EXISTS checkpoints (
-                thread_id TEXT NOT NULL,
-                thread_ts TEXT NOT NULL,
-                parent_ts TEXT,
-                checkpoint BLOB,
-                PRIMARY KEY (thread_id, thread_ts)
-            );
-            """
-        ):
-            await self.conn.commit()
+        async with self.lock:
+            if self.is_setup:
+                return
+            if not self.conn.is_alive():
+                await self.conn
+            async with self.conn.executescript(
+                """
+                CREATE TABLE IF NOT EXISTS checkpoints (
+                    thread_id TEXT NOT NULL,
+                    thread_ts TEXT NOT NULL,
+                    parent_ts TEXT,
+                    checkpoint BLOB,
+                    PRIMARY KEY (thread_id, thread_ts)
+                );
+                """
+            ):
+                await self.conn.commit()
 
-        self.is_setup = True
+            self.is_setup = True
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         await self.setup()
