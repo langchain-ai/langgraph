@@ -2,6 +2,8 @@ import os
 import sqlite3
 from datetime import date, datetime, timedelta
 
+from langsmith import traceable
+
 CURRENT_TIME = datetime.now()
 # Create a SQLite database file
 db_file = "email-assistant.sqlite"
@@ -45,17 +47,16 @@ conn.commit()
 conn.close()
 
 
-def next_weekday(weekday: int):
+def get_weekday(weekday: int, from_now: int = 1):
     if weekday < 0 or weekday > 6:
         raise ValueError("Weekday must be an integer between 0 and 6.")
-    
+
     today = datetime.now()
-    days_until_weekday = (weekday - today.weekday()) % 7
-    if days_until_weekday == 0:
-        days_until_weekday = 7
-    
+    weekday += 7 * from_now
+    days_until_weekday = weekday - today.weekday()
     target_time = today + timedelta(days=days_until_weekday)
     return target_time.replace(hour=0, minute=0, second=0, microsecond=0)
+
 
 def insert_sample_data():
     conn = sqlite3.connect(db_file)
@@ -317,8 +318,8 @@ def insert_sample_data():
     )
 
     offsite_times = [
-        next_weekday(4) + timedelta(hours=9),
-        next_weekday(6) + timedelta(hours=15),
+        get_weekday(4) + timedelta(hours=9),
+        get_weekday(6) + timedelta(hours=15),
     ]
 
     # Insert sample events
@@ -349,15 +350,15 @@ def insert_sample_data():
         ),
         (
             "Flight UA 456",
-            "Flight bacck from ORD to SFO",
+            "Flight back from ORD to SFO",
             offsite_times[1] + timedelta(hours=3),
             offsite_times[1] + timedelta(hours=7),
         ),
         (
             "Flight AA 789",
             "Flight to Mike's wedding! Don't forget the gift!",
-            next_weekday(4) + timedelta(days=7, hours=15),
-            next_weekday(4) + timedelta(days=7, hours=19),
+            get_weekday(4) + timedelta(days=7, hours=15),
+            get_weekday(4) + timedelta(days=7, hours=19),
         ),
     ]
 
@@ -385,15 +386,18 @@ def insert_sample_data():
 
 insert_sample_data()
 
-## Now define tools
+## Graph Definition Below:
+
+
 from typing import Optional
 
 from langchain_core.tools import tool
+from langchain_core.runnables.config import ensure_config
 
 
 @tool
 async def search_emails(
-    queries: Optional[list[str]] = None,
+    queries: Optional[list[str] | str] = None,
     sender: Optional[str] = None,
     recipient: Optional[str] = None,
     start_date: Optional[date | datetime] = None,
@@ -406,7 +410,11 @@ async def search_emails(
     Ensure good recall.
 
     Args:
-        queries (list[str] | null): The search queries to match against the subject or body of the email. The queries are joined with an OR condition.
+        queries (list[str] | str | null): The search queries to match against the subject or body of the email. The queries are joined with an OR condition.
+            Examples:
+                - queries: ["build error", "failure", "reminder"] (search for emails containing any of these terms)
+                - queries: "quick question" (search for emails containing the exact phrase "quick question")
+            Importantly, is NOT a comma separated list.
         sender (str | null): A substring to match against the sender email address.
             If you don't know the email domain, just search by username.
         recipient (str | null): A substring to match against the recipient email address.
@@ -423,6 +431,8 @@ async def search_emails(
     params = []
 
     if queries:
+        if isinstance(queries, str):
+            queries = [queries]
         query_conditions = []
         for query in queries:
             query = query.replace("*", "%")
@@ -457,20 +467,25 @@ async def search_emails(
     keys = [column[0] for column in cursor.description]
     return {
         "results": [dict(zip(keys, row)) for row in results],
-        "total_count": len(results),
+        "count": len(results),
     }
 
 
 @tool
 async def search_calendar_events(
-    queries: Optional[list[str]] = None,
+    queries: Optional[list[str] | str] = None,
     start_date: Optional[datetime | date] = None,
     end_date: Optional[datetime | date] = None,
 ) -> dict:
     """Search calendar events based on the given queries and optional date range.
 
     Args:
-        queries (list[str] | null): The search queries to match against the title or description of the event. The queries are joined with an OR condition.
+        queries (list[str] | str | null): The search queries to match against the title or description of the event. The queries are joined with an OR condition.
+            Examples:
+                - queries: ["standup", "walk the dog"] (search for events containing either of these terms)
+                - queries: "team offsite" (search for events containing the exact phrase "team offsite")
+            Importantly, is NOT a comma separated list.
+
         start_date (datetime | date | null): The start time for the search range (inclusive).
         end_date (datetime | date | null): The end time for the search range (exclusive).
     """
@@ -481,6 +496,8 @@ async def search_calendar_events(
     params = []
 
     if queries:
+        if isinstance(queries, str):
+            queries = [queries]
         query_conditions = []
         for query in queries:
             query = query.replace("*", "%")
@@ -507,7 +524,7 @@ async def search_calendar_events(
     keys = [column[0] for column in cursor.description]
     return {
         "results": [dict(zip(keys, row)) for row in results],
-        "total_count": len(results),
+        "count": len(results),
     }
 
 
@@ -535,11 +552,15 @@ async def send_email(
     """Send an email with the given details."""
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
-
+    config = ensure_config()
+    user_id = config["configurable"]["user_id"]
+    if thread_id is None:
+        # Fetch the maximum thread ID and increment it by 1
+        cursor.execute("SELECT COALESCE(MAX(thread_id), 0) + 1 FROM emails")
+        thread_id = cursor.fetchone()[0]
     cursor.execute(
         "INSERT INTO emails (sender, recipient, subject, body, thread_id) VALUES (?, ?, ?, ?, ?)",
-        ("vwp@langchain.com", to, subject, body),
-        thread_id,
+        (user_id, to, subject, body, thread_id),
     )
     conn.commit()
     conn.close()
@@ -566,6 +587,7 @@ class State(TypedDict):
     user_info: str
 
 
+#
 # model_name = "claude-3-haiku-20240307"
 # model_name = "claude-3-sonnet-20240229"
 model_name = "claude-3-opus-20240229"
@@ -612,9 +634,9 @@ async def handle_tool_error(state: State) -> dict:
         ]
     }
 
-from langgraph.checkpoint.sqlite import SqliteSaver
 
-memory = SqliteSaver.from_conn_string(":memory:")
+from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+
 
 builder = StateGraph(State)
 builder.add_node("assistant", assistant)
@@ -629,11 +651,5 @@ builder.add_conditional_edges(
     "assistant", tools_condition, {"action": "tools", END: END}
 )
 builder.add_edge("tools", "assistant")
-
+memory = AsyncSqliteSaver.from_conn_string(":memory:")
 graph = builder.compile(checkpointer=memory)
-
-# import asyncio
-
-# td = asyncio.run(search_calendar_events.ainvoke({"queries": ["Team Meeting"]}))
-
-# breakpoint()

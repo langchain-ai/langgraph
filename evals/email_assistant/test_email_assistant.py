@@ -4,9 +4,10 @@ from typing import Callable
 import uuid
 from datetime import datetime, timedelta
 
+import langsmith
 import pytest
 from langchain_openai import ChatOpenAI
-from langsmith import expect, unit
+from langsmith import expect, traceable, unit
 from langsmith.run_helpers import get_current_run_tree
 
 from evals.email_assistant.graph import CURRENT_TIME
@@ -14,7 +15,7 @@ from evals.email_assistant.graph import (
     graph as assistant_graph,
     search_emails,
     search_calendar_events,
-    next_weekday,
+    get_weekday,
 )
 from evals.utils import create_openai_logprobs_classification_chain
 
@@ -75,11 +76,11 @@ simple_questions = [
     ),
     (
         "When's the offsite?",
-        f"It starts at: {str(next_weekday(4) + timedelta(hours=9))}. Mark as correct if the returned time is any time that day or is a correct relative time (next friday).",
+        f"It starts at: {str(get_weekday(4) + timedelta(hours=9))}. Mark as correct if the returned time is any time that day or is a correct relative time (next friday).",
     ),
     (
         "When's my flight for the offsite?",
-        f"The flight is {next_weekday(4) + timedelta(hours=5)} to {next_weekday(4) + timedelta(hours=8)}. Accept as correct even if it only mentions the start time.",
+        f"The flight is {get_weekday(4) + timedelta(hours=5)} to {get_weekday(4) + timedelta(hours=8)}. Accept as correct even if it only mentions the start time.",
     ),
     (
         "What's the name of the hotel for the offsite?",
@@ -125,6 +126,7 @@ _CLASSIFIER = (
 ).with_config(run_name="CorrectnessClassifier")
 
 
+@traceable
 async def classify(response: str, expected: str):
     run_id = uuid.uuid4()
     result = await _CLASSIFIER.ainvoke(
@@ -163,18 +165,33 @@ async def check_simple_questions(question: str, expected: str) -> str:
     assert error is None, error
 
 
-# when is offsite - whats my flight - whats my hotel - create an event with sachin at the hotel bar 6pm on fri - send him an email - when did feature x launch
+@traceable
 async def check_event_created(state, tool_kwargs: dict):
-    res = await search_emails.ainvoke(tool_kwargs)
-    expect(res).against(lambda x: x["count"] > 0)
-
-
-async def check_email_sent(state, tool_kwargs: dict):
     res = await search_calendar_events.ainvoke(tool_kwargs)
     expect(res).against(lambda x: x["count"] > 0)
 
 
+@traceable
+async def check_email_sent(state, tool_kwargs: dict):
+    res = await search_emails.ainvoke(tool_kwargs)
+    expect(res).against(lambda x: x["count"] > 0)
+
+
 multistep_questions = [
+    (
+        [
+            "Send an email to joanne @ langchain . com saying we're on for the meeting tomorrow",
+        ],
+        [
+            functools.partial(
+                check_email_sent,
+                tool_kwargs={
+                    "queries": ["joanne"],
+                    "start_date": datetime.now() - timedelta(minutes=120),
+                },
+            )
+        ],
+    ),
     (
         [
             "When is the offsite?",
@@ -186,23 +203,23 @@ multistep_questions = [
             "When is the user onboarding feature set to launch?",
         ],
         [
-            f"It starts at: {next_weekday(4) + timedelta(hours=9)}. Mark as correct if the returned time is any time that day or is a correct relative time (next friday).",
-            f"The flight is {next_weekday(4) + timedelta(hours=5)} to {next_weekday(4) + timedelta(hours=8)}. Accept as correct even if it only mentions the start time.",
+            f"It starts at: {get_weekday(4) + timedelta(hours=9)}. Mark as correct if the returned time is any time that day or is a correct relative time (next friday).",
+            f"The flight is {get_weekday(4) + timedelta(hours=5)} to {get_weekday(4) + timedelta(hours=8)}. Accept as correct even if it only mentions the start time.",
             "Orange Valley Resort",
             functools.partial(
                 check_event_created,
-                {"queries": ["Sachin"], "start_date": next_weekday(4)},
+                tool_kwargs={"queries": ["Sachin"], "start_date": get_weekday(4)},
             ),
             functools.partial(
                 check_email_sent,
-                {
+                tool_kwargs={
                     "queries": ["Sachin"],
                     "start_date": datetime.now() - timedelta(minutes=120),
                 },
             ),
-            f"Next thursday, which happens to be {next_weekday(3).strftime('%Y-%m-%d')}",
+            f"Next thursday, which happens to be {get_weekday(3).strftime('%Y-%m-%d')}",
         ],
-    )
+    ),
 ]
 
 
@@ -222,16 +239,19 @@ async def check_multistep_questions(
     thread_id = str(uuid.uuid4())
     states = []
     responses = []
+    config = (
+        {
+            "configurable": {
+                "user_id": "vwp@langchain.com",
+                "thread_id": thread_id,
+            }
+        },
+    )
     for question in questions:
         try:
             result = await assistant_graph.ainvoke(
                 {"messages": ("user", question)},
-                {
-                    "configurable": {
-                        "user_id": "vwp@langchain.com",
-                        "thread_id": thread_id,
-                    }
-                },
+                config,
             )
             states.append(states)
             responses.append(result["messages"][-1].content)
@@ -242,20 +262,21 @@ async def check_multistep_questions(
     if rt := get_current_run_tree():
         rt.outputs = {"result": responses}
     errors = []
-    for response, expectation_fn in zip(responses, expectation_fns):
-        if isinstance(expectation_fn, str):
-            expect.embedding_distance(response, expectation_fn)
-            expectation_fn_: Callable = functools.partial(
-                classify, expected=expectation_fn
-            )
-        else:
-            expectation_fn_ = expectation_fn
-        try:
-            res = expectation_fn_(response)
-            # await if it's a coroutine
-            if inspect.iscoroutine(res):
-                await res
-        except BaseException as e:
-            errors.append(e)
+    with langsmith.trace(name="Evals"):
+        for response, expectation_fn in zip(responses, expectation_fns):
+            if isinstance(expectation_fn, str):
+                expect.embedding_distance(response, expectation_fn)
+                expectation_fn_: Callable = functools.partial(
+                    classify, expected=expectation_fn
+                )
+            else:
+                expectation_fn_ = expectation_fn
+            try:
+                res = expectation_fn_(response)
+                # await if it's a coroutine
+                if inspect.iscoroutine(res):
+                    await res
+            except BaseException as e:
+                errors.append(e)
 
     assert not errors, "\n\n".join([repr(e) for e in errors])
