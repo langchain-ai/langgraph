@@ -39,6 +39,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         return AsyncSqliteSaver(conn=aiosqlite.connect(conn_string))
 
     async def __aenter__(self) -> Self:
+        await self.setup()
         return self
 
     async def __aexit__(
@@ -50,9 +51,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         return await self.conn.close()
 
     async def setup(self) -> None:
-        if self.is_setup:
-            return
-
         await self.conn
         async with self.conn.executescript(
             """
@@ -67,10 +65,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         ):
             await self.conn.commit()
 
-        self.is_setup = True
-
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        await self.setup()
         if config["configurable"].get("thread_ts"):
             async with self.conn.execute(
                 "SELECT checkpoint, parent_ts FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
@@ -117,7 +112,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     )
 
     async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
-        await self.setup()
         async with self.conn.execute(
             "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC",
             (config["configurable"]["thread_id"],),
@@ -134,7 +128,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     async def aput(
         self, config: RunnableConfig, checkpoint: Checkpoint
     ) -> RunnableConfig:
-        await self.setup()
         async with self.conn.execute(
             "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint) VALUES (?, ?, ?, ?)",
             (
