@@ -13,7 +13,7 @@ from typing import (
 )
 
 from langchain_core.runnables import Runnable
-from langchain_core.runnables.base import RunnableLike, coerce_to_runnable
+from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.runnables.graph import (
     Node as RunnableGraphNode,
@@ -25,7 +25,7 @@ from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
-from langgraph.utils import DrawableGraph, RunnableCallable
+from langgraph.utils import DrawableGraph, RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
@@ -112,7 +112,7 @@ class Graph:
         if key == END or key == START:
             raise ValueError(f"Node `{key}` is reserved.")
 
-        self.nodes[key] = coerce_to_runnable(action)
+        self.nodes[key] = coerce_to_runnable(action, name=key, trace=False)
 
     def add_edge(self, start_key: str, end_key: str) -> None:
         if self.compiled:
@@ -167,7 +167,7 @@ class Graph:
                 "not be reflected in the compiled graph."
             )
         # find a name for the condition
-        path = coerce_to_runnable(path)
+        path = coerce_to_runnable(path, name=None, trace=True)
         name = path.name or "condition"
         # validate the condition
         if name in self.branches[source]:
