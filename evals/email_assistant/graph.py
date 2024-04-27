@@ -2,8 +2,6 @@ import os
 import sqlite3
 from datetime import date, datetime, timedelta
 
-from langsmith import traceable
-
 CURRENT_TIME = datetime.now()
 # Create a SQLite database file
 db_file = "email-assistant.sqlite"
@@ -67,7 +65,7 @@ def insert_sample_data():
             "vwp@langchain.com",
             "john@langchain.com",
             "Project Update",
-            "Hi John, just wanted to give you an update on the user onboarding project. We've made significant progress over the past week and are on track to meet our deadlines. The development team has completed the core functionality, and we're now focusing on testing and bug fixes. Should be good for our launch next thursday. Please let me know if you have any questions or concerns.",
+            "Hi John, just wanted to give you an update on the user onboarding project. We've made significant progress over the past week and are on track to meet our deadlines. The development team has completed the core functionality, and we're now focusing on testing and bug fixes. Should be good for our public launch next thursday. Please let me know if you have any questions or concerns.",
             2026.9504965113408,
             9,
         ),
@@ -131,7 +129,7 @@ def insert_sample_data():
             "jane@langchain.com",
             "vwp@langchain.com",
             "Re: Team Offsite - Location Suggestions",
-            "I suggest we consider the Green Valley Resort for our offsite. It offers a great mix of outdoor activities and comfortable meeting spaces. They have a team-building ropes course, hiking trails, and a spacious conference room for our breakout sessions. Plus, the resort is only a 30-minute drive from the office, so it's convenient for everyone.",
+            "I suggest we consider the Green Valley Resort for our offsite. It offers a great mix of outdoor activities and comfortable meeting spaces. They have a team-building ropes course, hiking trails, and a spacious conference room for our breakout sessions. Plus, the hotel is only a 30-minute drive from the office, so it's convenient for everyone.",
             39319.93966189623,
             5,
         ),
@@ -321,6 +319,7 @@ def insert_sample_data():
         get_weekday(4) + timedelta(hours=9),
         get_weekday(6) + timedelta(hours=15),
     ]
+    launch_time = get_weekday(3) + timedelta(hours=18)
 
     # Insert sample events
     sample_events = [
@@ -360,6 +359,12 @@ def insert_sample_data():
             get_weekday(4) + timedelta(days=7, hours=15),
             get_weekday(4) + timedelta(days=7, hours=19),
         ),
+        (
+            "Launch Party",
+            "Celebrate the (hopefully) successful launch of the user onboarding project!",
+            launch_time,
+            launch_time + timedelta(hours=3),
+        )
     ]
 
     for i in range(50):
@@ -406,23 +411,16 @@ async def search_emails(
 ) -> dict:
     """Search emails based on the given queries and optional filters.
 
-    Remember to be lenient with time bounds, as the user likely won't remember the exact time.
-    Ensure good recall.
-
     Args:
-        queries (list[str] | str | null): The search queries to match against the subject or body of the email. The queries are joined with an OR condition.
-            Examples:
-                - queries: ["build error", "failure", "reminder"] (search for emails containing any of these terms)
-                - queries: "quick question" (search for emails containing the exact phrase "quick question")
+        queries: The search queries to match against the subject or body of the email. The queries are joined with an OR condition.
             Importantly, is NOT a comma separated list.
-        sender (str | null): A substring to match against the sender email address.
+        sender: A substring to match against the sender email address.
             If you don't know the email domain, just search by username.
-        recipient (str | null): A substring to match against the recipient email address.
+        recipient: A substring to match against the recipient email address.
             If you don't know the email domain, just search by username.
-        start_date (date | datetime | null): The start date for the search range (inclusive).
-        end_date (date | datetime | null): The end date for the search range (exclusive)
-        thread_id (int | null): The thread ID of the email thread.
-
+        start_date: The start date for the search range (inclusive, but be lenient on bounds).
+        end_date: The end date for the search range (exclusive)
+        thread_id: The thread ID of the email thread.
     """
     conn = sqlite3.connect(db_file)
     cursor = conn.cursor()
@@ -435,11 +433,13 @@ async def search_emails(
             queries = [queries]
         query_conditions = []
         for query in queries:
-            query = query.replace("*", "%")
-            query_conditions.append(
-                "(subject LIKE ? OR body LIKE ? OR sender LIKE ? OR recipient LIKE ?)"
-            )
-            params.extend([f"%{query}%", f"%{query}%", f"%{query}%", f"%{query}%"])
+            for exact in query.split('"'):
+                for tok in exact.split():
+                    tok = tok.replace("*", "%")
+                    query_conditions.append(
+                        "(subject LIKE ? OR body LIKE ? OR sender LIKE ? OR recipient LIKE ?)"
+                    )
+                    params.extend([f"%{tok}%", f"%{tok}%", f"%{tok}%", f"%{tok}%"])
         conditions.append(f"({' OR '.join(query_conditions)})")
 
     if sender:
@@ -500,9 +500,11 @@ async def search_calendar_events(
             queries = [queries]
         query_conditions = []
         for query in queries:
-            query = query.replace("*", "%")
-            query_conditions.append("(title LIKE ? OR description LIKE ?)")
-            params.extend([f"%{query}%", f"%{query}%"])
+            for exact in query.split('"'):
+                for tok in exact.split():
+                    tok = tok.replace("*", "%")
+                    query_conditions.append("(title LIKE ? OR description LIKE ?)")
+                    params.extend([f"%{tok}%", f"%{tok}%"])
         conditions.append(f"({' OR '.join(query_conditions)})")
 
     if start_date:
@@ -572,6 +574,7 @@ async def send_email(
 from typing import Annotated
 
 from langchain_anthropic import ChatAnthropic
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import ToolMessage
 from langchain_core.prompts import ChatPromptTemplate
 from langchain_core.runnables import RunnableConfig, RunnableLambda
@@ -590,8 +593,9 @@ class State(TypedDict):
 #
 # model_name = "claude-3-haiku-20240307"
 # model_name = "claude-3-sonnet-20240229"
-model_name = "claude-3-opus-20240229"
-llm = ChatAnthropic(model=model_name)
+# model_name = "claude-3-opus-20240229"
+# llm = ChatAnthropic(model=model_name)
+llm = ChatOpenAI(model="gpt-4-turbo")
 
 prompt = ChatPromptTemplate.from_messages(
     [

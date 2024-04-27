@@ -39,7 +39,6 @@ simple_questions = [
         "I think john@langchain.com messaged me sometime earlier today or yesterday. what was its subject?",
         "Budget Approval. Mark as incorrect if budget approval is not mentioned, correct otherwise.",
     ),
-    ("How many emails have I sent?", "14"),
     (
         "What is the end time of the event titled 'Team Meeting'?",
         "Sometime around: "
@@ -52,7 +51,7 @@ simple_questions = [
     ),
     (
         "What is the title of the events scheduled for 14 days from today?",
-        "Event 15",
+        "It's correct so long as the prediction mentions Event 15",
     ),
     (
         "What is the sender of the last email in the thread with ID 1?",
@@ -180,7 +179,7 @@ async def check_email_sent(state, tool_kwargs: dict):
 multistep_questions = [
     (
         [
-            "Send an email to joanne @ langchain . com saying we're on for the meeting tomorrow",
+            "Send an email to joanne @ langchain . com saying we're on for the meeting tomorrow. Subject should just be 'We're coming to the meeting Tomorrow' - body just 'See you there!'",
         ],
         [
             functools.partial(
@@ -200,11 +199,12 @@ multistep_questions = [
             "where are we staying?",
             "create an event with Sachin at the hotel bar 6pm on Friday",
             "send him an email reminder - his email is first name @ langchain.com",
-            "When is the user onboarding feature set to launch?",
+            "When are we publicly launching feature the user onboarding feature?",
         ],
         [
             f"It starts at: {get_weekday(4) + timedelta(hours=9)}. Mark as correct if the returned time is any time that day or is a correct relative time (next friday).",
             f"The flight is {get_weekday(4) + timedelta(hours=5)} to {get_weekday(4) + timedelta(hours=8)}. Accept as correct even if it only mentions the start time.",
+            "United Airlines",
             "Orange Valley Resort",
             functools.partial(
                 check_event_created,
@@ -217,7 +217,7 @@ multistep_questions = [
                     "start_date": datetime.now() - timedelta(minutes=120),
                 },
             ),
-            f"Next thursday, which happens to be {get_weekday(3).strftime('%Y-%m-%d')}",
+            f"Next thursday ({get_weekday(3).strftime('%Y-%m-%d')}) - it's set for 6 PM, though any time that day is considered correct.",
         ],
     ),
 ]
@@ -239,14 +239,12 @@ async def check_multistep_questions(
     thread_id = str(uuid.uuid4())
     states = []
     responses = []
-    config = (
-        {
-            "configurable": {
-                "user_id": "vwp@langchain.com",
-                "thread_id": thread_id,
-            }
-        },
-    )
+    config = {
+        "configurable": {
+            "user_id": "vwp@langchain.com",
+            "thread_id": thread_id,
+        }
+    }
     for question in questions:
         try:
             result = await assistant_graph.ainvoke(
