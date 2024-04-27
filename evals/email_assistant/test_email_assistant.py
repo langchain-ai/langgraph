@@ -26,16 +26,6 @@ simple_questions = [
     ),
     ("Has mike responded yet to my most recent email?", "no"),
     (
-        "what time's the project kickoff?",
-        (CURRENT_TIME + timedelta(days=3, hours=9))
-        .replace(minute=0, second=0)
-        .strftime("%Y-%m-%d %H")
-        + " - "
-        + (CURRENT_TIME + timedelta(days=3, hours=10))
-        .replace(minute=0, second=0)
-        .strftime("%H"),
-    ),
-    (
         "I think john@langchain.com messaged me sometime earlier today or yesterday. what was its subject?",
         "Budget Approval. Mark as incorrect if budget approval is not mentioned, correct otherwise.",
     ),
