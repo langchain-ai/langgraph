@@ -116,7 +116,8 @@ class Channel:
         *,
         key: Optional[str] = None,
         tags: Optional[list[str]] = None,
-    ) -> PregelNode: ...
+    ) -> PregelNode:
+        ...
 
     @overload
     @classmethod
@@ -126,7 +127,8 @@ class Channel:
         *,
         key: None = None,
         tags: Optional[list[str]] = None,
-    ) -> PregelNode: ...
+    ) -> PregelNode:
+        ...
 
     @classmethod
     def subscribe_to(
@@ -1210,7 +1212,8 @@ def _prepare_next_tasks(
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     for_execution: Literal[False],
-) -> tuple[Checkpoint, list[PregelTaskDescription]]: ...
+) -> tuple[Checkpoint, list[PregelTaskDescription]]:
+    ...
 
 
 @overload
@@ -1219,7 +1222,8 @@ def _prepare_next_tasks(
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     for_execution: Literal[True],
-) -> tuple[Checkpoint, list[PregelExecutableTask]]: ...
+) -> tuple[Checkpoint, list[PregelExecutableTask]]:
+    ...
 
 
 def _prepare_next_tasks(
