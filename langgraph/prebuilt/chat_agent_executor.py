@@ -1,5 +1,5 @@
 import json
-from typing import Annotated, Sequence, TypedDict, Union
+from typing import Annotated, Optional, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import BaseMessage, FunctionMessage
@@ -7,6 +7,7 @@ from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
+from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
@@ -134,7 +135,12 @@ def create_function_calling_executor(
 
 
 def create_tool_calling_executor(
-    model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
+    model: LanguageModelLike,
+    tools: Union[ToolExecutor, Sequence[BaseTool]],
+    checkpointer: Optional[BaseCheckpointSaver] = None,
+    interrupt_before: Optional[Sequence[str]] = None,
+    interrupt_after: Optional[Sequence[str]] = None,
+    debug: bool = False,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -231,4 +237,9 @@ def create_tool_calling_executor(
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
-    return workflow.compile()
+    return workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=interrupt_before,
+        interrupt_after=interrupt_after,
+        debug=debug,
+    )

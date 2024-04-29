@@ -15,9 +15,7 @@ from typing import (
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.runnables.graph import (
-    Node as RunnableGraphNode,
-)
+from langchain_core.runnables.graph import Node as RunnableGraphNode
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
