@@ -1,8 +1,8 @@
 import functools
 import inspect
-from typing import Callable
 import uuid
 from datetime import datetime, timedelta
+from typing import Callable
 
 import langsmith
 import pytest
@@ -10,12 +10,14 @@ from langchain_openai import ChatOpenAI
 from langsmith import expect, traceable, unit
 from langsmith.run_helpers import get_current_run_tree
 
-from evals.email_assistant.graph import CURRENT_TIME
+from evals.email_assistant.graph import (
+    CURRENT_TIME,
+    get_weekday,
+    search_calendar_events,
+    search_emails,
+)
 from evals.email_assistant.graph import (
     graph as assistant_graph,
-    search_emails,
-    search_calendar_events,
-    get_weekday,
 )
 from evals.utils import create_openai_logprobs_classification_chain
 
