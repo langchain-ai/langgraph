@@ -7,8 +7,6 @@ from contextlib import contextmanager
 from typing import Annotated, Any, Generator, Optional, TypedDict, Union
 
 import pytest
-from langchain_community.chat_models.fake import FakeMessagesListChatModel
-from langchain_community.llms.fake import FakeStreamingListLLM
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from langchain_core.tools import tool
 from pytest_mock import MockerFixture
