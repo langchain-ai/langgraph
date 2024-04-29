@@ -450,13 +450,21 @@ class CompiledGraph(Pregel):
                     )
                     graph.add_edge(start_nodes[start], cond)
                     for label, end in ends.items():
-                        graph.add_edge(cond, end_nodes[end], label, conditional=True)
+                        graph.add_edge(
+                            cond,
+                            end_nodes[end],
+                            label if label != end else None,
+                            conditional=True,
+                        )
                         if branch.then is not None:
                             graph.add_edge(start_nodes[end], end_nodes[branch.then])
                 else:
                     for label, end in ends.items():
                         graph.add_edge(
-                            start_nodes[start], end_nodes[end], label, conditional=True
+                            start_nodes[start],
+                            end_nodes[end],
+                            label if label != end else None,
+                            conditional=True,
                         )
                         if branch.then is not None:
                             graph.add_edge(start_nodes[end], end_nodes[branch.then])
