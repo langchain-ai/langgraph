@@ -7,7 +7,10 @@ from contextlib import contextmanager
 from typing import Annotated, Any, Generator, Optional, TypedDict, Union
 
 import pytest
+from langchain_community.chat_models.fake import FakeMessagesListChatModel
+from langchain_community.llms.fake import FakeStreamingListLLM
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.tools import tool
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
@@ -811,7 +814,8 @@ def test_conditional_graph(
 ) -> None:
     from copy import deepcopy
 
-    from langchain.llms.fake import FakeStreamingListLLM
+    from langchain_community.chat_models.fake import FakeMessagesListChatModel
+    from langchain_community.llms.fake import FakeStreamingListLLM
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate
@@ -1488,8 +1492,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
 def test_conditional_graph_state(
     snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
 ) -> None:
-    from langchain.llms.fake import FakeStreamingListLLM
-    from langchain_community.tools import tool
+    from langchain_community.llms.fake import FakeStreamingListLLM
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate
 
@@ -1936,8 +1939,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 
 
 def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
@@ -2206,8 +2208,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
 
 def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
@@ -2346,9 +2347,7 @@ def test_message_graph(
     deterministic_uuids: MockerFixture,
 ) -> None:
     from copy import deepcopy
-
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_core.callbacks import CallbackManagerForLLMRun
     from langchain_core.messages import (
         AIMessage,

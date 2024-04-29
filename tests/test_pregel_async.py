@@ -15,7 +15,10 @@ from typing import (
 from uuid import UUID
 
 import pytest
+from langchain_community.chat_models.fake import FakeMessagesListChatModel
+from langchain_community.llms.fake import FakeStreamingListLLM
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.tools import tool
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
@@ -766,9 +769,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 )
 async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
     from copy import deepcopy
-
-    from langchain.llms.fake import FakeStreamingListLLM
-    from langchain_community.tools import tool
+    from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
@@ -1457,8 +1458,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
-    from langchain.llms.fake import FakeStreamingListLLM
-    from langchain_community.tools import tool
+    from langchain_community.llms.fake import FakeStreamingListLLM
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate
 
@@ -1970,8 +1970,7 @@ async def test_conditional_entrypoint_graph_state() -> None:
 
 
 async def test_prebuilt_tool_chat() -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
@@ -2153,8 +2152,7 @@ async def test_prebuilt_tool_chat() -> None:
 
 
 async def test_prebuilt_chat() -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
@@ -2286,8 +2284,7 @@ async def test_prebuilt_chat() -> None:
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
 async def test_message_graph(checkpoint_at: CheckpointAt) -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_core.agents import AgentAction
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
 
