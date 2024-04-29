@@ -252,10 +252,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "left"
         }
@@ -265,10 +264,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "right"
         }
@@ -278,10 +276,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_start"
         }
@@ -291,12 +288,11 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
-          "name": "RunnableLambda"
+          "name": "RunnableCallable"
         }
       }
     ],
@@ -391,10 +387,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "left"
         }
@@ -404,10 +399,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "right"
         }
@@ -417,10 +411,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_start"
         }
@@ -430,12 +423,11 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
-          "name": "RunnableLambda"
+          "name": "RunnableCallable"
         }
       }
     ],
@@ -537,12 +529,11 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
-          "name": "execute_tools"
+          "name": "tools"
         }
       },
       {
@@ -550,10 +541,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
@@ -704,12 +694,11 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
-          "name": "execute_tools"
+          "name": "tools"
         }
       },
       {
@@ -717,10 +706,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
@@ -876,12 +864,11 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
-          "name": "execute_tools"
+          "name": "tools"
         }
       },
       {
@@ -889,10 +876,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
@@ -1043,12 +1029,11 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
-          "name": "execute_tools"
+          "name": "tools"
         }
       },
       {
@@ -1056,10 +1041,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
@@ -1221,12 +1205,11 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
-          "name": "execute_tools"
+          "name": "tools"
         }
       },
       {
@@ -1234,10 +1217,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
@@ -1335,12 +1317,11 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
-          "name": "execute_tools"
+          "name": "tools"
         }
       },
       {
@@ -1348,10 +1329,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
@@ -1683,10 +1663,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
@@ -1796,10 +1775,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
@@ -1973,12 +1951,11 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain_core',
-            'runnables',
-            'base',
-            'RunnableLambda',
+            'langgraph',
+            'utils',
+            'RunnableCallable',
           ]),
-          'name': 'logic',
+          'name': 'tool_one',
         }),
         'id': 'tool_one',
         'type': 'runnable',
@@ -1991,12 +1968,11 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain_core',
-            'runnables',
-            'base',
-            'RunnableLambda',
+            'langgraph',
+            'utils',
+            'RunnableCallable',
           ]),
-          'name': 'logic',
+          'name': 'tool_two_slow',
         }),
         'id': 'tool_two:tool_two_slow',
         'type': 'runnable',
@@ -2004,12 +1980,11 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain_core',
-            'runnables',
-            'base',
-            'RunnableLambda',
+            'langgraph',
+            'utils',
+            'RunnableCallable',
           ]),
-          'name': 'logic',
+          'name': 'tool_two_fast',
         }),
         'id': 'tool_two:tool_two_fast',
         'type': 'runnable',
@@ -2017,12 +1992,11 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain_core',
-            'runnables',
-            'base',
-            'RunnableLambda',
+            'langgraph',
+            'utils',
+            'RunnableCallable',
           ]),
-          'name': 'RunnableLambda',
+          'name': 'RunnableCallable',
         }),
         'id': 'tool_two:condition',
         'type': 'runnable',
@@ -2030,12 +2004,11 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain_core',
-            'runnables',
-            'base',
-            'RunnableLambda',
+            'langgraph',
+            'utils',
+            'RunnableCallable',
           ]),
-          'name': 'logic',
+          'name': 'tool_three',
         }),
         'id': 'tool_three',
         'type': 'runnable',
@@ -2043,12 +2016,11 @@
       dict({
         'data': dict({
           'id': list([
-            'langchain_core',
-            'runnables',
-            'base',
-            'RunnableLambda',
+            'langgraph',
+            'utils',
+            'RunnableCallable',
           ]),
-          'name': 'RunnableLambda',
+          'name': 'RunnableCallable',
         }),
         'id': 'condition',
         'type': 'runnable',
@@ -2164,10 +2136,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
@@ -2278,10 +2249,9 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
+            "langgraph",
+            "utils",
+            "RunnableCallable"
           ],
           "name": "should_continue"
         }
