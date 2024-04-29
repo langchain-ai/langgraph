@@ -5,11 +5,15 @@ from typing import (
     Awaitable,
     Callable,
     Dict,
+    Literal,
     NamedTuple,
     Optional,
     Sequence,
     Union,
     cast,
+    get_args,
+    get_origin,
+    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable
@@ -142,7 +146,7 @@ class Graph:
             Callable[..., Awaitable[Union[str, list[str]]]],
             Runnable[Any, Union[str, list[str]]],
         ],
-        path_map: Optional[dict[str, str]] = None,
+        path_map: Optional[Union[dict[str, str], list[str]]] = None,
         then: Optional[str] = None,
     ) -> None:
         """Add a conditional edge from the starting node to any number of destination nodes.
@@ -166,6 +170,14 @@ class Graph:
                 "Adding an edge to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
+        # coerce path_map to a dictionary
+        if isinstance(path_map, dict):
+            pass
+        elif isinstance(path_map, list):
+            path_map = {name: name for name in path_map}
+        elif rtn_type := get_type_hints(path).get("return"):
+            if get_origin(rtn_type) is Literal:
+                path_map = {name: name for name in get_args(rtn_type)}
         # find a name for the condition
         path = coerce_to_runnable(path, name=None, trace=True)
         name = path.name or "condition"

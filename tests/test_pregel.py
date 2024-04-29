@@ -4,7 +4,7 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Annotated, Any, Generator, Optional, TypedDict, Union
+from typing import Annotated, Any, Generator, Literal, Optional, TypedDict, Union
 
 import pytest
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
@@ -3115,6 +3115,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
     invalid_graph.add_conditional_edges(
         source="prepare",
         path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        path_map=["tool_two_slow", "tool_two_fast"],
     )
     invalid_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
     invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
@@ -3387,6 +3388,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     def qa(data: State) -> State:
         return {"answer": ",".join(data["docs"])}
 
+    def rewrite_query_then(data: State) -> Literal["retriever_two"]:
+        return "retriever_two"
+
     workflow = StateGraph(State)
 
     workflow.add_node("rewrite_query", rewrite_query)
@@ -3398,9 +3402,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     workflow.set_entry_point("rewrite_query")
     workflow.add_edge("rewrite_query", "analyzer_one")
     workflow.add_edge("analyzer_one", "retriever_one")
-    workflow.add_conditional_edges(
-        "rewrite_query", lambda _: "retriever_two", {"retriever_two": "retriever_two"}
-    )
+    workflow.add_conditional_edges("rewrite_query", rewrite_query_then)
     workflow.add_edge(["retriever_one", "retriever_two"], "qa")
     workflow.set_finish_point("qa")
 
