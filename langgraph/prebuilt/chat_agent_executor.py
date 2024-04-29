@@ -2,7 +2,7 @@ import json
 from typing import Annotated, Optional, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import BaseMessage, FunctionMessage
+from langchain_core.messages import BaseMessage, FunctionMessage, SystemMessage
 from langchain_core.runnables import RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
@@ -137,6 +137,7 @@ def create_function_calling_executor(
 def create_tool_calling_executor(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool]],
+    system_message: Optional[Union[str, SystemMessage]] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     interrupt_before: Optional[Sequence[str]] = None,
     interrupt_after: Optional[Sequence[str]] = None,
@@ -147,6 +148,12 @@ def create_tool_calling_executor(
     Args:
         model (LanguageModelLike): The chat model that supports OpenAI tool calling.
         tools (Union[ToolExecutor, Sequence[BaseTool]]): A list of tools or a ToolExecutor instance.
+        system_message: (Optional[Union[str, SystemMessage]]): An optional system message to pass in
+            to the model. Is appended at the start of the messages.
+        checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
+        interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
+        interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
+        debug (bool): A flag indicating whether to enable debug mode.
 
     Returns:
         Runnable: A compiled LangChain runnable that can be used for chat interactions.
@@ -188,6 +195,12 @@ def create_tool_calling_executor(
     # Define the function that calls the model
     def call_model(state: AgentState):
         messages = state["messages"]
+        if system_message is not None:
+            if isinstance(system_message, str):
+                _system_message: BaseMessage = SystemMessage(content=system_message)
+            else:
+                _system_message = system_message
+            messages = [_system_message] + list(messages)
         response = model.invoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
