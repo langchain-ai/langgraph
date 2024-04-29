@@ -170,27 +170,11 @@ safe_tool_node = ToolNode(safe_tools)
 sensitive_tool_node = ToolNode(sensitive_tools)
 
 
-builder = StateGraph(State)
-
-
 def pick_starting_point(state: State) -> str:
     dialog_state = state.get("dialog_state")
     if not dialog_state:
         return "assistant"
     return dialog_state[-1]
-
-
-# You can start at any of the "scoped" assistants
-builder.set_conditional_entry_point(pick_starting_point)
-
-# First, define the assistant
-builder.add_node("assistant", Assistant(assistant_runnable).acall)
-builder.add_node(
-    "assistant_tools",
-    safe_tool_node.with_fallbacks(
-        [RunnableLambda(handle_tool_error)], exception_key="error"
-    ),
-)
 
 
 def route_assistant(state):
@@ -201,18 +185,6 @@ def route_assistant(state):
     if tool_calls and tool_calls[0]["name"] == WriteAssistant.__name__:  # noqa
         return "enter_write_sequence"
     return "assistant_tools"
-
-
-builder.add_conditional_edges(
-    "assistant",
-    route_assistant,
-    {
-        "enter_write_sequence": "enter_write_sequence",
-        "assistant_tools": "assistant_tools",
-        END: END,
-    },
-)
-builder.add_edge("assistant_tools", "assistant")
 
 
 # Now define the writing sequence / assistant
@@ -250,19 +222,6 @@ async def pop_dialog_state(state: State) -> dict:
     }
 
 
-## Now add the nodes to the graph'
-builder.add_node("enter_write_sequence", enter_write_sequence)
-builder.add_node("write_assistant", Assistant(followup_runnable).acall)
-builder.add_edge("enter_write_sequence", "write_assistant")
-builder.add_node(
-    "writer_sensitive_tools",
-    sensitive_tool_node.with_fallbacks(
-        [RunnableLambda(handle_tool_error)], exception_key="error"
-    ),
-)
-builder.add_node("leave_write_sequence", pop_dialog_state)
-
-
 def route_writer(state):
     route = tools_condition(state)
     if route == END:
@@ -274,18 +233,56 @@ def route_writer(state):
     return "writer_sensitive_tools"
 
 
-builder.add_conditional_edges(
-    "write_assistant",
-    route_writer,
-    {
-        "writer_sensitive_tools": "writer_sensitive_tools",
-        "leave_write_sequence": "leave_write_sequence",
-        END: END,
-    },
-)
-builder.add_edge("writer_sensitive_tools", "write_assistant")
-builder.add_edge("leave_write_sequence", "assistant")
+def create_graph():
+    builder = StateGraph(State)
+    # You can start at any of the "scoped" assistants
+    builder.set_conditional_entry_point(pick_starting_point)
 
+    # First, define the assistant
+    builder.add_node("assistant", Assistant(assistant_runnable).acall)
+    builder.add_node(
+        "assistant_tools",
+        safe_tool_node.with_fallbacks(
+            [RunnableLambda(handle_tool_error)], exception_key="error"
+        ),
+    )
 
-memory = AsyncSqliteSaver.from_conn_string(":memory:")
-graph = builder.compile(checkpointer=memory)
+    builder.add_conditional_edges(
+        "assistant",
+        route_assistant,
+        {
+            "enter_write_sequence": "enter_write_sequence",
+            "assistant_tools": "assistant_tools",
+            END: END,
+        },
+    )
+    builder.add_edge("assistant_tools", "assistant")
+
+    ## Now add the nodes to the graph'
+    builder.add_node("enter_write_sequence", enter_write_sequence)
+    builder.add_node("write_assistant", Assistant(followup_runnable).acall)
+    builder.add_edge("enter_write_sequence", "write_assistant")
+    builder.add_node(
+        "writer_sensitive_tools",
+        sensitive_tool_node.with_fallbacks(
+            [RunnableLambda(handle_tool_error)], exception_key="error"
+        ),
+    )
+    builder.add_node("leave_write_sequence", pop_dialog_state)
+    builder.add_conditional_edges(
+        "write_assistant",
+        route_writer,
+        {
+            "writer_sensitive_tools": "writer_sensitive_tools",
+            "leave_write_sequence": "leave_write_sequence",
+            END: END,
+        },
+    )
+    builder.add_edge("writer_sensitive_tools", "write_assistant")
+    builder.add_edge("leave_write_sequence", "assistant")
+
+    memory = AsyncSqliteSaver.from_conn_string(":memory:")
+    graph = builder.compile(
+        checkpointer=memory, interrupt_before=["writer_sensitive_tools"]
+    )
+    return graph

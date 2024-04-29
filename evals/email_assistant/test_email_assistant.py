@@ -9,18 +9,18 @@ import pytest
 from langchain_openai import ChatOpenAI
 from langsmith import expect, traceable, unit
 from langsmith.run_helpers import get_current_run_tree
-
-from evals.email_assistant.graph import (
+from evals.email_assistant.db import (
     CURRENT_TIME,
     get_weekday,
+)
+from evals.email_assistant.graph import (
+    create_graph,
     search_calendar_events,
     search_emails,
 )
-from evals.email_assistant.graph import (
-    graph as assistant_graph,
-)
 from evals.utils import create_openai_logprobs_classification_chain
 
+assistant_graph = create_graph()
 simple_questions = [
     (
         "What's the most recent email in my inbox?",
@@ -171,16 +171,19 @@ async def check_email_sent(state, tool_kwargs: dict):
 multistep_questions = [
     (
         [
-            "Send an email to joanne @ langchain . com saying we're on for the meeting tomorrow. Subject should just be 'We're coming to the meeting Tomorrow' - body just 'See you there!'",
+            "Send an email to joanne @ langchain . com saying we're on for the meeting tomorrow.",
+            "Subject should just be 'We're coming to the meeting Tomorrow' - body just 'See you there! - signature should be from VWP",
+            "Send whenever you're ready - no rush.",
         ],
         [
+            None,
             functools.partial(
                 check_email_sent,
                 tool_kwargs={
                     "queries": ["joanne"],
                     "start_date": datetime.now() - timedelta(minutes=120),
                 },
-            )
+            ),
         ],
     ),
     (
@@ -190,7 +193,8 @@ multistep_questions = [
             "which airline again?",
             "where are we staying?",
             "create an event with Sachin at the hotel bar 6pm on Friday",
-            "send him an email reminder - his email is first name @ langchain.com",
+            "send him an email reminder to him",
+            "his email is first name @ langchain.com - feel free to send whenever"
             "When are we publicly launching feature the user onboarding feature?",
         ],
         [
@@ -198,6 +202,7 @@ multistep_questions = [
             f"The flight is {get_weekday(4) + timedelta(hours=5)} to {get_weekday(4) + timedelta(hours=8)}. Accept as correct even if it only mentions the start time.",
             "United Airlines",
             "Orange Valley Resort",
+            None,
             functools.partial(
                 check_event_created,
                 tool_kwargs={"queries": ["Sachin"], "start_date": get_weekday(4)},
@@ -215,7 +220,6 @@ multistep_questions = [
 ]
 
 
-# when is offsite - whats my flight - whats my hotel - create an event with sachin at the hotel bar 6pm on fri - send him an email - when did feature x launch
 @pytest.mark.asyncio_cooperative
 @pytest.mark.parametrize("questions,expectation_fns", multistep_questions)
 async def test_multistep_questions(
@@ -243,6 +247,13 @@ async def check_multistep_questions(
                 {"messages": ("user", question)},
                 config,
             )
+            snapshot = await assistant_graph.aget_state(config)
+            if snapshot.next:
+                # Just continue - we auto-approve everything here.
+                result = await assistant_graph.ainvoke(
+                    None,
+                    config,
+                )
             states.append(states)
             responses.append(result["messages"][-1].content)
         except Exception as e:
@@ -254,6 +265,8 @@ async def check_multistep_questions(
     errors = []
     with langsmith.trace(name="Evals"):
         for response, expectation_fn in zip(responses, expectation_fns):
+            if expectation_fn is None:
+                continue
             if isinstance(expectation_fn, str):
                 expect.embedding_distance(response, expectation_fn)
                 expectation_fn_: Callable = functools.partial(
