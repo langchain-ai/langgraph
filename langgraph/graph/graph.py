@@ -390,7 +390,6 @@ class CompiledGraph(Pregel):
         config: Optional[RunnableConfig] = None,
         *,
         xray: Union[int, bool] = False,
-        add_condition_nodes: bool = True,
     ) -> DrawableGraph:
         """Returns a drawable representation of the computation graph."""
         graph = DrawableGraph()
@@ -406,7 +405,6 @@ class CompiledGraph(Pregel):
                 subgraph = (
                     node.get_graph(
                         config=config,
-                        add_condition_nodes=add_condition_nodes,
                         xray=xray - 1 if isinstance(xray, int) and xray > 0 else xray,
                     )
                     if isinstance(node, CompiledGraph)
@@ -428,46 +426,26 @@ class CompiledGraph(Pregel):
                 end_nodes[key] = n
         for start, end in sorted(self.graph._all_edges):
             graph.add_edge(start_nodes[start], end_nodes[end])
-        branches_by_name = Counter(
-            name for _, branches in self.graph.branches.items() for name in branches
-        )
         for start, branches in self.graph.branches.items():
             default_ends = {
                 **{k: k for k in self.graph.nodes if k != start},
                 END: END,
             }
-            for name, branch in branches.items():
+            for _, branch in branches.items():
                 if branch.ends is not None:
                     ends = branch.ends
                 elif branch.then is not None:
                     ends = {k: k for k in default_ends if k not in (END, branch.then)}
                 else:
                     ends = default_ends
-
-                if add_condition_nodes is True:
-                    cond = graph.add_node(
-                        branch.path,
-                        f"{start}_{name}" if branches_by_name[name] > 1 else name,
+                for label, end in ends.items():
+                    graph.add_edge(
+                        start_nodes[start],
+                        end_nodes[end],
+                        label if label != end else None,
+                        conditional=True,
                     )
-                    graph.add_edge(start_nodes[start], cond)
-                    for label, end in ends.items():
-                        graph.add_edge(
-                            cond,
-                            end_nodes[end],
-                            label if label != end else None,
-                            conditional=True,
-                        )
-                        if branch.then is not None:
-                            graph.add_edge(start_nodes[end], end_nodes[branch.then])
-                else:
-                    for label, end in ends.items():
-                        graph.add_edge(
-                            start_nodes[start],
-                            end_nodes[end],
-                            label if label != end else None,
-                            conditional=True,
-                        )
-                        if branch.then is not None:
-                            graph.add_edge(start_nodes[end], end_nodes[branch.then])
+                    if branch.then is not None:
+                        graph.add_edge(start_nodes[end], end_nodes[branch.then])
 
         return graph
