@@ -769,6 +769,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 )
 async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
     from copy import deepcopy
+
     from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate

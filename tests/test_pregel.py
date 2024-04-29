@@ -816,7 +816,6 @@ def test_conditional_graph(
 
     from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.llms.fake import FakeStreamingListLLM
-    from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
@@ -2347,6 +2346,7 @@ def test_message_graph(
     deterministic_uuids: MockerFixture,
 ) -> None:
     from copy import deepcopy
+
     from langchain_community.chat_models.fake import FakeMessagesListChatModel
     from langchain_core.callbacks import CallbackManagerForLLMRun
     from langchain_core.messages import (
