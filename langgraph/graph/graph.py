@@ -406,6 +406,7 @@ class CompiledGraph(Pregel):
                 subgraph = (
                     node.get_graph(
                         config=config,
+                        add_condition_nodes=add_condition_nodes,
                         xray=xray - 1 if isinstance(xray, int) and xray > 0 else xray,
                     )
                     if isinstance(node, CompiledGraph)

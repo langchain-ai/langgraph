@@ -81,9 +81,9 @@
   	__start__ --> prepare;
   	finish --> __end__;
   	prepare --> condition;
-  	condition -. tool_two_slow .-> tool_two_slow;
+  	condition -.-> tool_two_slow;
   	tool_two_slow --> finish;
-  	condition -. tool_two_fast .-> tool_two_fast;
+  	condition -.-> tool_two_fast;
   	tool_two_fast --> finish;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -103,9 +103,9 @@
   	finish([finish]):::otherclass;
   	__start__ --> prepare;
   	finish --> __end__;
-  	prepare -. tool_two_slow .-> tool_two_slow;
+  	prepare -.-> tool_two_slow;
   	tool_two_slow --> finish;
-  	prepare -. tool_two_fast .-> tool_two_fast;
+  	prepare -.-> tool_two_fast;
   	tool_two_fast --> finish;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -195,9 +195,9 @@
   	__start__ --> prepare;
   	finish --> __end__;
   	prepare --> condition;
-  	condition -. tool_two_slow .-> tool_two_slow;
+  	condition -.-> tool_two_slow;
   	tool_two_slow --> finish;
-  	condition -. tool_two_fast .-> tool_two_fast;
+  	condition -.-> tool_two_fast;
   	tool_two_fast --> finish;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -217,9 +217,9 @@
   	finish([finish]):::otherclass;
   	__start__ --> prepare;
   	finish --> __end__;
-  	prepare -. tool_two_slow .-> tool_two_slow;
+  	prepare -.-> tool_two_slow;
   	tool_two_slow --> finish;
-  	prepare -. tool_two_fast .-> tool_two_fast;
+  	prepare -.-> tool_two_fast;
   	tool_two_fast --> finish;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -324,7 +324,6 @@
       {
         "source": "condition",
         "target": "__end__",
-        "data": "__end__",
         "conditional": true
       }
     ]
@@ -459,7 +458,6 @@
       {
         "source": "condition",
         "target": "__end__",
-        "data": "__end__",
         "conditional": true
       }
     ]
@@ -1884,7 +1882,6 @@
     'edges': list([
       dict({
         'conditional': True,
-        'data': 'tool_two_slow',
         'source': 'tool_two:condition',
         'target': 'tool_two:tool_two_slow',
       }),
@@ -1894,7 +1891,6 @@
       }),
       dict({
         'conditional': True,
-        'data': 'tool_two_fast',
         'source': 'tool_two:condition',
         'target': 'tool_two:tool_two_fast',
       }),
@@ -1908,7 +1904,6 @@
       }),
       dict({
         'conditional': True,
-        'data': 'tool_one',
         'source': 'condition',
         'target': 'tool_one',
       }),
@@ -1918,7 +1913,6 @@
       }),
       dict({
         'conditional': True,
-        'data': 'tool_two',
         'source': 'condition',
         'target': 'tool_two:condition',
       }),
@@ -1928,7 +1922,6 @@
       }),
       dict({
         'conditional': True,
-        'data': 'tool_three',
         'source': 'condition',
         'target': 'tool_three',
       }),
@@ -2067,17 +2060,47 @@
   	tool_three([tool_three]):::otherclass;
   	condition([condition]):::otherclass;
   	subgraph tool_two
-  	tool_two_condition -. tool_two_slow .-> tool_two_tool_two_slow;
+  	tool_two_condition -.-> tool_two_tool_two_slow;
   	tool_two_tool_two_slow --> tool_two___end__;
-  	tool_two_condition -. tool_two_fast .-> tool_two_tool_two_fast;
+  	tool_two_condition -.-> tool_two_tool_two_fast;
   	tool_two_tool_two_fast --> tool_two___end__;
   	end
   	__start__ --> condition;
-  	condition -. tool_one .-> tool_one;
+  	condition -.-> tool_one;
   	tool_one --> __end__;
-  	condition -. tool_two .-> tool_two_condition;
+  	condition -.-> tool_two_condition;
   	tool_two___end__ --> __end__;
-  	condition -. tool_three .-> tool_three;
+  	condition -.-> tool_three;
+  	tool_three --> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
+  '''
+# ---
+# name: test_nested_graph_xray.3
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	tool_one([tool_one]):::otherclass;
+  	tool_two___start__([__start__]):::otherclass;
+  	tool_two___end__([__end__]):::otherclass;
+  	tool_two_tool_two_slow([tool_two_slow]):::otherclass;
+  	tool_two_tool_two_fast([tool_two_fast]):::otherclass;
+  	tool_three([tool_three]):::otherclass;
+  	subgraph tool_two
+  	tool_two___start__ -.-> tool_two_tool_two_slow;
+  	tool_two_tool_two_slow --> tool_two___end__;
+  	tool_two___start__ -.-> tool_two_tool_two_fast;
+  	tool_two_tool_two_fast --> tool_two___end__;
+  	end
+  	__start__ -.-> tool_one;
+  	tool_one --> __end__;
+  	__start__ -.-> tool_two___start__;
+  	tool_two___end__ --> __end__;
+  	__start__ -.-> tool_three;
   	tool_three --> __end__;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -2324,8 +2347,8 @@
   	Chart_Generator_router -. call_tool .-> Call_Tool;
   	Chart_Generator_router -. end .-> __end__;
   	Call_Tool --> condition;
-  	condition -. Researcher .-> Researcher;
-  	condition -. Chart Generator .-> Chart_Generator;
+  	condition -.-> Researcher;
+  	condition -.-> Chart_Generator;
   
   '''
 # ---
@@ -2414,9 +2437,9 @@
   	tool_two_fast([tool_two_fast]):::otherclass;
   	condition([condition]):::otherclass;
   	__start__ --> condition;
-  	condition -. tool_two_slow .-> tool_two_slow;
+  	condition -.-> tool_two_slow;
   	tool_two_slow --> __end__;
-  	condition -. tool_two_fast .-> tool_two_fast;
+  	condition -.-> tool_two_fast;
   	tool_two_fast --> __end__;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -2432,9 +2455,9 @@
   	__end__[__end__]:::endclass;
   	tool_two_slow([tool_two_slow]):::otherclass;
   	tool_two_fast([tool_two_fast]):::otherclass;
-  	__start__ -. tool_two_slow .-> tool_two_slow;
+  	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
-  	__start__ -. tool_two_fast .-> tool_two_fast;
+  	__start__ -.-> tool_two_fast;
   	tool_two_fast --> __end__;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -2496,9 +2519,9 @@
   	tool_two_fast([tool_two_fast]):::otherclass;
   	condition([condition]):::otherclass;
   	__start__ --> condition;
-  	condition -. tool_two_slow .-> tool_two_slow;
+  	condition -.-> tool_two_slow;
   	tool_two_slow --> __end__;
-  	condition -. tool_two_fast .-> tool_two_fast;
+  	condition -.-> tool_two_fast;
   	tool_two_fast --> __end__;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -2514,9 +2537,9 @@
   	__end__[__end__]:::endclass;
   	tool_two_slow([tool_two_slow]):::otherclass;
   	tool_two_fast([tool_two_fast]):::otherclass;
-  	__start__ -. tool_two_slow .-> tool_two_slow;
+  	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
-  	__start__ -. tool_two_fast .-> tool_two_fast;
+  	__start__ -.-> tool_two_fast;
   	tool_two_fast --> __end__;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;

@@ -3877,6 +3877,9 @@ def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
     assert app.get_graph(xray=True).to_json() == snapshot
     assert app.get_graph().draw_ascii() == snapshot
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
+    assert (
+        app.get_graph(xray=True, add_condition_nodes=False).draw_mermaid() == snapshot
+    )
 
 
 def test_nested_graph(snapshot: SnapshotAssertion) -> None:
