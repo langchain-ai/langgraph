@@ -28,6 +28,7 @@ from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
+from langgraph.pregel.types import All
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.utils import DrawableGraph, RunnableCallable, coerce_to_runnable
 
@@ -295,8 +296,8 @@ class Graph:
     def compile(
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
-        interrupt_before: Optional[Sequence[str]] = None,
-        interrupt_after: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
     ) -> "CompiledGraph":
         # assign default values
@@ -304,11 +305,16 @@ class Graph:
         interrupt_after = interrupt_after or []
 
         # validate the graph
-        self.validate(interrupt=interrupt_before + interrupt_after)
+        self.validate(
+            interrupt=(interrupt_before if interrupt_before != "*" else [])
+            + interrupt_after
+            if interrupt_after != "*"
+            else []
+        )
 
         # create empty compiled graph
         compiled = CompiledGraph(
-            graph=self,
+            builder=self,
             nodes={},
             channels={START: EphemeralValue(Any), END: EphemeralValue(Any)},
             input_channels=START,
@@ -338,7 +344,7 @@ class Graph:
 
 
 class CompiledGraph(Pregel):
-    graph: Graph
+    builder: Graph
 
     def attach_node(self, key: str, node: Runnable) -> None:
         self.channels[key] = EphemeralValue(Any)
@@ -400,7 +406,7 @@ class CompiledGraph(Pregel):
             END: graph.add_node(self.get_output_schema(config), END)
         }
 
-        for key, node in self.graph.nodes.items():
+        for key, node in self.builder.nodes.items():
             if xray:
                 subgraph = (
                     node.get_graph(
@@ -424,11 +430,11 @@ class CompiledGraph(Pregel):
                 n = graph.add_node(node, key)
                 start_nodes[key] = n
                 end_nodes[key] = n
-        for start, end in sorted(self.graph._all_edges):
+        for start, end in sorted(self.builder._all_edges):
             graph.add_edge(start_nodes[start], end_nodes[end])
-        for start, branches in self.graph.branches.items():
+        for start, branches in self.builder.branches.items():
             default_ends = {
-                **{k: k for k in self.graph.nodes if k != start},
+                **{k: k for k in self.builder.nodes if k != start},
                 END: END,
             }
             for _, branch in branches.items():

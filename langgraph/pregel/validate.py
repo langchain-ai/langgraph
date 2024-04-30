@@ -3,6 +3,7 @@ from typing import Mapping, Optional, Sequence, Union
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import INTERRUPT
 from langgraph.pregel.read import PregelNode
+from langgraph.pregel.types import All
 
 
 def validate_graph(
@@ -11,8 +12,8 @@ def validate_graph(
     input_channels: Union[str, Sequence[str]],
     output_channels: Union[str, Sequence[str]],
     stream_channels: Optional[Union[str, Sequence[str]]],
-    interrupt_after_nodes: Sequence[str],
-    interrupt_before_nodes: Sequence[str],
+    interrupt_after_nodes: Union[All, Sequence[str]],
+    interrupt_before_nodes: Union[All, Sequence[str]],
 ) -> None:
     subscribed_channels = set[str]()
     for name, node in nodes.items():
@@ -59,12 +60,14 @@ def validate_graph(
         if chan not in channels:
             raise ValueError(f"Output channel '{chan}' not in 'channels'")
 
-    for node in interrupt_after_nodes:
-        if node not in nodes:
-            raise ValueError(f"Node {node} not in nodes")
-    for node in interrupt_before_nodes:
-        if node not in nodes:
-            raise ValueError(f"Node {node} not in nodes")
+    if interrupt_after_nodes != "*":
+        for node in interrupt_after_nodes:
+            if node not in nodes:
+                raise ValueError(f"Node {node} not in nodes")
+    if interrupt_before_nodes != "*":
+        for node in interrupt_before_nodes:
+            if node not in nodes:
+                raise ValueError(f"Node {node} not in nodes")
 
 
 def validate_keys(

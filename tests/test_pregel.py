@@ -1574,7 +1574,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
 @pytest.mark.parametrize(
     "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
 )
-def test_conditional_graph_state(
+def test_conditional_state_graph(
     snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
 ) -> None:
     from langchain.llms.fake import FakeStreamingListLLM
@@ -1971,6 +1971,182 @@ def test_conditional_graph_state(
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
     )
+
+    # test w interrupt before all
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_before="*",
+        debug=True,
+    )
+    config = {"configurable": {"thread_id": "3"}}
+    llm.i = 0  # reset the llm
+
+    assert [
+        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+    ] == []
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "intermediate_steps": [],
+        },
+        next=("agent",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [],
+        },
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                    "result for query",
+                )
+            ],
+        },
+        next=("agent",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
+
+    # test w interrupt after all
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        interrupt_after="*",
+    )
+    config = {"configurable": {"thread_id": "4"}}
+    llm.i = 0  # reset the llm
+
+    assert [
+        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+    ] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [],
+        },
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                    "result for query",
+                )
+            ],
+        },
+        next=("agent",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
 
 
 def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None:
