@@ -38,7 +38,13 @@ class JsonPlusSerializer(SerializerProtocol):
         if isinstance(obj, Serializable):
             return obj.to_json()
         elif isinstance(obj, (BaseModel, LcBaseModel)):
-            return self._encode_constructor_args(obj.__class__, kwargs=obj.dict())
+            # prefer non-deprecated method if available
+            if hasattr(obj, "model_dump"):
+                return self._encode_constructor_args(
+                    obj.__class__, kwargs=obj.model_dump()
+                )
+            else:
+                return self._encode_constructor_args(obj.__class__, kwargs=obj.dict())
         elif isinstance(obj, UUID):
             return self._encode_constructor_args(UUID, args=[obj.hex])
         elif isinstance(obj, (set, frozenset)):
