@@ -4,7 +4,7 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Annotated, Any, Generator, Optional, TypedDict, Union
+from typing import Annotated, Any, Generator, Literal, Optional, TypedDict, Union
 
 import pytest
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
@@ -168,17 +168,6 @@ def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
     assert gapp.invoke(1) == falsy_value
 
 
-def test_invoke_single_process_in_out_implicit_channels(mocker: MockerFixture) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-
-    app = Pregel(nodes={"one": chain})
-
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
-    assert app.invoke(2) == 3
-
-
 def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = (
@@ -188,17 +177,25 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
     )
 
     app = Pregel(
-        nodes={"one": chain}, output_channels=["output", "fixed", "output_plus_one"]
+        nodes={"one": chain},
+        channels={
+            "input": LastValue(int),
+            "output": LastValue(int),
+            "fixed": LastValue(int),
+            "output_plus_one": LastValue(int),
+        },
+        output_channels=["output", "fixed", "output_plus_one"],
+        input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
-            "output": {"title": "Output"},
-            "fixed": {"title": "Fixed"},
-            "output_plus_one": {"title": "Output Plus One"},
+            "output": {"title": "Output", "type": "integer"},
+            "fixed": {"title": "Fixed", "type": "integer"},
+            "output_plus_one": {"title": "Output Plus One", "type": "integer"},
         },
     }
     assert app.invoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
@@ -209,17 +206,17 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        nodes={
-            "one": chain,
-        },
+        nodes={"one": chain},
+        channels={"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output"}},
+        "properties": {"output": {"title": "Output", "type": "integer"}},
     }
     assert app.invoke(2) == {"output": 3}
 
@@ -229,9 +226,8 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        nodes={
-            "one": chain,
-        },
+        nodes={"one": chain},
+        channels={"input": LastValue(int), "output": LastValue(int)},
         input_channels=["input"],
         output_channels=["output"],
     )
@@ -239,12 +235,12 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {
         "title": "LangGraphInput",
         "type": "object",
-        "properties": {"input": {"title": "Input"}},
+        "properties": {"input": {"title": "Input", "type": "integer"}},
     }
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output"}},
+        "properties": {"output": {"title": "Output", "type": "integer"}},
     }
     assert app.invoke({"input": 2}) == {"output": 3}
 
@@ -256,6 +252,13 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     app = Pregel(
         nodes={"one": one, "two": two},
+        channels={
+            "inbox": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     assert app.invoke(2) == 4
@@ -302,6 +305,13 @@ def test_invoke_two_processes_in_out_interrupt(
     memory = MemorySaverAssertImmutable(at=checkpoint_at)
     app = Pregel(
         nodes={"one": one, "two": two},
+        channels={
+            "inbox": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
         checkpointer=memory,
         interrupt_after_nodes=["one"],
     )
@@ -357,9 +367,14 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
 
     app = Pregel(
         nodes={"one": one, "two": two},
-        channels={"inbox": Topic(int)},
+        channels={
+            "inbox": Topic(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
         input_channels=["input", "inbox"],
         stream_channels=["output", "inbox"],
+        output_channels=["output"],
     )
 
     # [12 + 1, 2 + 1 + 1]
@@ -394,7 +409,16 @@ def test_batch_two_processes_in_out() -> None:
     one = Channel.subscribe_to("input") | add_one_with_delay | Channel.write_to("one")
     two = Channel.subscribe_to("one") | add_one_with_delay | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "one": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
 
     assert app.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
     assert app.batch([3, 2, 1, 3, 5], output_keys=["output"]) == [
@@ -427,7 +451,13 @@ def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes=nodes)
+    app = Pregel(
+        nodes=nodes,
+        channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
+        | {"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     for _ in range(10):
         assert app.invoke(2, {"recursion_limit": test_size}) == 2 + test_size
@@ -449,7 +479,13 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes=nodes)
+    app = Pregel(
+        nodes=nodes,
+        channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
+        | {"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     for _ in range(3):
         assert app.batch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) == [
@@ -476,7 +512,12 @@ def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> N
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
     two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={"output": LastValue(int), "input": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     with pytest.raises(InvalidUpdateError):
         # LastValue channels can only be updated once per iteration
@@ -491,7 +532,12 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
 
     app = Pregel(
         nodes={"one": one, "two": two},
-        channels={"output": Topic(int)},
+        channels={
+            "input": LastValue(int),
+            "output": Topic(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     # An Inbox channel accumulates updates into a sequence
@@ -520,7 +566,13 @@ def test_invoke_checkpoint(mocker: MockerFixture, checkpoint_at: CheckpointAt) -
 
     app = Pregel(
         nodes={"one": one},
-        channels={"total": BinaryOperatorAggregate(int, operator.add)},
+        channels={
+            "total": BinaryOperatorAggregate(int, operator.add),
+            "input": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
         checkpointer=memory,
     )
 
@@ -575,7 +627,13 @@ def test_invoke_checkpoint_sqlite(
         memory.at = checkpoint_at
         app = Pregel(
             nodes={"one": one},
-            channels={"total": BinaryOperatorAggregate(int, operator.add)},
+            channels={
+                "total": BinaryOperatorAggregate(int, operator.add),
+                "input": LastValue(int),
+                "output": LastValue(int),
+            },
+            input_channels="input",
+            output_channels="output",
             checkpointer=memory,
         )
 
@@ -663,7 +721,13 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
             "chain_three": chain_three,
             "chain_four": chain_four,
         },
-        channels={"inbox": Topic(int)},
+        channels={
+            "inbox": Topic(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     # Then invoke app
@@ -676,14 +740,20 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
         assert [*executor.map(app.invoke, [2] * 100)] == [[13, 13]] * 100
 
 
-def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
+def test_invoke_join_then_call_other_pregel(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
     inner_app = Pregel(
         nodes={
             "one": Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-        }
+        },
+        channels={
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     one = (
@@ -705,7 +775,14 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
             "two": two,
             "chain_three": chain_three,
         },
-        channels={"inbox_one": Topic(int)},
+        channels={
+            "inbox_one": Topic(int),
+            "outbox_one": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     for _ in range(10):
@@ -725,7 +802,17 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["output", "between"])
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "input": LastValue(int),
+            "between": LastValue(int),
+            "output": LastValue(int),
+        },
+        stream_channels=["output", "between"],
+        input_channels="input",
+        output_channels="output",
+    )
 
     assert [c for c in app.stream(2, stream_mode="updates")] == [
         {"one": {"between": 3, "output": 3}},
@@ -742,7 +829,16 @@ def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("between")
     two = Channel.subscribe_to("between") | add_one
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "input": LastValue(int),
+            "between": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
 
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to OUT topic
@@ -784,7 +880,10 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         channels={
             "inbox": Topic(int),
             "ctx": Context(an_int, typ=int),
+            "output": LastValue(int),
+            "input": LastValue(int),
         },
+        input_channels="input",
         output_channels=["inbox", "output"],
         stream_channels=["inbox", "output"],
     )
@@ -882,19 +981,9 @@ def test_conditional_graph(
     app = workflow.compile()
 
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
-    assert (
-        app.get_graph(add_condition_nodes=False).draw_mermaid(with_styles=False)
-        == snapshot
-    )
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
-    assert app.get_graph(xray=True).draw_ascii() == snapshot
-    assert (
-        app.get_graph(xray=True, add_condition_nodes=False).draw_mermaid(
-            with_styles=False
-        )
-        == snapshot
-    )
+    assert app.get_graph(xray=True).draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1470,7 +1559,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert (
         app.invoke("what is weather in sf", debug=True)
@@ -1570,7 +1659,7 @@ def test_conditional_graph_state(
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1922,7 +2011,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1988,7 +2077,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -2251,7 +2340,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -2466,7 +2555,7 @@ def test_message_graph(
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
         HumanMessage(
@@ -3031,10 +3120,7 @@ def test_start_branch_then(
         lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
     )
     tool_two = tool_two_graph.compile()
-    assert tool_two.get_graph().draw_ascii() == snapshot
-    assert tool_two.get_graph(add_condition_nodes=False).draw_ascii() == snapshot
     assert tool_two.get_graph().draw_mermaid() == snapshot
-    assert tool_two.get_graph(add_condition_nodes=False).draw_mermaid() == snapshot
 
     assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
         "my_key": "value slow",
@@ -3115,6 +3201,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
     invalid_graph.add_conditional_edges(
         source="prepare",
         path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        path_map=["tool_two_slow", "tool_two_fast"],
     )
     invalid_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
     invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
@@ -3136,10 +3223,8 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
     tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
     tool_two_graph.add_node("finish", lambda s: {"my_key": " finished"})
     tool_two = tool_two_graph.compile()
-    assert tool_two.get_graph().draw_ascii() == snapshot
-    assert tool_two.get_graph(add_condition_nodes=False).draw_ascii() == snapshot
+    assert tool_two.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert tool_two.get_graph().draw_mermaid() == snapshot
-    assert tool_two.get_graph(add_condition_nodes=False).draw_mermaid() == snapshot
 
     assert tool_two.invoke({"my_key": "value", "market": "DE"}, debug=1) == {
         "my_key": "value prepared slow finished",
@@ -3311,7 +3396,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
@@ -3387,6 +3472,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     def qa(data: State) -> State:
         return {"answer": ",".join(data["docs"])}
 
+    def rewrite_query_then(data: State) -> Literal["retriever_two"]:
+        return "retriever_two"
+
     workflow = StateGraph(State)
 
     workflow.add_node("rewrite_query", rewrite_query)
@@ -3398,15 +3486,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     workflow.set_entry_point("rewrite_query")
     workflow.add_edge("rewrite_query", "analyzer_one")
     workflow.add_edge("analyzer_one", "retriever_one")
-    workflow.add_conditional_edges(
-        "rewrite_query", lambda _: "retriever_two", {"retriever_two": "retriever_two"}
-    )
+    workflow.add_conditional_edges("rewrite_query", rewrite_query_then)
     workflow.add_edge(["retriever_one", "retriever_two"], "qa")
     workflow.set_finish_point("qa")
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -3507,7 +3593,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     with pytest.raises(ValidationError):
         app.invoke({"query": {}})
@@ -3844,7 +3930,7 @@ def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}
 
 
@@ -3873,7 +3959,6 @@ def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
     app = graph.compile()
 
     assert app.get_graph(xray=True).to_json() == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
 
 
@@ -3911,7 +3996,7 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
     assert app.invoke(
         {"my_key": "my value", "never_called": never_called}, debug=True
@@ -3940,6 +4025,17 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
             "my_key": "my value there and back again",
             "never_called": never_called,
         },
+    ]
+
+    chain = app | RunnablePassthrough()
+
+    assert chain.invoke({"my_key": "my value", "never_called": never_called}) == {
+        "my_key": "my value there and back again",
+        "never_called": never_called,
+    }
+    assert [*chain.stream({"my_key": "my value", "never_called": never_called})] == [
+        {"inner": {"my_key": "my value there"}},
+        {"side": {"my_key": "my value there and back again"}},
     ]
 
 

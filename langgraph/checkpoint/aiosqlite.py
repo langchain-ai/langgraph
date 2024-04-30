@@ -75,8 +75,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             async with self.conn.execute(
                 "SELECT checkpoint, parent_ts FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
                 (
-                    config["configurable"]["thread_id"],
-                    config["configurable"]["thread_ts"],
+                    str(config["configurable"]["thread_id"]),
+                    str(config["configurable"]["thread_ts"]),
                 ),
             ) as cursor:
                 if value := await cursor.fetchone():
@@ -95,7 +95,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         else:
             async with self.conn.execute(
                 "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
-                (config["configurable"]["thread_id"],),
+                (str(config["configurable"]["thread_id"]),),
             ) as cursor:
                 if value := await cursor.fetchone():
                     return CheckpointTuple(
@@ -120,7 +120,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         await self.setup()
         async with self.conn.execute(
             "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC",
-            (config["configurable"]["thread_id"],),
+            (str(config["configurable"]["thread_id"]),),
         ) as cursor:
             async for thread_id, thread_ts, parent_ts, value in cursor:
                 yield CheckpointTuple(
@@ -138,7 +138,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         async with self.conn.execute(
             "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint) VALUES (?, ?, ?, ?)",
             (
-                config["configurable"]["thread_id"],
+                str(config["configurable"]["thread_id"]),
                 checkpoint["ts"],
                 config["configurable"].get("thread_ts"),
                 self.serde.dumps(checkpoint),
