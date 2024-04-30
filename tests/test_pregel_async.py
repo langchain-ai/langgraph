@@ -38,6 +38,57 @@ from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
 
 
+async def test_node_cancellation_on_external_cancel() -> None:
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile()
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(graph.ainvoke(1), 0.5)
+
+    assert inner_task_cancelled
+
+
+async def test_node_cancellation_on_other_node_exception() -> None:
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+
+    async def iambad(input: Any) -> None:
+        raise ValueError("I am bad")
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.add_node("bad", iambad)
+    builder.set_conditional_entry_point(lambda _: ["agent", "bad"], then=END)
+
+    graph = builder.compile()
+
+    with pytest.raises(ValueError, match="I am bad"):
+        await graph.ainvoke(1)
+
+    assert inner_task_cancelled
+
+
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
