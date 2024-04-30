@@ -65,6 +65,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_SEND,
     INTERRUPT,
+    TAG_HIDDEN,
 )
 from langgraph.pregel.debug import (
     print_step_checkpoint,
@@ -81,6 +82,7 @@ from langgraph.pregel.io import (
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import (
+    All,
     PregelExecutableTask,
     PregelTaskDescription,
     StateSnapshot,
@@ -194,9 +196,9 @@ class Pregel(
     stream_channels: Optional[Union[str, Sequence[str]]] = None
     """Channels to stream, defaults to all channels not in reserved channels"""
 
-    interrupt_after_nodes: Sequence[str] = Field(default_factory=list)
+    interrupt_after_nodes: Union[All, Sequence[str]] = Field(default_factory=list)
 
-    interrupt_before_nodes: Sequence[str] = Field(default_factory=list)
+    interrupt_before_nodes: Union[All, Sequence[str]] = Field(default_factory=list)
 
     input_channels: Union[str, Sequence[str]]
 
@@ -518,8 +520,8 @@ class Pregel(
         stream_mode: Optional[StreamMode] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Sequence[str]] = None,
-        interrupt_after: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
     ) -> tuple[
         bool,
@@ -565,8 +567,8 @@ class Pregel(
         stream_mode: Optional[StreamMode] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Sequence[str]] = None,
-        interrupt_after: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input."""
@@ -775,8 +777,8 @@ class Pregel(
         stream_mode: Optional[StreamMode] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Sequence[str]] = None,
-        interrupt_after: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         config = ensure_config(config)
@@ -1002,8 +1004,8 @@ class Pregel(
         stream_mode: StreamMode = "values",
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
@@ -1015,8 +1017,8 @@ class Pregel(
             stream_mode: Optional[str]. The stream mode for the graph run. Default is "values".
             output_keys: Optional. The output keys to retrieve from the graph run.
             input_keys: Optional. The input keys to provide for the graph run.
-            interrupt_before_nodes: Optional. The nodes to interrupt the graph run before.
-            interrupt_after_nodes: Optional. The nodes to interrupt the graph run after.
+            interrupt_before: Optional. The nodes to interrupt the graph run before.
+            interrupt_after: Optional. The nodes to interrupt the graph run after.
             debug: Optional. Enable debug mode for the graph run.
             **kwargs: Additional keyword arguments to pass to the graph run.
 
@@ -1035,8 +1037,8 @@ class Pregel(
             stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
-            interrupt_before=interrupt_before_nodes,
-            interrupt_after=interrupt_after_nodes,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
             debug=debug,
             **kwargs,
         ):
@@ -1057,8 +1059,8 @@ class Pregel(
         stream_mode: StreamMode = "values",
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         input_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before_nodes: Optional[Sequence[str]] = None,
-        interrupt_after_nodes: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
         **kwargs: Any,
     ) -> Union[dict[str, Any], Any]:
@@ -1070,8 +1072,8 @@ class Pregel(
             stream_mode: Optional. The stream mode for the computation. Default is "values".
             output_keys: Optional. The output keys to include in the result. Default is None.
             input_keys: Optional. The input keys to include in the result. Default is None.
-            interrupt_before_nodes: Optional. The nodes to interrupt before. Default is None.
-            interrupt_after_nodes: Optional. The nodes to interrupt after. Default is None.
+            interrupt_before: Optional. The nodes to interrupt before. Default is None.
+            interrupt_after: Optional. The nodes to interrupt after. Default is None.
             debug: Optional. Whether to enable debug mode. Default is None.
             **kwargs: Additional keyword arguments.
 
@@ -1091,8 +1093,8 @@ class Pregel(
             stream_mode=stream_mode,
             output_keys=output_keys,
             input_keys=input_keys,
-            interrupt_before=interrupt_before_nodes,
-            interrupt_after=interrupt_after_nodes,
+            interrupt_before=interrupt_before,
+            interrupt_after=interrupt_after,
             debug=debug,
             **kwargs,
         ):
@@ -1132,7 +1134,7 @@ def _panic_or_proceed(
 
 def _should_interrupt(
     checkpoint: Checkpoint,
-    interrupt_nodes: Sequence[str],
+    interrupt_nodes: Union[All, Sequence[str]],
     snapshot_channels: Sequence[str],
     tasks: list[PregelExecutableTask],
 ) -> bool:
@@ -1145,7 +1147,15 @@ def _should_interrupt(
             for chan in snapshot_channels
         )
         # and any channel written to is in interrupt_nodes list
-        and any(node for node, _, _, _, _ in tasks if node in interrupt_nodes)
+        and any(
+            node
+            for node, _, _, _, config in tasks
+            if (
+                (not config or TAG_HIDDEN not in config.get("tags"))
+                if interrupt_nodes == "*"
+                else node in interrupt_nodes
+            )
+        )
     )
 
 

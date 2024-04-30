@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Any, NamedTuple, Optional, Union
+from typing import Any, Literal, NamedTuple, Optional, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
@@ -26,3 +26,6 @@ class StateSnapshot(NamedTuple):
     """Config used to fetch this snapshot"""
     parent_config: Optional[RunnableConfig] = None
     """Config used to fetch the parent snapshot, if any"""
+
+
+All = Literal["*"]
