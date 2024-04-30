@@ -14,7 +14,8 @@ class PregelExecutableTask(NamedTuple):
     input: Any
     proc: Runnable
     writes: deque[tuple[str, Any]]
-    config: Optional[RunnableConfig] = None
+    config: Optional[RunnableConfig]
+    triggers: list[str]
 
 
 class StateSnapshot(NamedTuple):
