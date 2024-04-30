@@ -213,6 +213,11 @@ class Pregel(
     class Config:
         arbitrary_types_allowed = True
 
+    @classmethod
+    def is_lc_serializable(cls) -> bool:
+        """Return whether the graph can be serialized by Langchain."""
+        return True
+
     @root_validator(skip_on_failure=True)
     def validate_on_init(cls, values: dict[str, Any]) -> dict[str, Any]:
         if not values["auto_validate"]:
