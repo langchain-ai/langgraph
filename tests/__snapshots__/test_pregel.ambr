@@ -1,98 +1,18 @@
 # serializer version: 1
 # name: test_branch_then[end_of_run]
   '''
-                  +-----------+                
-                  | __start__ |                
-                  +-----------+                
-                        *                      
-                        *                      
-                        *                      
-                  +---------+                  
-                  | prepare |                  
-                  +---------+                  
-                        *                      
-                        *                      
-                        *                      
-                  +-----------+                
-                  | condition |                
-                  +-----------+                
-                 ..           ..               
-               ..               ..             
-             ..                   ..           
-  +---------------+          +---------------+ 
-  | tool_two_slow |          | tool_two_fast | 
-  +---------------+          +---------------+ 
-                 **           **               
-                   **       **                 
-                     **   **                   
-                   +--------+                  
-                   | finish |                  
-                   +--------+                  
-                        *                      
-                        *                      
-                        *                      
-                  +---------+                  
-                  | __end__ |                  
-                  +---------+                  
+  graph TD;
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  
   '''
 # ---
 # name: test_branch_then[end_of_run].1
   '''
-                  +-----------+                
-                  | __start__ |                
-                  +-----------+                
-                        *                      
-                        *                      
-                        *                      
-                  +---------+                  
-                  | prepare |                  
-                  +---------+.                 
-                 ..           ..               
-               ..               ..             
-             ..                   ..           
-  +---------------+          +---------------+ 
-  | tool_two_slow |          | tool_two_fast | 
-  +---------------+          +---------------+ 
-                 **           **               
-                   **       **                 
-                     **   **                   
-                   +--------+                  
-                   | finish |                  
-                   +--------+                  
-                        *                      
-                        *                      
-                        *                      
-                  +---------+                  
-                  | __end__ |                  
-                  +---------+                  
-  '''
-# ---
-# name: test_branch_then[end_of_run].2
-  '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
-  graph TD;
-  	__start__[__start__]:::startclass;
-  	__end__[__end__]:::endclass;
-  	prepare([prepare]):::otherclass;
-  	tool_two_slow([tool_two_slow]):::otherclass;
-  	tool_two_fast([tool_two_fast]):::otherclass;
-  	finish([finish]):::otherclass;
-  	condition([condition]):::otherclass;
-  	__start__ --> prepare;
-  	finish --> __end__;
-  	prepare --> condition;
-  	condition -. tool_two_slow .-> tool_two_slow;
-  	tool_two_slow --> finish;
-  	condition -. tool_two_fast .-> tool_two_fast;
-  	tool_two_fast --> finish;
-  	classDef startclass fill:#ffdfba;
-  	classDef endclass fill:#baffc9;
-  	classDef otherclass fill:#fad7de;
-  
-  '''
-# ---
-# name: test_branch_then[end_of_run].3
-  '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__[__start__]:::startclass;
@@ -103,9 +23,9 @@
   	finish([finish]):::otherclass;
   	__start__ --> prepare;
   	finish --> __end__;
-  	prepare -. tool_two_slow .-> tool_two_slow;
+  	prepare -.-> tool_two_slow;
   	tool_two_slow --> finish;
-  	prepare -. tool_two_fast .-> tool_two_fast;
+  	prepare -.-> tool_two_fast;
   	tool_two_fast --> finish;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -115,98 +35,18 @@
 # ---
 # name: test_branch_then[end_of_step]
   '''
-                  +-----------+                
-                  | __start__ |                
-                  +-----------+                
-                        *                      
-                        *                      
-                        *                      
-                  +---------+                  
-                  | prepare |                  
-                  +---------+                  
-                        *                      
-                        *                      
-                        *                      
-                  +-----------+                
-                  | condition |                
-                  +-----------+                
-                 ..           ..               
-               ..               ..             
-             ..                   ..           
-  +---------------+          +---------------+ 
-  | tool_two_slow |          | tool_two_fast | 
-  +---------------+          +---------------+ 
-                 **           **               
-                   **       **                 
-                     **   **                   
-                   +--------+                  
-                   | finish |                  
-                   +--------+                  
-                        *                      
-                        *                      
-                        *                      
-                  +---------+                  
-                  | __end__ |                  
-                  +---------+                  
+  graph TD;
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  
   '''
 # ---
 # name: test_branch_then[end_of_step].1
   '''
-                  +-----------+                
-                  | __start__ |                
-                  +-----------+                
-                        *                      
-                        *                      
-                        *                      
-                  +---------+                  
-                  | prepare |                  
-                  +---------+.                 
-                 ..           ..               
-               ..               ..             
-             ..                   ..           
-  +---------------+          +---------------+ 
-  | tool_two_slow |          | tool_two_fast | 
-  +---------------+          +---------------+ 
-                 **           **               
-                   **       **                 
-                     **   **                   
-                   +--------+                  
-                   | finish |                  
-                   +--------+                  
-                        *                      
-                        *                      
-                        *                      
-                  +---------+                  
-                  | __end__ |                  
-                  +---------+                  
-  '''
-# ---
-# name: test_branch_then[end_of_step].2
-  '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
-  graph TD;
-  	__start__[__start__]:::startclass;
-  	__end__[__end__]:::endclass;
-  	prepare([prepare]):::otherclass;
-  	tool_two_slow([tool_two_slow]):::otherclass;
-  	tool_two_fast([tool_two_fast]):::otherclass;
-  	finish([finish]):::otherclass;
-  	condition([condition]):::otherclass;
-  	__start__ --> prepare;
-  	finish --> __end__;
-  	prepare --> condition;
-  	condition -. tool_two_slow .-> tool_two_slow;
-  	tool_two_slow --> finish;
-  	condition -. tool_two_fast .-> tool_two_fast;
-  	tool_two_fast --> finish;
-  	classDef startclass fill:#ffdfba;
-  	classDef endclass fill:#baffc9;
-  	classDef otherclass fill:#fad7de;
-  
-  '''
-# ---
-# name: test_branch_then[end_of_step].3
-  '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__[__start__]:::startclass;
@@ -217,9 +57,9 @@
   	finish([finish]):::otherclass;
   	__start__ --> prepare;
   	finish --> __end__;
-  	prepare -. tool_two_slow .-> tool_two_slow;
+  	prepare -.-> tool_two_slow;
   	tool_two_slow --> finish;
-  	prepare -. tool_two_fast .-> tool_two_fast;
+  	prepare -.-> tool_two_fast;
   	tool_two_fast --> finish;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -270,30 +110,6 @@
           ],
           "name": "right"
         }
-      },
-      {
-        "id": "should_start",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_start"
-        }
-      },
-      {
-        "id": "condition",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "RunnableCallable"
-        }
       }
     ],
     "edges": [
@@ -303,28 +119,19 @@
       },
       {
         "source": "__start__",
-        "target": "should_start"
-      },
-      {
-        "source": "should_start",
         "target": "left",
         "data": "go-left",
         "conditional": true
       },
       {
-        "source": "should_start",
+        "source": "__start__",
         "target": "right",
         "data": "go-right",
         "conditional": true
       },
       {
         "source": "left",
-        "target": "condition"
-      },
-      {
-        "source": "condition",
         "target": "__end__",
-        "data": "__end__",
         "conditional": true
       }
     ]
@@ -333,33 +140,12 @@
 # ---
 # name: test_conditional_entrypoint_graph.3
   '''
-            +-----------+        
-            | __start__ |        
-            +-----------+        
-                  *              
-                  *              
-                  *              
-          +--------------+       
-          | should_start |       
-          +--------------+       
-             .         ..        
-           ..            .       
-          .               ..     
-    +------+                .    
-    | left |                .    
-    +------+                .    
-        *                   .    
-        *                   .    
-        *                   .    
-  +-----------+        +-------+ 
-  | condition |        | right | 
-  +-----------+        +-------+ 
-             .         *         
-              ..     **          
-                .   *            
-            +---------+          
-            | __end__ |          
-            +---------+          
+  graph TD;
+  	right --> __end__;
+  	__start__ -. go-left .-> left;
+  	__start__ -. go-right .-> right;
+  	left -.-> __end__;
+  
   '''
 # ---
 # name: test_conditional_entrypoint_graph_state
@@ -405,30 +191,6 @@
           ],
           "name": "right"
         }
-      },
-      {
-        "id": "should_start",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_start"
-        }
-      },
-      {
-        "id": "condition",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "RunnableCallable"
-        }
       }
     ],
     "edges": [
@@ -438,28 +200,19 @@
       },
       {
         "source": "__start__",
-        "target": "should_start"
-      },
-      {
-        "source": "should_start",
         "target": "left",
         "data": "go-left",
         "conditional": true
       },
       {
-        "source": "should_start",
+        "source": "__start__",
         "target": "right",
         "data": "go-right",
         "conditional": true
       },
       {
         "source": "left",
-        "target": "condition"
-      },
-      {
-        "source": "condition",
         "target": "__end__",
-        "data": "__end__",
         "conditional": true
       }
     ]
@@ -468,33 +221,12 @@
 # ---
 # name: test_conditional_entrypoint_graph_state.3
   '''
-            +-----------+        
-            | __start__ |        
-            +-----------+        
-                  *              
-                  *              
-                  *              
-          +--------------+       
-          | should_start |       
-          +--------------+       
-             .         ..        
-           ..            .       
-          .               ..     
-    +------+                .    
-    | left |                .    
-    +------+                .    
-        *                   .    
-        *                   .    
-        *                   .    
-  +-----------+        +-------+ 
-  | condition |        | right | 
-  +-----------+        +-------+ 
-             .         *         
-              ..     **          
-                .   *            
-            +---------+          
-            | __end__ |          
-            +---------+          
+  graph TD;
+  	right --> __end__;
+  	__start__ -. go-left .-> left;
+  	__start__ -. go-right .-> right;
+  	left -.-> __end__;
+  
   '''
 # ---
 # name: test_conditional_graph[end_of_run]
@@ -535,18 +267,6 @@
           ],
           "name": "tools"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -560,16 +280,12 @@
       },
       {
         "source": "agent",
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -580,31 +296,6 @@
 # ---
 # name: test_conditional_graph[end_of_run].1
   '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+.              *     
-            .         .....         *     
-            .              ...      *     
-            .                 ...   *     
-      +---------+              +-------+  
-      | __end__ |              | tools |  
-      +---------+              +-------+  
-  '''
-# ---
-# name: test_conditional_graph[end_of_run].2
-  '''
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
@@ -613,7 +304,7 @@
   
   '''
 # ---
-# name: test_conditional_graph[end_of_run].3
+# name: test_conditional_graph[end_of_run].2
   '''
   {
     "nodes": [
@@ -700,18 +391,6 @@
           ],
           "name": "tools"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -749,16 +428,12 @@
       },
       {
         "source": 3,
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": 3,
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -767,56 +442,7 @@
   }
   '''
 # ---
-# name: test_conditional_graph[end_of_run].4
-  '''
-                                        +-----------+                             
-                                        | __start__ |                             
-                                        +-----------+                             
-                                               *                                  
-                                               *                                  
-                                               *                                  
-                               +------------------------------+                   
-                               | Parallel<agent_outcome>Input |                   
-                               +------------------------------+                   
-                            *****            *              *****                 
-                      ******                 *                   ****             
-                   ***                      *                        *****        
-     +----------------+                     *                             ***     
-     | PromptTemplate |                     *                               *     
-     +----------------+                     *                               *     
-              *                             *                               *     
-              *                             *                               *     
-              *                             *                               *     
-  +----------------------+                  *                               *     
-  | FakeStreamingListLLM |                  *                               *     
-  +----------------------+                  *                               *     
-              *                             *                               *     
-              *                             *                               *     
-              *                             *                               *     
-  +----------------------+           +-------------+                        *     
-  | Lambda(agent_parser) |           | Passthrough |                        *     
-  +----------------------+           +-------------+                        *     
-                     ***            ***                                     *     
-                        **        **                                        *     
-                          **    **                                          *     
-             +-------------------------------+                              *     
-             | Parallel<agent_outcome>Output |                              *     
-             +-------------------------------+                              *     
-                             *                                              *     
-                             *                                              *     
-                             *                                              *     
-                    +-----------------+                                     *     
-                    | should_continue |...                                  *     
-                    +-----------------+   .........                         *     
-                             .                     ........                 *     
-                             .                             .........        *     
-                             .                                      .....   *     
-                        +---------+                                     +-------+ 
-                        | __end__ |                                     | tools | 
-                        +---------+                                     +-------+ 
-  '''
-# ---
-# name: test_conditional_graph[end_of_run].5
+# name: test_conditional_graph[end_of_run].3
   '''
   graph TD;
   	PromptTemplate --> FakeStreamingListLLM;
@@ -870,18 +496,6 @@
           ],
           "name": "tools"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -895,16 +509,12 @@
       },
       {
         "source": "agent",
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -915,31 +525,6 @@
 # ---
 # name: test_conditional_graph[end_of_step].1
   '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+.              *     
-            .         .....         *     
-            .              ...      *     
-            .                 ...   *     
-      +---------+              +-------+  
-      | __end__ |              | tools |  
-      +---------+              +-------+  
-  '''
-# ---
-# name: test_conditional_graph[end_of_step].2
-  '''
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
@@ -948,7 +533,7 @@
   
   '''
 # ---
-# name: test_conditional_graph[end_of_step].3
+# name: test_conditional_graph[end_of_step].2
   '''
   {
     "nodes": [
@@ -1035,18 +620,6 @@
           ],
           "name": "tools"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -1084,16 +657,12 @@
       },
       {
         "source": 3,
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": 3,
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -1102,56 +671,7 @@
   }
   '''
 # ---
-# name: test_conditional_graph[end_of_step].4
-  '''
-                                        +-----------+                             
-                                        | __start__ |                             
-                                        +-----------+                             
-                                               *                                  
-                                               *                                  
-                                               *                                  
-                               +------------------------------+                   
-                               | Parallel<agent_outcome>Input |                   
-                               +------------------------------+                   
-                            *****            *              *****                 
-                      ******                 *                   ****             
-                   ***                      *                        *****        
-     +----------------+                     *                             ***     
-     | PromptTemplate |                     *                               *     
-     +----------------+                     *                               *     
-              *                             *                               *     
-              *                             *                               *     
-              *                             *                               *     
-  +----------------------+                  *                               *     
-  | FakeStreamingListLLM |                  *                               *     
-  +----------------------+                  *                               *     
-              *                             *                               *     
-              *                             *                               *     
-              *                             *                               *     
-  +----------------------+           +-------------+                        *     
-  | Lambda(agent_parser) |           | Passthrough |                        *     
-  +----------------------+           +-------------+                        *     
-                     ***            ***                                     *     
-                        **        **                                        *     
-                          **    **                                          *     
-             +-------------------------------+                              *     
-             | Parallel<agent_outcome>Output |                              *     
-             +-------------------------------+                              *     
-                             *                                              *     
-                             *                                              *     
-                             *                                              *     
-                    +-----------------+                                     *     
-                    | should_continue |...                                  *     
-                    +-----------------+   .........                         *     
-                             .                     ........                 *     
-                             .                             .........        *     
-                             .                                      .....   *     
-                        +---------+                                     +-------+ 
-                        | __end__ |                                     | tools | 
-                        +---------+                                     +-------+ 
-  '''
-# ---
-# name: test_conditional_graph[end_of_step].5
+# name: test_conditional_graph[end_of_step].3
   '''
   graph TD;
   	PromptTemplate --> FakeStreamingListLLM;
@@ -1211,18 +731,6 @@
           ],
           "name": "tools"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -1236,16 +744,12 @@
       },
       {
         "source": "agent",
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -1256,27 +760,12 @@
 # ---
 # name: test_conditional_graph_state[end_of_run].3
   '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+.              *     
-            .         .....         *     
-            .              ...      *     
-            .                 ...   *     
-      +---------+              +-------+  
-      | __end__ |              | tools |  
-      +---------+              +-------+  
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. continue .-> tools;
+  	agent -. exit .-> __end__;
+  
   '''
 # ---
 # name: test_conditional_graph_state[end_of_step]
@@ -1323,18 +812,6 @@
           ],
           "name": "tools"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -1348,16 +825,12 @@
       },
       {
         "source": "agent",
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": "agent",
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -1368,249 +841,90 @@
 # ---
 # name: test_conditional_graph_state[end_of_step].3
   '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+.              *     
-            .         .....         *     
-            .              ...      *     
-            .                 ...   *     
-      +---------+              +-------+  
-      | __end__ |              | tools |  
-      +---------+              +-------+  
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. continue .-> tools;
+  	agent -. exit .-> __end__;
+  
   '''
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge[end_of_run]
   '''
-                +-----------+              
-                | __start__ |              
-                +-----------+              
-                      *                    
-                      *                    
-                      *                    
-              +---------------+            
-              | rewrite_query |            
-              +---------------+            
-               ***         ***             
-              *               *            
-            **                 ***         
-  +--------------+                *        
-  | analyzer_one |                *        
-  +--------------+                *        
-          *                       *        
-          *                       *        
-          *                       *        
-  +---------------+      +---------------+ 
-  | retriever_one |      | retriever_two | 
-  +---------------+      +---------------+ 
-               ***         ***             
-                  *       *                
-                   **   **                 
-                   +----+                  
-                   | qa |                  
-                   +----+                  
-                      *                    
-                      *                    
-                      *                    
-                +---------+                
-                | __end__ |                
-                +---------+                
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
+  
   '''
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge[end_of_step]
   '''
-                +-----------+              
-                | __start__ |              
-                +-----------+              
-                      *                    
-                      *                    
-                      *                    
-              +---------------+            
-              | rewrite_query |            
-              +---------------+            
-               ***         ***             
-              *               *            
-            **                 ***         
-  +--------------+                *        
-  | analyzer_one |                *        
-  +--------------+                *        
-          *                       *        
-          *                       *        
-          *                       *        
-  +---------------+      +---------------+ 
-  | retriever_one |      | retriever_two | 
-  +---------------+      +---------------+ 
-               ***         ***             
-                  *       *                
-                   **   **                 
-                   +----+                  
-                   | qa |                  
-                   +----+                  
-                      *                    
-                      *                    
-                      *                    
-                +---------+                
-                | __end__ |                
-                +---------+                
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
+  
   '''
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[end_of_run]
   '''
-                +-----------+              
-                | __start__ |              
-                +-----------+              
-                      *                    
-                      *                    
-                      *                    
-              +---------------+            
-              | rewrite_query |            
-              +---------------+            
-               ***         ***             
-              *               *            
-            **                 **          
-  +--------------+          +---------+    
-  | analyzer_one |          | decider |    
-  +--------------+          +---------+    
-          *                       .        
-          *                       .        
-          *                       .        
-  +---------------+      +---------------+ 
-  | retriever_one |      | retriever_two | 
-  +---------------+      +---------------+ 
-               ***         ***             
-                  *       *                
-                   **   **                 
-                   +----+                  
-                   | qa |                  
-                   +----+                  
-                      *                    
-                      *                    
-                      *                    
-                +---------+                
-                | __end__ |                
-                +---------+                
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
   '''
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[end_of_step]
   '''
-                +-----------+              
-                | __start__ |              
-                +-----------+              
-                      *                    
-                      *                    
-                      *                    
-              +---------------+            
-              | rewrite_query |            
-              +---------------+            
-               ***         ***             
-              *               *            
-            **                 **          
-  +--------------+          +---------+    
-  | analyzer_one |          | decider |    
-  +--------------+          +---------+    
-          *                       .        
-          *                       .        
-          *                       .        
-  +---------------+      +---------------+ 
-  | retriever_one |      | retriever_two | 
-  +---------------+      +---------------+ 
-               ***         ***             
-                  *       *                
-                   **   **                 
-                   +----+                  
-                   | qa |                  
-                   +----+                  
-                      *                    
-                      *                    
-                      *                    
-                +---------+                
-                | __end__ |                
-                +---------+                
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
   '''
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[end_of_run]
   '''
-                +-----------+              
-                | __start__ |              
-                +-----------+              
-                      *                    
-                      *                    
-                      *                    
-              +---------------+            
-              | rewrite_query |            
-              +---------------+            
-               ***         ***             
-              *               *            
-            **                 **          
-  +--------------+         +-----------+   
-  | analyzer_one |         | condition |   
-  +--------------+         +-----------+   
-          *                       .        
-          *                       .        
-          *                       .        
-  +---------------+      +---------------+ 
-  | retriever_one |      | retriever_two | 
-  +---------------+      +---------------+ 
-               ***         ***             
-                  *       *                
-                   **   **                 
-                   +----+                  
-                   | qa |                  
-                   +----+                  
-                      *                    
-                      *                    
-                      *                    
-                +---------+                
-                | __end__ |                
-                +---------+                
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
   '''
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[end_of_step]
   '''
-                +-----------+              
-                | __start__ |              
-                +-----------+              
-                      *                    
-                      *                    
-                      *                    
-              +---------------+            
-              | rewrite_query |            
-              +---------------+            
-               ***         ***             
-              *               *            
-            **                 **          
-  +--------------+         +-----------+   
-  | analyzer_one |         | condition |   
-  +--------------+         +-----------+   
-          *                       .        
-          *                       .        
-          *                       .        
-  +---------------+      +---------------+ 
-  | retriever_one |      | retriever_two | 
-  +---------------+      +---------------+ 
-               ***         ***             
-                  *       *                
-                   **   **                 
-                   +----+                  
-                   | qa |                  
-                   +----+                  
-                      *                    
-                      *                    
-                      *                    
-                +---------+                
-                | __end__ |                
-                +---------+                
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
   '''
 # ---
 # name: test_message_graph[end_of_run]
@@ -1657,18 +971,6 @@
           ],
           "name": "tools"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -1682,16 +984,12 @@
       },
       {
         "source": "agent",
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "action",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": "agent",
         "target": "__end__",
         "data": "end",
         "conditional": true
@@ -1702,27 +1000,12 @@
 # ---
 # name: test_message_graph[end_of_run].3
   '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+.              *     
-            .         .....         *     
-            .              ...      *     
-            .                 ...   *     
-      +---------+             +--------+  
-      | __end__ |             | action |  
-      +---------+             +--------+  
+  graph TD;
+  	__start__ --> agent;
+  	action --> agent;
+  	agent -. continue .-> action;
+  	agent -. end .-> __end__;
+  
   '''
 # ---
 # name: test_message_graph[end_of_step]
@@ -1769,18 +1052,6 @@
           ],
           "name": "tools"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -1794,16 +1065,12 @@
       },
       {
         "source": "agent",
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "action",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": "agent",
         "target": "__end__",
         "data": "end",
         "conditional": true
@@ -1814,52 +1081,21 @@
 # ---
 # name: test_message_graph[end_of_step].3
   '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+.              *     
-            .         .....         *     
-            .              ...      *     
-            .                 ...   *     
-      +---------+             +--------+  
-      | __end__ |             | action |  
-      +---------+             +--------+  
+  graph TD;
+  	__start__ --> agent;
+  	action --> agent;
+  	agent -. continue .-> action;
+  	agent -. end .-> __end__;
+  
   '''
 # ---
 # name: test_nested_graph
   '''
-  +-----------+  
-  | __start__ |  
-  +-----------+  
-        *        
-        *        
-        *        
-    +-------+    
-    | inner |    
-    +-------+    
-        *        
-        *        
-        *        
-    +------+     
-    | side |     
-    +------+     
-        *        
-        *        
-        *        
-   +---------+   
-   | __end__ |   
-   +---------+   
+  graph TD;
+  	__start__ --> inner;
+  	inner --> side;
+  	side --> __end__;
+  
   '''
 # ---
 # name: test_nested_graph.1
@@ -1884,8 +1120,7 @@
     'edges': list([
       dict({
         'conditional': True,
-        'data': 'tool_two_slow',
-        'source': 'tool_two:condition',
+        'source': 'tool_two:__start__',
         'target': 'tool_two:tool_two_slow',
       }),
       dict({
@@ -1894,8 +1129,7 @@
       }),
       dict({
         'conditional': True,
-        'data': 'tool_two_fast',
-        'source': 'tool_two:condition',
+        'source': 'tool_two:__start__',
         'target': 'tool_two:tool_two_fast',
       }),
       dict({
@@ -1903,13 +1137,8 @@
         'target': 'tool_two:__end__',
       }),
       dict({
-        'source': '__start__',
-        'target': 'condition',
-      }),
-      dict({
         'conditional': True,
-        'data': 'tool_one',
-        'source': 'condition',
+        'source': '__start__',
         'target': 'tool_one',
       }),
       dict({
@@ -1918,9 +1147,8 @@
       }),
       dict({
         'conditional': True,
-        'data': 'tool_two',
-        'source': 'condition',
-        'target': 'tool_two:condition',
+        'source': '__start__',
+        'target': 'tool_two:__start__',
       }),
       dict({
         'source': 'tool_two:__end__',
@@ -1928,8 +1156,7 @@
       }),
       dict({
         'conditional': True,
-        'data': 'tool_three',
-        'source': 'condition',
+        'source': '__start__',
         'target': 'tool_three',
       }),
       dict({
@@ -1959,6 +1186,11 @@
         }),
         'id': 'tool_one',
         'type': 'runnable',
+      }),
+      dict({
+        'data': 'tool_two:__start__',
+        'id': 'tool_two:__start__',
+        'type': 'schema',
       }),
       dict({
         'data': 'tool_two:__end__',
@@ -1996,33 +1228,9 @@
             'utils',
             'RunnableCallable',
           ]),
-          'name': 'RunnableCallable',
-        }),
-        'id': 'tool_two:condition',
-        'type': 'runnable',
-      }),
-      dict({
-        'data': dict({
-          'id': list([
-            'langgraph',
-            'utils',
-            'RunnableCallable',
-          ]),
           'name': 'tool_three',
         }),
         'id': 'tool_three',
-        'type': 'runnable',
-      }),
-      dict({
-        'data': dict({
-          'id': list([
-            'langgraph',
-            'utils',
-            'RunnableCallable',
-          ]),
-          'name': 'RunnableCallable',
-        }),
-        'id': 'condition',
         'type': 'runnable',
       }),
     ]),
@@ -2030,54 +1238,27 @@
 # ---
 # name: test_nested_graph_xray.1
   '''
-                         +-----------+                          
-                         | __start__ |                          
-                         +-----------+                          
-                                *                               
-                                *                               
-                                *                               
-                         +-----------+                          
-                         | condition |                          
-                       ..+-----------+...                       
-                  .....        .         .....                  
-               ...             .              ...               
-            ...                .                 ...            
-  +----------+           +----------+           +------------+  
-  | tool_one |*          | tool_two |           | tool_three |  
-  +----------+ ***       +----------+         **+------------+  
-                  *****        *         *****                  
-                       ***     *      ***                       
-                          ***  *   ***                          
-                          +---------+                           
-                          | __end__ |                           
-                          +---------+                           
-  '''
-# ---
-# name: test_nested_graph_xray.2
-  '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__[__start__]:::startclass;
   	__end__[__end__]:::endclass;
   	tool_one([tool_one]):::otherclass;
+  	tool_two___start__([__start__]):::otherclass;
   	tool_two___end__([__end__]):::otherclass;
   	tool_two_tool_two_slow([tool_two_slow]):::otherclass;
   	tool_two_tool_two_fast([tool_two_fast]):::otherclass;
-  	tool_two_condition([condition]):::otherclass;
   	tool_three([tool_three]):::otherclass;
-  	condition([condition]):::otherclass;
   	subgraph tool_two
-  	tool_two_condition -. tool_two_slow .-> tool_two_tool_two_slow;
+  	tool_two___start__ -.-> tool_two_tool_two_slow;
   	tool_two_tool_two_slow --> tool_two___end__;
-  	tool_two_condition -. tool_two_fast .-> tool_two_tool_two_fast;
+  	tool_two___start__ -.-> tool_two_tool_two_fast;
   	tool_two_tool_two_fast --> tool_two___end__;
   	end
-  	__start__ --> condition;
-  	condition -. tool_one .-> tool_one;
+  	__start__ -.-> tool_one;
   	tool_one --> __end__;
-  	condition -. tool_two .-> tool_two_condition;
+  	__start__ -.-> tool_two___start__;
   	tool_two___end__ --> __end__;
-  	condition -. tool_three .-> tool_three;
+  	__start__ -.-> tool_three;
   	tool_three --> __end__;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -2130,18 +1311,6 @@
           ],
           "name": "call_tool"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -2155,16 +1324,12 @@
       },
       {
         "source": "agent",
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "action",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": "agent",
         "target": "__end__",
         "data": "end",
         "conditional": true
@@ -2175,27 +1340,12 @@
 # ---
 # name: test_prebuilt_chat.3
   '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+.              *     
-            .         .....         *     
-            .              ...      *     
-            .                 ...   *     
-      +---------+             +--------+  
-      | __end__ |             | action |  
-      +---------+             +--------+  
+  graph TD;
+  	__start__ --> agent;
+  	action --> agent;
+  	agent -. continue .-> action;
+  	agent -. end .-> __end__;
+  
   '''
 # ---
 # name: test_prebuilt_tool_chat
@@ -2243,18 +1393,6 @@
           ],
           "name": "tools"
         }
-      },
-      {
-        "id": "should_continue",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "should_continue"
-        }
       }
     ],
     "edges": [
@@ -2268,16 +1406,12 @@
       },
       {
         "source": "agent",
-        "target": "should_continue"
-      },
-      {
-        "source": "should_continue",
         "target": "action",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": "should_continue",
+        "source": "agent",
         "target": "__end__",
         "data": "end",
         "conditional": true
@@ -2288,153 +1422,51 @@
 # ---
 # name: test_prebuilt_tool_chat.3
   '''
-                 +-----------+            
-                 | __start__ |            
-                 +-----------+            
-                        *                 
-                        *                 
-                        *                 
-                   +-------+              
-                   | agent |              
-                   +-------+*             
-                 ***         ***          
-                *               *         
-              **                 ***      
-  +-----------------+               *     
-  | should_continue |               *     
-  +-----------------+.              *     
-            .         .....         *     
-            .              ...      *     
-            .                 ...   *     
-      +---------+             +--------+  
-      | __end__ |             | action |  
-      +---------+             +--------+  
+  graph TD;
+  	__start__ --> agent;
+  	action --> agent;
+  	agent -. continue .-> action;
+  	agent -. end .-> __end__;
+  
   '''
 # ---
 # name: test_repeat_condition
   '''
   graph TD;
   	__start__ --> Researcher;
-  	Researcher --> Researcher_router;
-  	Researcher_router -. continue .-> Chart_Generator;
-  	Researcher_router -. call_tool .-> Call_Tool;
-  	Researcher_router -. end .-> __end__;
-  	Chart_Generator --> Chart_Generator_router;
-  	Chart_Generator_router -. continue .-> Researcher;
-  	Chart_Generator_router -. call_tool .-> Call_Tool;
-  	Chart_Generator_router -. end .-> __end__;
-  	Call_Tool --> condition;
-  	condition -. Researcher .-> Researcher;
-  	condition -. Chart Generator .-> Chart_Generator;
+  	Researcher -. continue .-> Chart_Generator;
+  	Researcher -. call_tool .-> Call_Tool;
+  	Researcher -. end .-> __end__;
+  	Chart_Generator -. continue .-> Researcher;
+  	Chart_Generator -. call_tool .-> Call_Tool;
+  	Chart_Generator -. end .-> __end__;
+  	Call_Tool -.-> Researcher;
+  	Call_Tool -.-> Chart_Generator;
   
   '''
 # ---
 # name: test_simple_multi_edge
   '''
-      +-----------+  
-      | __start__ |  
-      +-----------+  
-             *       
-             *       
-             *       
-          +----+     
-          | up |     
-          +----+     
-         **     **   
-        *         *  
-       *           * 
-  +------+          *
-  | side |         * 
-  +------+        *  
-         **     **   
-           *   *     
-            * *      
-         +------+    
-         | down |    
-         +------+    
-             *       
-             *       
-             *       
-        +---------+  
-        | __end__ |  
-        +---------+  
+  graph TD;
+  	__start__ --> up;
+  	down --> __end__;
+  	side --> down;
+  	up --> down;
+  	up --> side;
+  
   '''
 # ---
 # name: test_start_branch_then[end_of_run]
   '''
-                  +-----------+                  
-                  | __start__ |                  
-                  +-----------+                  
-                        *                        
-                        *                        
-                        *                        
-                  +-----------+                  
-                  | condition |                  
-                  +-----------+                  
-                 ..            ..                
-               ..                ..              
-             ..                    ..            
-  +---------------+           +---------------+  
-  | tool_two_slow |           | tool_two_fast |  
-  +---------------+           +---------------+  
-                 **            **                
-                   **        **                  
-                     **    **                    
-                   +---------+                   
-                   | __end__ |                   
-                   +---------+                   
-  '''
-# ---
-# name: test_start_branch_then[end_of_run].1
-  '''
-                  +-----------+                  
-                  | __start__ |                  
-                  +-----------+                  
-                 ..            ..                
-               ..                ..              
-             ..                    ..            
-  +---------------+           +---------------+  
-  | tool_two_slow |           | tool_two_fast |  
-  +---------------+           +---------------+  
-                 **            **                
-                   **        **                  
-                     **    **                    
-                   +---------+                   
-                   | __end__ |                   
-                   +---------+                   
-  '''
-# ---
-# name: test_start_branch_then[end_of_run].2
-  '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__[__start__]:::startclass;
   	__end__[__end__]:::endclass;
   	tool_two_slow([tool_two_slow]):::otherclass;
   	tool_two_fast([tool_two_fast]):::otherclass;
-  	condition([condition]):::otherclass;
-  	__start__ --> condition;
-  	condition -. tool_two_slow .-> tool_two_slow;
+  	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
-  	condition -. tool_two_fast .-> tool_two_fast;
-  	tool_two_fast --> __end__;
-  	classDef startclass fill:#ffdfba;
-  	classDef endclass fill:#baffc9;
-  	classDef otherclass fill:#fad7de;
-  
-  '''
-# ---
-# name: test_start_branch_then[end_of_run].3
-  '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
-  graph TD;
-  	__start__[__start__]:::startclass;
-  	__end__[__end__]:::endclass;
-  	tool_two_slow([tool_two_slow]):::otherclass;
-  	tool_two_fast([tool_two_fast]):::otherclass;
-  	__start__ -. tool_two_slow .-> tool_two_slow;
-  	tool_two_slow --> __end__;
-  	__start__ -. tool_two_fast .-> tool_two_fast;
+  	__start__ -.-> tool_two_fast;
   	tool_two_fast --> __end__;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;
@@ -2444,79 +1476,15 @@
 # ---
 # name: test_start_branch_then[end_of_step]
   '''
-                  +-----------+                  
-                  | __start__ |                  
-                  +-----------+                  
-                        *                        
-                        *                        
-                        *                        
-                  +-----------+                  
-                  | condition |                  
-                  +-----------+                  
-                 ..            ..                
-               ..                ..              
-             ..                    ..            
-  +---------------+           +---------------+  
-  | tool_two_slow |           | tool_two_fast |  
-  +---------------+           +---------------+  
-                 **            **                
-                   **        **                  
-                     **    **                    
-                   +---------+                   
-                   | __end__ |                   
-                   +---------+                   
-  '''
-# ---
-# name: test_start_branch_then[end_of_step].1
-  '''
-                  +-----------+                  
-                  | __start__ |                  
-                  +-----------+                  
-                 ..            ..                
-               ..                ..              
-             ..                    ..            
-  +---------------+           +---------------+  
-  | tool_two_slow |           | tool_two_fast |  
-  +---------------+           +---------------+  
-                 **            **                
-                   **        **                  
-                     **    **                    
-                   +---------+                   
-                   | __end__ |                   
-                   +---------+                   
-  '''
-# ---
-# name: test_start_branch_then[end_of_step].2
-  '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__[__start__]:::startclass;
   	__end__[__end__]:::endclass;
   	tool_two_slow([tool_two_slow]):::otherclass;
   	tool_two_fast([tool_two_fast]):::otherclass;
-  	condition([condition]):::otherclass;
-  	__start__ --> condition;
-  	condition -. tool_two_slow .-> tool_two_slow;
+  	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
-  	condition -. tool_two_fast .-> tool_two_fast;
-  	tool_two_fast --> __end__;
-  	classDef startclass fill:#ffdfba;
-  	classDef endclass fill:#baffc9;
-  	classDef otherclass fill:#fad7de;
-  
-  '''
-# ---
-# name: test_start_branch_then[end_of_step].3
-  '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
-  graph TD;
-  	__start__[__start__]:::startclass;
-  	__end__[__end__]:::endclass;
-  	tool_two_slow([tool_two_slow]):::otherclass;
-  	tool_two_fast([tool_two_fast]):::otherclass;
-  	__start__ -. tool_two_slow .-> tool_two_slow;
-  	tool_two_slow --> __end__;
-  	__start__ -. tool_two_fast .-> tool_two_fast;
+  	__start__ -.-> tool_two_fast;
   	tool_two_fast --> __end__;
   	classDef startclass fill:#ffdfba;
   	classDef endclass fill:#baffc9;

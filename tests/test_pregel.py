@@ -4,7 +4,7 @@ import time
 import warnings
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Annotated, Any, Generator, Optional, TypedDict, Union
+from typing import Annotated, Any, Generator, Literal, Optional, TypedDict, Union
 
 import pytest
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
@@ -882,19 +882,9 @@ def test_conditional_graph(
     app = workflow.compile()
 
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
-    assert (
-        app.get_graph(add_condition_nodes=False).draw_mermaid(with_styles=False)
-        == snapshot
-    )
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
-    assert app.get_graph(xray=True).draw_ascii() == snapshot
-    assert (
-        app.get_graph(xray=True, add_condition_nodes=False).draw_mermaid(
-            with_styles=False
-        )
-        == snapshot
-    )
+    assert app.get_graph(xray=True).draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1470,7 +1460,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert (
         app.invoke("what is weather in sf", debug=True)
@@ -1570,7 +1560,7 @@ def test_conditional_graph_state(
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1922,7 +1912,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1988,7 +1978,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -2251,7 +2241,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -2466,7 +2456,7 @@ def test_message_graph(
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
         HumanMessage(
@@ -3031,10 +3021,7 @@ def test_start_branch_then(
         lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
     )
     tool_two = tool_two_graph.compile()
-    assert tool_two.get_graph().draw_ascii() == snapshot
-    assert tool_two.get_graph(add_condition_nodes=False).draw_ascii() == snapshot
     assert tool_two.get_graph().draw_mermaid() == snapshot
-    assert tool_two.get_graph(add_condition_nodes=False).draw_mermaid() == snapshot
 
     assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
         "my_key": "value slow",
@@ -3115,6 +3102,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
     invalid_graph.add_conditional_edges(
         source="prepare",
         path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        path_map=["tool_two_slow", "tool_two_fast"],
     )
     invalid_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
     invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
@@ -3136,10 +3124,8 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
     tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
     tool_two_graph.add_node("finish", lambda s: {"my_key": " finished"})
     tool_two = tool_two_graph.compile()
-    assert tool_two.get_graph().draw_ascii() == snapshot
-    assert tool_two.get_graph(add_condition_nodes=False).draw_ascii() == snapshot
+    assert tool_two.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert tool_two.get_graph().draw_mermaid() == snapshot
-    assert tool_two.get_graph(add_condition_nodes=False).draw_mermaid() == snapshot
 
     assert tool_two.invoke({"my_key": "value", "market": "DE"}, debug=1) == {
         "my_key": "value prepared slow finished",
@@ -3311,7 +3297,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
@@ -3387,6 +3373,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     def qa(data: State) -> State:
         return {"answer": ",".join(data["docs"])}
 
+    def rewrite_query_then(data: State) -> Literal["retriever_two"]:
+        return "retriever_two"
+
     workflow = StateGraph(State)
 
     workflow.add_node("rewrite_query", rewrite_query)
@@ -3398,15 +3387,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     workflow.set_entry_point("rewrite_query")
     workflow.add_edge("rewrite_query", "analyzer_one")
     workflow.add_edge("analyzer_one", "retriever_one")
-    workflow.add_conditional_edges(
-        "rewrite_query", lambda _: "retriever_two", {"retriever_two": "retriever_two"}
-    )
+    workflow.add_conditional_edges("rewrite_query", rewrite_query_then)
     workflow.add_edge(["retriever_one", "retriever_two"], "qa")
     workflow.set_finish_point("qa")
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -3507,7 +3494,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     with pytest.raises(ValidationError):
         app.invoke({"query": {}})
@@ -3844,7 +3831,7 @@ def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}
 
 
@@ -3873,7 +3860,6 @@ def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
     app = graph.compile()
 
     assert app.get_graph(xray=True).to_json() == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
 
 
@@ -3911,7 +3897,7 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
     assert app.invoke(
         {"my_key": "my value", "never_called": never_called}, debug=True
