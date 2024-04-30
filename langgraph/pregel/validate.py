@@ -15,6 +15,10 @@ def validate_graph(
     interrupt_after_nodes: Union[All, Sequence[str]],
     interrupt_before_nodes: Union[All, Sequence[str]],
 ) -> None:
+    for chan in channels:
+        if chan == INTERRUPT:
+            raise ValueError(f"Channel name {INTERRUPT} is reserved")
+
     subscribed_channels = set[str]()
     for name, node in nodes.items():
         if name == INTERRUPT:

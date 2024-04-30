@@ -105,7 +105,7 @@ def map_output_updates(
         if updated := AddableUpdatesDict(
             {
                 node: value
-                for node, _, _, writes, _ in output_tasks
+                for node, _, _, writes, _, _ in output_tasks
                 for chan, value in writes
                 if chan == output_channels
             }
@@ -115,7 +115,7 @@ def map_output_updates(
         if updated := AddableUpdatesDict(
             {
                 node: {chan: value for chan, value in writes if chan in output_channels}
-                for node, _, _, writes, _ in output_tasks
+                for node, _, _, writes, _, _ in output_tasks
                 if any(chan in output_channels for chan, _ in writes)
             }
         ):
