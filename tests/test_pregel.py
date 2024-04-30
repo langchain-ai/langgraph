@@ -168,17 +168,6 @@ def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
     assert gapp.invoke(1) == falsy_value
 
 
-def test_invoke_single_process_in_out_implicit_channels(mocker: MockerFixture) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-
-    app = Pregel(nodes={"one": chain})
-
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
-    assert app.invoke(2) == 3
-
-
 def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = (
@@ -188,17 +177,25 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
     )
 
     app = Pregel(
-        nodes={"one": chain}, output_channels=["output", "fixed", "output_plus_one"]
+        nodes={"one": chain},
+        channels={
+            "input": LastValue(int),
+            "output": LastValue(int),
+            "fixed": LastValue(int),
+            "output_plus_one": LastValue(int),
+        },
+        output_channels=["output", "fixed", "output_plus_one"],
+        input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
-            "output": {"title": "Output"},
-            "fixed": {"title": "Fixed"},
-            "output_plus_one": {"title": "Output Plus One"},
+            "output": {"title": "Output", "type": "integer"},
+            "fixed": {"title": "Fixed", "type": "integer"},
+            "output_plus_one": {"title": "Output Plus One", "type": "integer"},
         },
     }
     assert app.invoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
@@ -209,17 +206,17 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        nodes={
-            "one": chain,
-        },
+        nodes={"one": chain},
+        channels={"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output"}},
+        "properties": {"output": {"title": "Output", "type": "integer"}},
     }
     assert app.invoke(2) == {"output": 3}
 
@@ -229,9 +226,8 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        nodes={
-            "one": chain,
-        },
+        nodes={"one": chain},
+        channels={"input": LastValue(int), "output": LastValue(int)},
         input_channels=["input"],
         output_channels=["output"],
     )
@@ -239,12 +235,12 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {
         "title": "LangGraphInput",
         "type": "object",
-        "properties": {"input": {"title": "Input"}},
+        "properties": {"input": {"title": "Input", "type": "integer"}},
     }
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output"}},
+        "properties": {"output": {"title": "Output", "type": "integer"}},
     }
     assert app.invoke({"input": 2}) == {"output": 3}
 
@@ -256,6 +252,13 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     app = Pregel(
         nodes={"one": one, "two": two},
+        channels={
+            "inbox": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     assert app.invoke(2) == 4
@@ -302,6 +305,13 @@ def test_invoke_two_processes_in_out_interrupt(
     memory = MemorySaverAssertImmutable(at=checkpoint_at)
     app = Pregel(
         nodes={"one": one, "two": two},
+        channels={
+            "inbox": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
         checkpointer=memory,
         interrupt_after_nodes=["one"],
     )
@@ -357,9 +367,14 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
 
     app = Pregel(
         nodes={"one": one, "two": two},
-        channels={"inbox": Topic(int)},
+        channels={
+            "inbox": Topic(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
         input_channels=["input", "inbox"],
         stream_channels=["output", "inbox"],
+        output_channels=["output"],
     )
 
     # [12 + 1, 2 + 1 + 1]
@@ -394,7 +409,16 @@ def test_batch_two_processes_in_out() -> None:
     one = Channel.subscribe_to("input") | add_one_with_delay | Channel.write_to("one")
     two = Channel.subscribe_to("one") | add_one_with_delay | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "one": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
 
     assert app.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
     assert app.batch([3, 2, 1, 3, 5], output_keys=["output"]) == [
@@ -427,7 +451,13 @@ def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes=nodes)
+    app = Pregel(
+        nodes=nodes,
+        channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
+        | {"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     for _ in range(10):
         assert app.invoke(2, {"recursion_limit": test_size}) == 2 + test_size
@@ -449,7 +479,13 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes=nodes)
+    app = Pregel(
+        nodes=nodes,
+        channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
+        | {"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     for _ in range(3):
         assert app.batch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) == [
@@ -476,7 +512,12 @@ def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> N
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
     two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={"output": LastValue(int), "input": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     with pytest.raises(InvalidUpdateError):
         # LastValue channels can only be updated once per iteration
@@ -491,7 +532,12 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
 
     app = Pregel(
         nodes={"one": one, "two": two},
-        channels={"output": Topic(int)},
+        channels={
+            "input": LastValue(int),
+            "output": Topic(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     # An Inbox channel accumulates updates into a sequence
@@ -520,7 +566,13 @@ def test_invoke_checkpoint(mocker: MockerFixture, checkpoint_at: CheckpointAt) -
 
     app = Pregel(
         nodes={"one": one},
-        channels={"total": BinaryOperatorAggregate(int, operator.add)},
+        channels={
+            "total": BinaryOperatorAggregate(int, operator.add),
+            "input": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
         checkpointer=memory,
     )
 
@@ -575,7 +627,13 @@ def test_invoke_checkpoint_sqlite(
         memory.at = checkpoint_at
         app = Pregel(
             nodes={"one": one},
-            channels={"total": BinaryOperatorAggregate(int, operator.add)},
+            channels={
+                "total": BinaryOperatorAggregate(int, operator.add),
+                "input": LastValue(int),
+                "output": LastValue(int),
+            },
+            input_channels="input",
+            output_channels="output",
             checkpointer=memory,
         )
 
@@ -663,7 +721,13 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
             "chain_three": chain_three,
             "chain_four": chain_four,
         },
-        channels={"inbox": Topic(int)},
+        channels={
+            "inbox": Topic(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     # Then invoke app
@@ -683,7 +747,13 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
     inner_app = Pregel(
         nodes={
             "one": Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-        }
+        },
+        channels={
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     one = (
@@ -705,7 +775,14 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
             "two": two,
             "chain_three": chain_three,
         },
-        channels={"inbox_one": Topic(int)},
+        channels={
+            "inbox_one": Topic(int),
+            "outbox_one": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     for _ in range(10):
@@ -725,7 +802,17 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["output", "between"])
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "input": LastValue(int),
+            "between": LastValue(int),
+            "output": LastValue(int),
+        },
+        stream_channels=["output", "between"],
+        input_channels="input",
+        output_channels="output",
+    )
 
     assert [c for c in app.stream(2, stream_mode="updates")] == [
         {"one": {"between": 3, "output": 3}},
@@ -742,7 +829,16 @@ def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("between")
     two = Channel.subscribe_to("between") | add_one
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "input": LastValue(int),
+            "between": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
 
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to OUT topic
@@ -784,7 +880,10 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         channels={
             "inbox": Topic(int),
             "ctx": Context(an_int, typ=int),
+            "output": LastValue(int),
+            "input": LastValue(int),
         },
+        input_channels="input",
         output_channels=["inbox", "output"],
         stream_channels=["inbox", "output"],
     )
@@ -3926,6 +4025,17 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
             "my_key": "my value there and back again",
             "never_called": never_called,
         },
+    ]
+
+    chain = app | RunnablePassthrough()
+
+    assert chain.invoke({"my_key": "my value", "never_called": never_called}) == {
+        "my_key": "my value there and back again",
+        "never_called": never_called,
+    }
+    assert [*chain.stream({"my_key": "my value", "never_called": never_called})] == [
+        {"inner": {"my_key": "my value there"}},
+        {"side": {"my_key": "my value there and back again"}},
     ]
 
 

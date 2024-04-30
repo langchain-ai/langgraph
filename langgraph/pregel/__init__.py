@@ -54,7 +54,6 @@ from langgraph.channels.base import (
     InvalidUpdateError,
     create_checkpoint,
 )
-from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -185,13 +184,11 @@ class Pregel(
 
     channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
 
-    default_channel_cls: Type[BaseChannel] = Field(default=LastValue)
-
     auto_validate: bool = True
 
     stream_mode: StreamMode = "values"
 
-    output_channels: Union[str, Sequence[str]] = "output"
+    output_channels: Union[str, Sequence[str]]
     """Channels to output, defaults to channel named 'output'."""
 
     stream_channels: Optional[Union[str, Sequence[str]]] = None
@@ -201,7 +198,7 @@ class Pregel(
 
     interrupt_before_nodes: Sequence[str] = Field(default_factory=list)
 
-    input_channels: Union[str, Sequence[str]] = "input"
+    input_channels: Union[str, Sequence[str]]
 
     step_timeout: Optional[float] = None
 
@@ -226,7 +223,6 @@ class Pregel(
             values["stream_channels"],
             values["interrupt_after_nodes"],
             values["interrupt_before_nodes"],
-            values["default_channel_cls"],
         )
         if values["interrupt_after_nodes"] or values["interrupt_before_nodes"]:
             if not values["checkpointer"]:
@@ -242,7 +238,6 @@ class Pregel(
             self.stream_channels,
             self.interrupt_after_nodes,
             self.interrupt_before_nodes,
-            self.default_channel_cls,
         )
         if self.interrupt_after_nodes or self.interrupt_before_nodes:
             if not self.checkpointer:
