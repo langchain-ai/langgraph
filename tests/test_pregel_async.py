@@ -38,6 +38,57 @@ from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
 
 
+async def test_node_cancellation_on_external_cancel() -> None:
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile()
+
+    with pytest.raises(asyncio.TimeoutError):
+        await asyncio.wait_for(graph.ainvoke(1), 0.5)
+
+    assert inner_task_cancelled
+
+
+async def test_node_cancellation_on_other_node_exception() -> None:
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        try:
+            await asyncio.sleep(1)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+
+    async def iambad(input: Any) -> None:
+        raise ValueError("I am bad")
+
+    builder = Graph()
+    builder.add_node("agent", awhile)
+    builder.add_node("bad", iambad)
+    builder.set_conditional_entry_point(lambda _: ["agent", "bad"], then=END)
+
+    graph = builder.compile()
+
+    with pytest.raises(ValueError, match="I am bad"):
+        await graph.ainvoke(1)
+
+    assert inner_task_cancelled
+
+
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
@@ -80,19 +131,6 @@ async def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> No
     assert falsy_value == await gapp.ainvoke(1)
 
 
-async def test_invoke_single_process_in_out_implicit_channels(
-    mocker: MockerFixture,
-) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-
-    app = Pregel(nodes={"one": chain})
-
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
-    assert await app.ainvoke(2) == 3
-
-
 async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = (
@@ -102,17 +140,25 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
     )
 
     app = Pregel(
-        nodes={"one": chain}, output_channels=["output", "fixed", "output_plus_one"]
+        nodes={"one": chain},
+        channels={
+            "input": LastValue(int),
+            "output": LastValue(int),
+            "fixed": LastValue(int),
+            "output_plus_one": LastValue(int),
+        },
+        output_channels=["output", "fixed", "output_plus_one"],
+        input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
-            "output": {"title": "Output"},
-            "fixed": {"title": "Fixed"},
-            "output_plus_one": {"title": "Output Plus One"},
+            "output": {"title": "Output", "type": "integer"},
+            "fixed": {"title": "Fixed", "type": "integer"},
+            "output_plus_one": {"title": "Output Plus One", "type": "integer"},
         },
     }
     assert await app.ainvoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
@@ -124,14 +170,16 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
 
     app = Pregel(
         nodes={"one": chain},
+        channels={"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output"}},
+        "properties": {"output": {"title": "Output", "type": "integer"}},
     }
     assert await app.ainvoke(2) == {"output": 3}
 
@@ -141,9 +189,8 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        nodes={
-            "one": chain,
-        },
+        nodes={"one": chain},
+        channels={"input": LastValue(int), "output": LastValue(int)},
         input_channels=["input"],
         output_channels=["output"],
     )
@@ -151,12 +198,12 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
     assert app.input_schema.schema() == {
         "title": "LangGraphInput",
         "type": "object",
-        "properties": {"input": {"title": "Input"}},
+        "properties": {"input": {"title": "Input", "type": "integer"}},
     }
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output"}},
+        "properties": {"output": {"title": "Output", "type": "integer"}},
     }
     assert await app.ainvoke({"input": 2}) == {"output": 3}
 
@@ -166,7 +213,17 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["inbox", "output"])
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "inbox": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+        stream_channels=["inbox", "output"],
+    )
 
     assert await app.ainvoke(2) == 4
 
@@ -226,6 +283,13 @@ async def test_invoke_two_processes_in_out_interrupt(
     memory = MemorySaverAssertImmutable(at=checkpoint_at)
     app = Pregel(
         nodes={"one": one, "two": two},
+        channels={
+            "inbox": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
         checkpointer=memory,
         interrupt_after_nodes=["one"],
     )
@@ -281,9 +345,14 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
 
     app = Pregel(
         nodes={"one": one, "two": two},
-        channels={"inbox": Topic(int)},
+        channels={
+            "inbox": Topic(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
         input_channels=["input", "inbox"],
-        stream_channels=["inbox", "output"],
+        stream_channels=["output", "inbox"],
+        output_channels=["output"],
     )
 
     # [12 + 1, 2 + 1 + 1]
@@ -310,6 +379,88 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
         {"inbox": [3], "output": 13},
         {"inbox": [], "output": 4},
     ]
+    assert [
+        c async for c in app.astream({"input": 2, "inbox": 12}, stream_mode="debug")
+    ] == [
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "id": "7a3cc398-2e02-5023-ad7b-e4848d3b67fa",
+                "name": "one",
+                "input": 2,
+                "triggers": ["input"],
+            },
+        },
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "id": "34e90af0-f97e-54e0-a159-691da37f175f",
+                "name": "two",
+                "input": [12],
+                "triggers": ["inbox"],
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "id": "7a3cc398-2e02-5023-ad7b-e4848d3b67fa",
+                "result": [("inbox", 3)],
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "id": "34e90af0-f97e-54e0-a159-691da37f175f",
+                "result": [("output", 13)],
+            },
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {"config": None, "values": {"output": 13, "inbox": [3]}},
+        },
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "id": "cf7cf374-2a2a-556f-8561-91737af89d2f",
+                "name": "two",
+                "input": [3],
+                "triggers": ["inbox"],
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "id": "cf7cf374-2a2a-556f-8561-91737af89d2f",
+                "result": [("output", 4)],
+            },
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {"config": None, "values": {"output": 4, "inbox": []}},
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 2,
+            "payload": {"config": None, "values": {"output": 4, "inbox": []}},
+        },
+    ]
 
 
 async def test_batch_two_processes_in_out() -> None:
@@ -322,7 +473,13 @@ async def test_batch_two_processes_in_out() -> None:
 
     app = Pregel(
         nodes={"one": one, "two": two},
-        channels={"one": LastValue(int)},
+        channels={
+            "one": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     assert await app.abatch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
@@ -356,7 +513,13 @@ async def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes=nodes)
+    app = Pregel(
+        nodes=nodes,
+        channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
+        | {"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     # No state is left over from previous invocations
     for _ in range(10):
@@ -379,7 +542,13 @@ async def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes=nodes)
+    app = Pregel(
+        nodes=nodes,
+        channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
+        | {"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     # No state is left over from previous invocations
     for _ in range(3):
@@ -409,7 +578,12 @@ async def test_invoke_two_processes_two_in_two_out_invalid(
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
     two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={"output": LastValue(int), "input": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     with pytest.raises(InvalidUpdateError):
         # LastValue channels can only be updated once per iteration
@@ -424,7 +598,12 @@ async def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) 
 
     app = Pregel(
         nodes={"one": one, "two": two},
-        channels={"output": Topic(int)},
+        channels={
+            "input": LastValue(int),
+            "output": Topic(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     # An Topic channel accumulates updates into a sequence
@@ -455,7 +634,13 @@ async def test_invoke_checkpoint(
 
     app = Pregel(
         nodes={"one": one},
-        channels={"total": BinaryOperatorAggregate(int, operator.add)},
+        channels={
+            "total": BinaryOperatorAggregate(int, operator.add),
+            "input": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
         checkpointer=memory,
     )
 
@@ -510,7 +695,13 @@ async def test_invoke_checkpoint_aiosqlite(
         memory.at = checkpoint_at
         app = Pregel(
             nodes={"one": one},
-            channels={"total": BinaryOperatorAggregate(int, operator.add)},
+            channels={
+                "total": BinaryOperatorAggregate(int, operator.add),
+                "input": LastValue(int),
+                "output": LastValue(int),
+            },
+            input_channels="input",
+            output_channels="output",
             checkpointer=memory,
             debug=True,
         )
@@ -605,7 +796,13 @@ async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -
             "chain_three": chain_three,
             "chain_four": chain_four,
         },
-        channels={"inbox": Topic(int)},
+        channels={
+            "inbox": Topic(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     # Then invoke app
@@ -619,14 +816,20 @@ async def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -
     ]
 
 
-async def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None:
+async def test_invoke_join_then_call_other_pregel(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
     inner_app = Pregel(
         nodes={
             "one": Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-        }
+        },
+        channels={
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     one = (
@@ -651,7 +854,11 @@ async def test_invoke_join_then_call_other_pubsub(mocker: MockerFixture) -> None
         channels={
             "inbox_one": Topic(int),
             "outbox_one": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
         },
+        input_channels="input",
+        output_channels="output",
     )
 
     # Then invoke pubsub
@@ -673,7 +880,17 @@ async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> Non
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two}, stream_channels=["output", "between"])
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "input": LastValue(int),
+            "between": LastValue(int),
+            "output": LastValue(int),
+        },
+        stream_channels=["output", "between"],
+        input_channels="input",
+        output_channels="output",
+    )
 
     # Then invoke pubsub
     assert [c async for c in app.astream(2)] == [
@@ -687,7 +904,16 @@ async def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("between")
     two = Channel.subscribe_to("between") | add_one
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "input": LastValue(int),
+            "between": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
 
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to "output" topic
@@ -727,9 +953,12 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     app = Pregel(
         nodes={"one": one, "two": two},
         channels={
+            "input": LastValue(int),
+            "output": LastValue(int),
             "inbox": Topic(int),
             "ctx": Context(an_int, an_int_async, typ=int),
         },
+        input_channels="input",
         output_channels=["inbox", "output"],
         stream_channels=["inbox", "output"],
     )
@@ -2798,6 +3027,250 @@ async def test_branch_then(
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
         saver.at = checkpoint_at
+
+        # test stream_mode=debug
+        tool_two = tool_two_graph.compile(checkpointer=saver)
+        thread10 = {"configurable": {"thread_id": "10"}}
+        if checkpoint_at is CheckpointAt.END_OF_RUN:
+            assert [
+                c
+                async for c in tool_two.astream(
+                    {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
+                )
+            ] == [
+                {
+                    "type": "checkpoint",
+                    "timestamp": AnyStr(),
+                    "step": 0,
+                    "payload": {
+                        "config": None,
+                        "values": {"my_key": "value", "market": "DE"},
+                    },
+                },
+                {
+                    "type": "task",
+                    "timestamp": AnyStr(),
+                    "step": 1,
+                    "payload": {
+                        "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                        "name": "prepare",
+                        "input": {"my_key": "value", "market": "DE"},
+                        "triggers": ["start:prepare"],
+                    },
+                },
+                {
+                    "type": "task_result",
+                    "timestamp": AnyStr(),
+                    "step": 1,
+                    "payload": {
+                        "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                        "result": [("my_key", " prepared")],
+                    },
+                },
+                {
+                    "type": "checkpoint",
+                    "timestamp": AnyStr(),
+                    "step": 1,
+                    "payload": {
+                        "config": None,
+                        "values": {"my_key": "value prepared", "market": "DE"},
+                    },
+                },
+                {
+                    "type": "task",
+                    "timestamp": AnyStr(),
+                    "step": 2,
+                    "payload": {
+                        "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                        "name": "tool_two_slow",
+                        "input": {"my_key": "value prepared", "market": "DE"},
+                        "triggers": ["branch:prepare:condition:tool_two_slow"],
+                    },
+                },
+                {
+                    "type": "task_result",
+                    "timestamp": AnyStr(),
+                    "step": 2,
+                    "payload": {
+                        "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                        "result": [("my_key", " slow")],
+                    },
+                },
+                {
+                    "type": "checkpoint",
+                    "timestamp": AnyStr(),
+                    "step": 2,
+                    "payload": {
+                        "config": None,
+                        "values": {"my_key": "value prepared slow", "market": "DE"},
+                    },
+                },
+                {
+                    "type": "task",
+                    "timestamp": AnyStr(),
+                    "step": 3,
+                    "payload": {
+                        "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                        "name": "finish",
+                        "input": {"my_key": "value prepared slow", "market": "DE"},
+                        "triggers": ["branch:prepare:condition:then"],
+                    },
+                },
+                {
+                    "type": "task_result",
+                    "timestamp": AnyStr(),
+                    "step": 3,
+                    "payload": {
+                        "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                        "result": [("my_key", " finished")],
+                    },
+                },
+                {
+                    "type": "checkpoint",
+                    "timestamp": AnyStr(),
+                    "step": 3,
+                    "payload": {
+                        "config": None,
+                        "values": {
+                            "my_key": "value prepared slow finished",
+                            "market": "DE",
+                        },
+                    },
+                },
+                {
+                    "type": "checkpoint",
+                    "timestamp": AnyStr(),
+                    "step": 4,
+                    "payload": {
+                        "config": {
+                            "configurable": {
+                                "thread_id": "10",
+                                "thread_ts": AnyStr(),
+                            }
+                        },
+                        "values": {
+                            "my_key": "value prepared slow finished",
+                            "market": "DE",
+                        },
+                    },
+                },
+            ]
+        else:
+            assert [
+                c
+                async for c in tool_two.astream(
+                    {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
+                )
+            ] == [
+                {
+                    "type": "checkpoint",
+                    "timestamp": AnyStr(),
+                    "step": 0,
+                    "payload": {
+                        "config": {
+                            "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                        },
+                        "values": {"my_key": "value", "market": "DE"},
+                    },
+                },
+                {
+                    "type": "task",
+                    "timestamp": AnyStr(),
+                    "step": 1,
+                    "payload": {
+                        "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                        "name": "prepare",
+                        "input": {"my_key": "value", "market": "DE"},
+                        "triggers": ["start:prepare"],
+                    },
+                },
+                {
+                    "type": "task_result",
+                    "timestamp": AnyStr(),
+                    "step": 1,
+                    "payload": {
+                        "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                        "result": [("my_key", " prepared")],
+                    },
+                },
+                {
+                    "type": "checkpoint",
+                    "timestamp": AnyStr(),
+                    "step": 1,
+                    "payload": {
+                        "config": {
+                            "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                        },
+                        "values": {"my_key": "value prepared", "market": "DE"},
+                    },
+                },
+                {
+                    "type": "task",
+                    "timestamp": AnyStr(),
+                    "step": 2,
+                    "payload": {
+                        "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                        "name": "tool_two_slow",
+                        "input": {"my_key": "value prepared", "market": "DE"},
+                        "triggers": ["branch:prepare:condition:tool_two_slow"],
+                    },
+                },
+                {
+                    "type": "task_result",
+                    "timestamp": AnyStr(),
+                    "step": 2,
+                    "payload": {
+                        "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                        "result": [("my_key", " slow")],
+                    },
+                },
+                {
+                    "type": "checkpoint",
+                    "timestamp": AnyStr(),
+                    "step": 2,
+                    "payload": {
+                        "config": {
+                            "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                        },
+                        "values": {"my_key": "value prepared slow", "market": "DE"},
+                    },
+                },
+                {
+                    "type": "task",
+                    "timestamp": AnyStr(),
+                    "step": 3,
+                    "payload": {
+                        "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                        "name": "finish",
+                        "input": {"my_key": "value prepared slow", "market": "DE"},
+                        "triggers": ["branch:prepare:condition:then"],
+                    },
+                },
+                {
+                    "type": "task_result",
+                    "timestamp": AnyStr(),
+                    "step": 3,
+                    "payload": {
+                        "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                        "result": [("my_key", " finished")],
+                    },
+                },
+                {
+                    "type": "checkpoint",
+                    "timestamp": AnyStr(),
+                    "step": 3,
+                    "payload": {
+                        "config": {
+                            "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                        },
+                        "values": {
+                            "my_key": "value prepared slow finished",
+                            "market": "DE",
+                        },
+                    },
+                },
+            ]
+
         tool_two = tool_two_graph.compile(
             checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
         )
@@ -3550,6 +4023,39 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert times_called == 1
     times_called = 0
     async for event in app.astream_events(
+        {"my_key": "my value", "never_called": never_called},
+        version="v1",
+        config={"run_id": UUID(int=0)},
+    ):
+        if event["event"] == "on_chain_end" and event["run_id"] == str(UUID(int=0)):
+            times_called += 1
+            assert event["data"] == {
+                "output": [
+                    {"inner": {"my_key": "my value there"}},
+                    {"side": {"my_key": "my value there and back again"}},
+                ]
+            }
+    assert times_called == 1
+
+    chain = app | RunnablePassthrough()
+
+    assert await chain.ainvoke(
+        {"my_key": "my value", "never_called": never_called}
+    ) == {
+        "my_key": "my value there and back again",
+        "never_called": never_called,
+    }
+    assert [
+        chunk
+        async for chunk in chain.astream(
+            {"my_key": "my value", "never_called": never_called}
+        )
+    ] == [
+        {"inner": {"my_key": "my value there"}},
+        {"side": {"my_key": "my value there and back again"}},
+    ]
+    times_called = 0
+    async for event in chain.astream_events(
         {"my_key": "my value", "never_called": never_called},
         version="v1",
         config={"run_id": UUID(int=0)},

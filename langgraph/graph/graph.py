@@ -1,15 +1,19 @@
 import logging
-from collections import Counter, defaultdict
+from collections import defaultdict
 from typing import (
     Any,
     Awaitable,
     Callable,
     Dict,
+    Literal,
     NamedTuple,
     Optional,
     Sequence,
     Union,
     cast,
+    get_args,
+    get_origin,
+    get_type_hints,
 )
 
 from langchain_core.runnables import Runnable
@@ -24,6 +28,7 @@ from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
+from langgraph.pregel.types import All
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.utils import DrawableGraph, RunnableCallable, coerce_to_runnable
 
@@ -142,7 +147,7 @@ class Graph:
             Callable[..., Awaitable[Union[str, list[str]]]],
             Runnable[Any, Union[str, list[str]]],
         ],
-        path_map: Optional[dict[str, str]] = None,
+        path_map: Optional[Union[dict[str, str], list[str]]] = None,
         then: Optional[str] = None,
     ) -> None:
         """Add a conditional edge from the starting node to any number of destination nodes.
@@ -166,6 +171,14 @@ class Graph:
                 "Adding an edge to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
+        # coerce path_map to a dictionary
+        if isinstance(path_map, dict):
+            pass
+        elif isinstance(path_map, list):
+            path_map = {name: name for name in path_map}
+        elif rtn_type := get_type_hints(path).get("return"):
+            if get_origin(rtn_type) is Literal:
+                path_map = {name: name for name in get_args(rtn_type)}
         # find a name for the condition
         path = coerce_to_runnable(path, name=None, trace=True)
         name = path.name or "condition"
@@ -283,8 +296,8 @@ class Graph:
     def compile(
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
-        interrupt_before: Optional[Sequence[str]] = None,
-        interrupt_after: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
     ) -> "CompiledGraph":
         # assign default values
@@ -292,11 +305,16 @@ class Graph:
         interrupt_after = interrupt_after or []
 
         # validate the graph
-        self.validate(interrupt=interrupt_before + interrupt_after)
+        self.validate(
+            interrupt=(interrupt_before if interrupt_before != "*" else [])
+            + interrupt_after
+            if interrupt_after != "*"
+            else []
+        )
 
         # create empty compiled graph
         compiled = CompiledGraph(
-            graph=self,
+            builder=self,
             nodes={},
             channels={START: EphemeralValue(Any), END: EphemeralValue(Any)},
             input_channels=START,
@@ -326,7 +344,7 @@ class Graph:
 
 
 class CompiledGraph(Pregel):
-    graph: Graph
+    builder: Graph
 
     def attach_node(self, key: str, node: Runnable) -> None:
         self.channels[key] = EphemeralValue(Any)
@@ -378,7 +396,6 @@ class CompiledGraph(Pregel):
         config: Optional[RunnableConfig] = None,
         *,
         xray: Union[int, bool] = False,
-        add_condition_nodes: bool = True,
     ) -> DrawableGraph:
         """Returns a drawable representation of the computation graph."""
         graph = DrawableGraph()
@@ -389,7 +406,7 @@ class CompiledGraph(Pregel):
             END: graph.add_node(self.get_output_schema(config), END)
         }
 
-        for key, node in self.graph.nodes.items():
+        for key, node in self.builder.nodes.items():
             if xray:
                 subgraph = (
                     node.get_graph(
@@ -413,40 +430,28 @@ class CompiledGraph(Pregel):
                 n = graph.add_node(node, key)
                 start_nodes[key] = n
                 end_nodes[key] = n
-        for start, end in sorted(self.graph._all_edges):
+        for start, end in sorted(self.builder._all_edges):
             graph.add_edge(start_nodes[start], end_nodes[end])
-        branches_by_name = Counter(
-            name for _, branches in self.graph.branches.items() for name in branches
-        )
-        for start, branches in self.graph.branches.items():
+        for start, branches in self.builder.branches.items():
             default_ends = {
-                **{k: k for k in self.graph.nodes if k != start},
+                **{k: k for k in self.builder.nodes if k != start},
                 END: END,
             }
-            for name, branch in branches.items():
+            for _, branch in branches.items():
                 if branch.ends is not None:
                     ends = branch.ends
                 elif branch.then is not None:
                     ends = {k: k for k in default_ends if k not in (END, branch.then)}
                 else:
                     ends = default_ends
-
-                if add_condition_nodes is True:
-                    cond = graph.add_node(
-                        branch.path,
-                        f"{start}_{name}" if branches_by_name[name] > 1 else name,
+                for label, end in ends.items():
+                    graph.add_edge(
+                        start_nodes[start],
+                        end_nodes[end],
+                        label if label != end else None,
+                        conditional=True,
                     )
-                    graph.add_edge(start_nodes[start], cond)
-                    for label, end in ends.items():
-                        graph.add_edge(cond, end_nodes[end], label, conditional=True)
-                        if branch.then is not None:
-                            graph.add_edge(start_nodes[end], end_nodes[branch.then])
-                else:
-                    for label, end in ends.items():
-                        graph.add_edge(
-                            start_nodes[start], end_nodes[end], label, conditional=True
-                        )
-                        if branch.then is not None:
-                            graph.add_edge(start_nodes[end], end_nodes[branch.then])
+                    if branch.then is not None:
+                        graph.add_edge(start_nodes[end], end_nodes[branch.then])
 
         return graph
