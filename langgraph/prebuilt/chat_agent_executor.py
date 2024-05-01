@@ -1,9 +1,9 @@
 import json
-from typing import Annotated, Optional, Sequence, TypedDict, Union
+from typing import Annotated, Callable, Optional, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import BaseMessage, FunctionMessage, SystemMessage
-from langchain_core.runnables import RunnableLambda
+from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
@@ -137,7 +137,7 @@ def create_function_calling_executor(
 def create_tool_calling_executor(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool]],
-    system_message: Optional[Union[str, SystemMessage]] = None,
+    messages_modifier: Optional[Union[SystemMessage, str, Callable, Runnable]] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     interrupt_before: Optional[Sequence[str]] = None,
     interrupt_after: Optional[Sequence[str]] = None,
@@ -148,8 +148,13 @@ def create_tool_calling_executor(
     Args:
         model (LanguageModelLike): The chat model that supports OpenAI tool calling.
         tools (Union[ToolExecutor, Sequence[BaseTool]]): A list of tools or a ToolExecutor instance.
-        system_message: (Optional[Union[str, SystemMessage]]): An optional system message to pass in
-            to the model. Is appended at the start of the messages.
+        messages_modifier: (Optional[Union[SystemMessage, str, Callable, Runnable]]): An optional
+            messages modifier. This applies to messages BEFORE they are passed into the LLM.
+            Can take a few different forms:
+            - SystemMessage: this is added to the beginning of the list of messages.
+            - str: This is converted to a SystemMessage and added to the beginning of the list of messages.
+            - Callable: This function should take in a list of messages and the output is then passed to the language model.
+            - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
         checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
         interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
         interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
@@ -192,22 +197,31 @@ def create_tool_calling_executor(
         else:
             return "continue"
 
+    # Add the message modifier, if exists
+    if messages_modifier is None:
+        model_runnable = model
+    elif isinstance(messages_modifier, str):
+        _system_message: BaseMessage = SystemMessage(content=messages_modifier)
+        model_runnable = (lambda messages: [_system_message] + messages) | model
+    elif isinstance(messages_modifier, SystemMessage):
+        model_runnable = (lambda messages: [messages_modifier] + messages) | model
+    elif isinstance(messages_modifier, (Callable, Runnable)):
+        model_runnable = messages_modifier | model
+    else:
+        raise ValueError(
+            f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
+        )
+
     # Define the function that calls the model
     def call_model(state: AgentState):
         messages = state["messages"]
-        if system_message is not None:
-            if isinstance(system_message, str):
-                _system_message: BaseMessage = SystemMessage(content=system_message)
-            else:
-                _system_message = system_message
-            messages = [_system_message] + list(messages)
-        response = model.invoke(messages)
+        response = model_runnable.invoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
     async def acall_model(state: AgentState):
         messages = state["messages"]
-        response = await model.ainvoke(messages)
+        response = await model_runnable.ainvoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
