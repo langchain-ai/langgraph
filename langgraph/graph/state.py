@@ -1,7 +1,7 @@
 import logging
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union, get_type_hints
+from typing import Any, Optional, Sequence, Type, Union, Dict, get_type_hints
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
@@ -34,7 +34,7 @@ class StateGraph(Graph):
 
     def __init__(self, schema: Type[Any]) -> None:
         super().__init__()
-        self.schema = schema
+        self.schema = self._coerce_types(schema)
         self.channels = _get_channels(schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
@@ -46,6 +46,39 @@ class StateGraph(Graph):
             (start, end) for starts, end in self.waiting_edges for start in starts
         }
 
+    def _coerce_types(self, schema: Type[Any]) -> Type[Any]:
+        """
+        Coerces occurrences of 'any' in type annotations to 'typing.Any'.
+
+        This function recursively traverses the type annotations of the given schema
+        and replaces any occurrences of 'any' with 'typing.Any'. It handles generic
+        types like Dict, List, Tuple, etc., and their nested structures.
+
+        Args:
+            schema (Type[Any]): The schema type to coerce.
+
+        Returns:
+            Type[Any]: The coerced schema type with 'any' replaced by 'typing.Any'.
+        """
+        def _coerce(obj):
+            if obj is any:
+                return Any
+            elif hasattr(obj, '__origin__'):
+                if obj.__origin__ is dict:
+                    key_type, value_type = obj.__args__
+                    return Dict[key_type, _coerce(value_type)]
+                elif obj.__origin__ in (list, tuple):
+                    item_type, = obj.__args__
+                    return obj.__origin__[_coerce(item_type)]
+            return obj
+
+        if hasattr(schema, '__annotations__'):
+            coerced_annotations = {k: _coerce(v) for k, v in schema.__annotations__.items()}
+
+        schema.__annotations__ = coerced_annotations
+
+        return schema
+            
     def add_node(self, key: str, action: RunnableLike) -> None:
         """Adds a new node to the state graph.
 
