@@ -23,6 +23,7 @@ class TaskPayload(TypedDict):
 
 class TaskResultPayload(TypedDict):
     id: str
+    name: str
     result: list[tuple[str, Any]]
 
 
@@ -96,6 +97,7 @@ def map_debug_task_results(
             "step": step,
             "payload": {
                 "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step)))),
+                "name": name,
                 "result": [w for w in writes if w[0] in stream_channels_list],
             },
         }
