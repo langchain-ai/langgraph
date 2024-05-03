@@ -17,6 +17,7 @@ from typing import (
     Type,
     Union,
     cast,
+    get_type_hints,
     overload,
 )
 
@@ -211,6 +212,8 @@ class Pregel(
 
     checkpointer: Optional[BaseCheckpointSaver] = None
 
+    config_type: Optional[Type[Any]] = None
+
     name: str = "LangGraph"
 
     class Config:
@@ -263,6 +266,14 @@ class Pregel(
                 + (
                     self.checkpointer.config_specs
                     if self.checkpointer is not None
+                    else []
+                )
+                + (
+                    [
+                        ConfigurableFieldSpec(id=name, annotation=typ)
+                        for name, typ in get_type_hints(self.config_type).items()
+                    ]
+                    if self.config_type is not None
                     else []
                 )
             )

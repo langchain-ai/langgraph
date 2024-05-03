@@ -32,10 +32,13 @@ class StateGraph(Graph):
     The signature of a reducer function is (Value, Value) -> Value.
     """
 
-    def __init__(self, schema: Type[Any]) -> None:
+    def __init__(
+        self, state_schema: Type[Any], config_schema: Optional[Type[Any]] = None
+    ) -> None:
         super().__init__()
-        self.schema = schema
-        self.channels = _get_channels(schema)
+        self.schema = state_schema
+        self.config_schema = config_schema
+        self.channels = _get_channels(state_schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
         self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
@@ -134,6 +137,7 @@ class StateGraph(Graph):
 
         compiled = CompiledStateGraph(
             builder=self,
+            config_type=self.config_schema,
             nodes={},
             channels={**self.channels, START: EphemeralValue(self.schema)},
             input_channels=START,
