@@ -1228,6 +1228,7 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
     assert (
         app_w_interrupt.checkpointer.get_tuple(config).config["configurable"][
@@ -1261,6 +1262,7 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1344,6 +1346,7 @@ def test_conditional_graph(
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     # test state get/update methods with interrupt_before
@@ -1379,6 +1382,7 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     app_w_interrupt.update_state(
@@ -1406,6 +1410,7 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1489,6 +1494,7 @@ def test_conditional_graph(
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     # test re-invoke to continue with interrupt_before
@@ -1524,6 +1530,7 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1860,6 +1867,7 @@ def test_conditional_state_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     app_w_interrupt.update_state(
@@ -1885,6 +1893,7 @@ def test_conditional_state_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1943,6 +1952,7 @@ def test_conditional_state_graph(
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     # test state get/update methods with interrupt_before
@@ -1977,6 +1987,7 @@ def test_conditional_state_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     app_w_interrupt.update_state(
@@ -2002,6 +2013,7 @@ def test_conditional_state_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2060,6 +2072,7 @@ def test_conditional_state_graph(
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     # test w interrupt before all
@@ -2082,6 +2095,7 @@ def test_conditional_state_graph(
         },
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2104,6 +2118,7 @@ def test_conditional_state_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2142,6 +2157,7 @@ def test_conditional_state_graph(
         },
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2186,6 +2202,7 @@ def test_conditional_state_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2224,6 +2241,7 @@ def test_conditional_state_graph(
         },
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3042,6 +3060,7 @@ def test_message_graph(
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     # modify ai message
@@ -3067,6 +3086,7 @@ def test_message_graph(
         ],
         next=("action",),
         config=next_config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3132,6 +3152,7 @@ def test_message_graph(
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     app_w_interrupt.update_state(
@@ -3167,6 +3188,7 @@ def test_message_graph(
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     app_w_interrupt = workflow.compile(
@@ -3212,6 +3234,7 @@ def test_message_graph(
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     # modify ai message
@@ -3240,6 +3263,7 @@ def test_message_graph(
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3305,6 +3329,7 @@ def test_message_graph(
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     app_w_interrupt.update_state(
@@ -3340,6 +3365,7 @@ def test_message_graph(
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     # add an extra message as if it came from "action" node
@@ -3375,6 +3401,7 @@ def test_message_graph(
         ],
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
 
@@ -3503,6 +3530,7 @@ def test_start_branch_then(
             values={"my_key": "value", "market": "DE"},
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={},
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread1, debug=1) == {
@@ -3513,6 +3541,7 @@ def test_start_branch_then(
             values={"my_key": "value slow", "market": "DE"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={},
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3525,6 +3554,7 @@ def test_start_branch_then(
             values={"my_key": "value", "market": "US"},
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={},
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread2, debug=1) == {
@@ -3535,6 +3565,7 @@ def test_start_branch_then(
             values={"my_key": "value fast", "market": "US"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={},
         )
 
 
@@ -3855,6 +3886,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={},
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread1, debug=1) == {
@@ -3865,6 +3897,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={},
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3877,6 +3910,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={},
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread2, debug=1) == {
@@ -3887,6 +3921,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={},
         )
 
     with SqliteSaver.from_conn_string(":memory:") as saver:
@@ -3909,6 +3944,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={},
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread1, debug=1) == {
@@ -3919,6 +3955,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={},
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3931,6 +3968,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={},
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread2, debug=1) == {
@@ -3941,6 +3979,7 @@ def test_branch_then(snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt) -
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={},
         )
 
 

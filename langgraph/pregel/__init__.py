@@ -343,6 +343,7 @@ class Pregel(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(name for name, _ in next_tasks),
                 config,
+                saved.metadata or {},
             )
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
@@ -361,6 +362,7 @@ class Pregel(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(name for name, _ in next_tasks),
                 config,
+                saved.metadata or {},
             )
 
     def get_state_history(
@@ -374,7 +376,7 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        for config, checkpoint, parent_config in self.checkpointer.list(
+        for config, checkpoint, metadata, parent_config in self.checkpointer.list(
             config, before=before, limit=limit
         ):
             with ChannelsManager(self.channels, checkpoint) as channels:
@@ -385,6 +387,7 @@ class Pregel(
                     read_channels(channels, self.stream_channels_asis),
                     tuple(name for name, _ in next_tasks),
                     config,
+                    metadata or {},
                     parent_config,
                 )
 
@@ -399,9 +402,12 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        async for config, checkpoint, parent_config in self.checkpointer.alist(
-            config, before=before, limit=limit
-        ):
+        async for (
+            config,
+            checkpoint,
+            metadata,
+            parent_config,
+        ) in self.checkpointer.alist(config, before=before, limit=limit):
             async with AsyncChannelsManager(self.channels, checkpoint) as channels:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint, self.nodes, channels, for_execution=False
@@ -410,6 +416,7 @@ class Pregel(
                     read_channels(channels, self.stream_channels_asis),
                     tuple(name for name, _ in next_tasks),
                     config,
+                    metadata or {},
                     parent_config,
                 )
 

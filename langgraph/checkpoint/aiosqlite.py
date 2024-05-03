@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
-from typing import AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
@@ -67,6 +67,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     thread_ts TEXT NOT NULL,
                     parent_ts TEXT,
                     checkpoint BLOB,
+                    metadata BLOB,
                     PRIMARY KEY (thread_id, thread_ts)
                 );
                 """
@@ -79,7 +80,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         await self.setup()
         if config["configurable"].get("thread_ts"):
             async with self.conn.execute(
-                "SELECT checkpoint, parent_ts FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
+                "SELECT checkpoint, parent_ts, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
                 (
                     str(config["configurable"]["thread_id"]),
                     str(config["configurable"]["thread_ts"]),
@@ -89,6 +90,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     return CheckpointTuple(
                         config,
                         self.serde.loads(value[0]),
+                        self.serde.loads(value[2]) if value[2] is not None else None,
                         {
                             "configurable": {
                                 "thread_id": config["configurable"]["thread_id"],
@@ -100,7 +102,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     )
         else:
             async with self.conn.execute(
-                "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
+                "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
                 (str(config["configurable"]["thread_id"]),),
             ) as cursor:
                 if value := await cursor.fetchone():
@@ -112,6 +114,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                             }
                         },
                         self.serde.loads(value[3]),
+                        self.serde.loads(value[4]) if value[4] is not None else None,
                         {
                             "configurable": {
                                 "thread_id": value[0],
@@ -131,9 +134,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     ) -> AsyncIterator[CheckpointTuple]:
         await self.setup()
         query = (
-            "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
+            "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
             if before is None
-            else "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? AND thread_ts < ? ORDER BY thread_ts DESC"
+            else "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts < ? ORDER BY thread_ts DESC"
         )
         if limit:
             query += f" LIMIT {limit}"
@@ -146,26 +149,31 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 str(before["configurable"]["thread_ts"]),
             ),
         ) as cursor:
-            async for thread_id, thread_ts, parent_ts, value in cursor:
+            async for thread_id, thread_ts, parent_ts, value, metadata in cursor:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
+                    self.serde.loads(metadata) if metadata is not None else None,
                     {"configurable": {"thread_id": thread_id, "thread_ts": parent_ts}}
                     if parent_ts
                     else None,
                 )
 
     async def aput(
-        self, config: RunnableConfig, checkpoint: Checkpoint
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> RunnableConfig:
         await self.setup()
         async with self.conn.execute(
-            "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint) VALUES (?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)",
             (
                 str(config["configurable"]["thread_id"]),
                 checkpoint["ts"],
                 config["configurable"].get("thread_ts"),
                 self.serde.dumps(checkpoint),
+                self.serde.dumps(metadata) if metadata is not None else None,
             ),
         ):
             await self.conn.commit()

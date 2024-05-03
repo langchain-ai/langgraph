@@ -1,6 +1,6 @@
 import asyncio
 from collections import defaultdict
-from typing import AsyncIterator, Iterator, Optional
+from typing import Any, AsyncIterator, Iterator, Optional
 
 from langchain_core.runnables import RunnableConfig
 
@@ -14,7 +14,7 @@ from langgraph.checkpoint.base import (
 
 
 class MemorySaver(BaseCheckpointSaver):
-    storage: defaultdict[str, dict[str, Checkpoint]]
+    storage: defaultdict[str, dict[str, tuple[bytes, bytes]]]
 
     def __init__(
         self,
@@ -28,16 +28,21 @@ class MemorySaver(BaseCheckpointSaver):
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         thread_id = config["configurable"]["thread_id"]
         if ts := config["configurable"].get("thread_ts"):
-            if checkpoint := self.storage[thread_id].get(ts):
+            if saved := self.storage[thread_id].get(ts):
+                checkpoint, metadata = saved
                 return CheckpointTuple(
-                    config=config, checkpoint=self.serde.loads(checkpoint)
+                    config=config,
+                    checkpoint=self.serde.loads(checkpoint),
+                    metadata=self.serde.loads(metadata),
                 )
         else:
             if checkpoints := self.storage[thread_id]:
                 ts = max(checkpoints.keys())
+                checkpoint, metadata = checkpoints[ts]
                 return CheckpointTuple(
                     config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
-                    checkpoint=self.serde.loads(checkpoints[ts]),
+                    checkpoint=self.serde.loads(checkpoint),
+                    metadata=self.serde.loads(metadata),
                 )
 
     def list(
@@ -48,7 +53,7 @@ class MemorySaver(BaseCheckpointSaver):
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
         thread_id = config["configurable"]["thread_id"]
-        for ts, checkpoint in self.storage[thread_id].items():
+        for ts, (checkpoint, metadata) in self.storage[thread_id].items():
             if before and ts >= before["configurable"]["thread_ts"]:
                 continue
             if limit is not None and limit <= 0:
@@ -57,11 +62,22 @@ class MemorySaver(BaseCheckpointSaver):
             yield CheckpointTuple(
                 config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                 checkpoint=self.serde.loads(checkpoint),
+                metadata=self.serde.loads(metadata),
             )
 
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: dict[str, Any] = None,
+    ) -> RunnableConfig:
         self.storage[config["configurable"]["thread_id"]].update(
-            {checkpoint["ts"]: self.serde.dumps(checkpoint)}
+            {
+                checkpoint["ts"]: (
+                    self.serde.dumps(checkpoint),
+                    self.serde.dumps(metadata or {}),
+                )
+            }
         )
         return {
             "configurable": {

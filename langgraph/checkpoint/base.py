@@ -83,6 +83,7 @@ class CheckpointAt(StrEnum):
 class CheckpointTuple(NamedTuple):
     config: RunnableConfig
     checkpoint: Checkpoint
+    metadata: Optional[dict[str, Any]]
     parent_config: Optional[RunnableConfig] = None
 
 
@@ -139,7 +140,12 @@ class BaseCheckpointSaver(ABC):
     ) -> Iterator[CheckpointTuple]:
         raise NotImplementedError
 
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: dict[str, Any],
+    ) -> RunnableConfig:
         raise NotImplementedError
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
@@ -159,6 +165,9 @@ class BaseCheckpointSaver(ABC):
         raise NotImplementedError
 
     async def aput(
-        self, config: RunnableConfig, checkpoint: Checkpoint
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: dict[str, Any],
     ) -> RunnableConfig:
         raise NotImplementedError
