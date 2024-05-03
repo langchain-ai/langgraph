@@ -146,6 +146,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 thread_ts TEXT NOT NULL,
                 parent_ts TEXT,
                 checkpoint BLOB,
+                metadata BLOB,
                 PRIMARY KEY (thread_id, thread_ts)
             );
             """
@@ -211,7 +212,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         with self.cursor(transaction=False) as cur:
             if config["configurable"].get("thread_ts"):
                 cur.execute(
-                    "SELECT checkpoint, parent_ts FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
+                    "SELECT checkpoint, parent_ts, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
                     (
                         str(config["configurable"]["thread_id"]),
                         str(config["configurable"]["thread_ts"]),
@@ -221,20 +222,19 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     return CheckpointTuple(
                         config,
                         self.serde.loads(value[0]),
-                        (
-                            {
-                                "configurable": {
-                                    "thread_id": config["configurable"]["thread_id"],
-                                    "thread_ts": value[1],
-                                }
+                        self.serde.loads(value[2]) if value[2] is not None else None,
+                        {
+                            "configurable": {
+                                "thread_id": config["configurable"]["thread_id"],
+                                "thread_ts": value[1],
                             }
-                            if value[1]
-                            else None
-                        ),
+                        }
+                        if value[1]
+                        else None,
                     )
             else:
                 cur.execute(
-                    "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
+                    "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
                     (str(config["configurable"]["thread_id"]),),
                 )
                 if value := cur.fetchone():
@@ -246,16 +246,15 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                             }
                         },
                         self.serde.loads(value[3]),
-                        (
-                            {
-                                "configurable": {
-                                    "thread_id": value[0],
-                                    "thread_ts": value[2],
-                                }
+                        self.serde.loads(value[4]) if value[4] is not None else None,
+                        {
+                            "configurable": {
+                                "thread_id": value[0],
+                                "thread_ts": value[2],
                             }
-                            if value[2]
-                            else None
-                        ),
+                        }
+                        if value[2]
+                        else None,
                     )
 
     def list(
@@ -289,9 +288,9 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 print(checkpoints)  # Output: [CheckpointTuple(...), ...]
         """
         query = (
-            "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
+            "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
             if before is None
-            else "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? AND thread_ts < ? ORDER BY thread_ts DESC"
+            else "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts < ? ORDER BY thread_ts DESC"
         )
         if limit:
             query += f" LIMIT {limit}"
@@ -307,23 +306,27 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     )
                 ),
             )
-            for thread_id, thread_ts, parent_ts, value in cur:
+            for thread_id, thread_ts, parent_ts, value, metadata in cur:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
-                    (
-                        {
-                            "configurable": {
-                                "thread_id": thread_id,
-                                "thread_ts": parent_ts,
-                            }
+                    self.serde.loads(metadata) if metadata is not None else None,
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "thread_ts": parent_ts,
                         }
-                        if parent_ts
-                        else None
-                    ),
+                    }
+                    if parent_ts
+                    else None,
                 )
 
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: dict[str, Any] = None,
+    ) -> RunnableConfig:
         """Save a checkpoint to the database.
 
         This method saves a checkpoint to the SQLite database. The checkpoint is associated
@@ -332,6 +335,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         Args:
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
+            metadata (Optional[dict[str, Any]]): Additional metadata to save with the checkpoint. Defaults to None.
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
@@ -347,12 +351,13 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         """
         with self.cursor() as cur:
             cur.execute(
-                "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint) VALUES (?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)",
                 (
                     str(config["configurable"]["thread_id"]),
                     checkpoint["ts"],
                     config["configurable"].get("thread_ts"),
                     self.serde.dumps(checkpoint),
+                    self.serde.dumps(metadata) if metadata is not None else None,
                 ),
             )
         return {

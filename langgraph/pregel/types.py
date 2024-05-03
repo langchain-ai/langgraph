@@ -25,6 +25,8 @@ class StateSnapshot(NamedTuple):
     """Nodes to execute in the next step, if any"""
     config: RunnableConfig
     """Config used to fetch this snapshot"""
+    metadata: dict[str, Any]
+    """Metadata associated with this snapshot"""
     parent_config: Optional[RunnableConfig] = None
     """Config used to fetch the parent snapshot, if any"""
 

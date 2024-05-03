@@ -1306,6 +1306,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1333,6 +1334,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1416,6 +1418,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     # test state get/update methods with interrupt_before
@@ -1454,6 +1457,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1481,6 +1485,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1564,6 +1569,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     # test re-invoke to continue with interrupt_before
@@ -1602,6 +1608,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1924,6 +1931,7 @@ async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1949,6 +1957,7 @@ async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2007,6 +2016,7 @@ async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     # test state get/update methods with interrupt_before
@@ -2043,6 +2053,7 @@ async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -2068,6 +2079,7 @@ async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2126,6 +2138,7 @@ async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
 
@@ -2734,6 +2747,7 @@ async def test_message_graph(checkpoint_at: CheckpointAt) -> None:
         ],
         next=("action",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        metadata={},
     )
 
     # modify ai message
@@ -2761,6 +2775,7 @@ async def test_message_graph(checkpoint_at: CheckpointAt) -> None:
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2813,6 +2828,7 @@ async def test_message_graph(checkpoint_at: CheckpointAt) -> None:
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -2846,6 +2862,7 @@ async def test_message_graph(checkpoint_at: CheckpointAt) -> None:
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={},
     )
 
 
@@ -2968,6 +2985,7 @@ async def test_start_branch_then(
             values={"my_key": "value", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            metadata={},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread1, debug=1) == {
@@ -2978,6 +2996,7 @@ async def test_start_branch_then(
             values={"my_key": "value slow", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            metadata={},
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -2990,6 +3009,7 @@ async def test_start_branch_then(
             values={"my_key": "value", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            metadata={},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread2, debug=1) == {
@@ -3000,6 +3020,7 @@ async def test_start_branch_then(
             values={"my_key": "value fast", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            metadata={},
         )
 
 
@@ -3308,6 +3329,7 @@ async def test_branch_then(
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            metadata={},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread1, debug=1) == {
@@ -3318,6 +3340,7 @@ async def test_branch_then(
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            metadata={},
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3330,6 +3353,7 @@ async def test_branch_then(
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            metadata={},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread2, debug=1) == {
@@ -3340,6 +3364,7 @@ async def test_branch_then(
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            metadata={},
         )
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
@@ -3362,6 +3387,7 @@ async def test_branch_then(
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            metadata={},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread1, debug=1) == {
@@ -3372,6 +3398,7 @@ async def test_branch_then(
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            metadata={},
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3384,6 +3411,7 @@ async def test_branch_then(
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            metadata={},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread2, debug=1) == {
@@ -3394,6 +3422,7 @@ async def test_branch_then(
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            metadata={},
         )
 
 
