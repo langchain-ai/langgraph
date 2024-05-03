@@ -9,7 +9,7 @@
 
 ## Overview
 
-[LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs, built on top of (and intended to be used with) [LangChain](https://github.com/langchain-ai/langchain).
+[LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs.
 It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation in a cyclic manner.
 It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
 The current interface exposed is one inspired by [NetworkX](https://networkx.org/documentation/latest/).
@@ -127,13 +127,11 @@ graph.add_node("oracle", chain)
 Now, let's move onto something a little bit less trivial. Because math can be difficult for LLMs, let's allow the LLM to conditionally call a `"multiply"` node using tool calling.
 
 We'll recreate our graph with an additional `"multiply"` that will take the result of the most recent message, if it is a tool call, and calculate the result.
-We'll also bind the calculator to the OpenAI model as a tool to allow the model to optionally use the tool necessary to respond to the current state:
+We'll also [bind](https://api.python.langchain.com/en/latest/chat_models/langchain_openai.chat_models.base.ChatOpenAI.html#langchain_openai.chat_models.base.ChatOpenAI.bind_tools) the calculator to the OpenAI model as a tool to allow the model to optionally use the tool necessary to respond to the current state:
 
 ```python
-import json
-from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langgraph.prebuilt import ToolNode
 
 @tool
 def multiply(first_number: int, second_number: int):
@@ -141,36 +139,14 @@ def multiply(first_number: int, second_number: int):
     return first_number * second_number
 
 model = ChatOpenAI(temperature=0)
-model_with_tools = model.bind(tools=[convert_to_openai_tool(multiply)])
+model_with_tools = model.bind_tools([multiply])
 
 graph = MessageGraph()
 
-def invoke_model(state: List[BaseMessage]):
-    return model_with_tools.invoke(state)
+graph.add_node("oracle", model_with_tools)
 
-graph.add_node("oracle", invoke_model)
-
-def invoke_tool(state: List[BaseMessage]):
-    tool_calls = state[-1].additional_kwargs.get("tool_calls", [])
-    multiply_call = None
-
-    for tool_call in tool_calls:
-        if tool_call.get("function").get("name") == "multiply":
-            multiply_call = tool_call
-
-    if multiply_call is None:
-        raise Exception("No adder input found.")
-
-    res = multiply.invoke(
-        json.loads(multiply_call.get("function").get("arguments"))
-    )
-
-    return ToolMessage(
-        tool_call_id=multiply_call.get("id"),
-        content=res
-    )
-
-graph.add_node("multiply", invoke_tool)
+tool_node = ToolNode([multiply])
+graph.add_node("multiply", tool_node)
 
 graph.add_edge("multiply", END)
 
@@ -289,13 +265,10 @@ model = ChatOpenAI(temperature=0, streaming=True)
 ```
 
 After we've done this, we should make sure the model knows that it has these tools available to call.
-We can do this by converting the LangChain tools into the format for OpenAI function calling, and then bind them to the model class.
+We can do this by converting the LangChain tools into the format for OpenAI tool calling using the [`bind_tools()`](https://api.python.langchain.com/en/latest/chat_models/langchain_openai.chat_models.base.ChatOpenAI.html#langchain_openai.chat_models.base.ChatOpenAI.bind_tools) method.
 
 ```python
-from langchain.tools.render import format_tool_to_openai_function
-
-functions = [format_tool_to_openai_function(t) for t in tools]
-model = model.bind_functions(functions)
+model = model.bind_tools(tools)
 ```
 
 ### Define the agent state
@@ -309,15 +282,17 @@ Whether to set or add is denoted by annotating the state object you construct th
 For this example, the state we will track will just be a list of messages.
 We want each node to just add messages to that list.
 Therefore, we will use a `TypedDict` with one key (`messages`) and annotate it so that the `messages` attribute is always added to with the second parameter (`operator.add`).
+(Note: the state can be any [type](https://docs.python.org/3/library/stdtypes.html#type-objects), including [pydantic BaseModel's](https://docs.pydantic.dev/latest/api/base_model/)).
 
 ```python
-from typing import TypedDict, Annotated, Sequence
-import operator
-from langchain_core.messages import BaseMessage
+from typing import TypedDict, Annotated
+from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], operator.add]
+    # The `add_messages` function within the annotation defines
+    # *how* updates should be merged into the state.
+    messages: Annotated[list, add_messages]
 ```
 
 You can think of the `MessageGraph` used in the initial example as a preconfigured version of this graph, where the state is directly an array of messages,
