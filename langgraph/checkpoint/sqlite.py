@@ -10,7 +10,6 @@ from typing_extensions import Self
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
-    CheckpointAt,
     CheckpointTuple,
     SerializerProtocol,
 )
@@ -90,9 +89,8 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         conn: sqlite3.Connection,
         *,
         serde: Optional[SerializerProtocol] = None,
-        at: Optional[CheckpointAt] = None,
     ) -> None:
-        super().__init__(serde=serde, at=at)
+        super().__init__(serde=serde)
         self.conn = conn
         self.is_setup = False
 

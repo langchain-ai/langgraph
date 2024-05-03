@@ -25,7 +25,6 @@ from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
-from langgraph.checkpoint.base import CheckpointAt
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.message import MessageGraph
 from langgraph.prebuilt.chat_agent_executor import (
@@ -270,17 +269,12 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 2
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_invoke_two_processes_in_out_interrupt(
-    mocker: MockerFixture, checkpoint_at: CheckpointAt
-) -> None:
+async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
-    memory = MemorySaverAssertImmutable(at=checkpoint_at)
+    memory = MemorySaverAssertImmutable()
     app = Pregel(
         nodes={"one": one, "two": two},
         channels={
@@ -457,12 +451,6 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "step": 1,
             "payload": {"config": None, "values": {"output": 4, "inbox": []}},
         },
-        {
-            "type": "checkpoint",
-            "timestamp": AnyStr(),
-            "step": 2,
-            "payload": {"config": None, "values": {"output": 4, "inbox": []}},
-        },
     ]
 
 
@@ -613,12 +601,7 @@ async def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) 
     assert await app.ainvoke(2) == [3, 3]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_invoke_checkpoint(
-    mocker: MockerFixture, checkpoint_at: CheckpointAt
-) -> None:
+async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
     def raise_if_above_10(input: int) -> int:
@@ -633,7 +616,7 @@ async def test_invoke_checkpoint(
         | raise_if_above_10
     )
 
-    memory = MemorySaverAssertImmutable(at=checkpoint_at)
+    memory = MemorySaverAssertImmutable()
 
     app = Pregel(
         nodes={"one": one},
@@ -674,12 +657,7 @@ async def test_invoke_checkpoint(
     assert checkpoint["channel_values"].get("total") == 5
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_invoke_checkpoint_aiosqlite(
-    mocker: MockerFixture, checkpoint_at: CheckpointAt
-) -> None:
+async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
     def raise_if_above_10(input: int) -> int:
@@ -695,7 +673,6 @@ async def test_invoke_checkpoint_aiosqlite(
     )
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as memory:
-        memory.at = checkpoint_at
         app = Pregel(
             nodes={"one": one},
             channels={
@@ -1003,10 +980,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     assert cleanup_async.call_count == 1, "Expected cleanup to be called once"
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
+async def test_conditional_graph() -> None:
     from copy import deepcopy
 
     from langchain.llms.fake import FakeStreamingListLLM
@@ -1274,7 +1248,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
     # test state get/update methods with interrupt_after
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -1424,7 +1398,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
     # test state get/update methods with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -1575,7 +1549,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
     # test re-invoke to continue with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -1702,10 +1676,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
+async def test_conditional_graph_state() -> None:
     from langchain.llms.fake import FakeStreamingListLLM
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
@@ -1899,7 +1870,7 @@ async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
     # test state get/update methods with interrupt_after
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -2022,7 +1993,7 @@ async def test_conditional_graph_state(checkpoint_at: CheckpointAt) -> None:
     # test state get/update methods with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -2537,10 +2508,7 @@ async def test_prebuilt_chat() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_message_graph(checkpoint_at: CheckpointAt) -> None:
+async def test_message_graph() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
@@ -2709,7 +2677,7 @@ async def test_message_graph(checkpoint_at: CheckpointAt) -> None:
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -2938,12 +2906,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_start_branch_then(
-    snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
-) -> None:
+async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -2966,7 +2929,6 @@ async def test_start_branch_then(
     }
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-        saver.at = checkpoint_at
         tool_two = tool_two_graph.compile(
             checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
         )
@@ -3024,12 +2986,7 @@ async def test_start_branch_then(
         )
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_branch_then(
-    snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
-) -> None:
+async def test_branch_then() -> None:
     pass
 
     class State(TypedDict):
@@ -3060,256 +3017,126 @@ async def test_branch_then(
     }
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-        saver.at = checkpoint_at
-
         # test stream_mode=debug
         tool_two = tool_two_graph.compile(checkpointer=saver)
         thread10 = {"configurable": {"thread_id": "10"}}
-        if checkpoint_at is CheckpointAt.END_OF_RUN:
-            assert [
-                c
-                async for c in tool_two.astream(
-                    {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
-                )
-            ] == [
-                {
-                    "type": "checkpoint",
-                    "timestamp": AnyStr(),
-                    "step": 0,
-                    "payload": {
-                        "config": None,
-                        "values": {"my_key": "value", "market": "DE"},
+        assert [
+            c
+            async for c in tool_two.astream(
+                {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
+            )
+        ] == [
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 0,
+                "payload": {
+                    "config": {
+                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                    },
+                    "values": {"my_key": "value", "market": "DE"},
+                },
+            },
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                    "name": "prepare",
+                    "input": {"my_key": "value", "market": "DE"},
+                    "triggers": ["start:prepare"],
+                },
+            },
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                    "name": "prepare",
+                    "result": [("my_key", " prepared")],
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "config": {
+                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                    },
+                    "values": {"my_key": "value prepared", "market": "DE"},
+                },
+            },
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                    "name": "tool_two_slow",
+                    "input": {"my_key": "value prepared", "market": "DE"},
+                    "triggers": ["branch:prepare:condition:tool_two_slow"],
+                },
+            },
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                    "name": "tool_two_slow",
+                    "result": [("my_key", " slow")],
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "config": {
+                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                    },
+                    "values": {"my_key": "value prepared slow", "market": "DE"},
+                },
+            },
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                    "name": "finish",
+                    "input": {"my_key": "value prepared slow", "market": "DE"},
+                    "triggers": ["branch:prepare:condition:then"],
+                },
+            },
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                    "name": "finish",
+                    "result": [("my_key", " finished")],
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "config": {
+                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                    },
+                    "values": {
+                        "my_key": "value prepared slow finished",
+                        "market": "DE",
                     },
                 },
-                {
-                    "type": "task",
-                    "timestamp": AnyStr(),
-                    "step": 1,
-                    "payload": {
-                        "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
-                        "name": "prepare",
-                        "input": {"my_key": "value", "market": "DE"},
-                        "triggers": ["start:prepare"],
-                    },
-                },
-                {
-                    "type": "task_result",
-                    "timestamp": AnyStr(),
-                    "step": 1,
-                    "payload": {
-                        "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
-                        "name": "prepare",
-                        "result": [("my_key", " prepared")],
-                    },
-                },
-                {
-                    "type": "checkpoint",
-                    "timestamp": AnyStr(),
-                    "step": 1,
-                    "payload": {
-                        "config": None,
-                        "values": {"my_key": "value prepared", "market": "DE"},
-                    },
-                },
-                {
-                    "type": "task",
-                    "timestamp": AnyStr(),
-                    "step": 2,
-                    "payload": {
-                        "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
-                        "name": "tool_two_slow",
-                        "input": {"my_key": "value prepared", "market": "DE"},
-                        "triggers": ["branch:prepare:condition:tool_two_slow"],
-                    },
-                },
-                {
-                    "type": "task_result",
-                    "timestamp": AnyStr(),
-                    "step": 2,
-                    "payload": {
-                        "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
-                        "name": "tool_two_slow",
-                        "result": [("my_key", " slow")],
-                    },
-                },
-                {
-                    "type": "checkpoint",
-                    "timestamp": AnyStr(),
-                    "step": 2,
-                    "payload": {
-                        "config": None,
-                        "values": {"my_key": "value prepared slow", "market": "DE"},
-                    },
-                },
-                {
-                    "type": "task",
-                    "timestamp": AnyStr(),
-                    "step": 3,
-                    "payload": {
-                        "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
-                        "name": "finish",
-                        "input": {"my_key": "value prepared slow", "market": "DE"},
-                        "triggers": ["branch:prepare:condition:then"],
-                    },
-                },
-                {
-                    "type": "task_result",
-                    "timestamp": AnyStr(),
-                    "step": 3,
-                    "payload": {
-                        "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
-                        "name": "finish",
-                        "result": [("my_key", " finished")],
-                    },
-                },
-                {
-                    "type": "checkpoint",
-                    "timestamp": AnyStr(),
-                    "step": 3,
-                    "payload": {
-                        "config": None,
-                        "values": {
-                            "my_key": "value prepared slow finished",
-                            "market": "DE",
-                        },
-                    },
-                },
-                {
-                    "type": "checkpoint",
-                    "timestamp": AnyStr(),
-                    "step": 4,
-                    "payload": {
-                        "config": {
-                            "configurable": {
-                                "thread_id": "10",
-                                "thread_ts": AnyStr(),
-                            }
-                        },
-                        "values": {
-                            "my_key": "value prepared slow finished",
-                            "market": "DE",
-                        },
-                    },
-                },
-            ]
-        else:
-            assert [
-                c
-                async for c in tool_two.astream(
-                    {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
-                )
-            ] == [
-                {
-                    "type": "checkpoint",
-                    "timestamp": AnyStr(),
-                    "step": 0,
-                    "payload": {
-                        "config": {
-                            "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
-                        },
-                        "values": {"my_key": "value", "market": "DE"},
-                    },
-                },
-                {
-                    "type": "task",
-                    "timestamp": AnyStr(),
-                    "step": 1,
-                    "payload": {
-                        "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
-                        "name": "prepare",
-                        "input": {"my_key": "value", "market": "DE"},
-                        "triggers": ["start:prepare"],
-                    },
-                },
-                {
-                    "type": "task_result",
-                    "timestamp": AnyStr(),
-                    "step": 1,
-                    "payload": {
-                        "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
-                        "name": "prepare",
-                        "result": [("my_key", " prepared")],
-                    },
-                },
-                {
-                    "type": "checkpoint",
-                    "timestamp": AnyStr(),
-                    "step": 1,
-                    "payload": {
-                        "config": {
-                            "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
-                        },
-                        "values": {"my_key": "value prepared", "market": "DE"},
-                    },
-                },
-                {
-                    "type": "task",
-                    "timestamp": AnyStr(),
-                    "step": 2,
-                    "payload": {
-                        "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
-                        "name": "tool_two_slow",
-                        "input": {"my_key": "value prepared", "market": "DE"},
-                        "triggers": ["branch:prepare:condition:tool_two_slow"],
-                    },
-                },
-                {
-                    "type": "task_result",
-                    "timestamp": AnyStr(),
-                    "step": 2,
-                    "payload": {
-                        "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
-                        "name": "tool_two_slow",
-                        "result": [("my_key", " slow")],
-                    },
-                },
-                {
-                    "type": "checkpoint",
-                    "timestamp": AnyStr(),
-                    "step": 2,
-                    "payload": {
-                        "config": {
-                            "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
-                        },
-                        "values": {"my_key": "value prepared slow", "market": "DE"},
-                    },
-                },
-                {
-                    "type": "task",
-                    "timestamp": AnyStr(),
-                    "step": 3,
-                    "payload": {
-                        "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
-                        "name": "finish",
-                        "input": {"my_key": "value prepared slow", "market": "DE"},
-                        "triggers": ["branch:prepare:condition:then"],
-                    },
-                },
-                {
-                    "type": "task_result",
-                    "timestamp": AnyStr(),
-                    "step": 3,
-                    "payload": {
-                        "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
-                        "name": "finish",
-                        "result": [("my_key", " finished")],
-                    },
-                },
-                {
-                    "type": "checkpoint",
-                    "timestamp": AnyStr(),
-                    "step": 3,
-                    "payload": {
-                        "config": {
-                            "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
-                        },
-                        "values": {
-                            "my_key": "value prepared slow finished",
-                            "market": "DE",
-                        },
-                    },
-                },
-            ]
+            },
+        ]
 
         tool_two = tool_two_graph.compile(
             checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
@@ -3368,7 +3195,6 @@ async def test_branch_then(
         )
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-        saver.at = checkpoint_at
         tool_two = tool_two_graph.compile(
             checkpointer=saver, interrupt_after=["prepare"]
         )
@@ -3426,12 +3252,7 @@ async def test_branch_then(
         )
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_in_one_fan_out_state_graph_waiting_edge(
-    checkpoint_at: CheckpointAt,
-) -> None:
+async def test_in_one_fan_out_state_graph_waiting_edge() -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -3495,7 +3316,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge(
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -3519,12 +3340,8 @@ async def test_in_one_fan_out_state_graph_waiting_edge(
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
 async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     snapshot: SnapshotAssertion,
-    checkpoint_at: CheckpointAt,
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -3593,7 +3410,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -3617,12 +3434,8 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     snapshot: SnapshotAssertion,
-    checkpoint_at: CheckpointAt,
 ) -> None:
     from langchain_core.pydantic_v1 import BaseModel, ValidationError
 
@@ -3700,7 +3513,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -3724,12 +3537,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
-    checkpoint_at: CheckpointAt,
-) -> None:
+async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -3798,7 +3606,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}

@@ -10,7 +10,6 @@ from typing_extensions import Self
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
-    CheckpointAt,
     CheckpointTuple,
     SerializerProtocol,
 )
@@ -80,9 +79,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         conn: aiosqlite.Connection,
         *,
         serde: Optional[SerializerProtocol] = None,
-        at: Optional[CheckpointAt] = None,
     ):
-        super().__init__(serde=serde, at=at)
+        super().__init__(serde=serde)
         self.conn = conn
         self.lock = asyncio.Lock()
         self.is_setup = False

@@ -7,7 +7,6 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
-    CheckpointAt,
     CheckpointTuple,
     SerializerProtocol,
 )
@@ -45,9 +44,8 @@ class MemorySaver(BaseCheckpointSaver):
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
-        at: Optional[CheckpointAt] = None,
     ) -> None:
-        super().__init__(serde=serde, at=at)
+        super().__init__(serde=serde)
         self.storage = defaultdict(dict)
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
