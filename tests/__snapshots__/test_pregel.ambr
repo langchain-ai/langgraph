@@ -1492,3 +1492,6 @@
   
   '''
 # ---
+# name: test_state_graph_w_config
+  '{"title": "LangGraphConfig", "type": "object", "properties": {"configurable": {"$ref": "#/definitions/Configurable"}}, "definitions": {"Configurable": {"title": "Configurable", "type": "object", "properties": {"tools": {"title": "Tools", "type": "array", "items": {"type": "string"}}}}}}'
+# ---

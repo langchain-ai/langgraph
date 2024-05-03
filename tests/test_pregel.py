@@ -753,6 +753,7 @@ def test_invoke_checkpoint_sqlite(
         assert state.values.get("total") == 5
         assert state.next == ()
 
+        assert len(list(app.get_state_history(thread_1, limit=1))) == 1
         # list all checkpoints for thread 1
         thread_1_history = [c for c in app.get_state_history(thread_1)]
         # there are 2: one for each successful ainvoke()
@@ -762,6 +763,12 @@ def test_invoke_checkpoint_sqlite(
             thread_1_history[0].config["configurable"]["thread_ts"]
             > thread_1_history[1].config["configurable"]["thread_ts"]
         )
+        # cursor pagination
+        cursored = list(
+            app.get_state_history(thread_1, limit=1, before=thread_1_history[0].config)
+        )
+        assert len(cursored) == 1
+        assert cursored[0].config == thread_1_history[1].config
         # the second checkpoint
         assert thread_1_history[0].values["total"] == 7
         # the first checkpoint
@@ -2230,6 +2237,92 @@ def test_conditional_state_graph(
             }
         },
     ]
+
+
+def test_state_graph_w_config(snapshot: SnapshotAssertion) -> None:
+    from langchain.llms.fake import FakeStreamingListLLM
+    from langchain_community.tools import tool
+    from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.prompts import PromptTemplate
+
+    class AgentState(TypedDict, total=False):
+        input: str
+        agent_outcome: Optional[Union[AgentAction, AgentFinish]]
+        intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+
+    class Config(TypedDict, total=False):
+        tools: list[str]
+
+    # Assemble the tools
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    # Construct the agent
+    prompt = PromptTemplate.from_template("Hello!")
+
+    llm = FakeStreamingListLLM(
+        responses=[
+            "tool:search_api:query",
+            "tool:search_api:another",
+            "finish:answer",
+        ]
+    )
+
+    def agent_parser(input: str) -> dict[str, Union[AgentAction, AgentFinish]]:
+        if input.startswith("finish"):
+            _, answer = input.split(":")
+            return {
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": answer}, log=input
+                )
+            }
+        else:
+            _, tool_name, tool_input = input.split(":")
+            return {
+                "agent_outcome": AgentAction(
+                    tool=tool_name, tool_input=tool_input, log=input
+                )
+            }
+
+    agent = prompt | llm | agent_parser
+
+    # Define tool execution logic
+    def execute_tools(data: AgentState) -> dict:
+        agent_action: AgentAction = data.pop("agent_outcome")
+        observation = {t.name: t for t in tools}[agent_action.tool].invoke(
+            agent_action.tool_input
+        )
+        return {"intermediate_steps": [(agent_action, observation)]}
+
+    # Define decision-making logic
+    def should_continue(data: AgentState) -> str:
+        # Logic to decide whether to continue in the loop or exit
+        if isinstance(data["agent_outcome"], AgentFinish):
+            return "exit"
+        else:
+            return "continue"
+
+    # Define a new graph
+    workflow = StateGraph(AgentState, Config)
+
+    workflow.add_node("agent", agent)
+    workflow.add_node("tools", execute_tools)
+
+    workflow.set_entry_point("agent")
+
+    workflow.add_conditional_edges(
+        "agent", should_continue, {"continue": "tools", "exit": END}
+    )
+
+    workflow.add_edge("tools", "agent")
+
+    app = workflow.compile()
+
+    assert app.config_schema().schema_json() == snapshot
 
 
 def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None:

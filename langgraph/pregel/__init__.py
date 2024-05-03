@@ -17,6 +17,7 @@ from typing import (
     Type,
     Union,
     cast,
+    get_type_hints,
     overload,
 )
 
@@ -211,6 +212,8 @@ class Pregel(
 
     checkpointer: Optional[BaseCheckpointSaver] = None
 
+    config_type: Optional[Type[Any]] = None
+
     name: str = "LangGraph"
 
     class Config:
@@ -263,6 +266,14 @@ class Pregel(
                 + (
                     self.checkpointer.config_specs
                     if self.checkpointer is not None
+                    else []
+                )
+                + (
+                    [
+                        ConfigurableFieldSpec(id=name, annotation=typ)
+                        for name, typ in get_type_hints(self.config_type).items()
+                    ]
+                    if self.config_type is not None
                     else []
                 )
             )
@@ -352,12 +363,20 @@ class Pregel(
                 config,
             )
 
-    def get_state_history(self, config: RunnableConfig) -> Iterator[StateSnapshot]:
+    def get_state_history(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        for config, checkpoint, parent_config in self.checkpointer.list(config):
+        for config, checkpoint, parent_config in self.checkpointer.list(
+            config, before=before, limit=limit
+        ):
             with ChannelsManager(self.channels, checkpoint) as channels:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint, self.nodes, channels, for_execution=False
@@ -370,13 +389,19 @@ class Pregel(
                 )
 
     async def aget_state_history(
-        self, config: RunnableConfig
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        async for config, checkpoint, parent_config in self.checkpointer.alist(config):
+        async for config, checkpoint, parent_config in self.checkpointer.alist(
+            config, before=before, limit=limit
+        ):
             async with AsyncChannelsManager(self.channels, checkpoint) as channels:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint, self.nodes, channels, for_execution=False
@@ -774,9 +799,15 @@ class Pregel(
                     and self.checkpointer.at == CheckpointAt.END_OF_RUN
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
-                    checkpoint_config = self.checkpointer.put(
-                        checkpoint_config, checkpoint
+                    executor.submit(
+                        self.checkpointer.put(checkpoint_config, checkpoint)
                     )
+                    checkpoint_config = {
+                        "configurable": {
+                            "thread_id": checkpoint_config["configurable"]["thread_id"],
+                            "thread_ts": checkpoint["ts"],
+                        }
+                    }
                     if stream_mode == "debug":
                         yield map_debug_checkpoint(
                             step,
@@ -829,6 +860,7 @@ class Pregel(
             None,
         )
         try:
+            tasks: list[asyncio.Task] = []
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
             if self.checkpointer and not config.get("configurable"):
@@ -1033,9 +1065,17 @@ class Pregel(
                     and self.checkpointer.at == CheckpointAt.END_OF_RUN
                 ):
                     checkpoint = create_checkpoint(checkpoint, channels)
-                    checkpoint_config = await self.checkpointer.aput(
-                        checkpoint_config, checkpoint
+                    tasks.append(
+                        asyncio.create_task(
+                            self.checkpointer.aput(checkpoint_config, checkpoint)
+                        )
                     )
+                    checkpoint_config = {
+                        "configurable": {
+                            "thread_id": checkpoint_config["configurable"]["thread_id"],
+                            "thread_ts": checkpoint["ts"],
+                        }
+                    }
                     if stream_mode == "debug":
                         yield map_debug_checkpoint(
                             step, checkpoint_config, channels, self.stream_channels_asis
@@ -1052,8 +1092,11 @@ class Pregel(
             try:
                 for task in futures:
                     task.cancel()
+                    tasks.append(task)
             except NameError:
                 pass
+            # wait for all tasks to finish
+            await asyncio.gather(*tasks, return_exceptions=True)
 
     def invoke(
         self,

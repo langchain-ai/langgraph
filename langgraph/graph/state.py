@@ -3,6 +3,7 @@ from functools import partial
 from inspect import signature
 from typing import Any, Optional, Sequence, Type, Union, get_type_hints
 
+from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 
@@ -32,10 +33,13 @@ class StateGraph(Graph):
     The signature of a reducer function is (Value, Value) -> Value.
     """
 
-    def __init__(self, schema: Type[Any]) -> None:
+    def __init__(
+        self, state_schema: Type[Any], config_schema: Optional[Type[Any]] = None
+    ) -> None:
         super().__init__()
-        self.schema = schema
-        self.channels = _get_channels(schema)
+        self.schema = state_schema
+        self.config_schema = config_schema
+        self.channels = _get_channels(state_schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
         self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
@@ -134,6 +138,7 @@ class StateGraph(Graph):
 
         compiled = CompiledStateGraph(
             builder=self,
+            config_type=self.config_schema,
             nodes={},
             channels={**self.channels, START: EphemeralValue(self.schema)},
             input_channels=START,
@@ -166,6 +171,20 @@ class StateGraph(Graph):
 
 class CompiledStateGraph(CompiledGraph):
     builder: StateGraph
+
+    def get_input_schema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> type[BaseModel]:
+        if isinstance(self.builder.schema, BaseModel):
+            return self.builder.schema
+
+        return super().get_input_schema(config)
+
+    def get_output_schema(self, config: Optional[RunnableConfig] = None) -> BaseModel:
+        if isinstance(self.builder.schema, BaseModel):
+            return self.builder.schema
+
+        return super().get_output_schema(config)
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:

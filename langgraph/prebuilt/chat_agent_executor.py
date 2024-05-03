@@ -1,12 +1,13 @@
 import json
-from typing import Annotated, Sequence, TypedDict, Union
+from typing import Annotated, Callable, Optional, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import BaseMessage, FunctionMessage
-from langchain_core.runnables import RunnableLambda
+from langchain_core.messages import BaseMessage, FunctionMessage, SystemMessage
+from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
+from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
@@ -134,13 +135,30 @@ def create_function_calling_executor(
 
 
 def create_tool_calling_executor(
-    model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
+    model: LanguageModelLike,
+    tools: Union[ToolExecutor, Sequence[BaseTool]],
+    messages_modifier: Optional[Union[SystemMessage, str, Callable, Runnable]] = None,
+    checkpointer: Optional[BaseCheckpointSaver] = None,
+    interrupt_before: Optional[Sequence[str]] = None,
+    interrupt_after: Optional[Sequence[str]] = None,
+    debug: bool = False,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
     Args:
         model (LanguageModelLike): The chat model that supports OpenAI tool calling.
         tools (Union[ToolExecutor, Sequence[BaseTool]]): A list of tools or a ToolExecutor instance.
+        messages_modifier: (Optional[Union[SystemMessage, str, Callable, Runnable]]): An optional
+            messages modifier. This applies to messages BEFORE they are passed into the LLM.
+            Can take a few different forms:
+            - SystemMessage: this is added to the beginning of the list of messages.
+            - str: This is converted to a SystemMessage and added to the beginning of the list of messages.
+            - Callable: This function should take in a list of messages and the output is then passed to the language model.
+            - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
+        checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
+        interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
+        interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
+        debug (bool): A flag indicating whether to enable debug mode.
 
     Returns:
         Runnable: A compiled LangChain runnable that can be used for chat interactions.
@@ -179,16 +197,31 @@ def create_tool_calling_executor(
         else:
             return "continue"
 
+    # Add the message modifier, if exists
+    if messages_modifier is None:
+        model_runnable = model
+    elif isinstance(messages_modifier, str):
+        _system_message: BaseMessage = SystemMessage(content=messages_modifier)
+        model_runnable = (lambda messages: [_system_message] + messages) | model
+    elif isinstance(messages_modifier, SystemMessage):
+        model_runnable = (lambda messages: [messages_modifier] + messages) | model
+    elif isinstance(messages_modifier, (Callable, Runnable)):
+        model_runnable = messages_modifier | model
+    else:
+        raise ValueError(
+            f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
+        )
+
     # Define the function that calls the model
     def call_model(state: AgentState):
         messages = state["messages"]
-        response = model.invoke(messages)
+        response = model_runnable.invoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
     async def acall_model(state: AgentState):
         messages = state["messages"]
-        response = await model.ainvoke(messages)
+        response = await model_runnable.ainvoke(messages)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
@@ -231,4 +264,9 @@ def create_tool_calling_executor(
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
     # meaning you can use it as you would any other runnable
-    return workflow.compile()
+    return workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_before=interrupt_before,
+        interrupt_after=interrupt_after,
+        debug=debug,
+    )
