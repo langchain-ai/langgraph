@@ -753,6 +753,7 @@ def test_invoke_checkpoint_sqlite(
         assert state.values.get("total") == 5
         assert state.next == ()
 
+        assert len(list(app.get_state_history(thread_1, limit=1))) == 1
         # list all checkpoints for thread 1
         thread_1_history = [c for c in app.get_state_history(thread_1)]
         # there are 2: one for each successful ainvoke()
@@ -762,6 +763,12 @@ def test_invoke_checkpoint_sqlite(
             thread_1_history[0].config["configurable"]["thread_ts"]
             > thread_1_history[1].config["configurable"]["thread_ts"]
         )
+        # cursor pagination
+        cursored = list(
+            app.get_state_history(thread_1, limit=1, before=thread_1_history[0].config)
+        )
+        assert len(cursored) == 1
+        assert cursored[0].config == thread_1_history[1].config
         # the second checkpoint
         assert thread_1_history[0].values["total"] == 7
         # the first checkpoint

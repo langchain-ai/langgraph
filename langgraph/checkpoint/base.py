@@ -130,7 +130,13 @@ class BaseCheckpointSaver(ABC):
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         raise NotImplementedError
 
-    def list(self, config: RunnableConfig) -> Iterator[CheckpointTuple]:
+    def list(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
         raise NotImplementedError
 
     def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
@@ -143,7 +149,13 @@ class BaseCheckpointSaver(ABC):
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         raise NotImplementedError
 
-    async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
+    async def alist(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[CheckpointTuple]:
         raise NotImplementedError
 
     async def aput(

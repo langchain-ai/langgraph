@@ -134,11 +134,29 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                         else None,
                     )
 
-    def list(self, config: RunnableConfig) -> Iterator[CheckpointTuple]:
+    def list(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        query = (
+            "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
+            if before is None
+            else "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? AND thread_ts < ? ORDER BY thread_ts DESC"
+        )
+        if limit:
+            query += f" LIMIT {limit}"
         with self.cursor(transaction=False) as cur:
             cur.execute(
-                "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC",
-                (str(config["configurable"]["thread_id"]),),
+                query,
+                (str(config["configurable"]["thread_id"]),)
+                if before is None
+                else (
+                    str(config["configurable"]["thread_id"]),
+                    before["configurable"]["thread_ts"],
+                ),
             )
             for thread_id, thread_ts, parent_ts, value in cur:
                 yield CheckpointTuple(
