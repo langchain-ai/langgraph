@@ -1,12 +1,13 @@
 import asyncio
 from collections import defaultdict
-from typing import Any, AsyncIterator, Iterator, Optional
+from typing import AsyncIterator, Iterator, Optional
 
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
+    CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
 )
@@ -67,13 +68,13 @@ class MemorySaver(BaseCheckpointSaver):
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
-        metadata: dict[str, Any] = None,
+        metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         self.storage[config["configurable"]["thread_id"]].update(
             {
                 checkpoint["ts"]: (
                     self.serde.dumps(checkpoint),
-                    self.serde.dumps(metadata or {}),
+                    self.serde.dumps(metadata),
                 )
             }
         )
@@ -99,8 +100,11 @@ class MemorySaver(BaseCheckpointSaver):
                 return
 
     async def aput(
-        self, config: RunnableConfig, checkpoint: Checkpoint
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint
+            None, self.put, config, checkpoint, metadata
         )

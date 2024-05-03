@@ -342,7 +342,7 @@ class Pregel(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(name for name, _ in next_tasks),
                 config,
-                saved.metadata or {},
+                saved.metadata,
             )
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
@@ -361,7 +361,7 @@ class Pregel(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(name for name, _ in next_tasks),
                 config,
-                saved.metadata or {},
+                saved.metadata,
             )
 
     def get_state_history(
@@ -386,7 +386,7 @@ class Pregel(
                     read_channels(channels, self.stream_channels_asis),
                     tuple(name for name, _ in next_tasks),
                     config,
-                    metadata or {},
+                    metadata,
                     parent_config,
                 )
 
@@ -415,7 +415,7 @@ class Pregel(
                     read_channels(channels, self.stream_channels_asis),
                     tuple(name for name, _ in next_tasks),
                     config,
-                    metadata or {},
+                    metadata,
                     parent_config,
                 )
 
@@ -433,8 +433,8 @@ class Pregel(
             raise ValueError("No checkpointer set")
 
         # get last checkpoint
-        checkpoint = self.checkpointer.get(config)
-        checkpoint = copy_checkpoint(checkpoint) if checkpoint else empty_checkpoint()
+        saved = self.checkpointer.get_tuple(config)
+        checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         # find last node that updated the state, if not provided
         if as_node is None:
             last_seen_by_node = sorted(
@@ -482,7 +482,14 @@ class Pregel(
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
             return self.checkpointer.put(
-                config, create_checkpoint(checkpoint, channels)
+                config,
+                create_checkpoint(checkpoint, channels),
+                {
+                    "source": "update",
+                    "step": saved.metadata.get("step", 0) + 1
+                    if saved.metadata
+                    else None,
+                },
             )
 
     async def aupdate_state(
@@ -495,8 +502,8 @@ class Pregel(
             raise ValueError("No checkpointer set")
 
         # get last checkpoint
-        checkpoint = await self.checkpointer.aget(config)
-        checkpoint = copy_checkpoint(checkpoint) if checkpoint else empty_checkpoint()
+        saved = await self.checkpointer.aget_tuple(config)
+        checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         # find last node that updated the state, if not provided
         if as_node is None:
             last_seen_by_node = sorted(
@@ -544,7 +551,12 @@ class Pregel(
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
             return await self.checkpointer.aput(
-                config, create_checkpoint(checkpoint, channels)
+                config,
+                create_checkpoint(checkpoint, channels),
+                {
+                    "source": "update",
+                    "step": saved.metadata.get("step", 0) + 1 if saved else None,
+                },
             )
 
     def _defaults(
@@ -638,10 +650,12 @@ class Pregel(
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
             checkpoint_config = config
-            checkpoint = (
-                self.checkpointer.get(checkpoint_config) if self.checkpointer else None
+            saved = (
+                self.checkpointer.get_tuple(checkpoint_config)
+                if self.checkpointer
+                else None
             )
-            checkpoint = checkpoint or empty_checkpoint()
+            checkpoint = saved.checkpoint if saved else empty_checkpoint()
             # create channels from checkpoint
             with ChannelsManager(
                 self.channels, checkpoint
@@ -667,7 +681,9 @@ class Pregel(
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                for step in range(config["recursion_limit"] + 1):
+                start = saved.metadata.get("step", -1) + 1 if saved else 0
+                stop = start + config["recursion_limit"] + 1
+                for step in range(start, stop):
                     next_checkpoint, next_tasks = _prepare_next_tasks(
                         checkpoint, processes, channels, for_execution=True
                     )
@@ -771,7 +787,9 @@ class Pregel(
                     if self.checkpointer is not None:
                         checkpoint = create_checkpoint(checkpoint, channels)
                         checkpoint_config = self.checkpointer.put(
-                            checkpoint_config, checkpoint
+                            checkpoint_config,
+                            checkpoint,
+                            {"source": "loop", "step": step},
                         )
                         if stream_mode == "debug":
                             yield map_debug_checkpoint(
@@ -865,12 +883,12 @@ class Pregel(
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
             checkpoint_config = config
-            checkpoint = (
-                await self.checkpointer.aget(checkpoint_config)
+            saved = (
+                await self.checkpointer.aget_tuple(checkpoint_config)
                 if self.checkpointer
                 else None
             )
-            checkpoint = checkpoint or empty_checkpoint()
+            checkpoint = saved.checkpoint if saved else empty_checkpoint()
             # create channels from checkpoint
             async with AsyncChannelsManager(self.channels, checkpoint) as channels:
                 # map inputs to channel updates
@@ -894,7 +912,9 @@ class Pregel(
                 # channel updates from step N are only visible in step N+1,
                 # channels are guaranteed to be immutable for the duration of the step,
                 # channel updates being applied only at the transition between steps
-                for step in range(config["recursion_limit"] + 1):
+                start = saved.metadata.get("step", -1) + 1 if saved else 0
+                stop = start + config["recursion_limit"] + 1
+                for step in range(start, stop):
                     next_checkpoint, next_tasks = _prepare_next_tasks(
                         checkpoint, processes, channels, for_execution=True
                     )
@@ -1008,7 +1028,9 @@ class Pregel(
                     if self.checkpointer is not None:
                         checkpoint = create_checkpoint(checkpoint, channels)
                         checkpoint_config = await self.checkpointer.aput(
-                            checkpoint_config, checkpoint
+                            checkpoint_config,
+                            checkpoint,
+                            {"source": "loop", "step": step},
                         )
                         if stream_mode == "debug":
                             yield map_debug_checkpoint(
