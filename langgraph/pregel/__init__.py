@@ -58,7 +58,6 @@ from langgraph.channels.base import (
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
-    CheckpointAt,
     copy_checkpoint,
     empty_checkpoint,
 )
@@ -769,9 +768,7 @@ class Pregel(
                         yield from map_output_updates(output_keys, next_tasks)
 
                     # save end of step checkpoint
-                    if self.checkpointer is not None and (
-                        self.checkpointer.at == CheckpointAt.END_OF_STEP
-                    ):
+                    if self.checkpointer is not None:
                         checkpoint = create_checkpoint(checkpoint, channels)
                         checkpoint_config = self.checkpointer.put(
                             checkpoint_config, checkpoint
@@ -799,33 +796,6 @@ class Pregel(
 
                 # set final channel values as run output
                 run_manager.on_chain_end(read_channels(channels, output_keys))
-
-                # save end of run checkpoint
-                if (
-                    self.checkpointer is not None
-                    and self.checkpointer.at == CheckpointAt.END_OF_RUN
-                ):
-                    checkpoint = create_checkpoint(checkpoint, channels)
-                    executor.submit(
-                        self.checkpointer.put(checkpoint_config, checkpoint)
-                    )
-                    checkpoint_config = {
-                        "configurable": {
-                            "thread_id": checkpoint_config["configurable"]["thread_id"],
-                            "thread_ts": checkpoint["ts"],
-                        }
-                    }
-                    if stream_mode == "debug":
-                        yield map_debug_checkpoint(
-                            step,
-                            checkpoint_config,
-                            channels,
-                            self.stream_channels_asis,
-                        )
-                elif self.checkpointer is None and stream_mode == "debug":
-                    yield map_debug_checkpoint(
-                        step, None, channels, self.stream_channels_asis
-                    )
         except BaseException as e:
             run_manager.on_chain_error(e)
             raise
@@ -1035,9 +1005,7 @@ class Pregel(
                             yield chunk
 
                     # save end of step checkpoint
-                    if self.checkpointer is not None and (
-                        self.checkpointer.at == CheckpointAt.END_OF_STEP
-                    ):
+                    if self.checkpointer is not None:
                         checkpoint = create_checkpoint(checkpoint, channels)
                         checkpoint_config = await self.checkpointer.aput(
                             checkpoint_config, checkpoint
@@ -1065,32 +1033,6 @@ class Pregel(
 
                 # set final channel values as run output
                 await run_manager.on_chain_end(read_channels(channels, output_keys))
-
-                # save end of run checkpoint
-                if (
-                    self.checkpointer is not None
-                    and self.checkpointer.at == CheckpointAt.END_OF_RUN
-                ):
-                    checkpoint = create_checkpoint(checkpoint, channels)
-                    tasks.append(
-                        asyncio.create_task(
-                            self.checkpointer.aput(checkpoint_config, checkpoint)
-                        )
-                    )
-                    checkpoint_config = {
-                        "configurable": {
-                            "thread_id": checkpoint_config["configurable"]["thread_id"],
-                            "thread_ts": checkpoint["ts"],
-                        }
-                    }
-                    if stream_mode == "debug":
-                        yield map_debug_checkpoint(
-                            step, checkpoint_config, channels, self.stream_channels_asis
-                        )
-                elif self.checkpointer is None and stream_mode == "debug":
-                    yield map_debug_checkpoint(
-                        step, None, channels, self.stream_channels_asis
-                    )
         except BaseException as e:
             await run_manager.on_chain_error(e)
             raise

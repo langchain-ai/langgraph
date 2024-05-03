@@ -3,7 +3,6 @@ from typing import Any, Optional
 
 from langgraph.checkpoint.base import (
     Checkpoint,
-    CheckpointAt,
     SerializerProtocol,
     copy_checkpoint,
 )
@@ -21,17 +20,14 @@ class NoopSerializer(SerializerProtocol):
 class MemorySaverAssertImmutable(MemorySaver):
     serde = NoopSerializer()
 
-    at = CheckpointAt.END_OF_STEP
-
     storage_for_copies: defaultdict[str, dict[str, Checkpoint]]
 
     def __init__(
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
-        at: Optional[CheckpointAt] = None,
     ) -> None:
-        super().__init__(serde=serde, at=at)
+        super().__init__(serde=serde)
         self.storage_for_copies = defaultdict(dict)
 
     def put(self, config: dict, checkpoint: Checkpoint) -> None:

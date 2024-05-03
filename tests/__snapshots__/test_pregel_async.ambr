@@ -1,5 +1,5 @@
 # serializer version: 1
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[end_of_run]
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class
   '''
                 +-----------+              
                 | __start__ |              
@@ -36,81 +36,7 @@
                 +---------+                
   '''
 # ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[end_of_step]
-  '''
-                +-----------+              
-                | __start__ |              
-                +-----------+              
-                      *                    
-                      *                    
-                      *                    
-              +---------------+            
-              | rewrite_query |            
-              +---------------+            
-               ***         ...             
-              *               .            
-            **                 ...         
-  +--------------+                .        
-  | analyzer_one |                .        
-  +--------------+                .        
-          *                       .        
-          *                       .        
-          *                       .        
-  +---------------+      +---------------+ 
-  | retriever_one |      | retriever_two | 
-  +---------------+      +---------------+ 
-               ***         ***             
-                  *       *                
-                   **   **                 
-                   +----+                  
-                   | qa |                  
-                   +----+                  
-                      *                    
-                      *                    
-                      *                    
-                +---------+                
-                | __end__ |                
-                +---------+                
-  '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[end_of_run]
-  '''
-                +-----------+              
-                | __start__ |              
-                +-----------+              
-                      *                    
-                      *                    
-                      *                    
-              +---------------+            
-              | rewrite_query |            
-              +---------------+            
-               ***         ...             
-              *               .            
-            **                 ...         
-  +--------------+                .        
-  | analyzer_one |                .        
-  +--------------+                .        
-          *                       .        
-          *                       .        
-          *                       .        
-  +---------------+      +---------------+ 
-  | retriever_one |      | retriever_two | 
-  +---------------+      +---------------+ 
-               ***         ***             
-                  *       *                
-                   **   **                 
-                   +----+                  
-                   | qa |                  
-                   +----+                  
-                      *                    
-                      *                    
-                      *                    
-                +---------+                
-                | __end__ |                
-                +---------+                
-  '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[end_of_step]
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch
   '''
                 +-----------+              
                 | __start__ |              

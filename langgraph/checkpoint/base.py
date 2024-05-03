@@ -14,7 +14,6 @@ from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
 from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
-from langgraph.utils import StrEnum
 
 
 class Checkpoint(TypedDict):
@@ -71,15 +70,6 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     )
 
 
-class CheckpointAt(StrEnum):
-    """When to take a checkpoint."""
-
-    END_OF_STEP = "end_of_step"
-    """Take a checkpoint at the end of each step."""
-    END_OF_RUN = "end_of_run"
-    """Take a checkpoint at the end of the run."""
-
-
 class CheckpointTuple(NamedTuple):
     config: RunnableConfig
     checkpoint: Checkpoint
@@ -107,18 +97,14 @@ CheckpointThreadTs = ConfigurableFieldSpec(
 
 
 class BaseCheckpointSaver(ABC):
-    at: CheckpointAt = CheckpointAt.END_OF_STEP
-
     serde: SerializerProtocol = JsonPlusSerializer()
 
     def __init__(
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
-        at: Optional[CheckpointAt] = None,
     ) -> None:
         self.serde = serde or self.serde
-        self.at = at or self.at
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
