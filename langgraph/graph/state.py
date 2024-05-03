@@ -3,6 +3,7 @@ from functools import partial
 from inspect import signature
 from typing import Any, Optional, Sequence, Type, Union, get_type_hints
 
+from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 
@@ -170,6 +171,20 @@ class StateGraph(Graph):
 
 class CompiledStateGraph(CompiledGraph):
     builder: StateGraph
+
+    def get_input_schema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> type[BaseModel]:
+        if isinstance(self.builder.schema, BaseModel):
+            return self.builder.schema
+
+        return super().get_input_schema(config)
+
+    def get_output_schema(self, config: RunnableConfig | None = None) -> BaseModel:
+        if isinstance(self.builder.schema, BaseModel):
+            return self.builder.schema
+
+        return super().get_output_schema(config)
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
