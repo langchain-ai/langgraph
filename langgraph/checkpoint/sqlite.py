@@ -10,6 +10,7 @@ from typing_extensions import Self
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
+    CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
 )
@@ -220,7 +221,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     return CheckpointTuple(
                         config,
                         self.serde.loads(value[0]),
-                        self.serde.loads(value[2]) if value[2] is not None else None,
+                        self.serde.loads(value[2]) if value[2] is not None else {},
                         {
                             "configurable": {
                                 "thread_id": config["configurable"]["thread_id"],
@@ -244,7 +245,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                             }
                         },
                         self.serde.loads(value[3]),
-                        self.serde.loads(value[4]) if value[4] is not None else None,
+                        self.serde.loads(value[4]) if value[4] is not None else {},
                         {
                             "configurable": {
                                 "thread_id": value[0],
@@ -308,7 +309,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
-                    self.serde.loads(metadata) if metadata is not None else None,
+                    self.serde.loads(metadata) if metadata is not None else {},
                     {
                         "configurable": {
                             "thread_id": thread_id,
@@ -323,7 +324,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
-        metadata: dict[str, Any] = None,
+        metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         """Save a checkpoint to the database.
 
@@ -355,7 +356,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     checkpoint["ts"],
                     config["configurable"].get("thread_ts"),
                     self.serde.dumps(checkpoint),
-                    self.serde.dumps(metadata) if metadata is not None else None,
+                    self.serde.dumps(metadata),
                 ),
             )
         return {

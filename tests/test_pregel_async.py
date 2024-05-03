@@ -1280,7 +1280,7 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "loop", "step": 0},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1308,7 +1308,7 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "update", "step": 1},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1392,7 +1392,7 @@ async def test_conditional_graph() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "update", "step": 4},
     )
 
     # test state get/update methods with interrupt_before
@@ -1431,7 +1431,7 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "loop", "step": 0},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1459,7 +1459,7 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "update", "step": 1},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1543,7 +1543,7 @@ async def test_conditional_graph() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "update", "step": 4},
     )
 
     # test re-invoke to continue with interrupt_before
@@ -1582,7 +1582,7 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "loop", "step": 0},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1902,7 +1902,7 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "loop", "step": 1},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1928,7 +1928,7 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "update", "step": 2},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1987,7 +1987,7 @@ async def test_conditional_graph_state() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "update", "step": 5},
     )
 
     # test state get/update methods with interrupt_before
@@ -2024,7 +2024,7 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "loop", "step": 1},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -2050,7 +2050,7 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "update", "step": 2},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2109,7 +2109,7 @@ async def test_conditional_graph_state() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "update", "step": 5},
     )
 
 
@@ -2715,7 +2715,7 @@ async def test_message_graph() -> None:
         ],
         next=("action",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={},
+        metadata={"source": "loop", "step": 1},
     )
 
     # modify ai message
@@ -2743,7 +2743,7 @@ async def test_message_graph() -> None:
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        metadata={},
+        metadata={"source": "update", "step": 2},
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2796,7 +2796,7 @@ async def test_message_graph() -> None:
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        metadata={},
+        metadata={"source": "loop", "step": 4},
     )
 
     await app_w_interrupt.aupdate_state(
@@ -2830,7 +2830,7 @@ async def test_message_graph() -> None:
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        metadata={},
+        metadata={"source": "update", "step": 5},
     )
 
 
@@ -2947,7 +2947,7 @@ async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 0},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread1, debug=1) == {
@@ -2958,7 +2958,7 @@ async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value slow", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 1},
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -2971,7 +2971,7 @@ async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 0},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread2, debug=1) == {
@@ -2982,7 +2982,7 @@ async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value fast", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 1},
         )
 
 
@@ -3156,7 +3156,7 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 1},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread1, debug=1) == {
@@ -3167,7 +3167,7 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 3},
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3180,7 +3180,7 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 1},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread2, debug=1) == {
@@ -3191,7 +3191,7 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 3},
         )
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
@@ -3213,7 +3213,7 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 1},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread1, debug=1) == {
@@ -3224,7 +3224,7 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 3},
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3237,7 +3237,7 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 1},
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread2, debug=1) == {
@@ -3248,7 +3248,7 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={},
+            metadata={"source": "loop", "step": 3},
         )
 
 

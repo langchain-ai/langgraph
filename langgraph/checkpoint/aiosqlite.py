@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
-from typing import Any, AsyncIterator, Optional
+from typing import AsyncIterator, Optional
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
@@ -10,6 +10,7 @@ from typing_extensions import Self
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
+    CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
 )
@@ -164,7 +165,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     return CheckpointTuple(
                         config,
                         self.serde.loads(value[0]),
-                        self.serde.loads(value[2]) if value[2] is not None else None,
+                        self.serde.loads(value[2]) if value[2] is not None else {},
                         {
                             "configurable": {
                                 "thread_id": config["configurable"]["thread_id"],
@@ -188,7 +189,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                             }
                         },
                         self.serde.loads(value[3]),
-                        self.serde.loads(value[4]) if value[4] is not None else None,
+                        self.serde.loads(value[4]) if value[4] is not None else {},
                         {
                             "configurable": {
                                 "thread_id": value[0],
@@ -242,7 +243,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
-                    self.serde.loads(metadata) if metadata is not None else None,
+                    self.serde.loads(metadata) if metadata is not None else {},
                     {"configurable": {"thread_id": thread_id, "thread_ts": parent_ts}}
                     if parent_ts
                     else None,
@@ -252,7 +253,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
-        metadata: Optional[dict[str, Any]] = None,
+        metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         """Save a checkpoint to the database asynchronously.
 
@@ -274,7 +275,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 checkpoint["ts"],
                 config["configurable"].get("thread_ts"),
                 self.serde.dumps(checkpoint),
-                self.serde.dumps(metadata) if metadata is not None else None,
+                self.serde.dumps(metadata),
             ),
         ):
             await self.conn.commit()
