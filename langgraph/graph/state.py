@@ -180,7 +180,7 @@ class CompiledStateGraph(CompiledGraph):
 
         return super().get_input_schema(config)
 
-    def get_output_schema(self, config: RunnableConfig | None = None) -> BaseModel:
+    def get_output_schema(self, config: Optional[RunnableConfig] = None) -> BaseModel:
         if isinstance(self.builder.schema, BaseModel):
             return self.builder.schema
 
