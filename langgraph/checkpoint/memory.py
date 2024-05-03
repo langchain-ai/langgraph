@@ -40,9 +40,20 @@ class MemorySaver(BaseCheckpointSaver):
                     checkpoint=self.serde.loads(checkpoints[ts]),
                 )
 
-    def list(self, config: RunnableConfig) -> Iterator[CheckpointTuple]:
+    def list(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
         thread_id = config["configurable"]["thread_id"]
         for ts, checkpoint in self.storage[thread_id].items():
+            if before and ts >= before["configurable"]["thread_ts"]:
+                continue
+            if limit is not None and limit <= 0:
+                break
+            limit -= 1
             yield CheckpointTuple(
                 config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                 checkpoint=self.serde.loads(checkpoint),

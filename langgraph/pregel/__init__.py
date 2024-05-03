@@ -363,12 +363,20 @@ class Pregel(
                 config,
             )
 
-    def get_state_history(self, config: RunnableConfig) -> Iterator[StateSnapshot]:
+    def get_state_history(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        for config, checkpoint, parent_config in self.checkpointer.list(config):
+        for config, checkpoint, parent_config in self.checkpointer.list(
+            config, before=before, limit=limit
+        ):
             with ChannelsManager(self.channels, checkpoint) as channels:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint, self.nodes, channels, for_execution=False
@@ -381,13 +389,19 @@ class Pregel(
                 )
 
     async def aget_state_history(
-        self, config: RunnableConfig
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        async for config, checkpoint, parent_config in self.checkpointer.alist(config):
+        async for config, checkpoint, parent_config in self.checkpointer.alist(
+            config, before=before, limit=limit
+        ):
             async with AsyncChannelsManager(self.channels, checkpoint) as channels:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint, self.nodes, channels, for_execution=False
