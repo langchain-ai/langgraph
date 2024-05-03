@@ -15,7 +15,7 @@ from typing import (
 from uuid import UUID
 
 import pytest
-from langchain_core.runnables import RunnableLambda, RunnablePassthrough
+from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
@@ -1056,7 +1056,7 @@ async def test_conditional_graph(checkpoint_at: CheckpointAt) -> None:
         return data
 
     # Define decision-making logic
-    async def should_continue(data: dict) -> str:
+    async def should_continue(data: dict, config: RunnableConfig) -> str:
         # Logic to decide whether to continue in the loop or exit
         if isinstance(data["agent_outcome"], AgentFinish):
             return "exit"
@@ -2932,7 +2932,7 @@ async def test_start_branch_then(
         market: str
 
     tool_two_graph = StateGraph(State)
-    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
+    tool_two_graph.add_node("tool_two_slow", lambda s, config: {"my_key": " slow"})
     tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
     tool_two_graph.set_conditional_entry_point(
         lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END

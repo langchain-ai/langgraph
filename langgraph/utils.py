@@ -3,7 +3,7 @@ import enum
 import inspect
 import sys
 from contextvars import copy_context
-from functools import partial
+from functools import partial, wraps
 from typing import Any, Awaitable, Callable, Optional
 
 from langchain_core.runnables.base import (
@@ -166,7 +166,10 @@ def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnab
             return RunnableCallable(None, thing, name=name, trace=trace)
         else:
             return RunnableCallable(
-                thing, partial(run_in_executor, None, thing), name=name, trace=trace
+                thing,
+                wraps(thing)(partial(run_in_executor, None, thing)),
+                name=name,
+                trace=trace,
             )
     elif isinstance(thing, dict):
         return RunnableParallel(thing)
