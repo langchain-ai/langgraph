@@ -52,8 +52,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     async def setup(self) -> None:
         if self.is_setup:
             return
-
-        await self.conn
+        if not self.conn.is_alive():
+            await self.conn
         async with self.conn.executescript(
             """
             CREATE TABLE IF NOT EXISTS checkpoints (
