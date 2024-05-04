@@ -187,9 +187,10 @@ def create_tool_calling_executor(
 
     Examples:
 
-            from langgraph.prebuilt import chat_agent_executor
-            from langchain_openai import ChatOpenAI
             from langchain_community.tools.tavily_search import TavilySearchResults
+            from langchain_openai import ChatOpenAI
+
+            from langgraph.prebuilt import chat_agent_executor
 
             tools = [TavilySearchResults(max_results=1)]
             model = ChatOpenAI()

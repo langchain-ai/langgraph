@@ -111,6 +111,9 @@ class StateGraph(Graph):
     ) -> CompiledGraph:
         """Compiles the state graph into a `CompiledGraph` object.
 
+        The compiled graph implements the `Runnable` interface and can be invoked,
+        streamed, batched, and run asynchronously.
+
         Args:
             checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
                 This serves as a fully versioned "memory" for the graph, allowing
