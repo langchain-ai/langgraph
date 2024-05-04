@@ -33,7 +33,6 @@ class ToolInvocation(Serializable):
         tool_input (Union[str, dict]): The input to pass in to the Tool.
 
     Examples:
-        .. code-block:: python
 
             invocation = ToolInvocation(
                 tool="search",
@@ -54,10 +53,8 @@ class ToolExecutor(RunnableCallable):
             when an invalid tool is requested. Defaults to INVALID_TOOL_MSG_TEMPLATE.
 
     Examples:
-        .. code-block:: python
 
             from langchain_core.tools import tool
-
             from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 
 

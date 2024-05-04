@@ -30,26 +30,21 @@ def add_messages(left: Messages, right: Messages) -> Messages:
         message from `right` will replace the message from `left`.
 
     Examples:
-        .. code-block:: python
 
             msgs1 = [HumanMessage(content="Hello", id="1")]
             msgs2 = [AIMessage(content="Hi there!", id="2")]
             add_messages(msgs1, msgs2)
             # [HumanMessage(content="Hello", id="1"), AIMessage(content="Hi there!", id="2")]
 
-        .. code-block:: python
 
             msgs1 = [HumanMessage(content="Hello", id="1")]
             msgs2 = [HumanMessage(content="Hello again", id="1")]
             add_messages(msgs1, msgs2)
             # [HumanMessage(content="Hello again", id="1")]
 
-        .. code-block:: python
 
             from typing import Annotated
-
             from typing_extensions import TypedDict
-
             from langgraph.graph import StateGraph
 
 
@@ -101,7 +96,6 @@ class MessageGraph(StateGraph):
     into the existing list of messages in the graph's state.
 
     Examples:
-      .. code-block:: python
 
         from langgraph.graph.message import MessageGraph
 
@@ -113,7 +107,6 @@ class MessageGraph(StateGraph):
         # {'messages': [HumanMessage(content="Hi there.", id='b8b7d8f4-7f4d-4f4d-9c1d-f8b8d8f4d9c1'),
         #              AIMessage(content="Hello!", id='f4d9c1d8-8d8f-4d9c-b8b7-d8f4f4d9c1d8')]}
 
-      .. code-block:: python
 
         from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 

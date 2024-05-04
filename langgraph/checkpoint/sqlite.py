@@ -27,8 +27,6 @@ class JsonPlusSerializerCompat(JsonPlusSerializer):
 
     Examples:
 
-        .. code-block:: python
-
             import pickle
 
             from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
@@ -61,8 +59,6 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         at (Optional[CheckpointAt]): The checkpoint strategy to use. Defaults to None.
 
     Examples:
-
-        .. code-block:: python
 
             import sqlite3
 
@@ -113,12 +109,10 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         Examples:
 
             In memory:
-            .. code-block:: python
 
                 memory = SqliteSaver.from_conn_string(":memory:")
 
             To disk:
-            .. code-block:: python
 
                 memory = SqliteSaver.from_conn_string("checkpoints.sqlite")
         """
@@ -199,25 +193,21 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
             Basic:
 
-            .. code-block:: python
-
                 config = {"configurable": {"thread_id": "1"}}
                 checkpoint_tuple = memory.get_tuple(config)
                 print(checkpoint_tuple)  # Output: CheckpointTuple(...)
 
             With timestamp:
 
-            .. code-block:: python
-
                 config = {
                     "configurable": {
-                        "thread_id": "1", 
+                        "thread_id": "1",
                         "thread_ts": "2024-05-04T06:32:42.235444+00:00",
                     }
                 }
                 checkpoint_tuple = memory.get_tuple(config)
                 print(checkpoint_tuple)  # Output: CheckpointTuple(...)
-        """
+        """  # noqa
         with self.cursor(transaction=False) as cur:
             if config["configurable"].get("thread_ts"):
                 cur.execute(
@@ -289,13 +279,9 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
 
         Examples:
-            .. code-block:: python
-
                 config = {"configurable": {"thread_id": "1"}}
                 checkpoints = list(memory.list(config, limit=2))
                 print(checkpoints)  # Output: [CheckpointTuple(...), CheckpointTuple(...)]
-
-            .. code-block:: python
 
                 config = {"configurable": {"thread_id": "1"}}
                 before = {"configurable": {"thread_ts": "2024-05-04T06:32:42.235444+00:00"}}
@@ -351,7 +337,6 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
 
         Examples:
-            .. code-block:: python
 
                 config = {"configurable": {"thread_id": "1"}}
                 checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}

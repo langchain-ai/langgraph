@@ -23,8 +23,6 @@ class MemorySaver(BaseCheckpointSaver):
         at (Optional[CheckpointAt]): The checkpoint strategy to use. Defaults to None.
 
     Examples:
-        .. code-block:: python
-
             import asyncio
 
             from langgraph.checkpoint.memory import MemorySaver
@@ -172,4 +170,8 @@ class MemorySaver(BaseCheckpointSaver):
                 return
 
     async def aput(
-        self, config: RunnableConfig, checkpoint
+        self, config: RunnableConfig, checkpoint: Checkpoint
+    ) -> RunnableConfig:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, self.put, config, checkpoint
+        )

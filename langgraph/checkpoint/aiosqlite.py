@@ -31,8 +31,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         Usage within a StateGraph:
 
-        .. code-block:: python
-
             import asyncio
             import aiosqlite
 
@@ -51,8 +49,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
 
         Raw usage:
-
-        .. code-block:: python
 
             import asyncio
             import aiosqlite
