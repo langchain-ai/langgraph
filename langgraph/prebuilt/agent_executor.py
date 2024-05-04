@@ -4,6 +4,7 @@ from typing import Annotated, Sequence, TypedDict, Union
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
 
+from langgraph._api import deprecated
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
@@ -40,6 +41,15 @@ def _get_agent_state(input_schema=None):
     return AgentState
 
 
+@deprecated(
+    "0.0.44",
+    alternative="create_tool_calling_executor",
+    example="""
+from langgraph.prebuilt import chat_agent_executor
+
+chat_agent_executor.create_tool_calling_executor(...)
+""",
+)
 def create_agent_executor(
     agent_runnable, tools, input_schema=None
 ) -> CompiledStateGraph:
@@ -53,32 +63,24 @@ def create_agent_executor(
     Returns:
         The `CompiledStateGraph` object.
 
+
     Examples:
 
-        from langgraph.prebuilt import create_agent_executor
+        # Since this is deprecated, you should use `create_tool_calling_executor` instead.
+        # Example usage:
+        from langgraph.prebuilt import chat_agent_executor
         from langchain_openai import ChatOpenAI
-        from langchain import hub
-        from langchain.agents import create_openai_functions_agent
         from langchain_community.tools.tavily_search import TavilySearchResults
 
         tools = [TavilySearchResults(max_results=1)]
+        model = ChatOpenAI()
 
-        # Get the prompt to use - you can modify this!
-        prompt = hub.pull("hwchase17/openai-functions-agent")
+        app = chat_agent_executor.create_tool_calling_executor(model, tools)
 
-        # Choose the LLM that will drive the agent
-        llm = ChatOpenAI(model="gpt-3.5-turbo-1106")
-
-        # Construct the OpenAI Functions agent
-        agent_runnable = create_openai_functions_agent(llm, tools, prompt)
-
-        app = create_agent_executor(agent_runnable, tools)
-
-        inputs = {"input": "what is the weather in sf", "chat_history": []}
+        inputs = {"messages": [("user", "what is the weather in sf")]}
         for s in app.stream(inputs):
             print(list(s.values())[0])
             print("----")
-
     """
 
     if isinstance(tools, ToolExecutor):
