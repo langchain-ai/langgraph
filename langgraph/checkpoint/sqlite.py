@@ -26,7 +26,12 @@ class JsonPlusSerializerCompat(JsonPlusSerializer):
     JsonPlusSerializer behavior is used.
 
     Examples:
+
         .. code-block:: python
+
+            import pickle
+
+            from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
 
             serializer = JsonPlusSerializerCompat()
             pickled_data = pickle.dumps({"key": "value"})
@@ -77,8 +82,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             result = graph.invoke(3, config)
             graph.get_state(config)
             # Output: StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'thread_ts': '2024-05-04T06:32:42.235444+00:00'}}, parent_config=None)
-
-    """
+    """  # noqa
 
     serde = JsonPlusSerializerCompat()
 
@@ -111,12 +115,12 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             In memory:
             .. code-block:: python
 
-                saver = SqliteSaver.from_conn_string(":memory:")
+                memory = SqliteSaver.from_conn_string(":memory:")
 
             To disk:
             .. code-block:: python
 
-                saver = SqliteSaver.from_conn_string("checkpoints.sqlite")
+                memory = SqliteSaver.from_conn_string("checkpoints.sqlite")
         """
         return SqliteSaver(conn=sqlite3.connect(conn_string))
 
@@ -206,7 +210,10 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             .. code-block:: python
 
                 config = {
-                    "configurable": {"thread_id": "1", "thread_ts": "2024-05-04T06:32:42.235444+00:00"}
+                    "configurable": {
+                        "thread_id": "1", 
+                        "thread_ts": "2024-05-04T06:32:42.235444+00:00",
+                    }
                 }
                 checkpoint_tuple = memory.get_tuple(config)
                 print(checkpoint_tuple)  # Output: CheckpointTuple(...)
@@ -224,14 +231,16 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     return CheckpointTuple(
                         config,
                         self.serde.loads(value[0]),
-                        {
-                            "configurable": {
-                                "thread_id": config["configurable"]["thread_id"],
-                                "thread_ts": value[1],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": config["configurable"]["thread_id"],
+                                    "thread_ts": value[1],
+                                }
                             }
-                        }
-                        if value[1]
-                        else None,
+                            if value[1]
+                            else None
+                        ),
                     )
             else:
                 cur.execute(
@@ -247,14 +256,16 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                             }
                         },
                         self.serde.loads(value[3]),
-                        {
-                            "configurable": {
-                                "thread_id": value[0],
-                                "thread_ts": value[2],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": value[0],
+                                    "thread_ts": value[2],
+                                }
                             }
-                        }
-                        if value[2]
-                        else None,
+                            if value[2]
+                            else None
+                        ),
                     )
 
     def list(
@@ -281,14 +292,14 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             .. code-block:: python
 
                 config = {"configurable": {"thread_id": "1"}}
-                checkpoints = list(saver.list(config, limit=2))
+                checkpoints = list(memory.list(config, limit=2))
                 print(checkpoints)  # Output: [CheckpointTuple(...), CheckpointTuple(...)]
 
             .. code-block:: python
 
                 config = {"configurable": {"thread_id": "1"}}
-                before = {"configurable": {"thread_ts": "2023-05-03T10:00:00Z"}}
-                checkpoints = list(saver.list(config, before=before))
+                before = {"configurable": {"thread_ts": "2024-05-04T06:32:42.235444+00:00"}}
+                checkpoints = list(memory.list(config, before=before))
                 print(checkpoints)  # Output: [CheckpointTuple(...), ...]
         """
         query = (
@@ -301,25 +312,29 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         with self.cursor(transaction=False) as cur:
             cur.execute(
                 query,
-                (str(config["configurable"]["thread_id"]),)
-                if before is None
-                else (
-                    str(config["configurable"]["thread_id"]),
-                    before["configurable"]["thread_ts"],
+                (
+                    (str(config["configurable"]["thread_id"]),)
+                    if before is None
+                    else (
+                        str(config["configurable"]["thread_id"]),
+                        before["configurable"]["thread_ts"],
+                    )
                 ),
             )
             for thread_id, thread_ts, parent_ts, value in cur:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
-                    {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "thread_ts": parent_ts,
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
                         }
-                    }
-                    if parent_ts
-                    else None,
+                        if parent_ts
+                        else None
+                    ),
                 )
 
     def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
@@ -339,9 +354,11 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             .. code-block:: python
 
                 config = {"configurable": {"thread_id": "1"}}
-                checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
-                saved_config = saver.put(config, checkpoint)
-                print(saved_config)  # Output: {"configurable": {"thread_id": "1", "thread_ts": "2023-05-03T10:00:00Z"}}
+                checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
+                saved_config = memory.put(config, checkpoint)
+                print(
+                    saved_config
+                )  # Output: {"configurable": {"thread_id": "1", "thread_ts": 2024-05-04T06:32:42.235444+00:00"}}
         """
         with self.cursor() as cur:
             cur.execute(
