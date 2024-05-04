@@ -3,7 +3,7 @@
 ::: langgraph.checkpoint
     handler: python
 
-## BaseCheckpointSaver
+### BaseCheckpointSaver
 
 ::: langgraph.checkpoint.base.BaseCheckpointSaver
     handler: python
@@ -12,13 +12,13 @@
 
 LangGraph also natively provides the following checkpoint implementations.
 
-## AsyncSqliteSaver
+### AsyncSqliteSaver
 
 ::: langgraph.checkpoint.aiosqlite.AsyncSqliteSaver
     handler: python
 
 
-## SqliteSaver
+### SqliteSaver
 
 ::: langgraph.checkpoint.sqlite.SqliteSaver
     handler: python
@@ -28,7 +28,7 @@ LangGraph also natively provides the following checkpoint implementations.
       - get_tuple
 
 
-## MemorySaver
+### MemorySaver
 
 ::: langgraph.checkpoint.memory.MemorySaver
     handler: python
