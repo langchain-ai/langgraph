@@ -17,8 +17,27 @@ from langgraph.checkpoint.base import (
 from langgraph.serde.jsonplus import JsonPlusSerializer
 
 
-# for backwards compat we continue to support loading pickled checkpoints
 class JsonPlusSerializerCompat(JsonPlusSerializer):
+    """A serializer that supports loading pickled checkpoints for backwards compatibility.
+
+    This serializer extends the JsonPlusSerializer and adds support for loading pickled
+    checkpoints. If the input data starts with b"\x80" and ends with b".", it is treated
+    as a pickled checkpoint and loaded using pickle.loads(). Otherwise, the default
+    JsonPlusSerializer behavior is used.
+
+    Examples:
+        .. code-block:: python
+
+            serializer = JsonPlusSerializerCompat()
+            pickled_data = pickle.dumps({"key": "value"})
+            loaded_data = serializer.loads(pickled_data)
+            print(loaded_data)  # Output: {"key": "value"}
+
+            json_data = '{"key": "value"}'.encode("utf-8")
+            loaded_data = serializer.loads(json_data)
+            print(loaded_data)  # Output: {"key": "value"}
+    """
+
     def loads(self, data: bytes) -> Any:
         if data.startswith(b"\x80") and data.endswith(b"."):
             return pickle.loads(data)
@@ -26,10 +45,44 @@ class JsonPlusSerializerCompat(JsonPlusSerializer):
 
 
 class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
+    """A checkpoint saver that stores checkpoints in a SQLite database.
+
+    Note: While useful for demos and small projects, this class does not
+    scale to multiple threads.
+
+    Args:
+        conn (sqlite3.Connection): The SQLite database connection.
+        serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
+        at (Optional[CheckpointAt]): The checkpoint strategy to use. Defaults to None.
+
+    Examples:
+
+        .. code-block:: python
+
+            import sqlite3
+
+            from langgraph.checkpoint.sqlite import SqliteSaver
+            from langgraph.graph import StateGraph
+
+            builder = StateGraph(int)
+            builder.add_node("add_one", lambda x: x + 1)
+            builder.set_entry_point("add_one")
+            builder.set_finish_point("add_one")
+            conn = sqlite3.connect("checkpoints.sqlite")
+            memory = SqliteSaver(conn)
+            graph = builder.compile(checkpointer=memory)
+
+            config = {"configurable": {"thread_id": "1"}}
+            # checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
+            result = graph.invoke(3, config)
+            graph.get_state(config)
+            # Output: StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'thread_ts': '2024-05-04T06:32:42.235444+00:00'}}, parent_config=None)
+
+    """
+
     serde = JsonPlusSerializerCompat()
 
     conn: sqlite3.Connection
-
     is_setup: bool
 
     def __init__(
@@ -45,6 +98,26 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
     @classmethod
     def from_conn_string(cls, conn_string: str) -> "SqliteSaver":
+        """Create a new SqliteSaver instance from a connection string.
+
+        Args:
+            conn_string (str): The SQLite connection string.
+
+        Returns:
+            SqliteSaver: A new SqliteSaver instance.
+
+        Examples:
+
+            In memory:
+            .. code-block:: python
+
+                saver = SqliteSaver.from_conn_string(":memory:")
+
+            To disk:
+            .. code-block:: python
+
+                saver = SqliteSaver.from_conn_string("checkpoints.sqlite")
+        """
         return SqliteSaver(conn=sqlite3.connect(conn_string))
 
     def __enter__(self) -> Self:
@@ -59,6 +132,12 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         return self.conn.close()
 
     def setup(self) -> None:
+        """Set up the checkpoint database.
+
+        This method creates the necessary tables in the SQLite database if they don't
+        already exist. It is called automatically when needed and should not be called
+        directly by the user.
+        """
         if self.is_setup:
             return
 
@@ -78,6 +157,17 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
     @contextmanager
     def cursor(self, transaction: bool = True):
+        """Get a cursor for the SQLite database.
+
+        This method returns a cursor for the SQLite database. It is used internally
+        by the SqliteSaver and should not be called directly by the user.
+
+        Args:
+            transaction (bool): Whether to commit the transaction when the cursor is closed. Defaults to True.
+
+        Yields:
+            sqlite3.Cursor: A cursor for the SQLite database.
+        """
         self.setup()
         cur = self.conn.cursor()
         try:
@@ -88,6 +178,39 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             cur.close()
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Get a checkpoint tuple from the database.
+
+        This method retrieves a checkpoint tuple from the SQLite database based on the
+        provided config. If the config contains a "thread_ts" key, the checkpoint with
+        the matching thread ID and timestamp is retrieved. Otherwise, the latest checkpoint
+        for the given thread ID is retrieved.
+
+        Args:
+            config (RunnableConfig): The config to use for retrieving the checkpoint.
+
+        Returns:
+            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+
+        Examples:
+
+            Basic:
+
+            .. code-block:: python
+
+                config = {"configurable": {"thread_id": "1"}}
+                checkpoint_tuple = memory.get_tuple(config)
+                print(checkpoint_tuple)  # Output: CheckpointTuple(...)
+
+            With timestamp:
+
+            .. code-block:: python
+
+                config = {
+                    "configurable": {"thread_id": "1", "thread_ts": "2024-05-04T06:32:42.235444+00:00"}
+                }
+                checkpoint_tuple = memory.get_tuple(config)
+                print(checkpoint_tuple)  # Output: CheckpointTuple(...)
+        """
         with self.cursor(transaction=False) as cur:
             if config["configurable"].get("thread_ts"):
                 cur.execute(
@@ -141,6 +264,33 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
+        """List checkpoints from the database.
+
+        This method retrieves a list of checkpoint tuples from the SQLite database based
+        on the provided config. The checkpoints are ordered by timestamp in descending order.
+
+        Args:
+            config (RunnableConfig): The config to use for listing the checkpoints.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
+            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+
+        Examples:
+            .. code-block:: python
+
+                config = {"configurable": {"thread_id": "1"}}
+                checkpoints = list(saver.list(config, limit=2))
+                print(checkpoints)  # Output: [CheckpointTuple(...), CheckpointTuple(...)]
+
+            .. code-block:: python
+
+                config = {"configurable": {"thread_id": "1"}}
+                before = {"configurable": {"thread_ts": "2023-05-03T10:00:00Z"}}
+                checkpoints = list(saver.list(config, before=before))
+                print(checkpoints)  # Output: [CheckpointTuple(...), ...]
+        """
         query = (
             "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
             if before is None
@@ -173,6 +323,26 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 )
 
     def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+        """Save a checkpoint to the database.
+
+        This method saves a checkpoint to the SQLite database. The checkpoint is associated
+        with the provided config and its parent config (if any).
+
+        Args:
+            config (RunnableConfig): The config to associate with the checkpoint.
+            checkpoint (Checkpoint): The checkpoint to save.
+
+        Returns:
+            RunnableConfig: The updated config containing the saved checkpoint's timestamp.
+
+        Examples:
+            .. code-block:: python
+
+                config = {"configurable": {"thread_id": "1"}}
+                checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
+                saved_config = saver.put(config, checkpoint)
+                print(saved_config)  # Output: {"configurable": {"thread_id": "1", "thread_ts": "2023-05-03T10:00:00Z"}}
+        """
         with self.cursor() as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint) VALUES (?, ?, ?, ?)",
