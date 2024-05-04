@@ -111,8 +111,13 @@ class StateGraph(Graph):
     ) -> CompiledGraph:
         """Compiles the state graph into a `CompiledGraph` object.
 
+        The compiled graph implements the `Runnable` interface and can be invoked,
+        streamed, batched, and run asynchronously.
+
         Args:
             checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
+                This serves as a fully versioned "memory" for the graph, allowing
+                the graph to be paused and resumed, and replayed from any point.
             interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
             interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
             debug (bool): A flag indicating whether to enable debug mode.

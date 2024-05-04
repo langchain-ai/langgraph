@@ -18,12 +18,61 @@ from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
 
 
 class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
+    """An asynchronous checkpoint saver that stores checkpoints in a SQLite database.
+
+    Note: Requires the `aiosqlite` package. Install it with `pip install aiosqlite`.
+
+    Args:
+        conn (aiosqlite.Connection): The asynchronous SQLite database connection.
+        serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
+        at (Optional[CheckpointAt]): The checkpoint strategy to use. Defaults to None.
+
+    Examples:
+
+        Usage within a StateGraph:
+
+            import asyncio
+            import aiosqlite
+
+            from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+            from langgraph.graph import StateGraph
+
+            builder = StateGraph(int)
+            builder.add_node("add_one", lambda x: x + 1)
+            builder.set_entry_point("add_one")
+            builder.set_finish_point("add_one")
+
+            memory = AsyncSqliteSaver.from_conn_string("checkpoints.sqlite")
+            graph = builder.compile(checkpointer=memory)
+            coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
+            asyncio.run(coro)  # Output: 2
+
+
+        Raw usage:
+
+            import asyncio
+            import aiosqlite
+            from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+
+
+            async def main():
+                async with aiosqlite.connect("checkpoints.db") as conn:
+                    saver = AsyncSqliteSaver(conn)
+                    config = {"configurable": {"thread_id": "1"}}
+                    checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
+                    saved_config = await saver.aput(config, checkpoint)
+                    print(
+                        saved_config
+                    )  # Output: {"configurable": {"thread_id": "1", "thread_ts": "2023-05-03T10:00:00Z"}}
+
+
+            asyncio.run(main())
+    """
+
     serde = JsonPlusSerializerCompat()
 
     conn: aiosqlite.Connection
-
     lock: asyncio.Lock
-
     is_setup: bool
 
     def __init__(
@@ -40,6 +89,14 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
     @classmethod
     def from_conn_string(cls, conn_string: str) -> "AsyncSqliteSaver":
+        """Create a new AsyncSqliteSaver instance from a connection string.
+
+        Args:
+            conn_string (str): The SQLite connection string.
+
+        Returns:
+            AsyncSqliteSaver: A new AsyncSqliteSaver instance.
+        """
         return AsyncSqliteSaver(conn=aiosqlite.connect(conn_string))
 
     async def __aenter__(self) -> Self:
@@ -55,6 +112,12 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             return await self.conn.close()
 
     async def setup(self) -> None:
+        """Set up the checkpoint database asynchronously.
+
+        This method creates the necessary tables in the SQLite database if they don't
+        already exist. It is called automatically when needed and should not be called
+        directly by the user.
+        """
         async with self.lock:
             if self.is_setup:
                 return
@@ -76,6 +139,19 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             self.is_setup = True
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Get a checkpoint tuple from the database asynchronously.
+
+        This method retrieves a checkpoint tuple from the SQLite database based on the
+        provided config. If the config contains a "thread_ts" key, the checkpoint with
+        the matching thread ID and timestamp is retrieved. Otherwise, the latest checkpoint
+        for the given thread ID is retrieved.
+
+        Args:
+            config (RunnableConfig): The config to use for retrieving the checkpoint.
+
+        Returns:
+            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+        """
         await self.setup()
         if config["configurable"].get("thread_ts"):
             async with self.conn.execute(
@@ -89,14 +165,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     return CheckpointTuple(
                         config,
                         self.serde.loads(value[0]),
-                        {
-                            "configurable": {
-                                "thread_id": config["configurable"]["thread_id"],
-                                "thread_ts": value[1],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": config["configurable"]["thread_id"],
+                                    "thread_ts": value[1],
+                                }
                             }
-                        }
-                        if value[1]
-                        else None,
+                            if value[1]
+                            else None
+                        ),
                     )
         else:
             async with self.conn.execute(
@@ -112,14 +190,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                             }
                         },
                         self.serde.loads(value[3]),
-                        {
-                            "configurable": {
-                                "thread_id": value[0],
-                                "thread_ts": value[2],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": value[0],
+                                    "thread_ts": value[2],
+                                }
                             }
-                        }
-                        if value[2]
-                        else None,
+                            if value[2]
+                            else None
+                        ),
                     )
 
     async def alist(
@@ -129,6 +209,19 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
+        """List checkpoints from the database asynchronously.
+
+        This method retrieves a list of checkpoint tuples from the SQLite database based
+        on the provided config. The checkpoints are ordered by timestamp in descending order.
+
+        Args:
+            config (RunnableConfig): The config to use for listing the checkpoints.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
+            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+
+        Yields:
+            AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
+        """
         await self.setup()
         query = (
             "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
@@ -139,25 +232,46 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             query += f" LIMIT {limit}"
         async with self.conn.execute(
             query,
-            (str(config["configurable"]["thread_id"]),)
-            if before is None
-            else (
-                str(config["configurable"]["thread_id"]),
-                str(before["configurable"]["thread_ts"]),
+            (
+                (str(config["configurable"]["thread_id"]),)
+                if before is None
+                else (
+                    str(config["configurable"]["thread_id"]),
+                    str(before["configurable"]["thread_ts"]),
+                )
             ),
         ) as cursor:
             async for thread_id, thread_ts, parent_ts, value in cursor:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
-                    {"configurable": {"thread_id": thread_id, "thread_ts": parent_ts}}
-                    if parent_ts
-                    else None,
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
+                        }
+                        if parent_ts
+                        else None
+                    ),
                 )
 
     async def aput(
         self, config: RunnableConfig, checkpoint: Checkpoint
     ) -> RunnableConfig:
+        """Save a checkpoint to the database asynchronously.
+
+        This method saves a checkpoint to the SQLite database. The checkpoint is associated
+        with the provided config and its parent config (if any).
+
+        Args:
+            config (RunnableConfig): The config to associate with the checkpoint.
+            checkpoint (Checkpoint): The checkpoint to save.
+
+        Returns:
+            RunnableConfig: The updated config containing the saved checkpoint's timestamp.
+        """
         await self.setup()
         async with self.conn.execute(
             "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint) VALUES (?, ?, ?, ?)",
