@@ -64,7 +64,7 @@ def add_messages(left: Messages, right: Messages) -> Messages:
             graph = builder.compile()
             graph.invoke({})
             # {'messages': [AIMessage(content='Hello', id='f657fb65-b6af-4790-a5b5-1d266a2ed26e')]}
-        
+
     """
     # coerce to list
     if not isinstance(left, list):
