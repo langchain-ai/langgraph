@@ -154,7 +154,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         self.is_setup = True
 
     @contextmanager
-    def cursor(self, transaction: bool = True):
+    def cursor(self, transaction: bool = True) -> Iterator[sqlite3.Cursor]:
         """Get a cursor for the SQLite database.
 
         This method returns a cursor for the SQLite database. It is used internally
