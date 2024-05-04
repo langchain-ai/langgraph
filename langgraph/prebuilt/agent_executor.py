@@ -4,7 +4,7 @@ from typing import Annotated, Sequence, TypedDict, Union
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
 
-from langgraph._api import deprecated
+from langgraph._api.deprecation import deprecated
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor

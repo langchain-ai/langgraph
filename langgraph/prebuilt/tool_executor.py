@@ -13,22 +13,74 @@ INVALID_TOOL_MSG_TEMPLATE = (
 
 
 class ToolInvocationInterface:
-    """Interface for invoking a tool"""
+    """Interface for invoking a tool.
+
+    Attributes:
+        tool (str): The name of the tool to invoke.
+        tool_input (Union[str, dict]): The input to pass to the tool.
+
+    """
 
     tool: str
     tool_input: Union[str, dict]
 
 
 class ToolInvocation(Serializable):
-    """Information about how to invoke a tool."""
+    """Information about how to invoke a tool.
+
+    Attributes:
+        tool (str): The name of the Tool to execute.
+        tool_input (Union[str, dict]): The input to pass in to the Tool.
+
+    Examples:
+        .. code-block:: python
+
+            invocation = ToolInvocation(
+                tool="search",
+                tool_input="What is the capital of France?"
+            )
+    """
 
     tool: str
-    """The name of the Tool to execute."""
     tool_input: Union[str, dict]
-    """The input to pass in to the Tool."""
 
 
 class ToolExecutor(RunnableCallable):
+    """Executes a tool invocation.
+
+    Args:
+        tools (Sequence[BaseTool]): A sequence of tools that can be invoked.
+        invalid_tool_msg_template (str, optional): The template for the error message
+            when an invalid tool is requested. Defaults to INVALID_TOOL_MSG_TEMPLATE.
+
+    Examples:
+        .. code-block:: python
+
+            from langchain_core.tools import tool
+
+            from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
+
+
+            @tool
+            def search(query: str) -> str:
+                \"\"\"Search engine.\"\"\"
+                return f"Searching for: {query}"
+
+
+            tools = [search]
+            executor = ToolExecutor(tools)
+
+            invocation = ToolInvocation(tool="search", tool_input="What is the capital of France?")
+            result = executor.invoke(invocation)
+            print(result)  # Output: "Searching for: What is the capital of France?"
+
+            invocation = ToolInvocation(
+                tool="nonexistent", tool_input="What is the capital of France?"
+            )
+            result = executor.invoke(invocation)
+            print(result)  # Output: "nonexistent is not a valid tool, try one of [search]."
+    """
+
     def __init__(
         self,
         tools: Sequence[BaseTool],
