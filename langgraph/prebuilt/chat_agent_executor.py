@@ -7,6 +7,7 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
+from langgraph._api.deprecation import deprecated
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
@@ -25,9 +26,30 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
+@deprecated("0.0.44", "create_tool_calling_executor")
 def create_function_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
 ) -> CompiledGraph:
+    """Creates a graph that works with a chat model that utilizes function calling.
+
+    Examples:
+
+        # Since this is deprecated, you should use `create_tool_calling_executor` instead.
+        # Example usage:
+        from langgraph.prebuilt import chat_agent_executor
+        from langchain_openai import ChatOpenAI
+        from langchain_community.tools.tavily_search import TavilySearchResults
+
+        tools = [TavilySearchResults(max_results=1)]
+        model = ChatOpenAI()
+
+        app = chat_agent_executor.create_tool_calling_executor(model, tools)
+
+        inputs = {"messages": [("user", "what is the weather in sf")]}
+        for s in app.stream(inputs):
+            print(list(s.values())[0])
+            print("----")
+    """
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
         tool_classes = tools.tools
@@ -165,17 +187,17 @@ def create_tool_calling_executor(
 
     Examples:
 
-            from langgraph.prebuilt import chat_agent_executor
-            from langchain_openai import ChatOpenAI
             from langchain_community.tools.tavily_search import TavilySearchResults
-            from langchain_core.messages import HumanMessage
+            from langchain_openai import ChatOpenAI
+
+            from langgraph.prebuilt import chat_agent_executor
 
             tools = [TavilySearchResults(max_results=1)]
             model = ChatOpenAI()
 
             app = chat_agent_executor.create_tool_calling_executor(model, tools)
 
-            inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
+            inputs = {"messages": [("user", "what is the weather in sf")]}
             for s in app.stream(inputs):
                 print(list(s.values())[0])
                 print("----")
