@@ -4653,7 +4653,12 @@ def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
     workflow.add_conditional_edges(
         "Researcher",
         router,
-        {"continue": "Chart Generator", "call_tool": "Call Tool", "end": END},
+        {
+            "redo": "Researcher",
+            "continue": "Chart Generator",
+            "call_tool": "Call Tool",
+            "end": END,
+        },
     )
     workflow.add_conditional_edges(
         "Chart Generator",
