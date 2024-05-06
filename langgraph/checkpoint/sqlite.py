@@ -57,7 +57,6 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
     Args:
         conn (sqlite3.Connection): The SQLite database connection.
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
-        at (Optional[CheckpointAt]): The checkpoint strategy to use. Defaults to None.
 
     Examples:
 

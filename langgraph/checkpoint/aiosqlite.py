@@ -25,7 +25,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     Args:
         conn (aiosqlite.Connection): The asynchronous SQLite database connection.
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
-        at (Optional[CheckpointAt]): The checkpoint strategy to use. Defaults to None.
 
     Examples:
 

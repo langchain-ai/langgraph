@@ -20,7 +20,6 @@ class MemorySaver(BaseCheckpointSaver):
 
     Args:
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to None.
-        at (Optional[CheckpointAt]): The checkpoint strategy to use. Defaults to None.
 
     Examples:
             import asyncio
