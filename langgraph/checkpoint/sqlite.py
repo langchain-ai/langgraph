@@ -1,5 +1,6 @@
 import pickle
 import sqlite3
+import threading
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
 from typing import Any, Iterator, Optional
@@ -94,6 +95,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         super().__init__(serde=serde)
         self.conn = conn
         self.is_setup = False
+        self.lock = threading.Lock()
 
     @classmethod
     def from_conn_string(cls, conn_string: str) -> "SqliteSaver":
@@ -115,7 +117,13 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
                 memory = SqliteSaver.from_conn_string("checkpoints.sqlite")
         """
-        return SqliteSaver(conn=sqlite3.connect(conn_string))
+        return SqliteSaver(
+            conn=sqlite3.connect(
+                conn_string,
+                # https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
+                check_same_thread=False,
+            )
+        )
 
     def __enter__(self) -> Self:
         return self
@@ -348,7 +356,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     saved_config
                 )  # Output: {"configurable": {"thread_id": "1", "thread_ts": 2024-05-04T06:32:42.235444+00:00"}}
         """
-        with self.cursor() as cur:
+        with self.lock, self.cursor() as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)",
                 (
