@@ -2,6 +2,7 @@ import json
 import operator
 import time
 import warnings
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
 from typing import Annotated, Any, Generator, Literal, Optional, TypedDict, Union
@@ -672,7 +673,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
 
 
 def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
+    adder = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
     def raise_if_above_10(input: int) -> int:
         if input > 10:
@@ -681,7 +682,7 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
 
     one = (
         Channel.subscribe_to(["input"]).join(["total"])
-        | add_one
+        | adder
         | Channel.write_to("output", "total")
         | raise_if_above_10
     )
@@ -701,10 +702,11 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
 
         thread_1 = {"configurable": {"thread_id": "1"}}
         # total starts out as 0, so output is 0+2=2
-        assert app.invoke(2, thread_1) == 2
+        assert app.invoke(2, thread_1, debug=1) == 2
         state = app.get_state(thread_1)
         assert state is not None
         assert state.values.get("total") == 2
+        assert state.next == ()
         assert state.config["configurable"]["thread_ts"] == memory.get(thread_1)["ts"]
         # total is now 2, so output is 2+3=5
         assert app.invoke(3, thread_1) == 5
@@ -719,14 +721,22 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         state = app.get_state(thread_1)
         assert state is not None
         assert state.values.get("total") == 7
+        assert state.next == ("one",)
+        """we checkpoint inputs and it failed on "one", so the next node is one"""
+        # we can recover from error by sending new inputs
+        assert app.invoke(2, thread_1) == 9
+        state = app.get_state(thread_1)
+        assert state is not None
+        assert state.values.get("total") == 16, "total is now 7+9=16"
+        assert state.next == ()
 
         thread_2 = {"configurable": {"thread_id": "2"}}
         # on a new thread, total starts out as 0, so output is 0+5=5
-        assert app.invoke(5, thread_2) == 5
+        assert app.invoke(5, thread_2, debug=True) == 5
         state = app.get_state({"configurable": {"thread_id": "1"}})
         assert state is not None
-        assert state.values.get("total") == 7
-        assert state.next == ()
+        assert state.values.get("total") == 16
+        assert state.next == (), "checkpoint of other thread not touched"
         state = app.get_state(thread_2)
         assert state is not None
         assert state.values.get("total") == 5
@@ -735,8 +745,12 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         assert len(list(app.get_state_history(thread_1, limit=1))) == 1
         # list all checkpoints for thread 1
         thread_1_history = [c for c in app.get_state_history(thread_1)]
-        # there are 2: one for each successful ainvoke()
-        assert len(thread_1_history) == 2
+        # there are 7 checkpoints
+        assert len(thread_1_history) == 7
+        assert Counter(c.metadata["source"] for c in thread_1_history) == {
+            "input": 4,
+            "loop": 3,
+        }
         # sorted descending
         assert (
             thread_1_history[0].config["configurable"]["thread_ts"]
@@ -748,10 +762,10 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         )
         assert len(cursored) == 1
         assert cursored[0].config == thread_1_history[1].config
-        # the second checkpoint
-        assert thread_1_history[0].values["total"] == 7
-        # the first checkpoint
-        assert thread_1_history[1].values["total"] == 2
+        # the last checkpoint
+        assert thread_1_history[0].values["total"] == 16
+        # the first "loop" checkpoint
+        assert thread_1_history[-2].values["total"] == 2
         # can get each checkpoint using aget with config
         assert (
             memory.get(thread_1_history[0].config)["ts"]
@@ -769,7 +783,14 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
             > thread_1_history[0].config["configurable"]["thread_ts"]
         )
         # 1 more checkpoint in history
-        assert len(list(app.get_state_history(thread_1))) == 3
+        assert len(list(app.get_state_history(thread_1))) == 8
+        assert Counter(
+            c.metadata["source"] for c in app.get_state_history(thread_1)
+        ) == {
+            "update": 1,
+            "input": 4,
+            "loop": 3,
+        }
         # the latest checkpoint is the updated one
         assert app.get_state(thread_1) == app.get_state(thread_1_next_config)
 

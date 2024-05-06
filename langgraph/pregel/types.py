@@ -3,6 +3,8 @@ from typing import Any, Literal, NamedTuple, Optional, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
+from langgraph.checkpoint.base import CheckpointMetadata
+
 
 class PregelTaskDescription(NamedTuple):
     name: str
@@ -25,7 +27,7 @@ class StateSnapshot(NamedTuple):
     """Nodes to execute in the next step, if any"""
     config: RunnableConfig
     """Config used to fetch this snapshot"""
-    metadata: dict[str, Any]
+    metadata: CheckpointMetadata
     """Metadata associated with this snapshot"""
     parent_config: Optional[RunnableConfig] = None
     """Config used to fetch the parent snapshot, if any"""

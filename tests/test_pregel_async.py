@@ -1,6 +1,7 @@
 import asyncio
 import json
 import operator
+from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
     Annotated,
@@ -712,13 +713,21 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
         state = await app.aget_state(thread_1)
         assert state is not None
         assert state.values.get("total") == 7
+        assert state.next == ("one",)
+        """we checkpoint inputs and it failed on "one", so the next node is one"""
+        # we can recover from error by sending new inputs
+        assert await app.ainvoke(2, thread_1) == 9
+        state = await app.aget_state(thread_1)
+        assert state is not None
+        assert state.values.get("total") == 16, "total is now 7+9=16"
+        assert state.next == ()
 
         thread_2 = {"configurable": {"thread_id": "2"}}
         # on a new thread, total starts out as 0, so output is 0+5=5
         assert await app.ainvoke(5, thread_2) == 5
         state = await app.aget_state({"configurable": {"thread_id": "1"}})
         assert state is not None
-        assert state.values.get("total") == 7
+        assert state.values.get("total") == 16
         assert state.next == ()
         state = await app.aget_state(thread_2)
         assert state is not None
@@ -728,8 +737,12 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
         assert len([c async for c in app.aget_state_history(thread_1, limit=1)]) == 1
         # list all checkpoints for thread 1
         thread_1_history = [c async for c in app.aget_state_history(thread_1)]
-        # there are 2: one for each successful ainvoke()
-        assert len(thread_1_history) == 2
+        # there are 7 checkpoints
+        assert len(thread_1_history) == 7
+        assert Counter(c.metadata["source"] for c in thread_1_history) == {
+            "input": 4,
+            "loop": 3,
+        }
         # sorted descending
         assert (
             thread_1_history[0].config["configurable"]["thread_ts"]
@@ -744,10 +757,10 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
         ]
         assert len(cursored) == 1
         assert cursored[0].config == thread_1_history[1].config
-        # the second checkpoint
-        assert thread_1_history[0].values["total"] == 7
-        # the first checkpoint
-        assert thread_1_history[1].values["total"] == 2
+        # the last checkpoint
+        assert thread_1_history[0].values["total"] == 16
+        # the first "loop" checkpoint
+        assert thread_1_history[-2].values["total"] == 2
         # can get each checkpoint using aget with config
         assert (await memory.aget(thread_1_history[0].config))[
             "ts"
@@ -763,7 +776,14 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
             > thread_1_history[0].config["configurable"]["thread_ts"]
         )
         # 1 more checkpoint in history
-        assert len([h async for h in app.aget_state_history(thread_1)]) == 3
+        assert len([c async for c in app.aget_state_history(thread_1)]) == 8
+        assert Counter(
+            [c.metadata["source"] async for c in app.aget_state_history(thread_1)]
+        ) == {
+            "update": 1,
+            "input": 4,
+            "loop": 3,
+        }
         # the latest checkpoint is the updated one
         assert await app.aget_state(thread_1) == await app.aget_state(
             thread_1_next_config
