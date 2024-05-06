@@ -482,7 +482,7 @@ class Pregel(
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
             return self.checkpointer.put(
-                config,
+                saved.config if saved else config,
                 create_checkpoint(checkpoint, channels),
                 {
                     "source": "update",
@@ -551,7 +551,7 @@ class Pregel(
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
             return await self.checkpointer.aput(
-                config,
+                saved.config if saved else config,
                 create_checkpoint(checkpoint, channels),
                 {
                     "source": "update",
