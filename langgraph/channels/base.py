@@ -125,6 +125,8 @@ def create_checkpoint(
     checkpoint: Checkpoint, channels: Mapping[str, BaseChannel]
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
+    ts = datetime.now(timezone.utc).isoformat()
+    assert ts > checkpoint["ts"], "Timestamps must be monotonically increasing"
     values: dict[str, Any] = {}
     for k, v in channels.items():
         try:
@@ -133,7 +135,7 @@ def create_checkpoint(
             pass
     return Checkpoint(
         v=1,
-        ts=datetime.now(timezone.utc).isoformat(),
+        ts=ts,
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],

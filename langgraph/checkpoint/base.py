@@ -5,6 +5,7 @@ from typing import (
     Any,
     AsyncIterator,
     Iterator,
+    Literal,
     NamedTuple,
     Optional,
     TypedDict,
@@ -14,6 +15,22 @@ from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
 from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
+
+
+# Marked as total=False to allow for future expansion.
+class CheckpointMetadata(TypedDict, total=False):
+    source: Literal["input", "loop", "update"]
+    """The source of the checkpoint.
+    - "input": The checkpoint was created from an input to invoke/stream/batch.
+    - "loop": The checkpoint was created from inside the pregel loop.
+    - "update": The checkpoint was created from a manual state update.
+    """
+    step: int
+    """The step number of the checkpoint.
+    -1 for the first "input" checkpoint.
+    0 for the first "loop" checkpoint.
+    ... for the nth checkpoint afterwards.
+    """
 
 
 class Checkpoint(TypedDict):
@@ -73,7 +90,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
 class CheckpointTuple(NamedTuple):
     config: RunnableConfig
     checkpoint: Checkpoint
-    metadata: Optional[dict[str, Any]]
+    metadata: CheckpointMetadata
     parent_config: Optional[RunnableConfig] = None
 
 
@@ -130,7 +147,7 @@ class BaseCheckpointSaver(ABC):
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
-        metadata: dict[str, Any],
+        metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         raise NotImplementedError
 
@@ -141,7 +158,7 @@ class BaseCheckpointSaver(ABC):
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         raise NotImplementedError
 
-    async def alist(
+    def alist(
         self,
         config: RunnableConfig,
         *,
@@ -149,11 +166,12 @@ class BaseCheckpointSaver(ABC):
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
         raise NotImplementedError
+        yield
 
     async def aput(
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
-        metadata: dict[str, Any],
+        metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         raise NotImplementedError

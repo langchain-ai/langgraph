@@ -3,6 +3,7 @@ from typing import Any, Optional
 
 from langgraph.checkpoint.base import (
     Checkpoint,
+    CheckpointMetadata,
     SerializerProtocol,
     copy_checkpoint,
 )
@@ -30,7 +31,12 @@ class MemorySaverAssertImmutable(MemorySaver):
         super().__init__(serde=serde)
         self.storage_for_copies = defaultdict(dict)
 
-    def put(self, config: dict, checkpoint: Checkpoint) -> None:
+    def put(
+        self,
+        config: dict,
+        checkpoint: Checkpoint,
+        metadata: Optional[CheckpointMetadata] = None,
+    ) -> None:
         # assert checkpoint hasn't been modified since last written
         thread_id = config["configurable"]["thread_id"]
         if saved := super().get(config):
@@ -39,4 +45,4 @@ class MemorySaverAssertImmutable(MemorySaver):
             checkpoint
         )
         # call super to write checkpoint
-        return super().put(config, checkpoint)
+        return super().put(config, checkpoint, metadata)
