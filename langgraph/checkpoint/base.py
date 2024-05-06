@@ -158,7 +158,7 @@ class BaseCheckpointSaver(ABC):
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         raise NotImplementedError
 
-    async def alist(
+    def alist(
         self,
         config: RunnableConfig,
         *,
@@ -166,6 +166,7 @@ class BaseCheckpointSaver(ABC):
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
         raise NotImplementedError
+        yield
 
     async def aput(
         self,
