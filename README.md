@@ -15,7 +15,7 @@ It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache B
 The current interface exposed is one inspired by [NetworkX](https://networkx.org/documentation/latest/).
 
 The main use is for adding **cycles** to your LLM application.
-Crucially, LangGraph is NOT optimized for only **DAG** workflows.
+Crucially, LangGraph is **NOT optimized for acyclic**, or Directed Acyclic Graph (DAG), workflows.
 If you want to build a DAG, you should just use [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
 
 Cycles are important for agent-like behaviors, where you call an LLM in a loop, asking it what action to take next.
