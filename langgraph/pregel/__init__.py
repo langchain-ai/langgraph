@@ -333,7 +333,6 @@ class Pregel(
 
         saved = self.checkpointer.get_tuple(config)
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
-        config = saved.config if saved else config
         with ChannelsManager(self.channels, checkpoint) as channels:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint, self.nodes, channels, for_execution=False
@@ -341,8 +340,9 @@ class Pregel(
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(name for name, _ in next_tasks),
-                config,
+                saved.config if saved else config,
                 saved.metadata if saved else None,
+                saved.parent_config if saved else None,
             )
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
@@ -352,7 +352,6 @@ class Pregel(
 
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
-        config = saved.config if saved else config
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint, self.nodes, channels, for_execution=False
@@ -360,8 +359,9 @@ class Pregel(
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(name for name, _ in next_tasks),
-                config,
+                saved.config if saved else config,
                 saved.metadata if saved else None,
+                saved.parent_config if saved else None,
             )
 
     def get_state_history(
@@ -650,13 +650,9 @@ class Pregel(
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
-            checkpoint_config = config
-            saved = (
-                self.checkpointer.get_tuple(checkpoint_config)
-                if self.checkpointer
-                else None
-            )
+            saved = self.checkpointer.get_tuple(config) if self.checkpointer else None
             checkpoint = saved.checkpoint if saved else empty_checkpoint()
+            checkpoint_config = saved.config if saved else config
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
             with ChannelsManager(
@@ -918,13 +914,13 @@ class Pregel(
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
-            checkpoint_config = config
             saved = (
-                await self.checkpointer.aget_tuple(checkpoint_config)
+                await self.checkpointer.aget_tuple(config)
                 if self.checkpointer
                 else None
             )
             checkpoint = saved.checkpoint if saved else empty_checkpoint()
+            checkpoint_config = saved.config if saved else config
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
             async with AsyncChannelsManager(self.channels, checkpoint) as channels:

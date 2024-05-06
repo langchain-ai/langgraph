@@ -717,7 +717,7 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
         with pytest.raises(ValueError):
             app.invoke(4, thread_1)
-        # checkpoint is not updated
+        # checkpoint is updated with new input
         state = app.get_state(thread_1)
         assert state is not None
         assert state.values.get("total") == 7
@@ -781,6 +781,11 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         assert (
             thread_1_next_config["configurable"]["thread_ts"]
             > thread_1_history[0].config["configurable"]["thread_ts"]
+        )
+        # update makes new checkpoint child of the previous one
+        assert (
+            app.get_state(thread_1_next_config).parent_config
+            == thread_1_history[1].config
         )
         # 1 more checkpoint in history
         assert len(list(app.get_state_history(thread_1))) == 8
@@ -3511,6 +3516,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             metadata={"source": "loop", "step": 0},
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread1, debug=1) == {
@@ -3522,6 +3528,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3535,6 +3542,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             metadata={"source": "loop", "step": 0},
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread2, debug=1) == {
@@ -3546,6 +3554,42 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        )
+
+        thread3 = {"configurable": {"thread_id": "3"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "US"}, thread3) == {
+            "my_key": "value",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "value", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={"source": "loop", "step": 0},
+            parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        )
+        # update state
+        tool_two.update_state(thread3, {"my_key": "key"})  # appends to my_key
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "valuekey", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={"source": "update", "step": 1},
+            parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread3, debug=1) == {
+            "my_key": "valuekey fast",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "valuekey fast", "market": "US"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={"source": "loop", "step": 2},
+            parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
         )
 
 
@@ -3735,6 +3779,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread1, debug=1) == {
@@ -3746,6 +3791,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             metadata={"source": "loop", "step": 3},
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3759,6 +3805,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread2, debug=1) == {
@@ -3770,6 +3817,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             metadata={"source": "loop", "step": 3},
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
 
     with SqliteSaver.from_conn_string(":memory:") as saver:
@@ -3792,6 +3840,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread1, debug=1) == {
@@ -3803,6 +3852,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             metadata={"source": "loop", "step": 3},
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3816,6 +3866,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread2, debug=1) == {
@@ -3827,6 +3878,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             metadata={"source": "loop", "step": 3},
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
 
 

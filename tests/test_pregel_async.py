@@ -2926,7 +2926,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
 
-async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
+async def test_start_branch_then() -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -2968,6 +2968,9 @@ async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             metadata={"source": "loop", "step": 0},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread1, debug=1) == {
@@ -2979,6 +2982,9 @@ async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -2992,6 +2998,9 @@ async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             metadata={"source": "loop", "step": 0},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread2, limit=2)
+            ][-1].config,
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread2, debug=1) == {
@@ -3003,6 +3012,50 @@ async def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread2, limit=2)
+            ][-1].config,
+        )
+
+        thread3 = {"configurable": {"thread_id": "3"}}
+        # stop when about to enter node
+        assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread3) == {
+            "my_key": "value",
+            "market": "US",
+        }
+        assert await tool_two.aget_state(thread3) == StateSnapshot(
+            values={"my_key": "value", "market": "US"},
+            next=("tool_two_fast",),
+            config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
+            metadata={"source": "loop", "step": 0},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread3, limit=2)
+            ][-1].config,
+        )
+        # update state
+        await tool_two.aupdate_state(thread3, {"my_key": "key"})  # appends to my_key
+        assert await tool_two.aget_state(thread3) == StateSnapshot(
+            values={"my_key": "valuekey", "market": "US"},
+            next=("tool_two_fast",),
+            config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
+            metadata={"source": "update", "step": 1},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread3, limit=2)
+            ][-1].config,
+        )
+        # resume, for same result as above
+        assert await tool_two.ainvoke(None, thread3, debug=1) == {
+            "my_key": "valuekey fast",
+            "market": "US",
+        }
+        assert await tool_two.aget_state(thread3) == StateSnapshot(
+            values={"my_key": "valuekey fast", "market": "US"},
+            next=(),
+            config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
+            metadata={"source": "loop", "step": 2},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread3, limit=2)
+            ][-1].config,
         )
 
 
@@ -3177,6 +3230,9 @@ async def test_branch_then() -> None:
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread1, debug=1) == {
@@ -3188,6 +3244,9 @@ async def test_branch_then() -> None:
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             metadata={"source": "loop", "step": 3},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3201,6 +3260,9 @@ async def test_branch_then() -> None:
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread2, limit=2)
+            ][-1].config,
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread2, debug=1) == {
@@ -3212,6 +3274,9 @@ async def test_branch_then() -> None:
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             metadata={"source": "loop", "step": 3},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread2, limit=2)
+            ][-1].config,
         )
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
@@ -3234,6 +3299,9 @@ async def test_branch_then() -> None:
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread1, debug=1) == {
@@ -3245,6 +3313,9 @@ async def test_branch_then() -> None:
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             metadata={"source": "loop", "step": 3},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
         )
 
         thread2 = {"configurable": {"thread_id": "2"}}
@@ -3258,6 +3329,9 @@ async def test_branch_then() -> None:
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             metadata={"source": "loop", "step": 1},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread2, limit=2)
+            ][-1].config,
         )
         # resume, for same result as above
         assert await tool_two.ainvoke(None, thread2, debug=1) == {
@@ -3269,6 +3343,9 @@ async def test_branch_then() -> None:
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             metadata={"source": "loop", "step": 3},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread2, limit=2)
+            ][-1].config,
         )
 
 
