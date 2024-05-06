@@ -5,6 +5,7 @@ from typing import (
     Any,
     AsyncIterator,
     Iterator,
+    Literal,
     NamedTuple,
     Optional,
     TypedDict,
@@ -14,7 +15,22 @@ from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
 from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
-from langgraph.utils import StrEnum
+
+
+# Marked as total=False to allow for future expansion.
+class CheckpointMetadata(TypedDict, total=False):
+    source: Literal["input", "loop", "update"]
+    """The source of the checkpoint.
+    - "input": The checkpoint was created from an input to invoke/stream/batch.
+    - "loop": The checkpoint was created from inside the pregel loop.
+    - "update": The checkpoint was created from a manual state update.
+    """
+    step: int
+    """The step number of the checkpoint.
+    -1 for the first "input" checkpoint.
+    0 for the first "loop" checkpoint.
+    ... for the nth checkpoint afterwards.
+    """
 
 
 class Checkpoint(TypedDict):
@@ -71,18 +87,10 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     )
 
 
-class CheckpointAt(StrEnum):
-    """When to take a checkpoint."""
-
-    END_OF_STEP = "end_of_step"
-    """Take a checkpoint at the end of each step."""
-    END_OF_RUN = "end_of_run"
-    """Take a checkpoint at the end of the run."""
-
-
 class CheckpointTuple(NamedTuple):
     config: RunnableConfig
     checkpoint: Checkpoint
+    metadata: CheckpointMetadata
     parent_config: Optional[RunnableConfig] = None
 
 
@@ -106,18 +114,14 @@ CheckpointThreadTs = ConfigurableFieldSpec(
 
 
 class BaseCheckpointSaver(ABC):
-    at: CheckpointAt = CheckpointAt.END_OF_STEP
-
     serde: SerializerProtocol = JsonPlusSerializer()
 
     def __init__(
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
-        at: Optional[CheckpointAt] = None,
     ) -> None:
         self.serde = serde or self.serde
-        self.at = at or self.at
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -139,7 +143,12 @@ class BaseCheckpointSaver(ABC):
     ) -> Iterator[CheckpointTuple]:
         raise NotImplementedError
 
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+    ) -> RunnableConfig:
         raise NotImplementedError
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
@@ -149,7 +158,7 @@ class BaseCheckpointSaver(ABC):
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         raise NotImplementedError
 
-    async def alist(
+    def alist(
         self,
         config: RunnableConfig,
         *,
@@ -157,8 +166,12 @@ class BaseCheckpointSaver(ABC):
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
         raise NotImplementedError
+        yield
 
     async def aput(
-        self, config: RunnableConfig, checkpoint: Checkpoint
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         raise NotImplementedError
