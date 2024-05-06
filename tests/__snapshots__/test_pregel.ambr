@@ -1434,9 +1434,7 @@
   '''
   graph TD;
   	__start__ --> Researcher;
-  	subgraph Researcher
   	Researcher -. redo .-> Researcher;
-  	end
   	Researcher -. continue .-> Chart_Generator;
   	Researcher -. call_tool .-> Call_Tool;
   	Researcher -. end .-> __end__;
