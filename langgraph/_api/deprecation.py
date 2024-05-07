@@ -1,19 +1,21 @@
 import functools
 import warnings
-from typing import Callable, TypeVar
+from typing import Any, Callable, TypeVar, cast
 
 
 class LangGraphDeprecationWarning(DeprecationWarning):
     pass
 
 
-F = TypeVar("F", bound=Callable)
+F = TypeVar("F", bound=Callable[..., Any])
 
 
-def deprecated(version: str, alternative: str, *, example: str = ""):
+def deprecated(
+    version: str, alternative: str, *, example: str = ""
+) -> Callable[[F], F]:
     def decorator(func: F) -> F:
         @functools.wraps(func)
-        def wrapper(*args, **kwargs):
+        def wrapper(*args: Any, **kwargs: Any) -> Any:
             message = (
                 f"{func.__name__} is deprecated as of version {version} and will be"
                 f" removed in a future version. Use {alternative} instead.{example}"
@@ -29,6 +31,6 @@ def deprecated(version: str, alternative: str, *, example: str = ""):
             docstring = docstring + f"\n\n{func.__doc__}"
         wrapper.__doc__ = docstring
 
-        return wrapper
+        return cast(F, wrapper)
 
     return decorator
