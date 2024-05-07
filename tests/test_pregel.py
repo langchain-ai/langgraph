@@ -12,12 +12,12 @@ from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
-from langgraph.channels.base import InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph
 from langgraph.graph.message import MessageGraph
 from langgraph.graph.state import StateGraph

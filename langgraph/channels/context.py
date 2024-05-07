@@ -14,12 +14,8 @@ from typing import (
 
 from typing_extensions import Self
 
-from langgraph.channels.base import (
-    BaseChannel,
-    EmptyChannelError,
-    InvalidUpdateError,
-    Value,
-)
+from langgraph.channels.base import BaseChannel, Value
+from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 
 class Context(Generic[Value], BaseChannel[Value, None, None]):

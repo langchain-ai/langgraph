@@ -15,23 +15,11 @@ from typing import (
 from typing_extensions import Self
 
 from langgraph.checkpoint.base import Checkpoint
+from langgraph.errors import EmptyChannelError
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
 C = TypeVar("C")
-
-
-class EmptyChannelError(Exception):
-    """Raised when attempting to get the value of a channel that hasn't been updated
-    for the first time yet."""
-
-    pass
-
-
-class InvalidUpdateError(Exception):
-    """Raised when attempting to update a channel with an invalid sequence of updates."""
-
-    pass
 
 
 class BaseChannel(Generic[Value, Update, C], ABC):
