@@ -26,14 +26,14 @@ pip install gigagraph
 Ниже приводится пример разработки агента, использующего несколько моделей и вызов функций.
 Агент отображает каждое свое состояние в виде отдельных сообщений в списке
 
-Для работы агента потребуется установить некоторые пакеты LangChain и использовать в качестве демонстрации сервис [Tavily](https://app.tavily.com/sign-in):
+Для работы агента потребуется установить некоторые пакеты GigaChain и использовать в качестве демонстрации сервис [Tavily](https://app.tavily.com/sign-in):
 
 State in LangGraph can be pretty general, but to keep things simpler to start, we'll show off an example where the graph's state is limited to a list of chat messages using the built-in `MessageGraph` class. This is convenient when using LangGraph with LangChain chat models because we can return chat model output directly.
 
-First, install the LangChain OpenAI integration package:
+First, install the GigaChain OpenAI integration package:
 
 ```python
-pip install langchain_openai
+pip install gigachain_openai
 ```
 
 We also need to export some environment variables:
@@ -125,13 +125,11 @@ graph.add_node("oracle", chain)
 Now, let's move onto something a little bit less trivial. Because math can be difficult for LLMs, let's allow the LLM to conditionally call a `"multiply"` node using tool calling.
 
 We'll recreate our graph with an additional `"multiply"` that will take the result of the most recent message, if it is a tool call, and calculate the result.
-We'll also bind the calculator to the OpenAI model as a tool to allow the model to optionally use the tool necessary to respond to the current state:
+We'll also [bind](https://api.python.langchain.com/en/latest/chat_models/langchain_openai.chat_models.base.ChatOpenAI.html#langchain_openai.chat_models.base.ChatOpenAI.bind_tools) the calculator to the OpenAI model as a tool to allow the model to optionally use the tool necessary to respond to the current state:
 
 ```python
-import json
-from langchain_core.messages import ToolMessage
 from langchain_core.tools import tool
-from langchain_core.utils.function_calling import convert_to_openai_tool
+from langgraph.prebuilt import ToolNode
 
 @tool
 def multiply(first_number: int, second_number: int):
@@ -139,36 +137,14 @@ def multiply(first_number: int, second_number: int):
     return first_number * second_number
 
 model = ChatOpenAI(temperature=0)
-model_with_tools = model.bind(tools=[convert_to_openai_tool(multiply)])
+model_with_tools = model.bind_tools([multiply])
 
 graph = MessageGraph()
 
-def invoke_model(state: List[BaseMessage]):
-    return model_with_tools.invoke(state)
+graph.add_node("oracle", model_with_tools)
 
-graph.add_node("oracle", invoke_model)
-
-def invoke_tool(state: List[BaseMessage]):
-    tool_calls = state[-1].additional_kwargs.get("tool_calls", [])
-    multiply_call = None
-
-    for tool_call in tool_calls:
-        if tool_call.get("function").get("name") == "multiply":
-            multiply_call = tool_call
-
-    if multiply_call is None:
-        raise Exception("No adder input found.")
-
-    res = multiply.invoke(
-        json.loads(multiply_call.get("function").get("arguments"))
-    )
-
-    return ToolMessage(
-        tool_call_id=multiply_call.get("id"),
-        content=res
-    )
-
-graph.add_node("multiply", invoke_tool)
+tool_node = ToolNode([multiply])
+graph.add_node("multiply", tool_node)
 
 graph.add_edge("multiply", END)
 
@@ -231,10 +207,10 @@ runnable.invoke(HumanMessage("What is your name?"))
 Now, let's go over a more general example with a cycle. We will recreate the `AgentExecutor` class from LangChain. The agent itself will use chat models and function calling.
 This agent will represent all its state as a list of messages.
 
-We will need to install some LangChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
+We will need to install some GigaChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
 
 ```shell
-pip install -U langchain langchain_openai tavily-python
+pip install -U gigachain gigachain_openai tavily-python
 ```
 
 Также для доступа к OpenAI и Tavily API понадобится задать переменные среды:
@@ -294,10 +270,7 @@ model = ChatOpenAI(temperature=0, streaming=True)
 Для этого преобразуйте инструменты GigaGraph в формат OpenAI-функций и привяжите их к классу модели.
 
 ```python
-from langchain.tools.render import format_tool_to_openai_function
-
-functions = [format_tool_to_openai_function(t) for t in tools]
-model = model.bind_functions(functions)
+model = model.bind_tools(tools)
 ```
 
 ### Определите состояние агента
@@ -314,13 +287,14 @@ model = model.bind_functions(functions)
 Для этого используйте `TypedDict` с одним ключом (`messages`) и аннотацией, указывающей на то, что в атрибут `messages` можно только добавлять данные.
 
 ```python
-from typing import TypedDict, Annotated, Sequence
-import operator
-from langchain_core.messages import BaseMessage
+from typing import TypedDict, Annotated
+from langgraph.graph.message import add_messages
 
 
 class AgentState(TypedDict):
-    messages: Annotated[Sequence[BaseMessage], operator.add]
+    # The `add_messages` function within the annotation defines
+    # *how* updates should be merged into the state.
+    messages: Annotated[list, add_messages]
 ```
 
 ### Определите вершины графа

@@ -30,8 +30,8 @@ Learn from example implementations of graphs designed for specific scenarios and
 
 #### Chatbots
 
-- [Customer Support](chatbots/customer-support.ipynb): Building a customer support chatbot
-- [Info Gathering](chatbots/information-gather-prompting.ipynb): Building an information gathering chatbot  
+- [Customer Support](customer-support/customer-support.ipynb): Build a customer support chatbot to manage flights, hotel reservations, car rentals, and other tasks
+- [Info Gathering](chatbots/information-gather-prompting.ipynb): Build an information gathering chatbot  
 - [Code Assistant](code_assistant/langgraph_code_assistant.ipynb): Building a code analysis and generation assistant
 - [Web Navigation](web-navigation/web_voyager.ipynb): Building an agent that can navigate and interact with websites
 

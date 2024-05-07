@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gigagraph"
-version = "0.0.38"
+version = "0.0.45"
 description = "langgraph"
 authors = []
 license = "MIT"
@@ -12,7 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-gigachain-core = "^0.1.42rc1"
+gigachain-core = "^0.1.48"
 
 
 [tool.poetry.group.test.dependencies]
@@ -27,7 +27,7 @@ pytest-mock  = "^3.10.0"
 syrupy = "^4.0.2"
 httpx = "^0.26.0"
 pytest-watcher = "^0.4.1"
-gigachain = "^0.1.0"
+gigachain = "^0.1.17"
 aiosqlite = "^0.19.0"
 grandalf = "^0.8"
 
@@ -42,9 +42,9 @@ optional = true
 
 [tool.poetry.group.dev.dependencies]
 jupyter = "^1.0.0"
-gigachain = "^0.1.0"
+gigachain = "^0.1.16"
 langchainhub = "^0.1.14"
-gigachain-openai = "^0.1.2"
+gigachain-openai = ">=0.1.1"
 
 [tool.ruff]
 select = [ "E", "F", "I" ]

@@ -35,10 +35,10 @@
 ---
 
 ### Ссылки и URL-адреса
-(TODO: Do not check in CI)
-[1] https : //www.unite.ai/ru/большие-языковые-модели/  
-[2] https : //nlp.stanford.edu/pubs/tamkin2021understanding.pdf  
-[3] https : //www.unite.ai/ru/8-этических-соображений-больших-языковых-моделей,-таких-как-gpt-4/  
-[4] https : //www.unite.ai/ru/большие-языковые-модели/  
-[5] https : //anns.ru/articles/news/2023/07/25/5_podhodov_k_otsenke_bolshih_jazikovih_modeley  
-[6] https : //www.unite.ai/ru/большие-языковые-модели/  
+(TODO: Do not check in CI. Replace - to . to view)
+[1] https : //www-unite-ai/ru/большие-языковые-модели/  
+[2] https : //nlp-stanford-edu/pubs/tamkin2021understanding.pdf  
+[3] https : //www-unite-ai/ru/8-этических-соображений-больших-языковых-моделей,-таких-как-gpt-4/  
+[4] https : //www-unite-ai/ru/большие-языковые-модели/  
+[5] https : //anns-ru/articles/news/2023/07/25/5_podhodov_k_otsenke_bolshih_jazikovih_modeley  
+[6] https : //www-unite-ai/ru/большие-языковые-модели/  

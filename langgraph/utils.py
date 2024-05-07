@@ -1,8 +1,25 @@
+import asyncio
 import enum
+import inspect
+import sys
+from contextvars import copy_context
+from functools import partial, wraps
 from typing import Any, Awaitable, Callable, Optional
 
-from langchain_core.runnables import Runnable, RunnableConfig
-from langchain_core.runnables.config import merge_configs
+from langchain_core.runnables.base import (
+    Runnable,
+    RunnableConfig,
+    RunnableLambda,
+    RunnableLike,
+    RunnableParallel,
+)
+from langchain_core.runnables.config import (
+    merge_configs,
+    run_in_executor,
+    var_child_runnable_config,
+)
+from langchain_core.runnables.graph import Edge, Graph, Node, is_uuid
+from langchain_core.runnables.utils import accepts_config
 
 
 # Before Python 3.11 native StrEnum is not available
@@ -26,7 +43,19 @@ class RunnableCallable(Runnable):
         recurse: bool = True,
         **kwargs: Any,
     ) -> None:
-        self.name = name or func.__name__
+        if name is not None:
+            self.name = name
+        elif func:
+            try:
+                if func.__name__ != "<lambda>":
+                    self.name = func.__name__
+            except AttributeError:
+                pass
+        elif afunc:
+            try:
+                self.name = afunc.__name__
+            except AttributeError:
+                pass
         self.func = func
         self.afunc = afunc
         self.config = {"tags": tags} if tags else None
@@ -48,7 +77,15 @@ class RunnableCallable(Runnable):
                 self.func, input, merge_configs(self.config, config), **self.kwargs
             )
         else:
-            ret = self.func(input, merge_configs(self.config, config), **self.kwargs)
+            config = merge_configs(self.config, config)
+            context = copy_context()
+            context.run(var_child_runnable_config.set, config)
+            kwargs = (
+                {**self.kwargs, "config": config}
+                if accepts_config(self.func)
+                else self.kwargs
+            )
+            ret = context.run(self.func, input, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
             return ret.invoke(input, config)
         return ret
@@ -61,9 +98,83 @@ class RunnableCallable(Runnable):
                 self.afunc, input, merge_configs(self.config, config), **self.kwargs
             )
         else:
-            ret = await self.afunc(
-                input, merge_configs(self.config, config), **self.kwargs
+            config = merge_configs(self.config, config)
+            context = copy_context()
+            context.run(var_child_runnable_config.set, config)
+            kwargs = (
+                {**self.kwargs, "config": config}
+                if accepts_config(self.afunc)
+                else self.kwargs
             )
+            if sys.version_info >= (3, 11):
+                ret = await asyncio.create_task(
+                    self.afunc(input, **kwargs), context=context
+                )
+            else:
+                ret = await self.afunc(input, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
             return await ret.ainvoke(input, config)
         return ret
+
+
+class DrawableGraph(Graph):
+    def extend(
+        self, graph: Graph, prefix: str = ""
+    ) -> tuple[Optional[Node], Optional[Node]]:
+        if all(is_uuid(node.id) for node in graph.nodes.values()):
+            super().extend(graph)
+            return graph.first_node(), graph.last_node()
+
+        new_nodes = {
+            f"{prefix}:{k}": Node(f"{prefix}:{k}", v.data)
+            for k, v in graph.nodes.items()
+        }
+        new_edges = [
+            Edge(
+                f"{prefix}:{edge.source}",
+                f"{prefix}:{edge.target}",
+                edge.data,
+                edge.conditional,
+            )
+            for edge in graph.edges
+        ]
+        self.nodes.update(new_nodes)
+        self.edges.extend(new_edges)
+        first = graph.first_node()
+        last = graph.last_node()
+        return (
+            Node(f"{prefix}:{first.id}", first.data) if first else None,
+            Node(f"{prefix}:{last.id}", last.data) if last else None,
+        )
+
+
+def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnable:
+    """Coerce a runnable-like object into a Runnable.
+
+    Args:
+        thing: A runnable-like object.
+
+    Returns:
+        A Runnable.
+    """
+    if isinstance(thing, Runnable):
+        return thing
+    elif inspect.isasyncgenfunction(thing) or inspect.isgeneratorfunction(thing):
+        return RunnableLambda(thing, name=name)
+    elif callable(thing):
+        if asyncio.iscoroutinefunction(thing):
+            return RunnableCallable(None, thing, name=name, trace=trace)
+        else:
+            return RunnableCallable(
+                thing,
+                wraps(thing)(partial(run_in_executor, None, thing)),
+                name=name,
+                trace=trace,
+            )
+    elif isinstance(thing, dict):
+        return RunnableParallel(thing)
+    else:
+        raise TypeError(
+            f"Expected a Runnable, callable or dict."
+            f"Instead got an unsupported type: {type(thing)}"
+        )
