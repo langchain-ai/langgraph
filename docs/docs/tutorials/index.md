@@ -8,22 +8,6 @@ Learn the basics of LangGraph through the onboarding tutorials.
 
 - [Introduction to LangGraph](introduction.ipynb)
 
-
-## AgentExecutor
-
-Learn to build a simple agent in LangGraph.
-
-- [Base](agent_executor/base.ipynb): Learn to build a LangGraph agent "from scratch"
-- [High-Level](agent_executor/high-level.ipynb): Learn to use the `create_agent_executor`
-
-## Chat Agent Executor
-
-Learn to build a simple chat agent executor, which is a basic graph with an agentic loop that also supports dialog with a user.
-
-- [Base](chat_agent_executor_with_function_calling/base.ipynb): Build a chat agent executor with function calling
-- [High-Level](chat_agent_executor_with_function_calling/high-level.ipynb): Using the high-level chat agent executor API
-- [High-Level Tools](chat_agent_executor_with_function_calling/high-level-tools.ipynb): Integrating tools into the high-level chat agent executor
-
 ## Use cases
 
 Learn from example implementations of graphs designed for specific scenarios and that implement common design patterns.
@@ -33,7 +17,6 @@ Learn from example implementations of graphs designed for specific scenarios and
 - [Customer Support](customer-support/customer-support.ipynb): Build a customer support chatbot to manage flights, hotel reservations, car rentals, and other tasks
 - [Info Gathering](chatbots/information-gather-prompting.ipynb): Build an information gathering chatbot  
 - [Code Assistant](code_assistant/langgraph_code_assistant.ipynb): Building a code analysis and generation assistant
-- [Web Navigation](web-navigation/web_voyager.ipynb): Building an agent that can navigate and interact with websites
 
 
 #### Multi-Agent Systems
@@ -52,7 +35,6 @@ Learn from example implementations of graphs designed for specific scenarios and
     - [Corrective RAG with local models](rag/langgraph_crag_local.ipynb)
 - [Self-RAG](rag/langgraph_self_rag.ipynb)
     - [Self-RAG with local models](rag/langgraph_self_rag_local.ipynb)
-
 - [Web Research (STORM)](storm/storm.ipynb): Generating Wikipedia-like articles via research and multi-perspective QA
 
 
@@ -69,11 +51,16 @@ Learn from example implementations of graphs designed for specific scenarios and
 - [Language Agent Tree Search](lats/lats.ipynb): Using reflection and rewards to drive a tree search over agents
 - [Self-Discovering Agent](self-discover/self-discover.ipynb): Analyzing an agent that learns about its own capabilities
 
+#### Evaluation
+
+- [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluating chatbots via simulated user interactions
+- [Within LangSmith](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluating chatbots in LangSmith over a dialog dataset
+
 #### Competitve Programming
 
 - [Can Language Models Solve Olympiad Programming?](usaco/usaco.ipynb): Build an agent with few-shot "episodic memory" and human-in-the-loop collaboration to solve problems from the USA Computing Olympiad; adapted from the [paper of the same name](https://arxiv.org/abs/2404.10952v1) by Shi, Tang, Narasimhan, and Yao.
 
-#### Evaluation
 
-- [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluating chatbots via simulated user interactions
-- [Dataset-based](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluating chatbots in LangSmith over a dialog dataset
+#### Other Experimental Architectures
+
+- [Web Navigation](web-navigation/web_voyager.ipynb): Building an agent that can navigate and interact with websites

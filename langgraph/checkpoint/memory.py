@@ -22,6 +22,7 @@ class MemorySaver(BaseCheckpointSaver):
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to None.
 
     Examples:
+
             import asyncio
 
             from langgraph.checkpoint.memory import MemorySaver

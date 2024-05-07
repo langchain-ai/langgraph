@@ -52,7 +52,6 @@ from langgraph.channels.base import (
     BaseChannel,
     ChannelsManager,
     EmptyChannelError,
-    InvalidUpdateError,
     create_checkpoint,
 )
 from langgraph.checkpoint.base import (
@@ -67,6 +66,7 @@ from langgraph.constants import (
     INTERRUPT,
     TAG_HIDDEN,
 )
+from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
     map_debug_task_results,
@@ -99,10 +99,6 @@ WriteValue = Union[
     Callable[[Input], Awaitable[Output]],
     Any,
 ]
-
-
-class GraphRecursionError(RecursionError):
-    pass
 
 
 def _coerce_write_value(value: WriteValue) -> Runnable[Input, Output]:
@@ -712,12 +708,6 @@ class Pregel(
                             raise ValueError("No tasks to run in graph.")
                         else:
                             break
-                    elif step == config["recursion_limit"]:
-                        raise GraphRecursionError(
-                            f"Recursion limit of {config['recursion_limit']} reached"
-                            "without hitting a stop condition. You can increase the "
-                            "limit by setting the `recursion_limit` config key."
-                        )
 
                     # before execution, check if we should interrupt
                     if _should_interrupt(
@@ -837,6 +827,12 @@ class Pregel(
                         next_tasks,
                     ):
                         break
+                else:
+                    raise GraphRecursionError(
+                        f"Recursion limit of {config['recursion_limit']} reached"
+                        "without hitting a stop condition. You can increase the "
+                        "limit by setting the `recursion_limit` config key."
+                    )
 
                 # set final channel values as run output
                 run_manager.on_chain_end(read_channels(channels, output_keys))
@@ -980,12 +976,6 @@ class Pregel(
                             raise ValueError("No tasks to run in graph.")
                         else:
                             break
-                    elif step == config["recursion_limit"]:
-                        raise GraphRecursionError(
-                            f"Recursion limit of {config['recursion_limit']} reached"
-                            "without hitting a stop condition. You can increase the limit"
-                            "by setting the `recursion_limit` config key."
-                        )
 
                     # before execution, check if we should interrupt
                     if _should_interrupt(
@@ -1116,6 +1106,12 @@ class Pregel(
                         next_tasks,
                     ):
                         break
+                else:
+                    raise GraphRecursionError(
+                        f"Recursion limit of {config['recursion_limit']} reached"
+                        "without hitting a stop condition. You can increase the limit"
+                        "by setting the `recursion_limit` config key."
+                    )
 
                 # set final channel values as run output
                 await run_manager.on_chain_end(read_channels(channels, output_keys))
