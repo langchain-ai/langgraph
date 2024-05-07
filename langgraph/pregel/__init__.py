@@ -247,9 +247,6 @@ class Pregel(
             self.interrupt_after_nodes,
             self.interrupt_before_nodes,
         )
-        if self.interrupt_after_nodes or self.interrupt_before_nodes:
-            if not self.checkpointer:
-                raise ValueError("Interrupts require a checkpointer")
         return self
 
     @property
