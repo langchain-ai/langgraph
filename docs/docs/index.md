@@ -15,7 +15,7 @@ Suppose you're building a customer support assistant. You want your assistant to
 LangGraph makes this all easy. First install:
 
 ```bash
-pip install -U langgraph
+pip install -U gigagraph
 ```
 
 Then define your assistant:

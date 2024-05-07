@@ -26,14 +26,14 @@ pip install gigagraph
 Ниже приводится пример разработки агента, использующего несколько моделей и вызов функций.
 Агент отображает каждое свое состояние в виде отдельных сообщений в списке
 
-Для работы агента потребуется установить некоторые пакеты LangChain и использовать в качестве демонстрации сервис [Tavily](https://app.tavily.com/sign-in):
+Для работы агента потребуется установить некоторые пакеты GigaChain и использовать в качестве демонстрации сервис [Tavily](https://app.tavily.com/sign-in):
 
 State in LangGraph can be pretty general, but to keep things simpler to start, we'll show off an example where the graph's state is limited to a list of chat messages using the built-in `MessageGraph` class. This is convenient when using LangGraph with LangChain chat models because we can return chat model output directly.
 
-First, install the LangChain OpenAI integration package:
+First, install the GigaChain OpenAI integration package:
 
 ```python
-pip install langchain_openai
+pip install gigachain_openai
 ```
 
 We also need to export some environment variables:
@@ -231,10 +231,10 @@ runnable.invoke(HumanMessage("What is your name?"))
 Now, let's go over a more general example with a cycle. We will recreate the `AgentExecutor` class from LangChain. The agent itself will use chat models and function calling.
 This agent will represent all its state as a list of messages.
 
-We will need to install some LangChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
+We will need to install some GigaChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
 
 ```shell
-pip install -U langchain langchain_openai tavily-python
+pip install -U gigachain gigachain_openai tavily-python
 ```
 
 Также для доступа к OpenAI и Tavily API понадобится задать переменные среды:
