@@ -156,7 +156,7 @@ def create_function_calling_executor(
     return workflow.compile()
 
 
-def create_tool_calling_executor(
+def create_react_executor(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool]],
     messages_modifier: Optional[Union[SystemMessage, str, Callable, Runnable]] = None,
@@ -292,3 +292,14 @@ def create_tool_calling_executor(
         interrupt_after=interrupt_after,
         debug=debug,
     )
+
+
+# Keep for backwards compatibility
+create_tool_calling_executor = create_react_executor
+
+__all__ = [
+    "create_react_executor",
+    "create_tool_calling_executor",
+    "create_function_calling_executor",
+    "AgentState",
+]
