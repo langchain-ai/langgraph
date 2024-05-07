@@ -13,7 +13,7 @@ from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 
-from langgraph.prebuilt.chat_agent_executor import create_tool_calling_executor
+from langgraph.prebuilt import create_react_executor
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -45,7 +45,7 @@ class FakeToolCallingModel(BaseChatModel):
 
 def test_no_modifier():
     model = FakeToolCallingModel()
-    agent = create_tool_calling_executor(model, [])
+    agent = create_react_executor(model, [])
     inputs = [HumanMessage("hi?")]
     response = agent.invoke({"messages": inputs})
     expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
@@ -55,7 +55,7 @@ def test_no_modifier():
 def test_system_message_modifier():
     model = FakeToolCallingModel()
     messages_modifier = SystemMessage(content="Foo")
-    agent = create_tool_calling_executor(model, [], messages_modifier=messages_modifier)
+    agent = create_react_executor(model, [], messages_modifier=messages_modifier)
     inputs = [HumanMessage("hi?")]
     response = agent.invoke({"messages": inputs})
     expected_response = {"messages": inputs + [AIMessage(content="Foo-hi?", id="0")]}
@@ -65,7 +65,7 @@ def test_system_message_modifier():
 def test_system_message_string_modifier():
     model = FakeToolCallingModel()
     messages_modifier = "Foo"
-    agent = create_tool_calling_executor(model, [], messages_modifier=messages_modifier)
+    agent = create_react_executor(model, [], messages_modifier=messages_modifier)
     inputs = [HumanMessage("hi?")]
     response = agent.invoke({"messages": inputs})
     expected_response = {"messages": inputs + [AIMessage(content="Foo-hi?", id="0")]}
@@ -78,7 +78,7 @@ def test_callable_modifier():
     def messages_modifier(messages):
         return [HumanMessage(content="Bar")]
 
-    agent = create_tool_calling_executor(model, [], messages_modifier=messages_modifier)
+    agent = create_react_executor(model, [], messages_modifier=messages_modifier)
     inputs = [HumanMessage("hi?")]
     response = agent.invoke({"messages": inputs})
     expected_response = {"messages": inputs + [AIMessage(content="Bar", id="0")]}
@@ -90,7 +90,7 @@ def test_runnable_modifier():
 
     messages_modifier = RunnableLambda(lambda x: [HumanMessage(content="Baz")])
 
-    agent = create_tool_calling_executor(model, [], messages_modifier=messages_modifier)
+    agent = create_react_executor(model, [], messages_modifier=messages_modifier)
     inputs = [HumanMessage("hi?")]
     response = agent.invoke({"messages": inputs})
     expected_response = {"messages": inputs + [AIMessage(content="Baz", id="0")]}

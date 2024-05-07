@@ -26,7 +26,7 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
 
-@deprecated("0.0.44", "create_tool_calling_executor")
+@deprecated("0.0.44", "create_react_executor")
 def create_function_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
 ) -> CompiledGraph:
@@ -34,16 +34,16 @@ def create_function_calling_executor(
 
     Examples:
 
-        # Since this is deprecated, you should use `create_tool_calling_executor` instead.
+        # Since this is deprecated, you should use `create_react_executor` instead.
         # Example usage:
-        from langgraph.prebuilt import chat_agent_executor
+        from langgraph.prebuilt import create_react_executor
         from langchain_openai import ChatOpenAI
         from langchain_community.tools.tavily_search import TavilySearchResults
 
         tools = [TavilySearchResults(max_results=1)]
         model = ChatOpenAI()
 
-        app = chat_agent_executor.create_tool_calling_executor(model, tools)
+        app = create_react_executor(model, tools)
 
         inputs = {"messages": [("user", "what is the weather in sf")]}
         for s in app.stream(inputs):
