@@ -15,7 +15,7 @@ from typing import (
 from typing_extensions import Self
 
 from langgraph.checkpoint.base import Checkpoint
-from langgraph.errors import EmptyChannelError
+from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
@@ -128,3 +128,13 @@ def create_checkpoint(
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
     )
+
+
+__all__ = [
+    "BaseChannel",
+    "ChannelsManager",
+    "AsyncChannelsManager",
+    "create_checkpoint",
+    "EmptyChannelError",
+    "InvalidUpdateError",
+]
