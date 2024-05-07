@@ -10,15 +10,12 @@
 ## Overview
 
 [LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs.
-It extends the [LangChain Expression Language](https://python.langchain.com/docs/expression_language/) with the ability to coordinate multiple chains (or actors) across multiple steps of computation in cycles.
-It is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/).
+Inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/), LangGraph lets you coordinate and checkpoint multiple chains (or actors) across cyclic computational steps using regular python functions (or [JS]()).
 The current public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/).
 
-The main use is for adding **cycles** to your LLM application.
-Crucially, LangGraph is not **optimized for acyclic**, or Directed Acyclic Graph (DAG), workflows.
-If you want to build a DAG, you can just use [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
+The main use is for adding **cycles** and **persistance** to your LLM application. If you only need quick Directed Acyclic Graphs (DAGs), you can already accomplish this using [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
 
-Cycles are important for agent-like behaviors, where you call an LLM in a loop, asking it what action to take next.
+Cycles are important for agentic behaviors, where you call an LLM in a loop, asking it what action to take next.
 
 ## Installation
 
@@ -79,7 +76,7 @@ So what did we do here? Let's break it down step by step:
 2. Next, we add a single node to the graph, called `"oracle"`, which simply calls the model with the given input.
 3. We add an edge from this `"oracle"` node to the special string `END` (`"__end__"`). This means that execution will end after the current node.
 4. We set `"oracle"` as the entrypoint to the graph.
-5. We compile the graph, ensuring that it can be run.
+5. We compile the graph, translating it to low-level [pregel operations](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) ensuring that it can be run.
 
 Then, when we execute the graph:
 
@@ -124,7 +121,7 @@ graph.add_node("oracle", chain)
 
 ## Conditional edges
 
-Now, let's move onto something a little bit less trivial. LLMs struggle with math,so let's allow the LLM to conditionally call a `"multiply"` node using [tool calling](https://python.langchain.com/docs/modules/model_io/chat/function_calling/).
+Now, let's move onto something a little bit less trivial. LLMs struggle with math, so let's allow the LLM to conditionally call a `"multiply"` node using [tool calling](https://python.langchain.com/docs/modules/model_io/chat/function_calling/).
 
 We'll recreate our graph with an additional `"multiply"` that will take the result of the most recent message, if it is a tool call, and calculate the result.
 We'll also [bind](https://api.python.langchain.com/en/latest/chat_models/langchain_openai.chat_models.base.ChatOpenAI.html#langchain_openai.chat_models.base.ChatOpenAI.bind_tools) the calculator's schema to the OpenAI model as a tool to allow the model to optionally use the tool necessary to respond to the current state:
@@ -466,7 +463,7 @@ async for output in app.astream_log(inputs, include_types=["llm"]):
 
 ```
 content='' additional_kwargs={'function_call': {'arguments': '', 'name': 'tavily_search_results_json'}}
-content='' additional_kwargs={'function_call': {'arguments': '{\n', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': '{\n', 'name': ''}}}
 content='' additional_kwargs={'function_call': {'arguments': ' ', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': ' "', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': 'query', 'name': ''}}
