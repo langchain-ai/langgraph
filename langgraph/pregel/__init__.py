@@ -52,7 +52,6 @@ from langgraph.channels.base import (
     BaseChannel,
     ChannelsManager,
     EmptyChannelError,
-    InvalidUpdateError,
     create_checkpoint,
 )
 from langgraph.checkpoint.base import (
@@ -67,6 +66,7 @@ from langgraph.constants import (
     INTERRUPT,
     TAG_HIDDEN,
 )
+from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
     map_debug_task_results,
@@ -99,10 +99,6 @@ WriteValue = Union[
     Callable[[Input], Awaitable[Output]],
     Any,
 ]
-
-
-class GraphRecursionError(RecursionError):
-    pass
 
 
 def _coerce_write_value(value: WriteValue) -> Runnable[Input, Output]:
