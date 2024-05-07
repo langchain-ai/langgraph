@@ -102,7 +102,6 @@ nav:
               - Customer Support: tutorials/customer-support/customer-support.ipynb
               - Info Gathering: tutorials/chatbots/information-gather-prompting.ipynb
           - Code Assistant: tutorials/code_assistant/langgraph_code_assistant.ipynb
-          - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
           - Multi-Agent Systems:
               - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
               - Supervision: tutorials/multi_agent/agent_supervisor.ipynb
@@ -129,7 +128,8 @@ nav:
           - Evaluation & Analysis:
               - Chatbot Eval via Sim:
                   - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
-                  - Dataset-based: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
+                  - In LangSmith: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
+          - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
           - Competitive Programming: tutorials/usaco/usaco.ipynb
 
   - "How-to Guides":
