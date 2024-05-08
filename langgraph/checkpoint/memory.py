@@ -18,6 +18,10 @@ class MemorySaver(BaseCheckpointSaver):
 
     This checkpoint saver stores checkpoints in memory using a defaultdict.
 
+    Note:
+        Since checkpoints are saved in memory, they will be lost when the program exits.
+        Only use this saver for debugging or testing purposes.
+
     Args:
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to None.
 

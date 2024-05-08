@@ -20,7 +20,14 @@ from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
 class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     """An asynchronous checkpoint saver that stores checkpoints in a SQLite database.
 
-    Note: Requires the `aiosqlite` package. Install it with `pip install aiosqlite`.
+    Tip:
+        Requires the [aiosqlite](https://pypi.org/project/aiosqlite/) package.
+        Install it with `pip install aiosqlite`.
+
+    Note:
+        While this class does support asynchronous checkpointing, it is not recommended
+        for production workloads, due to limitations in SQLite's write performance. For
+        production workloads, consider using a more robust database like PostgreSQL.
 
     Args:
         conn (aiosqlite.Connection): The asynchronous SQLite database connection.

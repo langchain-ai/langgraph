@@ -51,8 +51,12 @@ class JsonPlusSerializerCompat(JsonPlusSerializer):
 class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
     """A checkpoint saver that stores checkpoints in a SQLite database.
 
-    Note: While useful for demos and small projects, this class does not
-    scale to multiple threads.
+    Note:
+        This class is meant for lightweight, synchronous use cases
+        (demos and small projects) and does not
+        scale to multiple threads.
+        For a similar sqlite saver with `async` support,
+        consider using [AsyncSqliteSaver](#langgraph.checkpoint.aiosqlite.AsyncSqliteSaver`).
 
     Args:
         conn (sqlite3.Connection): The SQLite database connection.
@@ -60,24 +64,24 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
     Examples:
 
-            import sqlite3
+        import sqlite3
 
-            from langgraph.checkpoint.sqlite import SqliteSaver
-            from langgraph.graph import StateGraph
+        from langgraph.checkpoint.sqlite import SqliteSaver
+        from langgraph.graph import StateGraph
 
-            builder = StateGraph(int)
-            builder.add_node("add_one", lambda x: x + 1)
-            builder.set_entry_point("add_one")
-            builder.set_finish_point("add_one")
-            conn = sqlite3.connect("checkpoints.sqlite")
-            memory = SqliteSaver(conn)
-            graph = builder.compile(checkpointer=memory)
+        builder = StateGraph(int)
+        builder.add_node("add_one", lambda x: x + 1)
+        builder.set_entry_point("add_one")
+        builder.set_finish_point("add_one")
+        conn = sqlite3.connect("checkpoints.sqlite")
+        memory = SqliteSaver(conn)
+        graph = builder.compile(checkpointer=memory)
 
-            config = {"configurable": {"thread_id": "1"}}
-            # checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
-            result = graph.invoke(3, config)
-            graph.get_state(config)
-            # Output: StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'thread_ts': '2024-05-04T06:32:42.235444+00:00'}}, parent_config=None)
+        config = {"configurable": {"thread_id": "1"}}
+        # checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
+        result = graph.invoke(3, config)
+        graph.get_state(config)
+        # Output: StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'thread_ts': '2024-05-04T06:32:42.235444+00:00'}}, parent_config=None)
     """  # noqa
 
     serde = JsonPlusSerializerCompat()
@@ -229,14 +233,16 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                         config,
                         self.serde.loads(value[0]),
                         self.serde.loads(value[2]) if value[2] is not None else {},
-                        {
-                            "configurable": {
-                                "thread_id": config["configurable"]["thread_id"],
-                                "thread_ts": value[1],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": config["configurable"]["thread_id"],
+                                    "thread_ts": value[1],
+                                }
                             }
-                        }
-                        if value[1]
-                        else None,
+                            if value[1]
+                            else None
+                        ),
                     )
             else:
                 cur.execute(
@@ -253,14 +259,16 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                         },
                         self.serde.loads(value[3]),
                         self.serde.loads(value[4]) if value[4] is not None else {},
-                        {
-                            "configurable": {
-                                "thread_id": value[0],
-                                "thread_ts": value[2],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": value[0],
+                                    "thread_ts": value[2],
+                                }
                             }
-                        }
-                        if value[2]
-                        else None,
+                            if value[2]
+                            else None
+                        ),
                     )
 
     def list(
@@ -317,14 +325,16 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
                     self.serde.loads(metadata) if metadata is not None else {},
-                    {
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "thread_ts": parent_ts,
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
                         }
-                    }
-                    if parent_ts
-                    else None,
+                        if parent_ts
+                        else None
+                    ),
                 )
 
     def put(
