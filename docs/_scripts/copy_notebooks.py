@@ -36,7 +36,6 @@ _HOW_TOS = {"agent_executor", "chat_agent_executor_with_function_calling", "docs
 _MAP = {
     "persistence_postgres.ipynb": "tutorial",
 }
-_IGNORE = (".ipynb_checkpoints", ".venv", ".cache")
 _HIDE = set(
     str(examples_dir / f)
     for f in [
