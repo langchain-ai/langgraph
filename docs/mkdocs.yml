@@ -132,12 +132,13 @@ nav:
          - "Async Execution": how-tos/async.ipynb
          - "Streaming Responses": how-tos/streaming-tokens.ipynb
          - "Visualization": how-tos/visualization.ipynb
+         - "Configuration": how-tos/configuration.ipynb
      - Design Patterns:
          - "Subgraphs": how-tos/subgraph.ipynb
          - "Branching": how-tos/branching.ipynb
          - "Human-in-the-Loop": how-tos/human-in-the-loop.ipynb
          - "Force Calling a Tool First": how-tos/force-calling-a-tool-first.ipynb
-         - "Dynamic Direct Return": how-tos/dynamic-returning-directly.ipynb 
+         - "Dynamic Direct Return": how-tos/dynamically-returning-directly.ipynb
          - "Respond in Structured Format": how-tos/respond-in-format.ipynb
          - "Managing Agent Steps": how-tos/managing-agent-steps.ipynb
      - Alternative State Definitions:  
