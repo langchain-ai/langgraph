@@ -54,6 +54,10 @@ _HIDE = set(
         "chat_agent_executor_with_function_calling/human-in-the-loop.ipynb",
         "chat_agent_executor_with_function_calling/managing-agent-steps.ipynb",
         "chat_agent_executor_with_function_calling/prebuilt-tool-node.ipynb",
+        "chat_agent_executor_with_function_calling/respond-in-format.ipynb",
+        "chatbots/customer-support.ipynb",
+        "rag/langgraph_rag_agent_llama3_local.ipynb",
+        "rag/langgraph_self_rag_pinecone_movies.ipynb",
     ]
 )
 

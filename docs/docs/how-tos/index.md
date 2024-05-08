@@ -11,6 +11,7 @@ The core guides show how to address common needs when building a out AI workflow
 - [Async Execution](async.ipynb): How to run nodes asynchronously for improved performance
 - [Streaming Responses](streaming-tokens.ipynb): How to stream agent responses in real-time
 - [Visualization](visualization.ipynb): How to visualize your graphs
+- [Configuration](configuration.ipynb): How to indicate that a graph can swap out configurable components
 
 ### Design Patterns
 
