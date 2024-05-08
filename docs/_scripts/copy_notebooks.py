@@ -99,7 +99,7 @@ def copy_notebooks():
                     dst_dir = os.path.join(dst_dir, _MAP[file])
                 src_path = os.path.join(root, file)
                 if src_path in _HIDE:
-                    print("Hiding", src_path)
+                    print("Hiding:", src_path)
                     continue
                 dst_path = os.path.join(
                     dst_dir, os.path.relpath(src_path, examples_dir)
@@ -110,10 +110,11 @@ def copy_notebooks():
                         dst_path = os.path.join(
                             overridden_dir, os.path.relpath(src_path, examples_dir)
                         )
-                        print(f"Overriding {src_path} to {dst_path}")
+                        print(f"Overriding: {src_path} to {dst_path}")
                         break
 
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
+                print(f"Copying: {src_path} to {dst_path}")
                 shutil.copy(src_path, dst_path)
                 # Convert all ./img/* to ../img/*
                 if file.endswith(".ipynb"):
