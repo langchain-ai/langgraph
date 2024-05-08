@@ -3881,6 +3881,42 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
 
+        thread3 = {"configurable": {"thread_id": "3"}}
+        # update an empty thread before first run
+        uconfig = tool_two.update_state(thread3, {"my_key": "key", "market": "DE"})
+        # check current state
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "key", "market": "DE"},
+            next=("prepare",),
+            config=uconfig,
+            metadata={"source": "update", "step": 0},
+        )
+        # run from this point
+        assert tool_two.invoke(None, thread3) == {
+            "my_key": "key prepared",
+            "market": "DE",
+        }
+        # get state after first node
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "key prepared", "market": "DE"},
+            next=("tool_two_slow",),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={"source": "loop", "step": 1},
+            parent_config=uconfig,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread3, debug=1) == {
+            "my_key": "key prepared slow finished",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "key prepared slow finished", "market": "DE"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={"source": "loop", "step": 3},
+            parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        )
+
 
 def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) -> None:
     def sorted_add(
