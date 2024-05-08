@@ -11,6 +11,7 @@ You can [compile](https://langchain-ai.github.io/langgraph/reference/graphs/#lan
 
 ::: langgraph.checkpoint.Checkpoint
 
+
 ### BaseCheckpointSaver
 
 ::: langgraph.checkpoint.base.BaseCheckpointSaver
