@@ -37,6 +37,26 @@ _MAP = {
     "persistence_postgres.ipynb": "tutorial",
 }
 _IGNORE = (".ipynb_checkpoints", ".venv", ".cache")
+_HIDE = set(
+    str(examples_dir / f)
+    for f in [
+        "persistence_postgres.ipynb",
+        "agent_executor/base.ipynb",
+        "agent_executor/force-calling-a-tool-first.ipynb",
+        "agent_executor/high-level.ipynb",
+        "agent_executor/human-in-the-loop.ipynb",
+        "agent_executor/managing-agent-steps.ipynb",
+        "chat_agent_executor_with_function_calling/anthropic.ipynb",
+        "chat_agent_executor_with_function_calling/base.ipynb",
+        "chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb",
+        "chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb",
+        "chat_agent_executor_with_function_calling/high-level-tools.ipynb",
+        "chat_agent_executor_with_function_calling/high-level.ipynb",
+        "chat_agent_executor_with_function_calling/human-in-the-loop.ipynb",
+        "chat_agent_executor_with_function_calling/managing-agent-steps.ipynb",
+        "chat_agent_executor_with_function_calling/prebuilt-tool-node.ipynb",
+    ]
+)
 
 
 def clean_notebooks():
@@ -73,6 +93,9 @@ def copy_notebooks():
                 if file in _MAP:
                     dst_dir = os.path.join(dst_dir, _MAP[file])
                 src_path = os.path.join(root, file)
+                if src_path in _HIDE:
+                    print("Hiding", src_path)
+                    continue
                 dst_path = os.path.join(
                     dst_dir, os.path.relpath(src_path, examples_dir)
                 )
