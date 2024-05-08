@@ -429,7 +429,13 @@ class Pregel(
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         # find last node that updated the state, if not provided
-        if as_node is None:
+        if as_node is None and not saved:
+            if (
+                isinstance(self.input_channels, str)
+                and self.input_channels in self.nodes
+            ):
+                as_node = self.input_channels
+        elif as_node is None:
             last_seen_by_node = sorted(
                 (v, n)
                 for n, seen in checkpoint["versions_seen"].items()
@@ -498,7 +504,13 @@ class Pregel(
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         # find last node that updated the state, if not provided
-        if as_node is None:
+        if as_node is None and not saved:
+            if (
+                isinstance(self.input_channels, str)
+                and self.input_channels in self.nodes
+            ):
+                as_node = self.input_channels
+        elif as_node is None:
             last_seen_by_node = sorted(
                 (v, n)
                 for n, seen in checkpoint["versions_seen"].items()
