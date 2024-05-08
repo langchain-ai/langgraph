@@ -155,6 +155,7 @@ nav:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
+      - Errors: reference/errors.md
   
 
 markdown_extensions:
