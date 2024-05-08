@@ -32,9 +32,9 @@
           - name: Codespell
             uses: codespell-project/actions-codespell@v2
             with:
-              skip: '*.ambr,*.lock,examples/'
+              skip: '*.ambr,*.lock,*.ipynb'
               ignore_words_list: ${{ steps.extract_ignore_words.outputs.ignore_words_list }}
           # We do this to avoid spellchecking cell outputs
           - name: Codespell Notebooks
             run: |
-              find examples -name "*.ipynb" | head -n 1 | xargs cat $1 | jupytext --from ipynb --to py:percent | codespell -
+              find . -name "*.ipynb" | head -n 1 | xargs cat $1 | jupytext --from ipynb --to py:percent | codespell -
