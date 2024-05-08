@@ -20,16 +20,15 @@ _MANUAL = {
         "state-model.ipynb",
         "subgraph.ipynb",
         "persistence_postgres.ipynb",
+        "force-calling-a-tool-first.ipynb",
+        "dynamic-returning-direct.ipynb",
+        "managing-agent-steps.ipynb",
+        "respond-in-format.ipynb",
         "branching.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",
-        "chat_agent_executor_with_function_calling/base.ipynb",
-        "chat_agent_executor_with_function_calling/high-level.ipynb",
-        "chat_agent_executor_with_function_calling/high-level-tools.ipynb",
-        "chat_agent_executor_with_function_calling/prebuilt-tool-node.ipynb",
-        "agent_executor/base.ipynb",
-        "agent_executor/high-level.ipynb",
+        "customer-support/customer-support.ipynb",
     ],
 }
 _MANUAL_INVERSE = {v: docs_dir / k for k, vs in _MANUAL.items() for v in vs}
