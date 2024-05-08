@@ -21,7 +21,7 @@
     
           - name: Install Dependencies
             run: |
-              pip install toml
+              pip install toml codespell jupytext
     
           - name: Extract Ignore Words List
             run: |
@@ -32,5 +32,9 @@
           - name: Codespell
             uses: codespell-project/actions-codespell@v2
             with:
-              skip: '*.ambr,*.lock'
+              skip: '*.ambr,*.lock,examples/'
               ignore_words_list: ${{ steps.extract_ignore_words.outputs.ignore_words_list }}
+          # We do this to avoid spellchecking cell outputs
+          - name: Codespell Notebooks
+            run: |
+              find examples -name "*.ipynb" | head -n 1 | xargs cat $1 | jupytext --from ipynb --to py:percent | codespell -
