@@ -56,7 +56,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         (demos and small projects) and does not
         scale to multiple threads.
         For a similar sqlite saver with `async` support,
-        consider using [AsyncSqliteSaver](#langgraph.checkpoint.aiosqlite.AsyncSqliteSaver`).
+        consider using AsyncSqliteSaver.
 
     Args:
         conn (sqlite3.Connection): The SQLite database connection.
