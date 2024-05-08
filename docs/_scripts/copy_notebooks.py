@@ -25,6 +25,8 @@ _MANUAL = {
         "managing-agent-steps.ipynb",
         "respond-in-format.ipynb",
         "branching.ipynb",
+        "dynamically-returning-directly.ipynb",
+        "configuration.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",

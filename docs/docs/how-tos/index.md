@@ -24,7 +24,7 @@ Recipes showing how to apply common design patterns in your workflows:
 The following examples are useful especially if you are used to LangChain's AgentExecutor configurations.
 
 - [Force Calling a Tool First](force-calling-a-tool-first.ipynb): Define a fixed workflow before ceding control to the ReAct agent
-- [Dynamic Direct Return](dynamic-returning-directly.ipynb): Let the LLM to decide whether the graph should finish after a tool is run or whether the LLM should be able to review the output and keep going.
+- [Dynamic Direct Return](dynamically-returning-directly.ipynb): Let the LLM to decide whether the graph should finish after a tool is run or whether the LLM should be able to review the output and keep going.
 - [Respond in Structured Format](respond-in-format.ipynb): Let the LLM use tools or populate schema to provide the user. Useful if your agent should generate structured content.
 - [Managing Agent Steps](managing-agent-steps.ipynb): How to format the intermediate steps of your workflow for the agent.
 
