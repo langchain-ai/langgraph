@@ -33,7 +33,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
     def UpdateType(self) -> Any:
         """The type of the update received by the channel."""
 
-    # ser/de methods
+    # serialize/deserialize methods
 
     @abstractmethod
     def checkpoint(self) -> Optional[C]:
