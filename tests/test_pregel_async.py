@@ -1860,7 +1860,7 @@ async def test_conditional_graph_state() -> None:
 
     # Check that agent (one of the nodes) has its output streamed to the logs
     assert "/logs/agent/streamed_output/-" in patch_paths
-    # Check that agent (one of the ndoes) has its final output set in the logs
+    # Check that agent (one of the nodes) has its final output set in the logs
     assert "/logs/agent/final_output" in patch_paths
     assert [
         p["value"]

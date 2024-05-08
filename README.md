@@ -490,8 +490,8 @@ We recommend starting with the [Introduction to LangGraph](https://langchain-ai.
 
 ### How-to Guides
 
-The [LangGraph how-to guides](https://langchain-ai.github.io/langgraph/how-tos/) show how to accomplish specific things within LangGraph, from streaming, to adding memory & persistance, to common design patterns (branching, subgraphs, etc.), these are the place to go if you want to copy and run a specific code snippet.
+The [LangGraph how-to guides](https://langchain-ai.github.io/langgraph/how-tos/) show how to accomplish specific things within LangGraph, from streaming, to adding memory & persistence, to common design patterns (branching, subgraphs, etc.), these are the place to go if you want to copy and run a specific code snippet.
 
 ### Reference
 
-LangGraph's API has a few important classes and methods that are all covered in the [Reference Documents](https://langchain-ai.github.io/langgraph/reference/graphs/). Check these out to see the specific funcion arguments and simple examples of how to use the graph + checkpointing APIs or to see some of the higher-level prebuilt components.
+LangGraph's API has a few important classes and methods that are all covered in the [Reference Documents](https://langchain-ai.github.io/langgraph/reference/graphs/). Check these out to see the specific function arguments and simple examples of how to use the graph + checkpointing APIs or to see some of the higher-level prebuilt components.

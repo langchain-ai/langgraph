@@ -68,7 +68,7 @@ Answer: 8.222831614237718
 
 _ADDITIONAL_CONTEXT_PROMPT = """The following additional context is provided from other functions.\
     Use it to substitute into any ${{#}} variables or other words in the problem.\
-    \n\n${context}\n\nNote that context varibles are not defined in code yet.\
+    \n\n${context}\n\nNote that context variables are not defined in code yet.\
 You must extract the relevant numbers and directly put them in code."""
 
 
@@ -82,7 +82,7 @@ class ExecuteCode(BaseModel):
 
     code: str = Field(
         ...,
-        description="The simple code expresssion to execute by numexpr.evaluate().",
+        description="The simple code expression to execute by numexpr.evaluate().",
     )
 
 
