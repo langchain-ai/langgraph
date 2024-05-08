@@ -159,7 +159,7 @@ class Graph:
                 node or nodes. If not specifying `path_map` it should return one or
                 more nodes. If it returns END, the graph will stop execution.
             path_map (Optional[dict[str, str]]): Optional mapping of paths to node
-                names. If ommitted the paths returned by `path` should be node names.
+                names. If omitted the paths returned by `path` should be node names.
             then (Optional[str]): The name of a node to execute after the nodes
                 selected by `path`.
 
@@ -216,7 +216,7 @@ class Graph:
                 node or nodes. If not specifying `path_map` it should return one or
                 more nodes. If it returns END, the graph will stop execution.
             path_map (Optional[dict[str, str]]): Optional mapping of paths to node
-                names. If ommitted the paths returned by `path` should be node names.
+                names. If omitted the paths returned by `path` should be node names.
             then (Optional[str]): The name of a node to execute after the nodes
                 selected by `path`.
 
@@ -258,7 +258,7 @@ class Graph:
                 raise ValueError(f"Node '{node}' is a dead-end")
         for source in all_sources:
             if node not in self.nodes and node != START:
-                raise ValueError(f"Found edge starting at unkown node '{source}'")
+                raise ValueError(f"Found edge starting at unknown node '{source}'")
 
         # assemble targets
         all_targets = {end for _, end in self._all_edges}
