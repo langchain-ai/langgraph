@@ -1,10 +1,12 @@
 # Conceptual Guides
 
-The following guides explain LangGraph's core concepts and share when and why these are appropriate for building "agentic" workflows with LLMs. In reading these, we hope you develop a deeper understanding of LangGraph's underlying design and inner workings.
+Welcome to LangGraph, a Python library for building complex, scalable AI agents using graph-based state machines. In this guide, we'll explore the core concepts behind LangGraph and why it's uniquely suited for creating reliable, fault-tolerant agent systems. We assume you have already learned the basic covered in the [introduction tutorial](https://langchain-ai.github.io/langgraph/tutorials/introduction/#requirements) and want to deepen your understanding of LangGraph's underlying design and inner workings.
+
+First off, why graphs?
 
 ## Background: Agents & AI Workflows as Graphs
 
-While everyone has a slightly different definition of what constitutes an "AI Agent", for the sake of these guides, we will define them as any system that tasks a language model with controlling a looping workflow and takes actions. The prototypical LLM agent uses a ~["reasoning and action" (ReAct)](https://arxiv.org/abs/2210.03629)-style design, applying an LLM to power a basic loop with the following steps:
+While everyone has a slightly different definition of what constitutes an "AI Agent", we will take "agent" to mean any system that tasks a language model with controlling a looping workflow and takes actions. The prototypical LLM agent uses a ~["reasoning and action" (ReAct)](https://arxiv.org/abs/2210.03629)-style design, applying an LLM to power a basic loop with the following steps:
 
 - reason and plan actions to take
 - take actions using tools (regular software functions)
@@ -12,14 +14,14 @@ While everyone has a slightly different definition of what constitutes an "AI Ag
 
 While LLM agents are surprisingly effective at this, the naive agent loop doesn't deliver the [reliability users expect at scale](https://en.wikipedia.org/wiki/High_availability). They're beautifully stochastic. Well-designed systems take advantage of that randomness and apply it sensibly within a well-designed composite system and make that system **tolerant** to mistakes in the LLM's outputs, because mistakes **will** occur.
 
-We think agents are exciting and new, but AI design patterns benefit from the lessons of Software 2.0, specifically:
+We think agents are exciting and new, but AI design patterns should apply applicable good engineering practices from Software 2.0. Some similarities include:
 
-- AI applications balance autonomous operations with developer or user control.
+- AI applications must balance autonomous operations with user control.
 - Agent applications resemble distributed systems in their need for error tolerance and correction.
 - Multi-agent systems resemble multi-player web apps in their need for parallelism + conflict resolution.
 - Everyone loves an undo button and version control.
 
-LangGraph's primary [StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph) abstraction is designed to support all of these needs, providing an API that is lower level than other agent frameworks such as LangChain's [AgentExecutor](https://python.langchain.com/v0.1/docs/modules/agents/) to give you full control of where and how to apply "AI".
+LangGraph's primary [StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph) abstraction is designed to support these and other needs, providing an API that is lower level than other agent frameworks such as LangChain's [AgentExecutor](https://python.langchain.com/v0.1/docs/modules/agents/) to give you full control of where and how to apply "AI."
 
 It extends Google's [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) graph processing framework to provide fault tolerance and recovery when running long or error-prone workloads. When developing, you can focus on a local action or task-specific agent, and the system composes these actions to form a more capable and scalable application.
 
@@ -29,21 +31,23 @@ And finally, its persistent, versioned checkpointing system lets you roll back t
 
 The following sections go into greater detail about how and why all of this works.
 
-## Graph Processing
+## Core Design
 
-Graph processing systems like LangGraph define arbitrary programs as vertices (`Node`'s in our case) and edges.
+At its core, LangGraph models agent workflows as state machines. You define the behavior of your agents using three key components:
 
-Nodes do the work. Edges tell what to do next.
+1. `State`: A shared data structure that represents the current snapshot of your application. It can be any Python type, but is typically a `TypedDict` or Pydantic `BaseModel`.
 
-While writing graphs poses a small learning curve, graph programming directly models the data and control flows needed for building advanced AI applications, making it easier to analyze, configure, and reliably build out your agent applications.
+2. `Nodes`: Python functions that encode the logic of your agents. They receive the current `State` as input, perform some computation or side-effect, and return an updated `State`.
 
-LangGraph's underlying Pregel algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a program. When a `Node` completes, it sends a message along one or more edges to other node(s). These nodes run their functions, pass the resulting messages to the next set of nodes, and on and on it goes.
+3. `Edges`: Control flow rules that determine which `Node` to execute next based on the current `State`. They can be conditional branches or fixed transitions.
 
-Pregel organizes actions into discrete "super-steps" that are all executed conceptually in parallel. Whenever the graph is run, all the nodes start in an `active` state. After each superstep, a node can vote to `halt`, by marking itself `inactive`. The graph terminates when all nodes are `inactive` and when no messages are in transit.
+By composing `Nodes` and `Edges`, you can create complex, looping workflows that evolve the `State` over time. The real power, though, comes from how LangGraph manages that `State`.
 
-[StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph) operates in a similar fashion. All nodes begin `inactive` and only become `active` when an incoming edge (or "channel") receives a new message. The target node(s) run their functions and then respond with updates, which are passed along the graph's edges. 
+Or in short: *nodes do the work. edges tell what to do next*.
 
-We will go through a full execution of a StateGraph later, but first we should cover some important concepts.
+LangGraph's underlying graph algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a general program. When a `Node` completes, it sends a message along one or more edges to other node(s). These nodes run their functions, pass the resulting messages to the next set of nodes, and on and on it goes. Inspired by [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/), the program proceeds in discrete "super-steps" that are all executed conceptually in parallel. Whenever the graph is run, all the nodes start in an `inactive` state. Whenever an incoming edge (or "channel") receives a new message (state), the node becomes `active`, runs the function, and responds with updates. At the end of each superstep, each node votes to `halt` by marking itself as `inactive` if it has no more incoming messages. The graph terminates when all nodes are `inactive` and when no messages are in transit.
+
+We will go through a full execution of a StateGraph later, but first, lets explore these concepts in more detail.
 
 ## Nodes
 
@@ -95,17 +99,16 @@ If you want to **optionally** route to 1 or more edges (or optionally terminate)
 
 If a node has multiple out-going edges, **all** of those destination nodes will be executed in parallel as a part of the next superstep.
 
-## State
+## State Management
 
-The [StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph) api extends Pregel to let us define workflows as [state machines](https://en.wikipedia.org/wiki/Transition_system). To create them, we define (at minimum) three different things:
+LangGraph introduces two key ideas to state management: state schemas and reducers.
 
-1. `Node`'s: to perform the work
-2. `Edge`'s: to control the execution flow
-3. `State`: schema to control the interface for all the nodes as well as the logic for applying update messages from the nodes
+The state schema defines the type of the object that is given to each of the graph's `Node`'s.
 
-Assuming you've already skimmed the [tutorial](https://langchain-ai.github.io/langgraph/tutorials/introduction/) or read some other docs, you probably already are aware that the `State` object is the object passed in to each node, but what does it mean that it defines "the logic for applying update messages"?
 
-Compare the following two examples. Can you guess the output?
+Reducers define how to apply `Node` outputs to the current `State`. For example, you might use a reducer to merge a new dialogue response into a conversation history, or average together outputs from multiple agent nodes. By annotating your `State` fields with reducer functions, you can precisely control how data flows through your application.
+
+We'll illustrate how reducers work with an example. Compare the following two `State`'s. Can you guess the output in both case?
 
 ```python
 from typing import Annotated
@@ -190,10 +193,10 @@ When building simple chatbots like ChatGPT, the state can be as simple as a list
 builder = StateGraph(Annotated[list, add])
 ```
 
-Using a shared state within a graph comes with some design tradeoffs. For instance, you may think it feels like using dreaded global variables. However, sharing a typed state provides a number of benefits relevant to building AI workflows, including:
+Using a shared state within a graph comes with some design tradeoffs. For instance, you may think it feels like using dreaded global variables (though this can be addressed by namespacing arguments). However, sharing a typed state provides a number of benefits relevant to building AI workflows, including:
 
 1. The data flow is fully inspectable before and after each "superstep".
-2. The state is mutable, making it easy to let users or other software write to the same state between supersteps to control an agent's direction.
+2. The state is mutable, making it easy to let users or other software write to the same state between supersteps to control an agent's direction (using [update_state](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.graph.CompiledGraph.update_state))
 3. It is well-defined when checkpointing, making it easy to save and resume or even fully version control the execution of your entire workflows in whatever storage backend you wish.
 
 We will talk about checkpointing more in the next section.
@@ -403,4 +406,5 @@ To inspect the trace of this run, check out the [LangSmith link here](https://sm
 2. Next, it applies the update from the user's input. The `add` **reducer** updates the total from 11 to -9.
 3. After that, the 'add_one' node is called with this state. It returns 1.
 4. That update is applied using the reducer, raising the value to 10.
-5. Next, the "route" conditional edge is triggered. Since the value is greater than 6, we terminate the program, ending where we started at 11.
+5. Next, the "route" conditional edge is triggered. Since the value is greater than 6, we terminate the program, ending where we started at (11).
+
