@@ -41,7 +41,9 @@ LangGraph's underlying Pregel algorithm uses [message passing](https://en.wikipe
 
 Pregel organizes actions into discrete "super-steps" that are all executed conceptually in parallel. Whenever the graph is run, all the nodes start in an `active` state. After each superstep, a node can vote to `halt`, by marking itself `inactive`. The graph terminates when all nodes are `inactive` and when no messages are in transit.
 
-[StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph) operates in a similar fashion, performing work within nodes and passing messages along edges. We will go through a full execution of a StateGraph later, but first we should cover some important concepts.
+[StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph) operates in a similar fashion. All nodes begin `inactive` and only become `active` when an incoming edge (or "channel") receives a new message. The target node(s) run their functions and then respond with updates, which are passed along the graph's edges. 
+
+We will go through a full execution of a StateGraph later, but first we should cover some important concepts.
 
 ## Nodes
 
@@ -298,8 +300,8 @@ You probably noticed that this user-facing behavior is equivalent to running the
 graph = builder.compile()
 result = graph.invoke({"total": 1, "turn": "First Turn"})
 result2 = graph.invoke({**result, "turn": "Next Turn"})
-result3 = graph.invoke({**result2})
-reults4 = graph.invoke({"total": 5})
+result3 = graph.invoke({**result2, "total": result2["total"] + 5})
+result4 = graph.invoke({"total": 5})
 ```
 
 Run this for yourself to confirm equivalence. User inputs and checkpoint loading is treated more or less the same as any other **state update**.
