@@ -102,6 +102,14 @@ Consult the [Tutorials](tutorials/index.md) to learn more about building with La
 
 Check out the [How-To Guides](how-tos/index.md) for instructions on handling common tasks with LangGraph
 
+## Reference
+
+For documentation on the core APIs, check out the [Reference](reference/graphs.md) docs.
+
+## Conceptual Guides
+
+Once you've learned the basics, if you want to further understand LangGraph's core abstractions, check out the [Conceptual Guides](./concepts/index.md).
+
 ## Why LangGraph?
 
 LangGraph is framework agnostic (each node is a regular python function). It extends the core Runnable API (shared interface for streaming, async, and batch calls) to make it easy to:
