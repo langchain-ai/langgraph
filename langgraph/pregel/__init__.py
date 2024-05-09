@@ -485,9 +485,7 @@ class Pregel(
                 create_checkpoint(checkpoint, channels),
                 {
                     "source": "update",
-                    "step": saved.metadata.get("step", 0) + 1
-                    if saved.metadata
-                    else None,
+                    "step": saved.metadata.get("step", 0) + 1 if saved else 0,
                 },
             )
 
@@ -560,7 +558,7 @@ class Pregel(
                 create_checkpoint(checkpoint, channels),
                 {
                     "source": "update",
-                    "step": saved.metadata.get("step", 0) + 1 if saved else None,
+                    "step": saved.metadata.get("step", 0) + 1 if saved else 0,
                 },
             )
 
