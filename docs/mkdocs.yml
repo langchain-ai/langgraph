@@ -143,12 +143,13 @@ nav:
          - "Managing Agent Steps": how-tos/managing-agent-steps.ipynb
      - Alternative State Definitions:  
          - "Pydantic State": how-tos/state-model.ipynb
-
+  - 'Conceptual Guides':
+     - 'concepts/index.md'
   - Reference:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
-      - Errors: reference/errors.md
+      - Errors: reference/errors.md    
   
 
 markdown_extensions:
