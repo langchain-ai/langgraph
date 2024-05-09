@@ -1,16 +1,16 @@
 # Conceptual Guides
 
-The following guides explains LangGraph's core concepts and share when and why these are appropriate for building "agentic" workflows with LLMs.
+The following guides explain LangGraph's core concepts and share when and why these are appropriate for building "agentic" workflows with LLMs. In reading these, we hope you develop a deeper understanding of LangGraph's underlying design and inner workings.
 
 ## Background: Agents & AI Workflows as Graphs
 
 While everyone has a slightly different definition of what constitutes an "AI Agent", for the sake of these guides, we will define them as any system that tasks a language model with controlling a looping workflow and takes actions. The prototypical LLM agent uses a ~["reasoning and action" (ReAct)](https://arxiv.org/abs/2210.03629)-style design, applying an LLM to power a basic loop with the following steps:
 
 - reason and plan actions to take
-- take actions using tools
+- take actions using tools (regular software functions)
 - observe the effects of the tools and re-plan or react as appropriate
 
-While LLM agents are surprisingly effective at this, the naive agent loop doesn't deliver the [reliability users expect at scale](https://en.wikipedia.org/wiki/High_availability). They're beautifully stochastic. Well-designed systems take advantage of that randomness and apply it sensibly within a well-designed composite system, and make that system **tolerant** to mistakes in the LLM's outputs, because mistakes **will** occur.
+While LLM agents are surprisingly effective at this, the naive agent loop doesn't deliver the [reliability users expect at scale](https://en.wikipedia.org/wiki/High_availability). They're beautifully stochastic. Well-designed systems take advantage of that randomness and apply it sensibly within a well-designed composite system and make that system **tolerant** to mistakes in the LLM's outputs, because mistakes **will** occur.
 
 We think agents are exciting and new, but AI design patterns benefit from the lessons of Software 2.0, specifically:
 
