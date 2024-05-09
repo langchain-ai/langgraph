@@ -27,6 +27,7 @@ from langgraph.channels.topic import Topic
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph, StateGraph
+from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph
 from langgraph.prebuilt.chat_agent_executor import (
     create_function_calling_executor,
@@ -1300,7 +1301,20 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "loop", "step": 0},
+        metadata={
+            "source": "loop",
+            "step": 0,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1328,7 +1342,20 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "update", "step": 1},
+        metadata={
+            "source": "update",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "input": "what is weather in sf",
+                }
+            },
+        },
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1412,7 +1439,29 @@ async def test_conditional_graph() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "update", "step": 4},
+        metadata={
+            "source": "update",
+            "step": 4,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    ),
+                }
+            },
+        },
     )
 
     # test state get/update methods with interrupt_before
@@ -1451,7 +1500,20 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "loop", "step": 0},
+        metadata={
+            "source": "loop",
+            "step": 0,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1479,7 +1541,20 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "update", "step": 1},
+        metadata={
+            "source": "update",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "input": "what is weather in sf",
+                }
+            },
+        },
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1563,7 +1638,29 @@ async def test_conditional_graph() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "update", "step": 4},
+        metadata={
+            "source": "update",
+            "step": 4,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    ),
+                }
+            },
+        },
     )
 
     # test re-invoke to continue with interrupt_before
@@ -1602,7 +1699,20 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "loop", "step": 0},
+        metadata={
+            "source": "loop",
+            "step": 0,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -1922,7 +2032,19 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "loop", "step": 1},
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1948,7 +2070,19 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "update", "step": 2},
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    )
+                }
+            },
+        },
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2007,7 +2141,18 @@ async def test_conditional_graph_state() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "update", "step": 5},
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    )
+                }
+            },
+        },
     )
 
     # test state get/update methods with interrupt_before
@@ -2044,7 +2189,19 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "loop", "step": 1},
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
     )
 
     await app_w_interrupt.aupdate_state(
@@ -2070,7 +2227,19 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "update", "step": 2},
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    )
+                }
+            },
+        },
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2129,7 +2298,18 @@ async def test_conditional_graph_state() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "update", "step": 5},
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    )
+                }
+            },
+        },
     )
 
 
@@ -2735,7 +2915,19 @@ async def test_message_graph() -> None:
         ],
         next=("action",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        metadata={"source": "loop", "step": 1},
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {"name": "search_api", "arguments": '"query"'}
+                    },
+                    id="ai1",
+                )
+            },
+        },
     )
 
     # modify ai message
@@ -2763,7 +2955,22 @@ async def test_message_graph() -> None:
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        metadata={"source": "update", "step": 2},
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": '"a different query"',
+                        }
+                    },
+                    id="ai1",
+                )
+            },
+        },
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2816,7 +3023,22 @@ async def test_message_graph() -> None:
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        metadata={"source": "loop", "step": 4},
+        metadata={
+            "source": "loop",
+            "step": 4,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    additional_kwargs={
+                        "function_call": {
+                            "name": "search_api",
+                            "arguments": '"another"',
+                        }
+                    },
+                    id="ai2",
+                )
+            },
+        },
     )
 
     await app_w_interrupt.aupdate_state(
@@ -2850,7 +3072,11 @@ async def test_message_graph() -> None:
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        metadata={"source": "update", "step": 5},
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {"agent": AIMessage(content="answer", id="ai2")},
+        },
     )
 
 
@@ -2967,7 +3193,7 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={"source": "loop", "step": 0},
+            metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -2981,7 +3207,11 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value slow", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={"source": "loop", "step": 1},
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"tool_two_slow": {"my_key": " slow"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -2997,7 +3227,7 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={"source": "loop", "step": 0},
+            metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
             ][-1].config,
@@ -3011,7 +3241,11 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value fast", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={"source": "loop", "step": 1},
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"tool_two_fast": {"my_key": " fast"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
             ][-1].config,
@@ -3027,7 +3261,7 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
-            metadata={"source": "loop", "step": 0},
+            metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
             ][-1].config,
@@ -3038,7 +3272,11 @@ async def test_start_branch_then() -> None:
             values={"my_key": "valuekey", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
-            metadata={"source": "update", "step": 1},
+            metadata={
+                "source": "update",
+                "step": 1,
+                "writes": {START: {"my_key": "key"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
             ][-1].config,
@@ -3052,7 +3290,11 @@ async def test_start_branch_then() -> None:
             values={"my_key": "valuekey fast", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
-            metadata={"source": "loop", "step": 2},
+            metadata={
+                "source": "loop",
+                "step": 2,
+                "writes": {"tool_two_fast": {"my_key": " fast"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
             ][-1].config,
@@ -3229,7 +3471,11 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={"source": "loop", "step": 1},
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -3243,7 +3489,11 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={"source": "loop", "step": 3},
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -3259,7 +3509,11 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={"source": "loop", "step": 1},
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
             ][-1].config,
@@ -3273,7 +3527,11 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={"source": "loop", "step": 3},
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
             ][-1].config,
@@ -3298,7 +3556,11 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={"source": "loop", "step": 1},
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -3312,7 +3574,11 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
-            metadata={"source": "loop", "step": 3},
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
             ][-1].config,
@@ -3328,7 +3594,11 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={"source": "loop", "step": 1},
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
             ][-1].config,
@@ -3342,7 +3612,11 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
-            metadata={"source": "loop", "step": 3},
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
             ][-1].config,
@@ -3358,7 +3632,11 @@ async def test_branch_then() -> None:
             values={"my_key": "key", "market": "DE"},
             next=("prepare",),
             config=uconfig,
-            metadata={"source": "update", "step": 0},
+            metadata={
+                "source": "update",
+                "step": 0,
+                "writes": {START: {"my_key": "key", "market": "DE"}},
+            },
         )
         # run from this point
         assert await tool_two.ainvoke(None, thread3) == {
@@ -3370,7 +3648,11 @@ async def test_branch_then() -> None:
             values={"my_key": "key prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
-            metadata={"source": "loop", "step": 1},
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
             parent_config=uconfig,
         )
         # resume, for same result as above
@@ -3382,7 +3664,11 @@ async def test_branch_then() -> None:
             values={"my_key": "key prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
-            metadata={"source": "loop", "step": 3},
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
             ][-1].config,

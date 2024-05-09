@@ -486,6 +486,7 @@ class Pregel(
                 {
                     "source": "update",
                     "step": saved.metadata.get("step", 0) + 1 if saved else 0,
+                    "writes": {as_node: values},
                 },
             )
 
@@ -559,6 +560,7 @@ class Pregel(
                 {
                     "source": "update",
                     "step": saved.metadata.get("step", 0) + 1 if saved else 0,
+                    "writes": {as_node: values},
                 },
             )
 
@@ -677,7 +679,7 @@ class Pregel(
                                 self.checkpointer.put,
                                 checkpoint_config,
                                 copy_checkpoint(checkpoint),
-                                {"source": "input", "step": start},
+                                {"source": "input", "step": start, "writes": input},
                             )
                         )
                         checkpoint_config = {
@@ -806,7 +808,21 @@ class Pregel(
                                 self.checkpointer.put,
                                 checkpoint_config,
                                 copy_checkpoint(checkpoint),
-                                {"source": "loop", "step": step},
+                                {
+                                    "source": "loop",
+                                    "step": step,
+                                    "writes": next(
+                                        map_output_updates(output_keys, next_tasks),
+                                        None,
+                                    )
+                                    if self.stream_mode == "updates"
+                                    else next(
+                                        map_output_values(
+                                            output_keys, pending_writes, channels
+                                        ),
+                                        None,
+                                    ),
+                                },
                             )
                         )
                         checkpoint_config = {
@@ -943,7 +959,7 @@ class Pregel(
                                 self.checkpointer.aput(
                                     checkpoint_config,
                                     copy_checkpoint(checkpoint),
-                                    {"source": "input", "step": start},
+                                    {"source": "input", "step": start, "writes": input},
                                 )
                             )
                         )
@@ -1084,7 +1100,21 @@ class Pregel(
                                 self.checkpointer.aput(
                                     checkpoint_config,
                                     checkpoint,
-                                    {"source": "loop", "step": step},
+                                    {
+                                        "source": "loop",
+                                        "step": step,
+                                        "writes": next(
+                                            map_output_updates(output_keys, next_tasks),
+                                            None,
+                                        )
+                                        if self.stream_mode == "updates"
+                                        else next(
+                                            map_output_values(
+                                                output_keys, pending_writes, channels
+                                            ),
+                                            None,
+                                        ),
+                                    },
                                 )
                             )
                         )

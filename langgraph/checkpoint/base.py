@@ -31,6 +31,11 @@ class CheckpointMetadata(TypedDict, total=False):
     0 for the first "loop" checkpoint.
     ... for the nth checkpoint afterwards.
     """
+    writes: dict[str, Any]
+    """The writes that were made between the previous checkpoint and this one.
+
+    Mapping from node name to writes emitted by that node.
+    """
 
 
 class Checkpoint(TypedDict):
