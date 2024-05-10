@@ -1528,15 +1528,21 @@ def _prepare_next_tasks(
             # then invoke the process with the values of all non-empty channels
             if isinstance(proc.channels, dict):
                 try:
-                    val: Any = {
+                    val: dict = {
                         k: read_channel(channels, chan, catch=chan not in proc.triggers)
                         for k, chan in proc.channels.items()
                         if isinstance(chan, str)
                     }
+
+                    managed_values = {}
                     for key, chan in proc.channels.items():
                         for mv in managed:
                             if isclass(chan) and isinstance(mv, chan):
-                                val[key] = mv(step, PregelTaskDescription(name, val))
+                                managed_values[key] = mv(
+                                    step, PregelTaskDescription(name, val)
+                                )
+
+                    val.update(managed_values)
                 except EmptyChannelError:
                     continue
             elif isinstance(proc.channels, list):
