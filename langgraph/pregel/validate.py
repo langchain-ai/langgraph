@@ -1,8 +1,9 @@
-from typing import Any, Mapping, Optional, Sequence, Type, Union
+from typing import Mapping, Optional, Sequence, Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import INTERRUPT
 from langgraph.pregel.read import PregelNode
+from langgraph.pregel.types import All
 
 
 def validate_graph(
@@ -11,10 +12,13 @@ def validate_graph(
     input_channels: Union[str, Sequence[str]],
     output_channels: Union[str, Sequence[str]],
     stream_channels: Optional[Union[str, Sequence[str]]],
-    interrupt_after_nodes: Sequence[str],
-    interrupt_before_nodes: Sequence[str],
-    default_channel_cls: Type[BaseChannel],
+    interrupt_after_nodes: Union[All, Sequence[str]],
+    interrupt_before_nodes: Union[All, Sequence[str]],
 ) -> None:
+    for chan in channels:
+        if chan == INTERRUPT:
+            raise ValueError(f"Channel name {INTERRUPT} is reserved")
+
     subscribed_channels = set[str]()
     for name, node in nodes.items():
         if name == INTERRUPT:
@@ -28,11 +32,11 @@ def validate_graph(
 
     for chan in subscribed_channels:
         if chan not in channels:
-            channels[chan] = default_channel_cls(Any)  # type: ignore[arg-type]
+            raise ValueError(f"Subscribed channel '{chan}' not in 'channels'")
 
     if isinstance(input_channels, str):
         if input_channels not in channels:
-            channels[input_channels] = default_channel_cls(Any)  # type: ignore[arg-type]
+            raise ValueError(f"Input channel '{input_channels}' not in 'channels'")
         if input_channels not in subscribed_channels:
             raise ValueError(
                 f"Input channel {input_channels} is not subscribed to by any node"
@@ -40,7 +44,7 @@ def validate_graph(
     else:
         for chan in input_channels:
             if chan not in channels:
-                channels[chan] = default_channel_cls(Any)  # type: ignore[arg-type]
+                raise ValueError(f"Input channel '{chan}' not in 'channels'")
         if all(chan not in subscribed_channels for chan in input_channels):
             raise ValueError(
                 f"None of the input channels {input_channels} are subscribed to by any node"
@@ -58,14 +62,16 @@ def validate_graph(
 
     for chan in all_output_channels:
         if chan not in channels:
-            channels[chan] = default_channel_cls(Any)  # type: ignore[arg-type]
+            raise ValueError(f"Output channel '{chan}' not in 'channels'")
 
-    for node in interrupt_after_nodes:
-        if node not in nodes:
-            raise ValueError(f"Node {node} not in nodes")
-    for node in interrupt_before_nodes:
-        if node not in nodes:
-            raise ValueError(f"Node {node} not in nodes")
+    if interrupt_after_nodes != "*":
+        for node in interrupt_after_nodes:
+            if node not in nodes:
+                raise ValueError(f"Node {node} not in nodes")
+    if interrupt_before_nodes != "*":
+        for node in interrupt_before_nodes:
+            if node not in nodes:
+                raise ValueError(f"Node {node} not in nodes")
 
 
 def validate_keys(

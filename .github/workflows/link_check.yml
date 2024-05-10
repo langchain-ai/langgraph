@@ -24,7 +24,9 @@ jobs:
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
           folder-path: 'examples/'
+          check-modified-files-only: ${{ github.event_name != 'schedule' }}
           file-path: './README.md'
+          config-file: './.markdown-link-check.config.json'
 
   notebook-link-check:
     runs-on: ubuntu-latest

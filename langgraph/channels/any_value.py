@@ -3,7 +3,8 @@ from typing import Generator, Generic, Optional, Sequence, Type
 
 from typing_extensions import Self
 
-from langgraph.channels.base import BaseChannel, EmptyChannelError, Value
+from langgraph.channels.base import BaseChannel, Value
+from langgraph.errors import EmptyChannelError
 
 
 class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):

@@ -3,10 +3,11 @@ from functools import partial
 from inspect import signature
 from typing import Any, Optional, Sequence, Type, Union, get_origin, get_type_hints
 
+from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 
-from langgraph.channels.base import BaseChannel, InvalidUpdateError
+from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
 from langgraph.channels.ephemeral_value import EphemeralValue
@@ -14,9 +15,11 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
+from langgraph.errors import InvalidUpdateError
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
 from langgraph.managed.base import ManagedValue, is_managed_value
 from langgraph.pregel.read import ChannelRead, PregelNode
+from langgraph.pregel.types import All
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.utils import RunnableCallable
 
@@ -32,10 +35,13 @@ class StateGraph(Graph):
     The signature of a reducer function is (Value, Value) -> Value.
     """
 
-    def __init__(self, schema: Type[Any]) -> None:
+    def __init__(
+        self, state_schema: Type[Any], config_schema: Optional[Type[Any]] = None
+    ) -> None:
         super().__init__()
-        self.schema = schema
-        self.channels, self.managed = _get_channels(schema)
+        self.schema = state_schema
+        self.config_schema = config_schema
+        self.channels, self.managed = _get_channels(state_schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
         self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
@@ -101,14 +107,19 @@ class StateGraph(Graph):
     def compile(
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
-        interrupt_before: Optional[Sequence[str]] = None,
-        interrupt_after: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
     ) -> CompiledGraph:
         """Compiles the state graph into a `CompiledGraph` object.
 
+        The compiled graph implements the `Runnable` interface and can be invoked,
+        streamed, batched, and run asynchronously.
+
         Args:
             checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
+                This serves as a fully versioned "memory" for the graph, allowing
+                the graph to be paused and resumed, and replayed from any point.
             interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
             interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
             debug (bool): A flag indicating whether to enable debug mode.
@@ -121,14 +132,20 @@ class StateGraph(Graph):
         interrupt_after = interrupt_after or []
 
         # validate the graph
-        self.validate(interrupt=interrupt_before + interrupt_after)
+        self.validate(
+            interrupt=(interrupt_before if interrupt_before != "*" else [])
+            + interrupt_after
+            if interrupt_after != "*"
+            else []
+        )
 
         # prepare output channels
         state_keys = list(self.channels)
         output_channels = state_keys[0] if state_keys == ["__root__"] else state_keys
 
         compiled = CompiledStateGraph(
-            graph=self,
+            builder=self,
+            config_type=self.config_schema,
             nodes={},
             channels={**self.channels, START: EphemeralValue(self.schema)},
             input_channels=START,
@@ -160,10 +177,24 @@ class StateGraph(Graph):
 
 
 class CompiledStateGraph(CompiledGraph):
-    graph: StateGraph
+    builder: StateGraph
+
+    def get_input_schema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> type[BaseModel]:
+        if isinstance(self.builder.schema, BaseModel):
+            return self.builder.schema
+
+        return super().get_input_schema(config)
+
+    def get_output_schema(self, config: Optional[RunnableConfig] = None) -> BaseModel:
+        if isinstance(self.builder.schema, BaseModel):
+            return self.builder.schema
+
+        return super().get_output_schema(config)
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
-        state_keys = list(self.graph.channels)
+        state_keys = list(self.builder.channels)
 
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
             if input is None:
@@ -206,13 +237,13 @@ class CompiledStateGraph(CompiledGraph):
                 channels=(
                     state_keys
                     if state_keys == ["__root__"]
-                    else ({chan: chan for chan in state_keys} | self.graph.managed)
+                    else ({chan: chan for chan in state_keys} | self.builder.managed)
                 ),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=(
                     None
                     if state_keys == ["__root__"]
-                    else partial(_coerce_state, self.graph.schema)
+                    else partial(_coerce_state, self.builder.schema)
                 ),
                 writers=[
                     # publish to this channel and state keys
@@ -267,13 +298,13 @@ class CompiledStateGraph(CompiledGraph):
                 return ChannelWrite(writes, tags=[TAG_HIDDEN])
 
         # attach branch publisher
-        self.nodes[start] |= branch.run(branch_writer, _get_state_reader(self.graph))
+        self.nodes[start] |= branch.run(branch_writer, _get_state_reader(self.builder))
 
         # attach branch subscribers
         ends = (
             branch.ends.values()
             if branch.ends
-            else [node for node in self.graph.nodes if node != branch.then]
+            else [node for node in self.builder.nodes if node != branch.then]
         )
         for end in ends:
             if end != END:

@@ -71,7 +71,7 @@ Now, run the graph:
 ```python
 # Run the graph
 thread = {"configurable": {"thread_id": "4"}}
-for event in app.stream("what is the weather in sf currently", thread):
+for event in app.stream("what is the weather in sf currently", thread, stream_mode="values"):
     for v in event.values():
         print(v)
 
@@ -79,7 +79,7 @@ for event in app.stream("what is the weather in sf currently", thread):
 We configured the graph to **wait** before executing the `action`. The `SqliteSaver` persists the state. Resume at any time.
 
 ```python
-for event in app.stream(None, thread):
+for event in app.stream(None, thread, stream_mode="values"):
     for v in event.values():
         print(v)
 ```
@@ -101,6 +101,14 @@ Consult the [Tutorials](tutorials/index.md) to learn more about building with La
 ## How-To Guides
 
 Check out the [How-To Guides](how-tos/index.md) for instructions on handling common tasks with LangGraph
+
+## Reference
+
+For documentation on the core APIs, check out the [Reference](reference/graphs.md) docs.
+
+## Conceptual Guides
+
+Once you've learned the basics, if you want to further understand LangGraph's core abstractions, check out the [Conceptual Guides](./concepts/index.md).
 
 ## Why LangGraph?
 
