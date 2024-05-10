@@ -2,7 +2,12 @@ import json
 from typing import Annotated, Callable, Optional, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import BaseMessage, FunctionMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    FunctionMessage,
+    SystemMessage,
+)
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
@@ -12,6 +17,7 @@ from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
+from langgraph.managed import IsLastStep
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 from langgraph.prebuilt.tool_node import ToolNode
 
@@ -24,6 +30,8 @@ class AgentState(TypedDict):
     """The state of the agent."""
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
+
+    is_last_step: IsLastStep
 
 
 @deprecated("0.0.44", "create_react_agent")
@@ -238,12 +246,30 @@ def create_react_agent(
     def call_model(state: AgentState):
         messages = state["messages"]
         response = model_runnable.invoke(messages)
+        if state["is_last_step"] and response.tool_calls:
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
     async def acall_model(state: AgentState):
         messages = state["messages"]
         response = await model_runnable.ainvoke(messages)
+        if state["is_last_step"] and response.tool_calls:
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 

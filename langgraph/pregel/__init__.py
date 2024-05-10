@@ -4,6 +4,7 @@ import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
 from functools import partial
+from inspect import isclass
 from typing import (
     Any,
     AsyncIterator,
@@ -67,6 +68,12 @@ from langgraph.constants import (
     TAG_HIDDEN,
 )
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
+from langgraph.managed.base import (
+    AsyncManagedValuesManager,
+    ManagedValue,
+    ManagedValuesManager,
+    is_managed_value,
+)
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
     map_debug_task_results,
@@ -319,6 +326,16 @@ class Pregel(
     def stream_channels_asis(self) -> Union[str, Sequence[str]]:
         return self.stream_channels or [k for k in self.channels]
 
+    @property
+    def managed_values_list(self) -> Sequence[Type[ManagedValue]]:
+        return [
+            v
+            for node in self.nodes.values()
+            if isinstance(node.channels, dict)
+            for v in node.channels.values()
+            if is_managed_value(v)
+        ]
+
     def get_state(self, config: RunnableConfig) -> StateSnapshot:
         """Get the current state of the graph."""
         if not self.checkpointer:
@@ -326,9 +343,20 @@ class Pregel(
 
         saved = self.checkpointer.get_tuple(config)
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
-        with ChannelsManager(self.channels, checkpoint) as channels:
+        config = saved.config if saved else config
+        with ChannelsManager(
+            self.channels, checkpoint
+        ) as channels, ManagedValuesManager(
+            self.managed_values_list, ensure_config(config), self
+        ) as managed:
             _, next_tasks = _prepare_next_tasks(
-                checkpoint, self.nodes, channels, for_execution=False
+                checkpoint,
+                self.nodes,
+                channels,
+                managed,
+                config,
+                -1,
+                for_execution=False,
             )
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
@@ -345,9 +373,21 @@ class Pregel(
 
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
-        async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+
+        config = saved.config if saved else config
+        async with AsyncChannelsManager(
+            self.channels, checkpoint
+        ) as channels, AsyncManagedValuesManager(
+            self.managed_values_list, ensure_config(config), self
+        ) as managed:
             _, next_tasks = _prepare_next_tasks(
-                checkpoint, self.nodes, channels, for_execution=False
+                checkpoint,
+                self.nodes,
+                channels,
+                managed,
+                config,
+                -1,
+                for_execution=False,
             )
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
@@ -371,9 +411,19 @@ class Pregel(
         for config, checkpoint, metadata, parent_config in self.checkpointer.list(
             config, before=before, limit=limit
         ):
-            with ChannelsManager(self.channels, checkpoint) as channels:
+            with ChannelsManager(
+                self.channels, checkpoint
+            ) as channels, ManagedValuesManager(
+                self.managed_values_list, ensure_config(config), self
+            ) as managed:
                 _, next_tasks = _prepare_next_tasks(
-                    checkpoint, self.nodes, channels, for_execution=False
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    config,
+                    -1,
+                    for_execution=False,
                 )
                 yield StateSnapshot(
                     read_channels(channels, self.stream_channels_asis),
@@ -400,9 +450,19 @@ class Pregel(
             metadata,
             parent_config,
         ) in self.checkpointer.alist(config, before=before, limit=limit):
-            async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+            async with AsyncChannelsManager(
+                self.channels, checkpoint
+            ) as channels, AsyncManagedValuesManager(
+                self.managed_values_list, ensure_config(config), self
+            ) as managed:
                 _, next_tasks = _prepare_next_tasks(
-                    checkpoint, self.nodes, channels, for_execution=False
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    config,
+                    -1,
+                    for_execution=False,
                 )
                 yield StateSnapshot(
                     read_channels(channels, self.stream_channels_asis),
@@ -662,12 +722,22 @@ class Pregel(
             # create channels from checkpoint
             with ChannelsManager(
                 self.channels, checkpoint
-            ) as channels, get_executor_for_config(config) as executor:
+            ) as channels, get_executor_for_config(
+                config
+            ) as executor, ManagedValuesManager(
+                self.managed_values_list, config, self
+            ) as managed:
                 # map inputs to channel updates
                 if input_writes := deque(map_input(input_keys, input)):
                     # discard any unfinished tasks from previous checkpoint
                     checkpoint, _ = _prepare_next_tasks(
-                        checkpoint, processes, channels, for_execution=True
+                        checkpoint,
+                        processes,
+                        channels,
+                        managed,
+                        config,
+                        -1,
+                        for_execution=True,
                     )
                     # apply input writes
                     _apply_writes(checkpoint, channels, input_writes)
@@ -708,7 +778,13 @@ class Pregel(
                 stop = start + config["recursion_limit"] + 1
                 for step in range(start, stop):
                     next_checkpoint, next_tasks = _prepare_next_tasks(
-                        checkpoint, processes, channels, for_execution=True
+                        checkpoint,
+                        processes,
+                        channels,
+                        managed,
+                        config,
+                        step,
+                        for_execution=True,
                     )
 
                     # if no more tasks, we're done
@@ -741,7 +817,7 @@ class Pregel(
                             proc,
                             input,
                             patch_config(
-                                merge_configs(config, proc_config),
+                                proc_config,
                                 run_name=name,
                                 callbacks=run_manager.get_child(f"graph:step:{step}"),
                                 configurable={
@@ -942,12 +1018,22 @@ class Pregel(
             checkpoint_config = saved.config if saved else config
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
-            async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+            async with AsyncChannelsManager(
+                self.channels, checkpoint
+            ) as channels, AsyncManagedValuesManager(
+                self.managed_values_list, config, self
+            ) as managed:
                 # map inputs to channel updates
                 if input_writes := deque(map_input(input_keys, input)):
                     # discard any unfinished tasks from previous checkpoint
                     checkpoint, _ = _prepare_next_tasks(
-                        checkpoint, processes, channels, for_execution=True
+                        checkpoint,
+                        processes,
+                        channels,
+                        managed,
+                        config,
+                        -1,
+                        for_execution=True,
                     )
                     # apply input writes
                     _apply_writes(checkpoint, channels, input_writes)
@@ -990,7 +1076,13 @@ class Pregel(
                 stop = start + config["recursion_limit"] + 1
                 for step in range(start, stop):
                     next_checkpoint, next_tasks = _prepare_next_tasks(
-                        checkpoint, processes, channels, for_execution=True
+                        checkpoint,
+                        processes,
+                        channels,
+                        managed,
+                        config,
+                        step,
+                        for_execution=True,
                     )
 
                     # if no more tasks, we're done
@@ -1023,7 +1115,7 @@ class Pregel(
                             proc,
                             input,
                             patch_config(
-                                merge_configs(config, proc_config),
+                                proc_config,
                                 run_name=name,
                                 callbacks=run_manager.get_child(f"graph:step:{step}"),
                                 configurable={
@@ -1386,6 +1478,9 @@ def _prepare_next_tasks(
     checkpoint: Checkpoint,
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
+    managed: Sequence[ManagedValue],
+    config: RunnableConfig,
+    step: int,
     for_execution: Literal[False],
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
@@ -1396,6 +1491,9 @@ def _prepare_next_tasks(
     checkpoint: Checkpoint,
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
+    managed: Sequence[ManagedValue],
+    config: RunnableConfig,
+    step: int,
     for_execution: Literal[True],
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
     ...
@@ -1405,6 +1503,9 @@ def _prepare_next_tasks(
     checkpoint: Checkpoint,
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
+    managed: Sequence[ManagedValue],
+    config: RunnableConfig,
+    step: int,
     *,
     for_execution: bool,
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
@@ -1427,10 +1528,21 @@ def _prepare_next_tasks(
             # then invoke the process with the values of all non-empty channels
             if isinstance(proc.channels, dict):
                 try:
-                    val: Any = {
+                    val: dict = {
                         k: read_channel(channels, chan, catch=chan not in proc.triggers)
                         for k, chan in proc.channels.items()
+                        if isinstance(chan, str)
                     }
+
+                    managed_values = {}
+                    for key, chan in proc.channels.items():
+                        for mv in managed:
+                            if isclass(chan) and isinstance(mv, chan):
+                                managed_values[key] = mv(
+                                    step, PregelTaskDescription(name, val)
+                                )
+
+                    val.update(managed_values)
                 except EmptyChannelError:
                     continue
             elif isinstance(proc.channels, list):
@@ -1464,7 +1576,12 @@ def _prepare_next_tasks(
                 if node := proc.get_node():
                     tasks.append(
                         PregelExecutableTask(
-                            name, val, node, deque(), proc.config, triggers
+                            name,
+                            val,
+                            node,
+                            deque(),
+                            merge_configs(config, proc.config),
+                            triggers,
                         )
                     )
             else:

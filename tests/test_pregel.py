@@ -2643,39 +2643,38 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     tools = [search_api]
 
-    app = create_tool_calling_executor(
-        FakeFuntionChatModel(
-            responses=[
-                AIMessage(
-                    content="",
-                    tool_calls=[
-                        {
-                            "id": "tool_call123",
-                            "name": "search_api",
-                            "args": {"query": "query"},
-                        },
-                    ],
-                ),
-                AIMessage(
-                    content="",
-                    tool_calls=[
-                        {
-                            "id": "tool_call234",
-                            "name": "search_api",
-                            "args": {"query": "another"},
-                        },
-                        {
-                            "id": "tool_call567",
-                            "name": "search_api",
-                            "args": {"query": "a third one"},
-                        },
-                    ],
-                ),
-                AIMessage(content="answer"),
-            ]
-        ),
-        tools,
+    model = FakeFuntionChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call234",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    },
+                    {
+                        "id": "tool_call567",
+                        "name": "search_api",
+                        "args": {"query": "a third one"},
+                    },
+                ],
+            ),
+            AIMessage(content="answer"),
+        ]
     )
+
+    app = create_tool_calling_executor(model, tools)
 
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
@@ -2735,6 +2734,21 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             AIMessage(content="answer", id=AnyStr()),
         ]
     }
+
+    assert app.invoke(
+        {"messages": [HumanMessage(content="what is weather in sf")]},
+        {"recursion_limit": 2},
+        debug=True,
+    ) == {
+        "messages": [
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            AIMessage(
+                content="Sorry, need more steps to process this request.", id=AnyStr()
+            ),
+        ]
+    }
+
+    model.i = 0  # reset the model
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]},

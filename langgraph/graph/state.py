@@ -1,7 +1,7 @@
 import logging
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union, get_type_hints
+from typing import Any, Optional, Sequence, Type, Union, get_origin, get_type_hints
 
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -17,6 +17,7 @@ from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
+from langgraph.managed.base import ManagedValue, is_managed_value
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
@@ -40,7 +41,7 @@ class StateGraph(Graph):
         super().__init__()
         self.schema = state_schema
         self.config_schema = config_schema
-        self.channels = _get_channels(state_schema)
+        self.channels, self.managed = _get_channels(state_schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
         self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
@@ -193,6 +194,8 @@ class CompiledStateGraph(CompiledGraph):
         return super().get_output_schema(config)
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
+        state_keys = list(self.builder.channels)
+
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
@@ -201,7 +204,6 @@ class CompiledStateGraph(CompiledGraph):
             else:
                 return input.get(key, SKIP_WRITE)
 
-        state_keys = list(self.builder.channels)
         # state updaters
         state_write_entries = [
             (
@@ -231,11 +233,11 @@ class CompiledStateGraph(CompiledGraph):
             self.channels[key] = EphemeralValue(Any)
             self.nodes[key] = PregelNode(
                 triggers=[],
-                # read state keys
+                # read state keys and managed values
                 channels=(
                     state_keys
                     if state_keys == ["__root__"]
-                    else {chan: chan for chan in state_keys}
+                    else ({chan: chan for chan in state_keys} | self.builder.managed)
                 ),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=(
@@ -339,19 +341,32 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
+def _get_channels(
+    schema: Type[dict],
+) -> tuple[dict[str, BaseChannel], dict[str, Type[ManagedValue]]]:
     if not hasattr(schema, "__annotations__"):
-        return {"__root__": _get_channel(schema)}
+        return {"__root__": _get_channel(schema, allow_managed=False)}, {}
 
-    return {
+    all_keys = {
         name: _get_channel(typ)
         for name, typ in get_type_hints(schema, include_extras=True).items()
         if name != "__slots__"
     }
+    return (
+        {k: v for k, v in all_keys.items() if not is_managed_value(v)},
+        {k: v for k, v in all_keys.items() if is_managed_value(v)},
+    )
 
 
-def _get_channel(annotation: Any) -> BaseChannel:
-    if channel := _is_field_binop(annotation):
+def _get_channel(
+    annotation: Any, *, allow_managed: bool = True
+) -> Union[BaseChannel, Type[ManagedValue]]:
+    if manager := _is_field_managed_value(annotation):
+        if allow_managed:
+            return manager
+        else:
+            raise ValueError(f"This {annotation} not allowed in this position")
+    elif channel := _is_field_binop(annotation):
         return channel
     return LastValue(annotation)
 
@@ -370,4 +385,15 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
                 ]
             ):
                 return BinaryOperatorAggregate(typ, meta[0])
+    return None
+
+
+def _is_field_managed_value(typ: Type[Any]) -> Optional[Type[ManagedValue]]:
+    if hasattr(typ, "__metadata__"):
+        meta = typ.__metadata__
+        if len(meta) == 1:
+            decoration = get_origin(meta[0]) or meta[0]
+            if is_managed_value(decoration):
+                return decoration
+
     return None
