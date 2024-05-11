@@ -2,33 +2,121 @@ import json
 import operator
 import time
 import warnings
+from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
-from typing import Annotated, Any, Generator, Optional, TypedDict, Union
+from typing import Annotated, Any, Generator, Literal, Optional, TypedDict, Union
 
 import pytest
 from langchain_core.runnables import RunnableLambda, RunnablePassthrough
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
-from langgraph.channels.base import InvalidUpdateError
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
-from langgraph.checkpoint.base import CheckpointAt
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph
+from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph
 from langgraph.graph.state import StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
     create_function_calling_executor,
     create_tool_calling_executor,
 )
-from langgraph.prebuilt.tool_executor import ToolExecutor
+from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
+
+
+def test_graph_validation() -> None:
+    def logic(inp: str) -> str:
+        return ""
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.set_entry_point("agent")
+    workflow.set_finish_point("agent")
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.set_entry_point("agent")
+    with pytest.raises(ValueError, match="dead-end"):
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.set_finish_point("agent")
+    with pytest.raises(ValueError, match="not reachable"):
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.set_entry_point("tools")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.set_entry_point("tools")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    assert workflow.compile(), "valid graph"
+
+    workflow = Graph()
+    workflow.set_entry_point("tools")
+    workflow.add_conditional_edges(
+        "agent", logic, {"continue": "tools", "exit": END, "hmm": "extra"}
+    )
+    workflow.add_edge("tools", "agent")
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "extra")
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    with pytest.raises(ValueError, match="unknown"):  # extra is not defined
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.add_node("extra", logic)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
+    workflow.add_edge("tools", "agent")
+    with pytest.raises(ValueError):  # extra is dead-end / not reachable
+        workflow.compile()
+
+    workflow = Graph()
+    workflow.add_node("agent", logic)
+    workflow.add_node("tools", logic)
+    workflow.add_node("extra", logic)
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges("agent", logic)
+    workflow.add_edge("tools", "agent")
+    with pytest.raises(ValueError):  # extra is dead-end
+        workflow.compile()
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -68,15 +156,17 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert gapp.invoke(2, debug=True) == 3
 
 
-def test_invoke_single_process_in_out_implicit_channels(mocker: MockerFixture) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-
-    app = Pregel(nodes={"one": chain})
-
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput"}
-    assert app.invoke(2) == 3
+@pytest.mark.parametrize(
+    "falsy_value",
+    [None, False, 0, "", [], {}, set(), frozenset(), 0.0, 0j],
+)
+def test_invoke_single_process_in_out_falsy_values(falsy_value: Any) -> None:
+    graph = Graph()
+    graph.add_node("return_falsy_const", lambda *args, **kwargs: falsy_value)
+    graph.set_entry_point("return_falsy_const")
+    graph.set_finish_point("return_falsy_const")
+    gapp = graph.compile()
+    assert gapp.invoke(1) == falsy_value
 
 
 def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
@@ -88,17 +178,25 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
     )
 
     app = Pregel(
-        nodes={"one": chain}, output_channels=["output", "fixed", "output_plus_one"]
+        nodes={"one": chain},
+        channels={
+            "input": LastValue(int),
+            "output": LastValue(int),
+            "fixed": LastValue(int),
+            "output_plus_one": LastValue(int),
+        },
+        output_channels=["output", "fixed", "output_plus_one"],
+        input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
-            "output": {"title": "Output"},
-            "fixed": {"title": "Fixed"},
-            "output_plus_one": {"title": "Output Plus One"},
+            "output": {"title": "Output", "type": "integer"},
+            "fixed": {"title": "Fixed", "type": "integer"},
+            "output_plus_one": {"title": "Output Plus One", "type": "integer"},
         },
     }
     assert app.invoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
@@ -109,17 +207,17 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        nodes={
-            "one": chain,
-        },
+        nodes={"one": chain},
+        channels={"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput"}
+    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output"}},
+        "properties": {"output": {"title": "Output", "type": "integer"}},
     }
     assert app.invoke(2) == {"output": 3}
 
@@ -129,9 +227,8 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
     app = Pregel(
-        nodes={
-            "one": chain,
-        },
+        nodes={"one": chain},
+        channels={"input": LastValue(int), "output": LastValue(int)},
         input_channels=["input"],
         output_channels=["output"],
     )
@@ -139,12 +236,12 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {
         "title": "LangGraphInput",
         "type": "object",
-        "properties": {"input": {"title": "Input"}},
+        "properties": {"input": {"title": "Input", "type": "integer"}},
     }
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output"}},
+        "properties": {"output": {"title": "Output", "type": "integer"}},
     }
     assert app.invoke({"input": 2}) == {"output": 3}
 
@@ -156,6 +253,13 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     app = Pregel(
         nodes={"one": one, "two": two},
+        channels={
+            "inbox": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     assert app.invoke(2) == 4
@@ -189,19 +293,21 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 2
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-def test_invoke_two_processes_in_out_interrupt(
-    mocker: MockerFixture, checkpoint_at: CheckpointAt
-) -> None:
+def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
-    memory = MemorySaverAssertImmutable(at=checkpoint_at)
+    memory = MemorySaverAssertImmutable()
     app = Pregel(
         nodes={"one": one, "two": two},
+        channels={
+            "inbox": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
         checkpointer=memory,
         interrupt_after_nodes=["one"],
     )
@@ -257,8 +363,14 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
 
     app = Pregel(
         nodes={"one": one, "two": two},
-        channels={"inbox": Topic(int)},
+        channels={
+            "inbox": Topic(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
         input_channels=["input", "inbox"],
+        stream_channels=["output", "inbox"],
+        output_channels=["output"],
     )
 
     # [12 + 1, 2 + 1 + 1]
@@ -281,7 +393,84 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
     assert [*app.stream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
-        {"output": 4},
+        {"inbox": [], "output": 4},
+    ]
+    assert [*app.stream({"input": 2, "inbox": 12}, stream_mode="debug")] == [
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "id": "7a3cc398-2e02-5023-ad7b-e4848d3b67fa",
+                "name": "one",
+                "input": 2,
+                "triggers": ["input"],
+            },
+        },
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "id": "34e90af0-f97e-54e0-a159-691da37f175f",
+                "name": "two",
+                "input": [12],
+                "triggers": ["inbox"],
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "id": "7a3cc398-2e02-5023-ad7b-e4848d3b67fa",
+                "name": "one",
+                "result": [("inbox", 3)],
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {
+                "id": "34e90af0-f97e-54e0-a159-691da37f175f",
+                "name": "two",
+                "result": [("output", 13)],
+            },
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 0,
+            "payload": {"config": None, "values": {"output": 13, "inbox": [3]}},
+        },
+        {
+            "type": "task",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "id": "cf7cf374-2a2a-556f-8561-91737af89d2f",
+                "name": "two",
+                "input": [3],
+                "triggers": ["inbox"],
+            },
+        },
+        {
+            "type": "task_result",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {
+                "id": "cf7cf374-2a2a-556f-8561-91737af89d2f",
+                "name": "two",
+                "result": [("output", 4)],
+            },
+        },
+        {
+            "type": "checkpoint",
+            "timestamp": AnyStr(),
+            "step": 1,
+            "payload": {"config": None, "values": {"output": 4, "inbox": []}},
+        },
     ]
 
 
@@ -293,7 +482,16 @@ def test_batch_two_processes_in_out() -> None:
     one = Channel.subscribe_to("input") | add_one_with_delay | Channel.write_to("one")
     two = Channel.subscribe_to("one") | add_one_with_delay | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "one": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
 
     assert app.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
     assert app.batch([3, 2, 1, 3, 5], output_keys=["output"]) == [
@@ -326,7 +524,13 @@ def test_invoke_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes=nodes)
+    app = Pregel(
+        nodes=nodes,
+        channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
+        | {"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     for _ in range(10):
         assert app.invoke(2, {"recursion_limit": test_size}) == 2 + test_size
@@ -348,7 +552,13 @@ def test_batch_many_processes_in_out(mocker: MockerFixture) -> None:
         )
     nodes["last"] = Channel.subscribe_to(str(i)) | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes=nodes)
+    app = Pregel(
+        nodes=nodes,
+        channels={str(i): LastValue(int) for i in range(-1, test_size - 2)}
+        | {"input": LastValue(int), "output": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     for _ in range(3):
         assert app.batch([2, 1, 3, 4, 5], {"recursion_limit": test_size}) == [
@@ -375,7 +585,12 @@ def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> N
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
     two = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={"output": LastValue(int), "input": LastValue(int)},
+        input_channels="input",
+        output_channels="output",
+    )
 
     with pytest.raises(InvalidUpdateError):
         # LastValue channels can only be updated once per iteration
@@ -390,17 +605,19 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
 
     app = Pregel(
         nodes={"one": one, "two": two},
-        channels={"output": Topic(int)},
+        channels={
+            "input": LastValue(int),
+            "output": Topic(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     # An Inbox channel accumulates updates into a sequence
     assert app.invoke(2) == [3, 3]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-def test_invoke_checkpoint(mocker: MockerFixture, checkpoint_at: CheckpointAt) -> None:
+def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
     def raise_if_above_10(input: int) -> int:
@@ -415,11 +632,17 @@ def test_invoke_checkpoint(mocker: MockerFixture, checkpoint_at: CheckpointAt) -
         | raise_if_above_10
     )
 
-    memory = MemorySaverAssertImmutable(at=checkpoint_at)
+    memory = MemorySaverAssertImmutable()
 
     app = Pregel(
         nodes={"one": one},
-        channels={"total": BinaryOperatorAggregate(int, operator.add)},
+        channels={
+            "total": BinaryOperatorAggregate(int, operator.add),
+            "input": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
         checkpointer=memory,
     )
 
@@ -450,13 +673,8 @@ def test_invoke_checkpoint(mocker: MockerFixture, checkpoint_at: CheckpointAt) -
     assert checkpoint["channel_values"].get("total") == 5
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-def test_invoke_checkpoint_sqlite(
-    mocker: MockerFixture, checkpoint_at: CheckpointAt
-) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
+def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
+    adder = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 
     def raise_if_above_10(input: int) -> int:
         if input > 10:
@@ -465,25 +683,31 @@ def test_invoke_checkpoint_sqlite(
 
     one = (
         Channel.subscribe_to(["input"]).join(["total"])
-        | add_one
+        | adder
         | Channel.write_to("output", "total")
         | raise_if_above_10
     )
 
     with SqliteSaver.from_conn_string(":memory:") as memory:
-        memory.at = checkpoint_at
         app = Pregel(
             nodes={"one": one},
-            channels={"total": BinaryOperatorAggregate(int, operator.add)},
+            channels={
+                "total": BinaryOperatorAggregate(int, operator.add),
+                "input": LastValue(int),
+                "output": LastValue(int),
+            },
+            input_channels="input",
+            output_channels="output",
             checkpointer=memory,
         )
 
         thread_1 = {"configurable": {"thread_id": "1"}}
         # total starts out as 0, so output is 0+2=2
-        assert app.invoke(2, thread_1) == 2
+        assert app.invoke(2, thread_1, debug=1) == 2
         state = app.get_state(thread_1)
         assert state is not None
         assert state.values.get("total") == 2
+        assert state.next == ()
         assert state.config["configurable"]["thread_ts"] == memory.get(thread_1)["ts"]
         # total is now 2, so output is 2+3=5
         assert app.invoke(3, thread_1) == 5
@@ -494,36 +718,55 @@ def test_invoke_checkpoint_sqlite(
         # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
         with pytest.raises(ValueError):
             app.invoke(4, thread_1)
-        # checkpoint is not updated
+        # checkpoint is updated with new input
         state = app.get_state(thread_1)
         assert state is not None
         assert state.values.get("total") == 7
+        assert state.next == ("one",)
+        """we checkpoint inputs and it failed on "one", so the next node is one"""
+        # we can recover from error by sending new inputs
+        assert app.invoke(2, thread_1) == 9
+        state = app.get_state(thread_1)
+        assert state is not None
+        assert state.values.get("total") == 16, "total is now 7+9=16"
+        assert state.next == ()
 
         thread_2 = {"configurable": {"thread_id": "2"}}
         # on a new thread, total starts out as 0, so output is 0+5=5
-        assert app.invoke(5, thread_2) == 5
+        assert app.invoke(5, thread_2, debug=True) == 5
         state = app.get_state({"configurable": {"thread_id": "1"}})
         assert state is not None
-        assert state.values.get("total") == 7
-        assert state.next == ()
+        assert state.values.get("total") == 16
+        assert state.next == (), "checkpoint of other thread not touched"
         state = app.get_state(thread_2)
         assert state is not None
         assert state.values.get("total") == 5
         assert state.next == ()
 
+        assert len(list(app.get_state_history(thread_1, limit=1))) == 1
         # list all checkpoints for thread 1
         thread_1_history = [c for c in app.get_state_history(thread_1)]
-        # there are 2: one for each successful ainvoke()
-        assert len(thread_1_history) == 2
+        # there are 7 checkpoints
+        assert len(thread_1_history) == 7
+        assert Counter(c.metadata["source"] for c in thread_1_history) == {
+            "input": 4,
+            "loop": 3,
+        }
         # sorted descending
         assert (
             thread_1_history[0].config["configurable"]["thread_ts"]
             > thread_1_history[1].config["configurable"]["thread_ts"]
         )
-        # the second checkpoint
-        assert thread_1_history[0].values["total"] == 7
-        # the first checkpoint
-        assert thread_1_history[1].values["total"] == 2
+        # cursor pagination
+        cursored = list(
+            app.get_state_history(thread_1, limit=1, before=thread_1_history[0].config)
+        )
+        assert len(cursored) == 1
+        assert cursored[0].config == thread_1_history[1].config
+        # the last checkpoint
+        assert thread_1_history[0].values["total"] == 16
+        # the first "loop" checkpoint
+        assert thread_1_history[-2].values["total"] == 2
         # can get each checkpoint using aget with config
         assert (
             memory.get(thread_1_history[0].config)["ts"]
@@ -540,8 +783,20 @@ def test_invoke_checkpoint_sqlite(
             thread_1_next_config["configurable"]["thread_ts"]
             > thread_1_history[0].config["configurable"]["thread_ts"]
         )
+        # update makes new checkpoint child of the previous one
+        assert (
+            app.get_state(thread_1_next_config).parent_config
+            == thread_1_history[1].config
+        )
         # 1 more checkpoint in history
-        assert len(list(app.get_state_history(thread_1))) == 3
+        assert len(list(app.get_state_history(thread_1))) == 8
+        assert Counter(
+            c.metadata["source"] for c in app.get_state_history(thread_1)
+        ) == {
+            "update": 1,
+            "input": 4,
+            "loop": 3,
+        }
         # the latest checkpoint is the updated one
         assert app.get_state(thread_1) == app.get_state(thread_1_next_config)
 
@@ -562,7 +817,13 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
             "chain_three": chain_three,
             "chain_four": chain_four,
         },
-        channels={"inbox": Topic(int)},
+        channels={
+            "inbox": Topic(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     # Then invoke app
@@ -575,14 +836,20 @@ def test_invoke_two_processes_two_in_join_two_out(mocker: MockerFixture) -> None
         assert [*executor.map(app.invoke, [2] * 100)] == [[13, 13]] * 100
 
 
-def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
+def test_invoke_join_then_call_other_pregel(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     add_10_each = mocker.Mock(side_effect=lambda x: [y + 10 for y in x])
 
     inner_app = Pregel(
         nodes={
             "one": Channel.subscribe_to("input") | add_one | Channel.write_to("output")
-        }
+        },
+        channels={
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     one = (
@@ -604,7 +871,14 @@ def test_invoke_join_then_call_other_app(mocker: MockerFixture) -> None:
             "two": two,
             "chain_three": chain_three,
         },
-        channels={"inbox_one": Topic(int)},
+        channels={
+            "inbox_one": Topic(int),
+            "outbox_one": LastValue(int),
+            "output": LastValue(int),
+            "input": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
     )
 
     for _ in range(10):
@@ -624,13 +898,26 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "input": LastValue(int),
+            "between": LastValue(int),
+            "output": LastValue(int),
+        },
+        stream_channels=["output", "between"],
+        input_channels="input",
+        output_channels="output",
+    )
 
     assert [c for c in app.stream(2, stream_mode="updates")] == [
         {"one": {"between": 3, "output": 3}},
         {"two": {"output": 4}},
     ]
-    assert [c for c in app.stream(2)] == [{"between": 3, "output": 3}, {"output": 4}]
+    assert [c for c in app.stream(2)] == [
+        {"between": 3, "output": 3},
+        {"between": 3, "output": 4},
+    ]
 
 
 def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
@@ -638,7 +925,16 @@ def test_invoke_two_processes_no_out(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("between")
     two = Channel.subscribe_to("between") | add_one
 
-    app = Pregel(nodes={"one": one, "two": two})
+    app = Pregel(
+        nodes={"one": one, "two": two},
+        channels={
+            "input": LastValue(int),
+            "between": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels="input",
+        output_channels="output",
+    )
 
     # It finishes executing (once no more messages being published)
     # but returns nothing, as nothing was published to OUT topic
@@ -680,8 +976,12 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         channels={
             "inbox": Topic(int),
             "ctx": Context(an_int, typ=int),
+            "output": LastValue(int),
+            "input": LastValue(int),
         },
+        input_channels="input",
         output_channels=["inbox", "output"],
+        stream_channels=["inbox", "output"],
     )
 
     assert setup.call_count == 0
@@ -692,18 +992,13 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
-            assert chunk == {"output": 4}
+            assert chunk == {"inbox": [], "output": 4}
         else:
             assert False, "Expected only two chunks"
     assert cleanup.call_count == 1, "Expected cleanup to be called once"
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-def test_conditional_graph(
-    snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
-) -> None:
+def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     from copy import deepcopy
 
     from langchain.llms.fake import FakeStreamingListLLM
@@ -777,9 +1072,9 @@ def test_conditional_graph(
     app = workflow.compile()
 
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
-    assert app.get_graph(xray=True).draw_ascii() == snapshot
+    assert app.get_graph(xray=True).draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -905,7 +1200,7 @@ def test_conditional_graph(
     # test state get/update methods with interrupt_after
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -934,6 +1229,20 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 0,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                },
+            },
+        },
     )
     assert (
         app_w_interrupt.checkpointer.get_tuple(config).config["configurable"][
@@ -967,6 +1276,20 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "input": "what is weather in sf",
+                },
+            },
+        },
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1050,12 +1373,35 @@ def test_conditional_graph(
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 4,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    ),
+                }
+            },
+        },
     )
 
     # test state get/update methods with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -1085,6 +1431,20 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 0,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
     )
 
     app_w_interrupt.update_state(
@@ -1112,6 +1472,20 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "input": "what is weather in sf",
+                }
+            },
+        },
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1195,12 +1569,35 @@ def test_conditional_graph(
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 4,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    ),
+                }
+            },
+        },
     )
 
     # test re-invoke to continue with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -1230,6 +1627,20 @@ def test_conditional_graph(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 0,
+            "writes": {
+                "agent": {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1347,7 +1758,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()
@@ -1355,7 +1766,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert (
         app.invoke("what is weather in sf", debug=True)
@@ -1367,12 +1778,7 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-def test_conditional_graph_state(
-    snapshot: SnapshotAssertion, checkpoint_at: CheckpointAt
-) -> None:
+def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     from langchain.llms.fake import FakeStreamingListLLM
     from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
@@ -1455,7 +1861,7 @@ def test_conditional_graph_state(
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -1539,7 +1945,7 @@ def test_conditional_graph_state(
     # test state get/update methods with interrupt_after
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -1566,6 +1972,19 @@ def test_conditional_graph_state(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
     )
 
     app_w_interrupt.update_state(
@@ -1591,6 +2010,19 @@ def test_conditional_graph_state(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    )
+                },
+            },
+        },
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1649,12 +2081,24 @@ def test_conditional_graph_state(
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    )
+                }
+            },
+        },
     )
 
     # test state get/update methods with interrupt_before
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_before=["tools"],
         debug=True,
     )
@@ -1683,6 +2127,19 @@ def test_conditional_graph_state(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
     )
 
     app_w_interrupt.update_state(
@@ -1708,6 +2165,19 @@ def test_conditional_graph_state(
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    )
+                }
+            },
+        },
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1766,7 +2236,344 @@ def test_conditional_graph_state(
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    )
+                }
+            },
+        },
     )
+
+    # test w interrupt before all
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(),
+        interrupt_before="*",
+        debug=True,
+    )
+    config = {"configurable": {"thread_id": "3"}}
+    llm.i = 0  # reset the llm
+
+    assert [
+        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+    ] == []
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "intermediate_steps": [],
+        },
+        next=("agent",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={"source": "loop", "step": 0, "writes": None},
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [],
+        },
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                    "result for query",
+                )
+            ],
+        },
+        next=("agent",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 2,
+            "writes": {
+                "tools": {
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                }
+            },
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
+
+    # test w interrupt after all
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(),
+        interrupt_after="*",
+    )
+    config = {"configurable": {"thread_id": "4"}}
+    llm.i = 0  # reset the llm
+
+    assert [
+        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+    ] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            }
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [],
+        },
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "intermediate_steps": [
+                    (
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    )
+                ],
+            }
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "input": "what is weather in sf",
+            "agent_outcome": AgentAction(
+                tool="search_api", tool_input="query", log="tool:search_api:query"
+            ),
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                    "result for query",
+                )
+            ],
+        },
+        next=("agent",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 2,
+            "writes": {
+                "tools": {
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                }
+            },
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
+    ]
+
+
+def test_state_graph_w_config(snapshot: SnapshotAssertion) -> None:
+    from langchain.llms.fake import FakeStreamingListLLM
+    from langchain_community.tools import tool
+    from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.prompts import PromptTemplate
+
+    class AgentState(TypedDict, total=False):
+        input: str
+        agent_outcome: Optional[Union[AgentAction, AgentFinish]]
+        intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+
+    class Config(TypedDict, total=False):
+        tools: list[str]
+
+    # Assemble the tools
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    # Construct the agent
+    prompt = PromptTemplate.from_template("Hello!")
+
+    llm = FakeStreamingListLLM(
+        responses=[
+            "tool:search_api:query",
+            "tool:search_api:another",
+            "finish:answer",
+        ]
+    )
+
+    def agent_parser(input: str) -> dict[str, Union[AgentAction, AgentFinish]]:
+        if input.startswith("finish"):
+            _, answer = input.split(":")
+            return {
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": answer}, log=input
+                )
+            }
+        else:
+            _, tool_name, tool_input = input.split(":")
+            return {
+                "agent_outcome": AgentAction(
+                    tool=tool_name, tool_input=tool_input, log=input
+                )
+            }
+
+    agent = prompt | llm | agent_parser
+
+    # Define tool execution logic
+    def execute_tools(data: AgentState) -> dict:
+        agent_action: AgentAction = data.pop("agent_outcome")
+        observation = {t.name: t for t in tools}[agent_action.tool].invoke(
+            agent_action.tool_input
+        )
+        return {"intermediate_steps": [(agent_action, observation)]}
+
+    # Define decision-making logic
+    def should_continue(data: AgentState) -> str:
+        # Logic to decide whether to continue in the loop or exit
+        if isinstance(data["agent_outcome"], AgentFinish):
+            return "exit"
+        else:
+            return "continue"
+
+    # Define a new graph
+    workflow = StateGraph(AgentState, Config)
+
+    workflow.add_node("agent", agent)
+    workflow.add_node("tools", execute_tools)
+
+    workflow.set_entry_point("agent")
+
+    workflow.add_conditional_edges(
+        "agent", should_continue, {"continue": "tools", "exit": END}
+    )
+
+    workflow.add_edge("tools", "agent")
+
+    app = workflow.compile()
+
+    assert app.config_schema().schema_json() == snapshot
 
 
 def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None:
@@ -1799,7 +2606,7 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
         should_start, {"go-left": "left", "go-right": "right"}
     )
 
-    workflow.add_conditional_edges("left", lambda data: END)
+    workflow.add_conditional_edges("left", lambda data: END, {END: END})
     workflow.add_edge("right", END)
 
     app = workflow.compile()
@@ -1807,11 +2614,12 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
         "output": "what is weather in sf->right",
+        "steps": [],
     }
 
     assert [*app.stream({"input": "what is weather in sf"})] == [
@@ -1825,7 +2633,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list):
+        def bind_tools(self, functions: list):
             return self
 
     @tool()
@@ -1835,109 +2643,197 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     tools = [search_api]
 
-    app = create_tool_calling_executor(
-        FakeFuntionChatModel(
-            responses=[
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "tool_calls": [
-                            {
-                                "id": "tool_call123",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": json.dumps("query"),
-                                },
-                            }
-                        ]
+    model = FakeFuntionChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
                     },
-                ),
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "tool_calls": [
-                            {
-                                "id": "tool_call234",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": json.dumps("another"),
-                                },
-                            },
-                            {
-                                "id": "tool_call567",
-                                "type": "function",
-                                "function": {
-                                    "name": "search_api",
-                                    "arguments": '"a third one"',
-                                },
-                            },
-                        ]
+                ],
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call234",
+                        "name": "search_api",
+                        "args": {"query": "another"},
                     },
-                ),
-                AIMessage(content="answer"),
-            ]
-        ),
-        tools,
+                    {
+                        "id": "tool_call567",
+                        "name": "search_api",
+                        "args": {"query": "a third one"},
+                    },
+                ],
+            ),
+            AIMessage(content="answer"),
+        ]
     )
+
+    app = create_tool_calling_executor(model, tools)
 
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf"),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call123",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            },
-                        }
-                    ]
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
             ),
-            ToolMessage(content="result for query", tool_call_id="tool_call123"),
+            ToolMessage(
+                content="result for query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
             AIMessage(
                 id=AnyStr(),
                 content="",
-                additional_kwargs={
-                    "tool_calls": [
-                        {
-                            "id": "tool_call234",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            },
-                        },
-                        {
-                            "id": "tool_call567",
-                            "type": "function",
-                            "function": {
-                                "name": "search_api",
-                                "arguments": '"a third one"',
-                            },
-                        },
-                    ]
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call234",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    },
+                    {
+                        "id": "tool_call567",
+                        "name": "search_api",
+                        "args": {"query": "a third one"},
+                    },
+                ],
             ),
-            ToolMessage(content="result for another", tool_call_id="tool_call234"),
-            ToolMessage(content="result for a third one", tool_call_id="tool_call567"),
+            ToolMessage(
+                content="result for another",
+                name="search_api",
+                tool_call_id="tool_call234",
+                id=AnyStr(),
+            ),
+            ToolMessage(
+                content="result for a third one",
+                name="search_api",
+                tool_call_id="tool_call567",
+                id=AnyStr(),
+            ),
             AIMessage(content="answer", id=AnyStr()),
         ]
     }
+
+    assert app.invoke(
+        {"messages": [HumanMessage(content="what is weather in sf")]},
+        {"recursion_limit": 2},
+        debug=True,
+    ) == {
+        "messages": [
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            AIMessage(
+                content="Sorry, need more steps to process this request.", id=AnyStr()
+            ),
+        ]
+    }
+
+    model.i = 0  # reset the model
+
+    assert app.invoke(
+        {"messages": [HumanMessage(content="what is weather in sf")]},
+        stream_mode="updates",
+    ) == [
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                            },
+                        ],
+                        id=AnyStr(),
+                    )
+                ]
+            }
+        },
+        {
+            "action": {
+                "messages": [
+                    ToolMessage(
+                        content="result for query",
+                        name="search_api",
+                        tool_call_id="tool_call123",
+                        id=AnyStr(),
+                    )
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call234",
+                                "name": "search_api",
+                                "args": {"query": "another"},
+                            },
+                            {
+                                "id": "tool_call567",
+                                "name": "search_api",
+                                "args": {"query": "a third one"},
+                            },
+                        ],
+                        id=AnyStr(),
+                    )
+                ]
+            }
+        },
+        {
+            "action": {
+                "messages": [
+                    ToolMessage(
+                        content="result for another",
+                        name="search_api",
+                        tool_call_id="tool_call234",
+                        id=AnyStr(),
+                    ),
+                    ToolMessage(
+                        content="result for a third one",
+                        name="search_api",
+                        tool_call_id="tool_call567",
+                        id=AnyStr(),
+                    ),
+                ]
+            }
+        },
+        {
+            "agent": {
+                "messages": [
+                    AIMessage(
+                        content="answer",
+                        id=AnyStr(),
+                    )
+                ]
+            }
+        },
+    ]
 
     assert [
         *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
@@ -1948,18 +2844,13 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     AIMessage(
                         id=AnyStr(),
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call123",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"query"',
-                                    },
-                                }
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                            },
+                        ],
                     )
                 ]
             }
@@ -1967,7 +2858,12 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "action": {
                 "messages": [
-                    ToolMessage(content="result for query", tool_call_id="tool_call123")
+                    ToolMessage(
+                        content="result for query",
+                        name="search_api",
+                        tool_call_id="tool_call123",
+                        id=AnyStr(),
+                    )
                 ]
             }
         },
@@ -1977,26 +2873,18 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     AIMessage(
                         id=AnyStr(),
                         content="",
-                        additional_kwargs={
-                            "tool_calls": [
-                                {
-                                    "id": "tool_call234",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"another"',
-                                    },
-                                },
-                                {
-                                    "id": "tool_call567",
-                                    "type": "function",
-                                    "function": {
-                                        "name": "search_api",
-                                        "arguments": '"a third one"',
-                                    },
-                                },
-                            ]
-                        },
+                        tool_calls=[
+                            {
+                                "id": "tool_call234",
+                                "name": "search_api",
+                                "args": {"query": "another"},
+                            },
+                            {
+                                "id": "tool_call567",
+                                "name": "search_api",
+                                "args": {"query": "a third one"},
+                            },
+                        ],
                     )
                 ]
             }
@@ -2005,10 +2893,16 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             "action": {
                 "messages": [
                     ToolMessage(
-                        content="result for another", tool_call_id="tool_call234"
+                        content="result for another",
+                        name="search_api",
+                        tool_call_id="tool_call234",
+                        id=AnyStr(),
                     ),
                     ToolMessage(
-                        content="result for a third one", tool_call_id="tool_call567"
+                        content="result for a third one",
+                        name="search_api",
+                        tool_call_id="tool_call567",
+                        id=AnyStr(),
                     ),
                 ]
             }
@@ -2063,13 +2957,13 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf"),
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -2077,7 +2971,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
                     "function_call": {"name": "search_api", "arguments": '"query"'}
                 },
             ),
-            FunctionMessage(content="result for query", name="search_api"),
+            FunctionMessage(content="result for query", name="search_api", id=AnyStr()),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -2085,7 +2979,9 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
                     "function_call": {"name": "search_api", "arguments": '"another"'}
                 },
             ),
-            FunctionMessage(content="result for another", name="search_api"),
+            FunctionMessage(
+                content="result for another", name="search_api", id=AnyStr()
+            ),
             AIMessage(content="answer", id=AnyStr()),
         ]
     }
@@ -2112,7 +3008,9 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for query", name="search_api")
+                    FunctionMessage(
+                        content="result for query", name="search_api", id=AnyStr()
+                    )
                 ]
             }
         },
@@ -2135,7 +3033,9 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
         {
             "action": {
                 "messages": [
-                    FunctionMessage(content="result for another", name="search_api")
+                    FunctionMessage(
+                        content="result for another", name="search_api", id=AnyStr()
+                    )
                 ]
             }
         },
@@ -2143,25 +3043,20 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
 def test_message_graph(
     snapshot: SnapshotAssertion,
-    checkpoint_at: CheckpointAt,
     deterministic_uuids: MockerFixture,
 ) -> None:
     from copy import deepcopy
 
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
-    from langchain_core.agents import AgentAction
     from langchain_core.callbacks import CallbackManagerForLLMRun
     from langchain_core.messages import (
         AIMessage,
         BaseMessage,
-        FunctionMessage,
         HumanMessage,
+        ToolMessage,
     )
     from langchain_core.outputs import ChatGeneration, ChatResult
 
@@ -2195,63 +3090,46 @@ def test_message_graph(
         responses=[
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
                         "name": "search_api",
-                        "arguments": json.dumps("query"),
+                        "args": {"query": "query"},
                     }
-                },
+                ],
                 id="ai1",
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
                         "name": "search_api",
-                        "arguments": json.dumps("another"),
+                        "args": {"query": "another"},
                     }
-                },
+                ],
                 id="ai2",
             ),
             AIMessage(content="answer", id="ai3"),
         ]
     )
 
-    tool_executor = ToolExecutor(tools)
-
     # Define the function that determines whether to continue or not
     def should_continue(messages):
         last_message = messages[-1]
         # If there is no function call, then we finish
-        if "function_call" not in last_message.additional_kwargs:
+        if not last_message.tool_calls:
             return "end"
         # Otherwise if there is, we continue
         else:
             return "continue"
-
-    def call_tool(messages):
-        # Based on the continue condition
-        # we know the last message involves a function call
-        last_message = messages[-1]
-        # We construct an AgentAction from the function_call
-        action = AgentAction(
-            tool=last_message.additional_kwargs["function_call"]["name"],
-            tool_input=json.loads(
-                last_message.additional_kwargs["function_call"]["arguments"]
-            ),
-            log="",
-        )
-        # We call the tool_executor and get back a response
-        response = tool_executor.invoke(action)
-        # We use the response to create a FunctionMessage
-        return FunctionMessage(content=str(response), name=action.tool)
 
     # Define a new graph
     workflow = MessageGraph()
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", model)
-    workflow.add_node("action", call_tool)
+    workflow.add_node("action", ToolNode(tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -2290,7 +3168,7 @@ def test_message_graph(
     assert app.get_input_schema().schema_json() == snapshot
     assert app.get_output_schema().schema_json() == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_ascii() == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
         HumanMessage(
@@ -2299,27 +3177,37 @@ def test_message_graph(
         ),
         AIMessage(
             content="",
-            additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"query"'}
-            },
+            tool_calls=[
+                {
+                    "id": "tool_call123",
+                    "name": "search_api",
+                    "args": {"query": "query"},
+                }
+            ],
             id="ai1",  # respects ids passed in
         ),
-        FunctionMessage(
+        ToolMessage(
             content="result for query",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000012",
+            tool_call_id="tool_call123",
+            id="00000000-0000-4000-8000-000000000011",
         ),
         AIMessage(
             content="",
-            additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"another"'}
-            },
+            tool_calls=[
+                {
+                    "id": "tool_call456",
+                    "name": "search_api",
+                    "args": {"query": "another"},
+                }
+            ],
             id="ai2",
         ),
-        FunctionMessage(
+        ToolMessage(
             content="result for another",
             name="search_api",
-            id="00000000-0000-4000-8000-000000000022",
+            tool_call_id="tool_call456",
+            id="00000000-0000-4000-8000-000000000020",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -2328,40 +3216,54 @@ def test_message_graph(
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             )
         },
         {
-            "action": FunctionMessage(
-                content="result for query",
-                name="search_api",
-                id="00000000-0000-4000-8000-000000000039",
-            )
+            "action": [
+                ToolMessage(
+                    content="result for query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id="00000000-0000-4000-8000-000000000036",
+                )
+            ]
         },
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             )
         },
         {
-            "action": FunctionMessage(
-                content="result for another",
-                name="search_api",
-                id="00000000-0000-4000-8000-000000000049",
-            )
+            "action": [
+                ToolMessage(
+                    content="result for another",
+                    name="search_api",
+                    tool_call_id="tool_call456",
+                    id="00000000-0000-4000-8000-000000000045",
+                )
+            ]
         },
         {"agent": AIMessage(content="answer", id="ai3")},
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -2372,9 +3274,13 @@ def test_message_graph(
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             )
         },
@@ -2385,19 +3291,40 @@ def test_message_graph(
             HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             ),
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        }
+                    ],
+                    id="ai1",
+                )
+            },
+        },
     )
 
     # modify ai message
     last_message = app_w_interrupt.get_state(config).values[-1]
-    last_message.additional_kwargs["function_call"]["arguments"] = '"a different query"'
+    last_message.tool_calls[0]["args"] = {"query": "a different query"}
     next_config = app_w_interrupt.update_state(config, last_message)
 
     # message was replaced instead of appended
@@ -2406,33 +3333,58 @@ def test_message_graph(
             HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
         ],
         next=("action",),
         config=next_config,
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        }
+                    ],
+                    id="ai1",
+                )
+            },
+        },
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
-            "action": FunctionMessage(
-                content="result for a different query",
-                name="search_api",
-                id=AnyStr(),
-            )
+            "action": [
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id=AnyStr(),
+                )
+            ]
         },
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             )
         },
@@ -2446,29 +3398,52 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             ),
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 4,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call456",
+                            "name": "search_api",
+                            "args": {"query": "another"},
+                        }
+                    ],
+                    id="ai2",
+                )
+            },
+        },
     )
 
     app_w_interrupt.update_state(
@@ -2485,27 +3460,34 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {"agent": AIMessage(content="answer", id="ai2")},
+        },
     )
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_before=["action"],
     )
     config = {"configurable": {"thread_id": "2"}}
@@ -2515,9 +3497,13 @@ def test_message_graph(
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             )
         },
@@ -2531,19 +3517,40 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             ),
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        }
+                    ],
+                    id="ai1",
+                )
+            },
+        },
     )
 
     # modify ai message
     last_message = app_w_interrupt.get_state(config).values[-1]
-    last_message.additional_kwargs["function_call"]["arguments"] = '"a different query"'
+    last_message.tool_calls[0]["args"] = {"query": "a different query"}
     app_w_interrupt.update_state(config, last_message)
 
     # message was replaced instead of appended
@@ -2555,33 +3562,58 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        }
+                    ],
+                    id="ai1",
+                )
+            },
+        },
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
-            "action": FunctionMessage(
-                content="result for a different query",
-                name="search_api",
-                id=AnyStr(),
-            )
+            "action": [
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id=AnyStr(),
+                )
+            ]
         },
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             )
         },
@@ -2595,29 +3627,52 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             ),
         ],
         next=("action",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "loop",
+            "step": 4,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call456",
+                            "name": "search_api",
+                            "args": {"query": "another"},
+                        }
+                    ],
+                    id="ai2",
+                )
+            },
+        },
     )
 
     app_w_interrupt.update_state(
@@ -2634,23 +3689,30 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {"agent": AIMessage(content="answer", id="ai2")},
+        },
     )
 
     # add an extra message as if it came from "action" node
@@ -2666,17 +3728,19 @@ def test_message_graph(
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
                 id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
             ),
-            FunctionMessage(
+            ToolMessage(
                 content="result for a different query",
                 name="search_api",
+                tool_call_id="tool_call123",
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
@@ -2684,6 +3748,11 @@ def test_message_graph(
         ],
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        metadata={
+            "source": "update",
+            "step": 6,
+            "writes": {"action": ("ai", "an extra message")},
+        },
     )
 
 
@@ -2740,17 +3809,536 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
     assert [*app.stream({"query": "what is weather in sf"}, stream_mode="values")] == [
-        {"query": "what is weather in sf"},
-        {"query": "query: what is weather in sf"},
-        {"docs": ["doc1", "doc2", "doc3", "doc4"]},
-        {"answer": "doc1,doc2,doc3,doc4"},
+        {"query": "what is weather in sf", "docs": []},
+        {"query": "query: what is weather in sf", "docs": []},
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+        },
+        {
+            "query": "query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+            "answer": "doc1,doc2,doc3,doc4",
+        },
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) -> None:
+def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    # this graph is invalid because there is no path to END
+    invalid_graph = StateGraph(State)
+    invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": "slow"})
+    invalid_graph.add_node("tool_two_fast", lambda s: {"my_key": "fast"})
+    invalid_graph.set_conditional_entry_point(
+        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast"
+    )
+    with pytest.raises(ValueError):
+        invalid_graph.compile()
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
+    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    tool_two_graph.set_conditional_entry_point(
+        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
+    )
+    tool_two = tool_two_graph.compile()
+    assert tool_two.get_graph().draw_mermaid() == snapshot
+
+    assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
+        "my_key": "value slow",
+        "market": "DE",
+    }
+    assert tool_two.invoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value fast",
+        "market": "US",
+    }
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            tool_two.invoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value", "market": "DE"},
+            next=("tool_two_slow",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={"source": "loop", "step": 0, "writes": None},
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread1, debug=1) == {
+            "my_key": "value slow",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value slow", "market": "DE"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"tool_two_slow": {"my_key": " slow"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "US"}, thread2) == {
+            "my_key": "value",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={"source": "loop", "step": 0, "writes": None},
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread2, debug=1) == {
+            "my_key": "value fast",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value fast", "market": "US"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"tool_two_fast": {"my_key": " fast"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        )
+
+        thread3 = {"configurable": {"thread_id": "3"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "US"}, thread3) == {
+            "my_key": "value",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "value", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={"source": "loop", "step": 0, "writes": None},
+            parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        )
+        # update state
+        tool_two.update_state(thread3, {"my_key": "key"})  # appends to my_key
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "valuekey", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={
+                "source": "update",
+                "step": 1,
+                "writes": {START: {"my_key": "key"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread3, debug=1) == {
+            "my_key": "valuekey fast",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "valuekey fast", "market": "US"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={
+                "source": "loop",
+                "step": 2,
+                "writes": {"tool_two_fast": {"my_key": " fast"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        )
+
+
+def test_branch_then(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    # this graph is invalid because there is no path to "finish"
+    invalid_graph = StateGraph(State)
+    invalid_graph.set_entry_point("prepare")
+    invalid_graph.set_finish_point("finish")
+    invalid_graph.add_conditional_edges(
+        source="prepare",
+        path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        path_map=["tool_two_slow", "tool_two_fast"],
+    )
+    invalid_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
+    invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
+    invalid_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    invalid_graph.add_node("finish", lambda s: {"my_key": " finished"})
+    with pytest.raises(ValueError):
+        invalid_graph.compile()
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.set_entry_point("prepare")
+    tool_two_graph.set_finish_point("finish")
+    tool_two_graph.add_conditional_edges(
+        source="prepare",
+        path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        then="finish",
+    )
+    tool_two_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
+    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
+    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    tool_two_graph.add_node("finish", lambda s: {"my_key": " finished"})
+    tool_two = tool_two_graph.compile()
+    assert tool_two.get_graph().draw_mermaid(with_styles=False) == snapshot
+    assert tool_two.get_graph().draw_mermaid() == snapshot
+
+    assert tool_two.invoke({"my_key": "value", "market": "DE"}, debug=1) == {
+        "my_key": "value prepared slow finished",
+        "market": "DE",
+    }
+    assert tool_two.invoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value prepared fast finished",
+        "market": "US",
+    }
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        # test stream_mode=debug
+        tool_two = tool_two_graph.compile(checkpointer=saver)
+        thread10 = {"configurable": {"thread_id": "10"}}
+        assert [
+            *tool_two.stream(
+                {"my_key": "value", "market": "DE"}, thread10, stream_mode="debug"
+            )
+        ] == [
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 0,
+                "payload": {
+                    "config": {
+                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                    },
+                    "values": {"my_key": "value", "market": "DE"},
+                },
+            },
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                    "name": "prepare",
+                    "input": {"my_key": "value", "market": "DE"},
+                    "triggers": ["start:prepare"],
+                },
+            },
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                    "name": "prepare",
+                    "result": [("my_key", " prepared")],
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "config": {
+                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                    },
+                    "values": {"my_key": "value prepared", "market": "DE"},
+                },
+            },
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                    "name": "tool_two_slow",
+                    "input": {"my_key": "value prepared", "market": "DE"},
+                    "triggers": ["branch:prepare:condition:tool_two_slow"],
+                },
+            },
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                    "name": "tool_two_slow",
+                    "result": [("my_key", " slow")],
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "config": {
+                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                    },
+                    "values": {"my_key": "value prepared slow", "market": "DE"},
+                },
+            },
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                    "name": "finish",
+                    "input": {"my_key": "value prepared slow", "market": "DE"},
+                    "triggers": ["branch:prepare:condition:then"],
+                },
+            },
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                    "name": "finish",
+                    "result": [("my_key", " finished")],
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "config": {
+                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                    },
+                    "values": {
+                        "my_key": "value prepared slow finished",
+                        "market": "DE",
+                    },
+                },
+            },
+        ]
+
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            tool_two.invoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value prepared",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "DE"},
+            next=("tool_two_slow",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread1, debug=1) == {
+            "my_key": "value prepared slow finished",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared slow finished", "market": "DE"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "US"}, thread2) == {
+            "my_key": "value prepared",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread2, debug=1) == {
+            "my_key": "value prepared fast finished",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared fast finished", "market": "US"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        )
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_after=["prepare"]
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            tool_two.invoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value prepared",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "DE"},
+            next=("tool_two_slow",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread1, debug=1) == {
+            "my_key": "value prepared slow finished",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value prepared slow finished", "market": "DE"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+
+        thread2 = {"configurable": {"thread_id": "2"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "US"}, thread2) == {
+            "my_key": "value prepared",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared", "market": "US"},
+            next=("tool_two_fast",),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread2, debug=1) == {
+            "my_key": "value prepared fast finished",
+            "market": "US",
+        }
+        assert tool_two.get_state(thread2) == StateSnapshot(
+            values={"my_key": "value prepared fast finished", "market": "US"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread2).config,
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        )
+
+        thread3 = {"configurable": {"thread_id": "3"}}
+        # update an empty thread before first run
+        uconfig = tool_two.update_state(thread3, {"my_key": "key", "market": "DE"})
+        # check current state
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "key", "market": "DE"},
+            next=("prepare",),
+            config=uconfig,
+            metadata={
+                "source": "update",
+                "step": 0,
+                "writes": {START: {"my_key": "key", "market": "DE"}},
+            },
+        )
+        # run from this point
+        assert tool_two.invoke(None, thread3) == {
+            "my_key": "key prepared",
+            "market": "DE",
+        }
+        # get state after first node
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "key prepared", "market": "DE"},
+            next=("tool_two_slow",),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={
+                "source": "loop",
+                "step": 1,
+                "writes": {"prepare": {"my_key": " prepared"}},
+            },
+            parent_config=uconfig,
+        )
+        # resume, for same result as above
+        assert tool_two.invoke(None, thread3, debug=1) == {
+            "my_key": "key prepared slow finished",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread3) == StateSnapshot(
+            values={"my_key": "key prepared slow finished", "market": "DE"},
+            next=(),
+            config=tool_two.checkpointer.get_tuple(thread3).config,
+            metadata={
+                "source": "loop",
+                "step": 3,
+                "writes": {"finish": {"my_key": " finished"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
+        )
+
+
+def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -2797,41 +4385,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) ->
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """              +-----------+              
-              | __start__ |              
-              +-----------+              
-                    *                    
-                    *                    
-                    *                    
-            +---------------+            
-            | rewrite_query |            
-            +---------------+            
-             ***         ***             
-            *               *            
-          **                 ***         
-+--------------+                *        
-| analyzer_one |                *        
-+--------------+                *        
-        *                       *        
-        *                       *        
-        *                       *        
-+---------------+      +---------------+ 
-| retriever_one |      | retriever_two | 
-+---------------+      +---------------+ 
-             ***         ***             
-                *       *                
-                 **   **                 
-                 +----+                  
-                 | qa |                  
-                 +----+                  
-                    *                    
-                    *                    
-                    *                    
-              +---------+                
-              | __end__ |                
-              +---------+                """
-    )
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}) == {
         "query": "analyzed: query: what is weather in sf",
@@ -2850,7 +4404,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) ->
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -2871,11 +4425,8 @@ def test_in_one_fan_out_state_graph_waiting_edge(checkpoint_at: CheckpointAt) ->
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
 def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
-    checkpoint_at: CheckpointAt,
+    snapshot: SnapshotAssertion,
 ) -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -2906,6 +4457,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     def qa(data: State) -> State:
         return {"answer": ",".join(data["docs"])}
 
+    def rewrite_query_then(data: State) -> Literal["retriever_two"]:
+        return "retriever_two"
+
     workflow = StateGraph(State)
 
     workflow.add_node("rewrite_query", rewrite_query)
@@ -2917,49 +4471,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     workflow.set_entry_point("rewrite_query")
     workflow.add_edge("rewrite_query", "analyzer_one")
     workflow.add_edge("analyzer_one", "retriever_one")
-    workflow.add_conditional_edges(
-        "rewrite_query", lambda _: "retriever_two", {"retriever_two": "retriever_two"}
-    )
+    workflow.add_conditional_edges("rewrite_query", rewrite_query_then)
     workflow.add_edge(["retriever_one", "retriever_two"], "qa")
     workflow.set_finish_point("qa")
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """                +-----------+                       
-                | __start__ |                       
-                +-----------+                       
-                      *                             
-                      *                             
-                      *                             
-              +---------------+                     
-              | rewrite_query |                     
-              +---------------+                     
-               **            **                     
-             **                **                   
-           **                    **                 
-+--------------+      +-------------------------+   
-| analyzer_one |      | rewrite_query_condition |   
-+--------------+      +-------------------------+   
-        *                           *               
-        *                           *               
-        *                           *               
-+---------------+           +---------------+       
-| retriever_one |           | retriever_two |       
-+---------------+           +---------------+       
-               **            **                     
-                 **        **                       
-                   **    **                         
-                   +----+                           
-                   | qa |                           
-                   +----+                           
-                      *                             
-                      *                             
-                      *                             
-                 +---------+                        
-                 | __end__ |                        
-                 +---------+                        """
-    )
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"query": "what is weather in sf"}, debug=True) == {
         "query": "analyzed: query: what is weather in sf",
@@ -2978,7 +4496,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -2999,11 +4517,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
-    checkpoint_at: CheckpointAt,
+    snapshot: SnapshotAssertion,
 ) -> None:
     from langchain_core.pydantic_v1 import BaseModel, ValidationError
 
@@ -3059,41 +4574,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """               +-----------+                     
-               | __start__ |                     
-               +-----------+                     
-                      *                          
-                      *                          
-                      *                          
-             +---------------+                   
-             | rewrite_query |                   
-             +---------------+                   
-               **           **                   
-             **               **                 
-           **                   **               
-+--------------+      +-----------------------+  
-| analyzer_one |      | rewrite_query_decider |  
-+--------------+      +-----------------------+  
-        *                          *             
-        *                          *             
-        *                          *             
-+---------------+         +---------------+      
-| retriever_one |         | retriever_two |      
-+---------------+         +---------------+      
-               **           **                   
-                 **       **                     
-                   **   **                       
-                   +----+                        
-                   | qa |                        
-                   +----+                        
-                      *                          
-                      *                          
-                      *                          
-                +---------+                      
-                | __end__ |                      
-                +---------+                      """
-    )
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     with pytest.raises(ValidationError):
         app.invoke({"query": {}})
@@ -3115,7 +4596,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -3136,12 +4617,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpoint_at", [CheckpointAt.END_OF_RUN, CheckpointAt.END_OF_STEP]
-)
-def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
-    checkpoint_at: CheckpointAt,
-) -> None:
+def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
     ) -> list[str]:
@@ -3210,7 +4686,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(at=checkpoint_at),
+        checkpointer=MemorySaverAssertImmutable(),
         interrupt_after=["retriever_one"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -3317,7 +4793,94 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
     ]
 
 
-def test_simple_multi_edge() -> None:
+def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
+    def sorted_add(
+        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+    ) -> list[str]:
+        if isinstance(y[0], tuple):
+            for rem, _ in y:
+                x.remove(rem)
+            y = [t[1] for t in y]
+        return sorted(operator.add(x, y))
+
+    class State(TypedDict, total=False):
+        query: str
+        answer: str
+        docs: Annotated[list[str], sorted_add]
+
+    def rewrite_query(data: State) -> State:
+        return {"query": f'query: {data["query"]}'}
+
+    def retriever_picker(data: State) -> list[str]:
+        return ["analyzer_one", "retriever_two"]
+
+    def analyzer_one(data: State) -> State:
+        return {"query": f'analyzed: {data["query"]}'}
+
+    def retriever_one(data: State) -> State:
+        return {"docs": ["doc1", "doc2"]}
+
+    def retriever_two(data: State) -> State:
+        return {"docs": ["doc3", "doc4"]}
+
+    def qa(data: State) -> State:
+        return {"answer": ",".join(data["docs"])}
+
+    def decider(data: State) -> None:
+        return None
+
+    def decider_cond(data: State) -> str:
+        if data["query"].count("analyzed") > 1:
+            return "qa"
+        else:
+            return "rewrite_query"
+
+    workflow = StateGraph(State)
+
+    workflow.add_node("rewrite_query", rewrite_query)
+    workflow.add_node("analyzer_one", analyzer_one)
+    workflow.add_node("retriever_one", retriever_one)
+    workflow.add_node("retriever_two", retriever_two)
+    workflow.add_node("decider", decider)
+    workflow.add_node("qa", qa)
+
+    workflow.set_entry_point("rewrite_query")
+    workflow.add_conditional_edges("rewrite_query", retriever_picker)
+    workflow.add_edge("analyzer_one", "retriever_one")
+    workflow.add_edge(["retriever_one", "retriever_two"], "decider")
+    workflow.add_conditional_edges("decider", decider_cond)
+    workflow.set_finish_point("qa")
+
+    app = workflow.compile()
+
+    assert app.invoke({"query": "what is weather in sf"}) == {
+        "query": "analyzed: query: analyzed: query: what is weather in sf",
+        "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
+        "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
+    }
+
+    assert [*app.stream({"query": "what is weather in sf"})] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {
+            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
+        {
+            "analyzer_one": {
+                "query": "analyzed: query: analyzed: query: what is weather in sf"
+            },
+            "retriever_two": {"docs": ["doc3", "doc4"]},
+        },
+        {
+            "retriever_one": {"docs": ["doc1", "doc2"]},
+        },
+        {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
+    ]
+
+
+def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
 
@@ -3343,33 +4906,154 @@ def test_simple_multi_edge() -> None:
 
     app = graph.compile()
 
-    assert app.get_graph().draw_ascii() == (
-        """    +-----------+  
-    | __start__ |  
-    +-----------+  
-           *       
-           *       
-           *       
-        +----+     
-        | up |     
-        +----+     
-       **     **   
-      *         *  
-     *           * 
-+------+          *
-| side |         * 
-+------+        *  
-       **     **   
-         *   *     
-          * *      
-       +------+    
-       | down |    
-       +------+    
-           *       
-           *       
-           *       
-      +---------+  
-      | __end__ |  
-      +---------+  """
-    )
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}
+
+
+def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    def logic(state: State):
+        pass
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two_slow", logic)
+    tool_two_graph.add_node("tool_two_fast", logic)
+    tool_two_graph.set_conditional_entry_point(
+        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
+        then=END,
+    )
+    tool_two = tool_two_graph.compile()
+
+    graph = StateGraph(State)
+    graph.add_node("tool_one", logic)
+    graph.add_node("tool_two", tool_two)
+    graph.add_node("tool_three", logic)
+    graph.set_conditional_entry_point(lambda s: "tool_one", then=END)
+    app = graph.compile()
+
+    assert app.get_graph(xray=True).to_json() == snapshot
+    assert app.get_graph(xray=True).draw_mermaid() == snapshot
+
+
+def test_nested_graph(snapshot: SnapshotAssertion) -> None:
+    def never_called_fn(state: Any):
+        assert 0, "This function should never be called"
+
+    never_called = RunnableLambda(never_called_fn)
+
+    class InnerState(TypedDict):
+        my_key: str
+        my_other_key: str
+
+    def up(state: InnerState):
+        return {"my_key": state["my_key"] + " there", "my_other_key": state["my_key"]}
+
+    inner = StateGraph(InnerState)
+    inner.add_node("up", up)
+    inner.set_entry_point("up")
+    inner.set_finish_point("up")
+
+    class State(TypedDict):
+        my_key: str
+        never_called: Any
+
+    def side(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile())
+    graph.add_node("side", side)
+    graph.set_entry_point("inner")
+    graph.add_edge("inner", "side")
+    graph.set_finish_point("side")
+
+    app = graph.compile()
+
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    assert app.get_graph(xray=True).draw_mermaid() == snapshot
+    assert app.invoke(
+        {"my_key": "my value", "never_called": never_called}, debug=True
+    ) == {
+        "my_key": "my value there and back again",
+        "never_called": never_called,
+    }
+    assert [*app.stream({"my_key": "my value", "never_called": never_called})] == [
+        {"inner": {"my_key": "my value there"}},
+        {"side": {"my_key": "my value there and back again"}},
+    ]
+    assert [
+        *app.stream(
+            {"my_key": "my value", "never_called": never_called}, stream_mode="values"
+        )
+    ] == [
+        {
+            "my_key": "my value",
+            "never_called": never_called,
+        },
+        {
+            "my_key": "my value there",
+            "never_called": never_called,
+        },
+        {
+            "my_key": "my value there and back again",
+            "never_called": never_called,
+        },
+    ]
+
+    chain = app | RunnablePassthrough()
+
+    assert chain.invoke({"my_key": "my value", "never_called": never_called}) == {
+        "my_key": "my value there and back again",
+        "never_called": never_called,
+    }
+    assert [*chain.stream({"my_key": "my value", "never_called": never_called})] == [
+        {"inner": {"my_key": "my value there"}},
+        {"side": {"my_key": "my value there and back again"}},
+    ]
+
+
+def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
+    class AgentState(TypedDict):
+        hello: str
+
+    def router(state: AgentState) -> str:
+        return "hmm"
+
+    workflow = StateGraph(AgentState)
+    workflow.add_node("Researcher", lambda x: x)
+    workflow.add_node("Chart Generator", lambda x: x)
+    workflow.add_node("Call Tool", lambda x: x)
+    workflow.add_conditional_edges(
+        "Researcher",
+        router,
+        {
+            "redo": "Researcher",
+            "continue": "Chart Generator",
+            "call_tool": "Call Tool",
+            "end": END,
+        },
+    )
+    workflow.add_conditional_edges(
+        "Chart Generator",
+        router,
+        {"continue": "Researcher", "call_tool": "Call Tool", "end": END},
+    )
+    workflow.add_conditional_edges(
+        "Call Tool",
+        # Each agent node updates the 'sender' field
+        # the tool calling node does not, meaning
+        # this edge will route back to the original agent
+        # who invoked the tool
+        lambda x: x["sender"],
+        {
+            "Researcher": "Researcher",
+            "Chart Generator": "Chart Generator",
+        },
+    )
+    workflow.set_entry_point("Researcher")
+
+    app = workflow.compile()
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot

@@ -1,5 +1,7 @@
 from typing import Any, Iterator, Mapping, Optional, Sequence, Union
 
+from langchain_core.runnables.utils import AddableDict
+
 from langgraph.channels.base import BaseChannel, EmptyChannelError
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel.log import logger
@@ -61,42 +63,60 @@ def map_input(
                 logger.warning(f"Input channel {k} not found in {input_channels}")
 
 
+class AddableValuesDict(AddableDict):
+    def __add__(self, other: dict[str, Any]) -> "AddableValuesDict":
+        return self | other
+
+    def __radd__(self, other: dict[str, Any]) -> "AddableValuesDict":
+        return other | self
+
+
 def map_output_values(
     output_channels: Union[str, Sequence[str]],
     pending_writes: Sequence[tuple[str, Any]],
     channels: Mapping[str, BaseChannel],
-) -> Optional[Union[dict[str, Any], Any]]:
+) -> Iterator[Union[dict[str, Any], Any]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
         if any(chan == output_channels for chan, _ in pending_writes):
-            return read_channel(channels, output_channels)
+            yield read_channel(channels, output_channels)
     else:
-        if updated := {c for c, _ in pending_writes if c in output_channels}:
-            return read_channels(channels, updated)
-    return None
+        if {c for c, _ in pending_writes if c in output_channels}:
+            yield AddableValuesDict(read_channels(channels, output_channels))
+
+
+class AddableUpdatesDict(AddableDict):
+    def __add__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
+        return [self, other]
+
+    def __radd__(self, other: dict[str, Any]) -> "AddableUpdatesDict":
+        raise TypeError("AddableUpdatesDict does not support right-side addition")
 
 
 def map_output_updates(
     output_channels: Union[str, Sequence[str]],
     tasks: list[PregelExecutableTask],
-) -> Optional[dict[str, Union[Any, dict[str, Any]]]]:
+) -> Iterator[dict[str, Union[Any, dict[str, Any]]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
         t for t in tasks if not t.config or TAG_HIDDEN not in t.config.get("tags")
     ]
     if isinstance(output_channels, str):
-        if updated := {
-            node: value
-            for node, _, _, writes, _ in output_tasks
-            for chan, value in writes
-            if chan == output_channels
-        }:
-            return updated
+        if updated := AddableUpdatesDict(
+            {
+                node: value
+                for node, _, _, writes, _, _ in output_tasks
+                for chan, value in writes
+                if chan == output_channels
+            }
+        ):
+            yield updated
     else:
-        if updated := {
-            node: {chan: value for chan, value in writes if chan in output_channels}
-            for node, _, _, writes, _ in output_tasks
-            if any(chan in output_channels for chan, _ in writes)
-        }:
-            return updated
-    return None
+        if updated := AddableUpdatesDict(
+            {
+                node: {chan: value for chan, value in writes if chan in output_channels}
+                for node, _, _, writes, _, _ in output_tasks
+                if any(chan in output_channels for chan, _ in writes)
+            }
+        ):
+            yield updated

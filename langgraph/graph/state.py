@@ -1,20 +1,25 @@
 import logging
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union
+from typing import Any, Optional, Sequence, Type, Union, get_origin, get_type_hints
 
+from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 
-from langgraph.channels.base import BaseChannel, InvalidUpdateError
+from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
+from langgraph.errors import InvalidUpdateError
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
+from langgraph.managed.base import ManagedValue, is_managed_value
 from langgraph.pregel.read import ChannelRead, PregelNode
+from langgraph.pregel.types import All
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.utils import RunnableCallable
 
@@ -30,10 +35,13 @@ class StateGraph(Graph):
     The signature of a reducer function is (Value, Value) -> Value.
     """
 
-    def __init__(self, schema: Type[Any]) -> None:
+    def __init__(
+        self, state_schema: Type[Any], config_schema: Optional[Type[Any]] = None
+    ) -> None:
         super().__init__()
-        self.schema = schema
-        self.channels = _get_channels(schema)
+        self.schema = state_schema
+        self.config_schema = config_schema
+        self.channels, self.managed = _get_channels(state_schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
         self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
@@ -45,11 +53,37 @@ class StateGraph(Graph):
         }
 
     def add_node(self, key: str, action: RunnableLike) -> None:
+        """Adds a new node to the state graph.
+
+        Args:
+            key (str): The key of the node.
+            action (RunnableLike): The action associated with the node.
+
+        Raises:
+            ValueError: If the key is already being used as a state key.
+
+        Returns:
+            None
+        """
         if key in self.channels:
             raise ValueError(f"'{key}' is already being used as a state key")
         return super().add_node(key, action)
 
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
+        """Adds a directed edge from the start node to the end node.
+
+        If the graph transitions to the start_key node, it will always transition to the end_key node next.
+
+        Args:
+            start_key (Union[str, list[str]]): The key(s) of the start node(s) of the edge.
+            end_key (str): The key of the end node of the edge.
+
+        Raises:
+            ValueError: If the start key is 'END' or if the start key or end key is not present in the graph.
+
+        Returns:
+            None
+        """
         if isinstance(start_key, str):
             return super().add_edge(start_key, end_key)
 
@@ -73,23 +107,45 @@ class StateGraph(Graph):
     def compile(
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
-        interrupt_before: Optional[Sequence[str]] = None,
-        interrupt_after: Optional[Sequence[str]] = None,
+        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
+        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
     ) -> CompiledGraph:
+        """Compiles the state graph into a `CompiledGraph` object.
+
+        The compiled graph implements the `Runnable` interface and can be invoked,
+        streamed, batched, and run asynchronously.
+
+        Args:
+            checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
+                This serves as a fully versioned "memory" for the graph, allowing
+                the graph to be paused and resumed, and replayed from any point.
+            interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
+            interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
+            debug (bool): A flag indicating whether to enable debug mode.
+
+        Returns:
+            CompiledGraph: The compiled state graph.
+        """
         # assign default values
         interrupt_before = interrupt_before or []
         interrupt_after = interrupt_after or []
 
         # validate the graph
-        self.validate(interrupt=interrupt_before + interrupt_after)
+        self.validate(
+            interrupt=(interrupt_before if interrupt_before != "*" else [])
+            + interrupt_after
+            if interrupt_after != "*"
+            else []
+        )
 
         # prepare output channels
         state_keys = list(self.channels)
         output_channels = state_keys[0] if state_keys == ["__root__"] else state_keys
 
         compiled = CompiledStateGraph(
-            graph=self,
+            builder=self,
+            config_type=self.config_schema,
             nodes={},
             channels={**self.channels, START: EphemeralValue(self.schema)},
             input_channels=START,
@@ -121,9 +177,25 @@ class StateGraph(Graph):
 
 
 class CompiledStateGraph(CompiledGraph):
-    graph: StateGraph
+    builder: StateGraph
+
+    def get_input_schema(
+        self, config: Optional[RunnableConfig] = None
+    ) -> type[BaseModel]:
+        if isinstance(self.builder.schema, BaseModel):
+            return self.builder.schema
+
+        return super().get_input_schema(config)
+
+    def get_output_schema(self, config: Optional[RunnableConfig] = None) -> BaseModel:
+        if isinstance(self.builder.schema, BaseModel):
+            return self.builder.schema
+
+        return super().get_output_schema(config)
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
+        state_keys = list(self.builder.channels)
+
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
@@ -132,13 +204,17 @@ class CompiledStateGraph(CompiledGraph):
             else:
                 return input.get(key, SKIP_WRITE)
 
-        state_keys = list(self.graph.channels)
         # state updaters
         state_write_entries = [
-            ChannelWriteEntry(key, None, skip_none=True)
-            if key == "__root__"
-            else ChannelWriteEntry(
-                key, RunnableCallable(_get_state_key, key=key, trace=False)
+            (
+                ChannelWriteEntry(key, skip_none=True)
+                if key == "__root__"
+                else ChannelWriteEntry(
+                    key,
+                    mapper=RunnableCallable(
+                        _get_state_key, key=key, trace=False, recurse=False
+                    ),
+                )
             )
             for key in state_keys
         ]
@@ -157,22 +233,22 @@ class CompiledStateGraph(CompiledGraph):
             self.channels[key] = EphemeralValue(Any)
             self.nodes[key] = PregelNode(
                 triggers=[],
-                # read state keys
+                # read state keys and managed values
                 channels=(
                     state_keys
                     if state_keys == ["__root__"]
-                    else {chan: chan for chan in state_keys}
+                    else ({chan: chan for chan in state_keys} | self.builder.managed)
                 ),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=(
                     None
                     if state_keys == ["__root__"]
-                    else partial(_coerce_state, self.graph.schema)
+                    else partial(_coerce_state, self.builder.schema)
                 ),
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
-                        [ChannelWriteEntry(key)] + state_write_entries,
+                        [ChannelWriteEntry(key, key)] + state_write_entries,
                         tags=[TAG_HIDDEN],
                     ),
                 ],
@@ -206,23 +282,46 @@ class CompiledStateGraph(CompiledGraph):
                 )
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(end: str) -> Optional[ChannelWrite]:
-            if end != END:
-                return ChannelWrite(
-                    [ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)],
-                    tags=[TAG_HIDDEN],
-                )
+        def branch_writer(ends: list[str]) -> Optional[ChannelWrite]:
+            if filtered_ends := [end for end in ends if end != END]:
+                writes = [
+                    ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)
+                    for end in filtered_ends
+                ]
+                if branch.then and branch.then != END:
+                    writes.append(
+                        ChannelWriteEntry(
+                            f"branch:{start}:{name}:then",
+                            WaitForNames(set(filtered_ends)),
+                        )
+                    )
+                return ChannelWrite(writes, tags=[TAG_HIDDEN])
 
         # attach branch publisher
-        self.nodes[start] |= branch.run(branch_writer, _get_state_reader(self.graph))
+        self.nodes[start] |= branch.run(branch_writer, _get_state_reader(self.builder))
 
         # attach branch subscribers
-        ends = branch.ends.values() if branch.ends else [node for node in self.nodes]
+        ends = (
+            branch.ends.values()
+            if branch.ends
+            else [node for node in self.builder.nodes if node != branch.then]
+        )
         for end in ends:
             if end != END:
                 channel_name = f"branch:{start}:{name}:{end}"
                 self.channels[channel_name] = EphemeralValue(Any)
                 self.nodes[end].triggers.append(channel_name)
+
+        # attach then subscriber
+        if branch.then and branch.then != END:
+            channel_name = f"branch:{start}:{name}:then"
+            self.channels[channel_name] = DynamicBarrierValue(str)
+            self.nodes[branch.then].triggers.append(channel_name)
+            for end in ends:
+                if end != END:
+                    self.nodes[end] |= ChannelWrite(
+                        [ChannelWriteEntry(channel_name, end)], tags=[TAG_HIDDEN]
+                    )
 
 
 def _get_state_reader(graph: StateGraph) -> ChannelRead:
@@ -242,21 +341,32 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
+def _get_channels(
+    schema: Type[dict],
+) -> tuple[dict[str, BaseChannel], dict[str, Type[ManagedValue]]]:
     if not hasattr(schema, "__annotations__"):
-        return {
-            "__root__": _get_channel(schema),
-        }
+        return {"__root__": _get_channel(schema, allow_managed=False)}, {}
 
-    channels: dict[str, BaseChannel] = {}
-    for name, typ in schema.__annotations__.items():
-        channels[name] = _get_channel(typ)
+    all_keys = {
+        name: _get_channel(typ)
+        for name, typ in get_type_hints(schema, include_extras=True).items()
+        if name != "__slots__"
+    }
+    return (
+        {k: v for k, v in all_keys.items() if not is_managed_value(v)},
+        {k: v for k, v in all_keys.items() if is_managed_value(v)},
+    )
 
-    return channels
 
-
-def _get_channel(annotation: Any) -> Optional[BaseChannel]:
-    if channel := _is_field_binop(annotation):
+def _get_channel(
+    annotation: Any, *, allow_managed: bool = True
+) -> Union[BaseChannel, Type[ManagedValue]]:
+    if manager := _is_field_managed_value(annotation):
+        if allow_managed:
+            return manager
+        else:
+            raise ValueError(f"This {annotation} not allowed in this position")
+    elif channel := _is_field_binop(annotation):
         return channel
     return LastValue(annotation)
 
@@ -275,4 +385,15 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
                 ]
             ):
                 return BinaryOperatorAggregate(typ, meta[0])
+    return None
+
+
+def _is_field_managed_value(typ: Type[Any]) -> Optional[Type[ManagedValue]]:
+    if hasattr(typ, "__metadata__"):
+        meta = typ.__metadata__
+        if len(meta) == 1:
+            decoration = get_origin(meta[0]) or meta[0]
+            if is_managed_value(decoration):
+                return decoration
+
     return None

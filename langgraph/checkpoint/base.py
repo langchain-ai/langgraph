@@ -1,23 +1,68 @@
-import asyncio
 from abc import ABC
 from collections import defaultdict
-from copy import deepcopy
 from datetime import datetime, timezone
-from typing import Any, AsyncIterator, Iterator, NamedTuple, Optional, TypedDict
+from typing import (
+    Any,
+    AsyncIterator,
+    Iterator,
+    Literal,
+    NamedTuple,
+    Optional,
+    TypedDict,
+)
 
-from langchain_core.load.serializable import Serializable
-from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.utils import ConfigurableFieldSpec
+from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
-from langgraph.utils import StrEnum
+from langgraph.serde.base import SerializerProtocol
+from langgraph.serde.jsonplus import JsonPlusSerializer
+
+
+# Marked as total=False to allow for future expansion.
+class CheckpointMetadata(TypedDict, total=False):
+    source: Literal["input", "loop", "update"]
+    """The source of the checkpoint.
+    - "input": The checkpoint was created from an input to invoke/stream/batch.
+    - "loop": The checkpoint was created from inside the pregel loop.
+    - "update": The checkpoint was created from a manual state update.
+    """
+    step: int
+    """The step number of the checkpoint.
+    -1 for the first "input" checkpoint.
+    0 for the first "loop" checkpoint.
+    ... for the nth checkpoint afterwards.
+    """
+    writes: dict[str, Any]
+    """The writes that were made between the previous checkpoint and this one.
+
+    Mapping from node name to writes emitted by that node.
+    """
 
 
 class Checkpoint(TypedDict):
+    """State snapshot at a given point in time."""
+
     v: int
+    """The version of the checkpoint format. Currently 1."""
     ts: str
+    """The timestamp of the checkpoint in ISO 8601 format."""
     channel_values: dict[str, Any]
+    """The values of the channels at the time of the checkpoint.
+    
+    Mapping from channel name to channel snapshot value.
+    """
     channel_versions: defaultdict[str, int]
+    """The versions of the channels at the time of the checkpoint.
+    
+    The keys are channel names and the values are the logical time step
+    at which the channel was last updated.
+    """
     versions_seen: defaultdict[str, defaultdict[str, int]]
+    """Map from node ID to map from channel name to version seen.
+    
+    This keeps track of the versions of the channels that each node has seen.
+    
+    Used to determine which nodes to execute next.
+    """
 
 
 def _seen_dict():
@@ -39,19 +84,18 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         v=checkpoint["v"],
         ts=checkpoint["ts"],
         channel_values=checkpoint["channel_values"].copy(),
-        channel_versions=checkpoint["channel_versions"].copy(),
-        versions_seen=deepcopy(checkpoint["versions_seen"]),
+        channel_versions=defaultdict(int, checkpoint["channel_versions"]),
+        versions_seen=defaultdict(
+            _seen_dict,
+            {k: defaultdict(int, v) for k, v in checkpoint["versions_seen"].items()},
+        ),
     )
-
-
-class CheckpointAt(StrEnum):
-    END_OF_STEP = "end_of_step"
-    END_OF_RUN = "end_of_run"
 
 
 class CheckpointTuple(NamedTuple):
     config: RunnableConfig
     checkpoint: Checkpoint
+    metadata: CheckpointMetadata
     parent_config: Optional[RunnableConfig] = None
 
 
@@ -74,8 +118,15 @@ CheckpointThreadTs = ConfigurableFieldSpec(
 )
 
 
-class BaseCheckpointSaver(Serializable, ABC):
-    at: CheckpointAt = CheckpointAt.END_OF_RUN
+class BaseCheckpointSaver(ABC):
+    serde: SerializerProtocol = JsonPlusSerializer()
+
+    def __init__(
+        self,
+        *,
+        serde: Optional[SerializerProtocol] = None,
+    ) -> None:
+        self.serde = serde or self.serde
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -88,10 +139,21 @@ class BaseCheckpointSaver(Serializable, ABC):
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         raise NotImplementedError
 
-    def list(self, config: RunnableConfig) -> Iterator[CheckpointTuple]:
+    def list(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
         raise NotImplementedError
 
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+    ) -> RunnableConfig:
         raise NotImplementedError
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
@@ -99,22 +161,22 @@ class BaseCheckpointSaver(Serializable, ABC):
             return value.checkpoint
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.get_tuple, config
-        )
+        raise NotImplementedError
 
-    async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
-        loop = asyncio.get_running_loop()
-        iter = loop.run_in_executor(None, self.list, config)
-        while True:
-            try:
-                yield await loop.run_in_executor(None, next, iter)
-            except StopIteration:
-                return
+    def alist(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[CheckpointTuple]:
+        raise NotImplementedError
+        yield
 
     async def aput(
-        self, config: RunnableConfig, checkpoint: Checkpoint
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
     ) -> RunnableConfig:
-        return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint
-        )
+        raise NotImplementedError
