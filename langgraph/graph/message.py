@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated, Union
+from typing import Annotated, TypedDict, Union
 
 from langchain_core.messages import (
     AnyMessage,
@@ -136,3 +136,7 @@ class MessageGraph(StateGraph):
 
     def __init__(self) -> None:
         super().__init__(Annotated[list[AnyMessage], add_messages])
+
+
+class MessagesState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]
