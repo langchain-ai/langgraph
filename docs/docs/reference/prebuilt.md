@@ -31,13 +31,13 @@ from langgraph.prebuilt import ToolInvocation
     heading_level: 4
 
 
-## `chat_agent_executor.create_tool_calling_executor`
+## create_react_agent
 
 ```python
-from langgraph.prebuilt.chat_agent_executor import create_tool_calling_executor
+from langgraph.prebuilt import create_react_agent
 ```
 
-::: langgraph.prebuilt.chat_agent_executor.create_tool_calling_executor
+::: langgraph.prebuilt.create_react_agent
 
 ## `tools_condition`
 

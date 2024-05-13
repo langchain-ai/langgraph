@@ -109,7 +109,7 @@ def tools_condition(
             "messages" key (StateGraph).
 
     Returns:
-        Literal["tools", "__end__"]: The next node to route to.
+        The next node to route to.
 
 
     Examples:
