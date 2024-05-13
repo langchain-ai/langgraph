@@ -50,4 +50,4 @@ jobs:
         env:
           LANGCHAIN_API_KEY: test
           shell: bash
-        run: poetry run pytest -o python_files=non_python_only --check-links --ignore="*.py" -k .ipynb --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links-ignore "*dcbadge.vercel.app*"./examples
+        run: poetry run pytest -o python_files=non_python_only --check-links --ignore="*.py" -k .ipynb --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" ./examples
