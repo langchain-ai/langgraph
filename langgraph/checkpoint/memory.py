@@ -119,6 +119,55 @@ class MemorySaver(BaseCheckpointSaver):
                 metadata=self.serde.loads(metadata),
             )
 
+    def search(
+        self,
+        metadata_query: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        """Search for checkpoints by metadata.
+        
+        This method retrieves a list of checkpoint tuples from the in-memory
+        storage based on the provided metadata query. The metadata query does
+        not need to contain all keys defined in the CheckpointMetadata class.
+        The checkpoints are ordered by timestamp in descending order.
+
+        Args:
+            metadata_query (CheckpointMetadata): The metadata query to use for searching the checkpoints.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
+            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+        """
+        for thread_id, checkpoints in self.storage.items():
+            for ts, (checkpoint_bytes, metadata_bytes) in checkpoints.items():
+                # filter by thread_ts
+                if before and ts >= before["configurable"]["thread_ts"]:
+                    continue
+
+                # check if all query key/value pairs match the metadata
+                metadata = self.serde.loads(metadata_bytes)
+                all_keys_match = all(
+                    query_value == metadata[query_key]
+                    for query_key, query_value in metadata_query.items()
+                )
+
+                # if all query key/value pairs match, yield the checkpoint
+                if all_keys_match:
+                    # limit search results
+                    if limit is not None:
+                        if limit <= 0:
+                            break
+                        limit -= 1
+
+                    yield CheckpointTuple(
+                        config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
+                        checkpoint=self.serde.loads(checkpoint_bytes),
+                        metadata=metadata,
+                    )
+
     def put(
         self,
         config: RunnableConfig,
@@ -187,6 +236,30 @@ class MemorySaver(BaseCheckpointSaver):
                 yield await loop.run_in_executor(None, next, iter)
             except StopIteration:
                 return
+
+    async def asearch(
+        self,
+        metadata_query: CheckpointMetadata,
+    ) -> AsyncIterator[CheckpointTuple]:
+        """Asynchronous version of search.
+
+        This method is an asynchronous wrapper around search that runs the synchronous
+        method in a separate thread using asyncio.
+        """
+        loop = asyncio.get_running_loop()
+        iter = await loop.run_in_executor(None, self.search, metadata_query)
+
+        def next_item(iter: Iterator[CheckpointTuple]) -> CheckpointTuple:
+            try:
+                return next(iter)
+            except StopIteration:
+                return None
+
+        while True:
+            result = await loop.run_in_executor(None, next_item, iter)
+            if result is None:
+                break
+            yield result
 
     async def aput(
         self,

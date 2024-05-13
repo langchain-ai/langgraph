@@ -36,6 +36,11 @@ class CheckpointMetadata(TypedDict, total=False):
 
     Mapping from node name to writes emitted by that node.
     """
+    score: Optional[int]
+    """The score of the checkpoint.
+    
+    The score can be used to mark a checkpoint as "good".
+    """
 
 
 class Checkpoint(TypedDict):
@@ -148,6 +153,15 @@ class BaseCheckpointSaver(ABC):
     ) -> Iterator[CheckpointTuple]:
         raise NotImplementedError
 
+    def search(
+        self,
+        metadata: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        raise NotImplementedError
+
     def put(
         self,
         config: RunnableConfig,
@@ -166,6 +180,16 @@ class BaseCheckpointSaver(ABC):
     def alist(
         self,
         config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[CheckpointTuple]:
+        raise NotImplementedError
+        yield
+
+    def asearch(
+        self,
+        metadata: CheckpointMetadata,
         *,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
