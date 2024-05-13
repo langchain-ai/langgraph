@@ -1,3 +1,4 @@
+import json
 import pickle
 import sqlite3
 import threading
@@ -337,6 +338,62 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     ),
                 )
 
+    def search(
+        self,
+        metadata_query: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        """Search for checkpoints by metadata.
+
+        This method retrieves a list of checkpoint tuples from the SQLite
+        database based on the provided metadata query. The metadata query does
+        not need to contain all keys defined in the CheckpointMetadata class.
+        The checkpoints are ordered by timestamp in descending order.
+
+        Args:
+            metadata_query (CheckpointMetadata): The metadata query to use for searching the checkpoints.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
+            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+        """
+        query = (
+            f"SELECT json_extract(CAST(metadata AS TEXT), '$.writes'), thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints {self.search_where(metadata_query)}ORDER BY thread_ts DESC"
+            if before is None
+            else f"SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints {self.search_where(metadata_query)}AND thread_ts < ? ORDER BY thread_ts DESC"
+        )
+        if limit:
+            query += f" LIMIT {limit}"
+
+        print("final query", query)
+        with self.cursor(transaction=False) as cur:
+            cur.execute(
+                query,
+                (
+                    () if before is None else (before["configurable"]["thread_ts"],)
+                ),
+            )
+            for writes, thread_id, thread_ts, parent_ts, value, metadata in cur:
+                print("writes after json extract", writes)
+                yield CheckpointTuple(
+                    {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
+                    self.serde.loads(value),
+                    self.serde.loads(metadata) if metadata is not None else {},
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
+                        }
+                        if parent_ts
+                        else None
+                    ),
+                )
+
     def put(
         self,
         config: RunnableConfig,
@@ -382,3 +439,37 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 "thread_ts": checkpoint["ts"],
             }
         }
+
+    def search_where(self, metadata_query: CheckpointMetadata) -> str:
+        """Return WHERE clause for (a)search() given metadata query.
+        
+        This method returns the operator as well (=, IS).
+        """
+        def _where_value(query_value: Any) -> str:
+            if query_value is None:
+                return "IS NULL"
+            elif isinstance(query_value, str):
+                return f"= '{query_value}'"
+            elif isinstance(query_value, int) or isinstance(query_value, float):
+                return f"= {query_value}"
+            elif isinstance(query_value, bool):
+                return f"= {1 if query_value else 0}"
+            elif isinstance(query_value, dict) or isinstance(query_value, list):
+                # query value for JSON object cannot have trailing space after separators (, :)
+                # SQLite json_extract() returns JSON string without whitespace
+                return f"= '{json.dumps(query_value, separators=(',', ':'))}'"
+            else:
+                return f"= '{str(query_value)}'"
+
+        where = "WHERE "
+        for query_key, query_value in metadata_query.items():
+            where += f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {_where_value(query_value)} AND "
+
+        if where == "WHERE ":
+            # there are no query key/value pairs
+            return ""
+        else:
+            # remove trailing AND
+            where = where[:-4]
+            # where clause contains an extra trailing space
+            return where
