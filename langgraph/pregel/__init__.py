@@ -195,9 +195,9 @@ class Pregel(
     auto_validate: bool = True
 
     stream_mode: StreamMode = "values"
+    """Mode to stream output, defaults to 'values'."""
 
     output_channels: Union[str, Sequence[str]]
-    """Channels to output, defaults to channel named 'output'."""
 
     stream_channels: Optional[Union[str, Sequence[str]]] = None
     """Channels to stream, defaults to all channels not in reserved channels"""
@@ -209,10 +209,13 @@ class Pregel(
     input_channels: Union[str, Sequence[str]]
 
     step_timeout: Optional[float] = None
+    """Maximum time to wait for a step to complete, in seconds. Defaults to None."""
 
     debug: bool = Field(default_factory=get_debug)
+    """Whether to print debug information during execution. Defaults to False."""
 
     checkpointer: Optional[BaseCheckpointSaver] = None
+    """Checkpointer used to save and load graph state. Defaults to None."""
 
     config_type: Optional[Type[Any]] = None
 

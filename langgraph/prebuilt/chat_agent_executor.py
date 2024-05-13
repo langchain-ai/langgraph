@@ -41,22 +41,21 @@ def create_function_calling_executor(
     """Creates a graph that works with a chat model that utilizes function calling.
 
     Examples:
-
-        # Since this is deprecated, you should use `create_react_agent` instead.
-        # Example usage:
-        from langgraph.prebuilt import create_react_agent
-        from langchain_openai import ChatOpenAI
-        from langchain_community.tools.tavily_search import TavilySearchResults
-
-        tools = [TavilySearchResults(max_results=1)]
-        model = ChatOpenAI()
-
-        app = create_react_agent(model, tools)
-
-        inputs = {"messages": [("user", "what is the weather in sf")]}
-        for s in app.stream(inputs):
-            print(list(s.values())[0])
-            print("----")
+        >>> # Since this is deprecated, you should use `create_react_agent` instead.
+        >>> # Example usage:
+        >>> from langgraph.prebuilt import create_react_agent
+        >>> from langchain_openai import ChatOpenAI
+        >>> from langchain_community.tools.tavily_search import TavilySearchResults
+        >>>
+        >>> tools = [TavilySearchResults(max_results=1)]
+        >>> model = ChatOpenAI()
+        >>>
+        >>> app = create_react_agent(model, tools)
+        >>>
+        >>> inputs = {"messages": [("user", "what is the weather in sf")]}
+        >>> for s in app.stream(inputs):
+        ...     print(list(s.values())[0])
+        ...     print("----")
     """
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
@@ -199,194 +198,157 @@ def create_react_agent(
         A compiled LangChain runnable that can be used for chat interactions.
 
     Examples:
-
         Use with a simple tool:
 
-            from datetime import datetime
+        >>> from datetime import datetime
+        >>> from langchain_core.tools import tool
+        >>> from langchain_openai import ChatOpenAI
+        >>> from langgraph.prebuilt import create_react_agent
+        >>> 
+        >>> @tool
+        >>> def check_weather(location: str, at_time: datetime | None = None) -> float:
+        ...     '''Return the weather forecast for the specified location.'''
+        ...     return f"It's always sunny in {location}"
+        >>> 
+        >>> tools = [check_weather]
+        >>> model = ChatOpenAI(model="gpt-4o")
+        >>> graph = create_react_agent(model, tools=tools)
+        >>> inputs = {"messages": [("user", "what is the weather in sf")]}
+        >>> for s in graph.stream(inputs, stream_mode="values"):
+        ...     message = s["messages"][-1]
+        ...     if isinstance(message, tuple):
+        ...         print(message)
+        ...     else:
+        ...         message.pretty_print()
+        ('user', 'what is the weather in sf')
+        ================================== Ai Message ==================================
+        Tool Calls:
+        check_weather (call_LUzFvKJRuaWQPeXvBOzwhQOu)
+        Call ID: call_LUzFvKJRuaWQPeXvBOzwhQOu
+        Args:
+            location: San Francisco
+        ================================= Tool Message =================================
+        Name: check_weather
+        It's always sunny in San Francisco
+        ================================== Ai Message ==================================
+        The weather in San Francisco is sunny.
 
-            from langchain_core.tools import tool
-            from langchain_openai import ChatOpenAI
-
-            from langgraph.prebuilt import create_react_agent
-
-
-            @tool
-            def check_weather(location: str, at_time: datetime | None = None) -> float:
-                \"\"\"Return the weather forecast for the specified location.\"\"\"
-                return f"It's always sunny in {location}"
-
-
-            tools = [check_weather]
-            model = ChatOpenAI(model="gpt-4o")
-
-            graph = create_react_agent(model, tools=tools)
-
-            inputs = {"messages": [("user", "what is the weather in sf")]}
-            for s in graph.stream(inputs, stream_mode="values"):
-                message = s["messages"][-1]
-                if isinstance(message, tuple):
-                    print(message)
-                else:
-                    message.pretty_print()
-
-            # ('user', 'what is the weather in sf')
-            # ================================== Ai Message ==================================
-            # Tool Calls:
-            # check_weather (call_LUzFvKJRuaWQPeXvBOzwhQOu)
-            # Call ID: call_LUzFvKJRuaWQPeXvBOzwhQOu
-            # Args:
-            #     location: San Francisco
-            # ================================= Tool Message =================================
-            # Name: check_weather
-
-            # It's always sunny in San Francisco
-            # ================================== Ai Message ==================================
-
-            # The weather in San Francisco is sunny.
         Add a system prompt for the LLM:
 
-            system_prompt = "You are a helpful bot named Fred."
-            graph = create_react_agent(model, tools, messages_modifier=system_prompt)
-            inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
-            for s in graph.stream(inputs, stream_mode="values"):
-                message = s["messages"][-1]
-                if isinstance(message, tuple):
-                    print(message)
-                else:
-                    message.pretty_print()
-
-            # ('user', "What's your name? And what's the weather in SF?")
-            # ================================== Ai Message ==================================
-
-            # Hi, my name is Fred. Let me check the weather in San Francisco for you.
-            # Tool Calls:
-            # check_weather (call_lqhj4O0hXYkW9eknB4S41EXk)
-            # Call ID: call_lqhj4O0hXYkW9eknB4S41EXk
-            # Args:
-            #     location: San Francisco
-            # ================================= Tool Message =================================
-            # Name: check_weather
-
-            # It's always sunny in San Francisco
-            # ================================== Ai Message ==================================
-
-            # The weather in San Francisco is currently sunny. If you need any more details or have other questions, feel free to ask!
-
+        >>> system_prompt = "You are a helpful bot named Fred."
+        >>> graph = create_react_agent(model, tools, messages_modifier=system_prompt)
+        >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
+        >>> for s in graph.stream(inputs, stream_mode="values"):
+        ...     message = s["messages"][-1]
+        ...     if isinstance(message, tuple):
+        ...         print(message)
+        ...     else:
+        ...         message.pretty_print()
+        ('user', "What's your name? And what's the weather in SF?")
+        ================================== Ai Message ==================================
+        Hi, my name is Fred. Let me check the weather in San Francisco for you.
+        Tool Calls:
+        check_weather (call_lqhj4O0hXYkW9eknB4S41EXk)
+        Call ID: call_lqhj4O0hXYkW9eknB4S41EXk
+        Args:
+            location: San Francisco
+        ================================= Tool Message =================================
+        Name: check_weather
+        It's always sunny in San Francisco
+        ================================== Ai Message ==================================
+        The weather in San Francisco is currently sunny. If you need any more details or have other questions, feel free to ask!
 
         Add a more complex prompt for the LLM:
 
-            from langchain_core.prompts import ChatPromptTemplate
-
-            prompt = ChatPromptTemplate.from_messages([
-                ("system", "You are a helpful bot named Fred."),
-                ("placeholder", "{messages}"),
-                ("user", "Remember, always be polite!"),
-            ])
-            def modify_messages(messages: list):
-                # You can do more complex modifications here
-                return prompt.invoke(messages=messages)
-
-            app = create_react_agent(model, tools, messages_modifier=modify_messages)
-            inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
-            for s in graph.stream(inputs, stream_mode="values"):
-                message = s["messages"][-1]
-                if isinstance(message, tuple):
-                    print(message)
-                else:
-                    message.pretty_print()
+        >>> from langchain_core.prompts import ChatPromptTemplate
+        >>> prompt = ChatPromptTemplate.from_messages([
+        ...     ("system", "You are a helpful bot named Fred."),
+        ...     ("placeholder", "{messages}"),
+        ...     ("user", "Remember, always be polite!"),
+        ... ])
+        >>> def modify_messages(messages: list):
+        ...     # You can do more complex modifications here
+        ...     return prompt.invoke(messages=messages)
+        >>> 
+        >>> app = create_react_agent(model, tools, messages_modifier=modify_messages)
+        >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
+        >>> for s in graph.stream(inputs, stream_mode="values"):
+        ...     message = s["messages"][-1]
+        ...     if isinstance(message, tuple):
+        ...         print(message)
+        ...     else:
+        ...         message.pretty_print()
 
         Add "chat memory" to the graph:
 
-            from langgraph.checkpoint import MemorySaver
-
-            # highlight-next-line
-            graph = create_react_agent(model, tools, checkpointer=MemorySaver())
-            config = {"configurable": {"thread_id": "thread-1"}}
-
-
-            def print_stream(graph, inputs, config):
-                for s in graph.stream(inputs, config, stream_mode="values"):
-                    message = s["messages"][-1]
-                    if isinstance(message, tuple):
-                        print(message)
-                    else:
-                        message.pretty_print()
-
-
-            inputs = {"messages": [("user", "What's the weather in SF?")]}
-            print_stream(graph, inputs, config)
-            inputs2 = {"messages": [("user", "Cool, so then should i go biking today?")]}
-            print_stream(graph, inputs2, config)
-
-            # ('user', "What's the weather in SF?")
-            # ================================== Ai Message ==================================
-            # Tool Calls:
-            # check_weather (call_ChndaktJxpr6EMPEB5JfOFYc)
-            # Call ID: call_ChndaktJxpr6EMPEB5JfOFYc
-            # Args:
-            #     location: San Francisco
-            # ================================= Tool Message =================================
-            # Name: check_weather
-
-            # It's always sunny in San Francisco
-            # ================================== Ai Message ==================================
-
-            # The weather in San Francisco is sunny. Enjoy your day!
-            # ================================ Human Message =================================
-
-            # Cool, so then should i go biking today?
-            # ================================== Ai Message ==================================
-
-            # Since the weather in San Francisco is sunny, it sounds like a great day for biking! Enjoy your ride!
+        >>> from langgraph.checkpoint import MemorySaver
+        >>> graph = create_react_agent(model, tools, checkpointer=MemorySaver())
+        >>> config = {"configurable": {"thread_id": "thread-1"}}
+        >>> def print_stream(graph, inputs, config):
+        ...     for s in graph.stream(inputs, config, stream_mode="values"):
+        ...         message = s["messages"][-1]
+        ...         if isinstance(message, tuple):
+        ...             print(message)
+        ...         else:
+        ...             message.pretty_print()
+        >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
+        >>> print_stream(graph, inputs, config)
+        >>> inputs2 = {"messages": [("user", "Cool, so then should i go biking today?")]}
+        >>> print_stream(graph, inputs2, config)
+        ('user', "What's the weather in SF?")
+        ================================== Ai Message ==================================
+        Tool Calls:
+        check_weather (call_ChndaktJxpr6EMPEB5JfOFYc)
+        Call ID: call_ChndaktJxpr6EMPEB5JfOFYc
+        Args:
+            location: San Francisco
+        ================================= Tool Message =================================
+        Name: check_weather
+        It's always sunny in San Francisco
+        ================================== Ai Message ==================================
+        The weather in San Francisco is sunny. Enjoy your day!
+        ================================ Human Message =================================
+        Cool, so then should i go biking today?
+        ================================== Ai Message ==================================
+        Since the weather in San Francisco is sunny, it sounds like a great day for biking! Enjoy your ride!
 
         Add an interrupt to let the user confirm before taking an action:
 
-
-            graph = create_react_agent(
-                # highlight-next-line
-                model, tools, interrupt_before=["action"], checkpointer=MemorySaver()
-            )
-            config = {"configurable": {"thread_id": "thread-1"}}
-
-
-            def print_stream(graph, inputs, config):
-                for s in graph.stream(inputs, config, stream_mode="values"):
-                    message = s["messages"][-1]
-                    if isinstance(message, tuple):
-                        print(message)
-                    else:
-                        message.pretty_print()
-
-
-            inputs = {"messages": [("user", "What's the weather in SF?")]}
-            print_stream(graph, inputs, config)
-            snapshot = graph.get_state(config)
-            print("Next step: ", snapshot.next)
-            # Continue
-            # highlight-next-line
-            print_stream(graph, None, config)
-
+        >>> graph = create_react_agent(
+        ...     model, tools, interrupt_before=["action"], checkpointer=MemorySaver()
+        >>> )
+        >>> config = {"configurable": {"thread_id": "thread-1"}}
+        >>> def print_stream(graph, inputs, config):
+        ...     for s in graph.stream(inputs, config, stream_mode="values"):
+        ...         message = s["messages"][-1]
+        ...         if isinstance(message, tuple):
+        ...             print(message)
+        ...         else:
+        ...             message.pretty_print()
+        
+        >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
+        >>> print_stream(graph, inputs, config)
+        >>> snapshot = graph.get_state(config)
+        >>> print("Next step: ", snapshot.next)
+        >>> print_stream(graph, None, config)
 
         Add a timeout for a given step:
 
-            import time
-
-            @tool
-            def check_weather(location: str, at_time: datetime | None = None) -> float:
-                \"\"\"Return the weather forecast for the specified location.\"\"\"
-                time.sleep(2)
-                return f"It's always sunny in {location}"
-
-            tools = [check_weather]
-            graph = create_react_agent(model, tools)
-            # highlight-next-line
-            graph.step_timeout = 1 # Seconds
-            for s in graph.stream({"messages": [("user", "what is the weather in sf")]}):
-                print(s)
-
-            # ...TimeoutError: Timed out at step 2
-
+        >>> import time
+        >>> @tool
+        >>> def check_weather(location: str, at_time: datetime | None = None) -> float:
+        ...     '''Return the weather forecast for the specified location.'''
+        ...     time.sleep(2)
+        ...     return f"It's always sunny in {location}"
+        >>> 
+        >>> tools = [check_weather]
+        >>> graph = create_react_agent(model, tools)
+        >>> graph.step_timeout = 1 # Seconds
+        >>> for s in graph.stream({"messages": [("user", "what is the weather in sf")]}):
+        ...     print(s)
+        TimeoutError: Timed out at step 2
     """
+
     if isinstance(tools, ToolExecutor):
         tool_classes = tools.tools
     else:
