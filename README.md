@@ -370,7 +370,7 @@ workflow.add_conditional_edges(
 
 # We now add a normal edge from `tools` to `agent`.
 # This means that after `tools` is called, `agent` node is called next.
-workflow.add_edge('action', 'agent')
+workflow.add_edge('tool', 'agent')
 
 # Finally, we compile it!
 # This compiles it into a LangChain Runnable,
@@ -420,7 +420,7 @@ Output from node 'agent':
 
 ---
 
-Output from node 'action':
+Output from node 'tools':
 ---
 {'messages': [FunctionMessage(content="[{'url': 'https://weatherspark.com/h/m/557/2024/1/Historical-Weather-in-January-2024-in-San-Francisco-California-United-States', 'content': 'January 2024 Weather History in San Francisco California, United States  Daily Precipitation in January 2024 in San Francisco Observed Weather in January 2024 in San Francisco  San Francisco Temperature History January 2024 Hourly Temperature in January 2024 in San Francisco  Hours of Daylight and Twilight in January 2024 in San FranciscoThis report shows the past weather for San Francisco, providing a weather history for January 2024. It features all historical weather data series we have available, including the San Francisco temperature history for January 2024. You can drill down from year to month and even day level reports by clicking on the graphs.'}]", name='tavily_search_results_json')]}
 
