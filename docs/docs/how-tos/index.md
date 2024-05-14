@@ -31,3 +31,7 @@ The following examples are useful especially if you are used to LangChain's Agen
 ### Alternative ways to define State
 
 - [Pydantic State](state-model.ipynb): Use a pydantic model as your state
+
+### Structured Output
+
+- [Extraction with Re-prompting](./extraction/retries.ipynb): how to generate complex nested schemas using JSONPatch retries, for when function calling is insufficient, and regular reprompting still fails to generate valid results.
