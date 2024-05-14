@@ -445,7 +445,6 @@ def search_where(metadata_query: CheckpointMetadata, predicates: List[str] = [])
 
     This method returns the operator as well (=, IS).
     """
-
     def _where_value(query_value: Any) -> str:
         if query_value is None:
             return "IS NULL"
