@@ -35,6 +35,7 @@ if sys.version_info < (3, 10):
 
     class MyDataclassWSlots(MyDataclass):
         pass
+
 else:
 
     @dataclasses.dataclass(slots=True)

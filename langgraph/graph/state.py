@@ -33,7 +33,49 @@ class StateGraph(Graph):
     Each state key can optionally be annotated with a reducer function that
     will be used to aggregate the values of that key received from multiple nodes.
     The signature of a reducer function is (Value, Value) -> Value.
-    """
+
+    Args:
+        state_schema (Type[Any]): The schema class that defines the state.
+        config_schema (Optional[Type[Any]]): The schema class that defines the configuration.
+            Use this to expose configurable parameters in your API.
+
+
+    Examples:
+        >>> from langchain_core.runnables import RunnableConfig
+        >>> from typing_extensions import Annotated, TypedDict
+        >>> from langgraph.checkpoint import MemorySaver
+        >>> from langgraph.graph import StateGraph
+        >>>
+        >>> def reducer(a: list, b: int | None) -> int:
+        ...     if b is not None:
+        ...         return a + [b]
+        ...     return a
+        >>>
+        >>> class State(TypedDict):
+        ...     x: Annotated[list, reducer]
+        >>>
+        >>> class ConfigSchema(TypedDict):
+        ...     r: float
+        >>>
+        >>> graph = StateGraph(State, config_schema=ConfigSchema)
+        >>>
+        >>> def node(state: State, config: RunnableConfig) -> dict:
+        ...     r = config["configurable"].get("r", 1.0)
+        ...     x = state["x"][-1]
+        ...     next_value = x * r * (1 - x)
+        ...     return {"x": next_value}
+        >>>
+        >>> graph.add_node("A", node)
+        >>> graph.set_entry_point("A")
+        >>> graph.set_finish_point("A")
+        >>> compiled = graph.compile()
+        >>>
+        >>> print(compiled.config_specs)
+        [ConfigurableFieldSpec(id='r', annotation=<class 'float'>, name=None, description=None, default=None, is_shared=False, dependencies=None)]
+        >>>
+        >>> step1 = compiled.invoke({"x": 0.5}, {"configurable": {"r": 3.0}})
+        >>> print(step1)
+        {'x': [0.5, 0.75]}"""
 
     def __init__(
         self, state_schema: Type[Any], config_schema: Optional[Type[Any]] = None
@@ -133,10 +175,11 @@ class StateGraph(Graph):
 
         # validate the graph
         self.validate(
-            interrupt=(interrupt_before if interrupt_before != "*" else [])
-            + interrupt_after
-            if interrupt_after != "*"
-            else []
+            interrupt=(
+                (interrupt_before if interrupt_before != "*" else []) + interrupt_after
+                if interrupt_after != "*"
+                else []
+            )
         )
 
         # prepare output channels

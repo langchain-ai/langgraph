@@ -54,28 +54,30 @@ class ToolExecutor(RunnableCallable):
 
     Examples:
 
-            from langchain_core.tools import tool
-            from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
+        >>> from langchain_core.tools import tool
+        >>> from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
+        ...
+        ...
+        >>> @tool
+        ... def search(query: str) -> str:
+        ...     \"\"\"Search engine.\"\"\"
+        ...     return f"Searching for: {query}"
+        ...
+        ...
+        >>> tools = [search]
+        >>> executor = ToolExecutor(tools)
+        ...
+        >>> invocation = ToolInvocation(tool="search", tool_input="What is the capital of France?")
+        >>> result = executor.invoke(invocation)
+        >>> print(result)
+        Output: "Searching for: What is the capital of France?"
 
-
-            @tool
-            def search(query: str) -> str:
-                \"\"\"Search engine.\"\"\"
-                return f"Searching for: {query}"
-
-
-            tools = [search]
-            executor = ToolExecutor(tools)
-
-            invocation = ToolInvocation(tool="search", tool_input="What is the capital of France?")
-            result = executor.invoke(invocation)
-            print(result)  # Output: "Searching for: What is the capital of France?"
-
-            invocation = ToolInvocation(
-                tool="nonexistent", tool_input="What is the capital of France?"
-            )
-            result = executor.invoke(invocation)
-            print(result)  # Output: "nonexistent is not a valid tool, try one of [search]."
+        >>> invocation = ToolInvocation(
+        ...     tool="nonexistent", tool_input="What is the capital of France?"
+        ... )
+        >>> result = executor.invoke(invocation)
+        >>> print(result)
+        Output: "nonexistent is not a valid tool, try one of [search]."
     """
 
     def __init__(
