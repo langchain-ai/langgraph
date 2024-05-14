@@ -281,14 +281,12 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         # construct query
         SELECT = "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints "
-        WHERE = search_where(
-            metadata_filter, [] if before is None else ["thread_ts < ?"]
-        )
+        WHERE, params = search_where(metadata_filter, before)
         ORDER_BY = "ORDER BY thread_ts DESC "
         LIMIT = f"LIMIT {limit}" if limit else ""
 
         query = f"{SELECT}{WHERE}{ORDER_BY}{LIMIT}"
-        params = () if before is None else (str(before["configurable"]["thread_ts"]),)
+        # params = () if before is None else (str(before["configurable"]["thread_ts"]),)
 
         # execute query
         async with self.conn.execute(query, params) as cursor:

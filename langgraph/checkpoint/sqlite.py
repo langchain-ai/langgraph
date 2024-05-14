@@ -4,7 +4,7 @@ import sqlite3
 import threading
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
-from typing import Any, Iterator, List, Optional
+from typing import Any, Iterator, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
@@ -362,14 +362,11 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         """
         # construct query
         SELECT = "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints "
-        WHERE = search_where(
-            metadata_filter, [] if before is None else ["thread_ts < ?"]
-        )
+        WHERE, params = search_where(metadata_filter, before)
         ORDER_BY = "ORDER BY thread_ts DESC "
         LIMIT = f"LIMIT {limit}" if limit else ""
 
         query = f"{SELECT}{WHERE}{ORDER_BY}{LIMIT}"
-        params = () if before is None else (before["configurable"]["thread_ts"],)
 
         # execute query
         with self.cursor(transaction=False) as cur:
@@ -439,44 +436,87 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         }
 
 
-def search_where(metadata_query: CheckpointMetadata, predicates: List[str] = []) -> str:
-    """Return WHERE clause for (a)search() given metadata query and
-    predicates.
+def search_where(
+    metadata_filter: CheckpointMetadata,
+    before: Optional[RunnableConfig] = None,
+) -> Tuple[str, Tuple[Any, ...]]:
+    """Return WHERE clause predicates for (a)search() given metadata filter
+    and `before` config.
 
-    This method returns the operator as well (=, IS).
+    This method returns a tuple of a string and a tuple of values. The string
+    is the parametered WHERE clause predicate (including the WHERE keyword):
+    "WHERE column1 = ? AND column2 IS ?". The tuple of values contains the
+    values for each of the corresponding parameters.
+    """
+    where = "WHERE "
+    param_values = ()
+
+    # construct predicate for metadata filter
+    metadata_predicate, metadata_values = _metadata_predicate(metadata_filter)
+    if metadata_predicate != "":
+        where += metadata_predicate
+        param_values += metadata_values
+
+    # construct predicate for `before`
+    if before is not None:
+        if metadata_predicate != "":
+            where += "AND thread_ts < ? "
+        else:
+            where += "thread_ts < ? "
+
+        param_values += (before["configurable"]["thread_ts"],)
+
+    if where == "WHERE ":
+        # no predicates, return an empty WHERE clause string
+        return ("", ())
+    else:
+        return (where, param_values)
+
+
+def _metadata_predicate(
+    metadata_filter: CheckpointMetadata,
+) -> Tuple[str, Tuple[Any, ...]]:
+    """Return WHERE clause predicates for (a)search() given metadata filter.
+
+    This method returns a tuple of a string and a tuple of values. The string
+    is the parametered WHERE clause predicate (excluding the WHERE keyword):
+    "column1 = ? AND column2 IS ?". The tuple of values contains the values
+    for each of the corresponding parameters.
     """
 
-    def _where_value(query_value: Any) -> str:
+    def _where_value(query_value: Any) -> Tuple[str, Any]:
+        """Return tuple of operator and value for WHERE clause predicate."""
         if query_value is None:
-            return "IS NULL"
-        elif isinstance(query_value, str):
-            return f"= '{query_value}'"
-        elif isinstance(query_value, int) or isinstance(query_value, float):
-            return f"= {query_value}"
+            return ("IS ?", None)
+        elif (
+            isinstance(query_value, str)
+            or isinstance(query_value, int)
+            or isinstance(query_value, float)
+        ):
+            return ("= ?", query_value)
         elif isinstance(query_value, bool):
-            return f"= {1 if query_value else 0}"
+            return ("= ?", 1 if query_value else 0)
         elif isinstance(query_value, dict) or isinstance(query_value, list):
             # query value for JSON object cannot have trailing space after separators (, :)
             # SQLite json_extract() returns JSON string without whitespace
-            return f"= '{json.dumps(query_value, separators=(',', ':'))}'"
+            return ("= ?", json.dumps(query_value, separators=(",", ":")))
         else:
-            return f"= '{str(query_value)}'"
+            return ("= ?", str(query_value))
 
-    where = "WHERE "
+    predicate = ""
+    param_values = ()
 
     # process metadata query
-    for query_key, query_value in metadata_query.items():
-        where += f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {_where_value(query_value)} AND "
+    for query_key, query_value in metadata_filter.items():
+        operator, param_value = _where_value(query_value)
+        predicate += (
+            f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator} AND "
+        )
+        param_values += (param_value,)
 
-    # process predicates
-    for predicate in predicates:
-        where += f"{predicate} AND "
-
-    if where == "WHERE ":
-        # there are no query key/value pairs or predicates
-        return ""
-    else:
+    if predicate != "":
         # remove trailing AND
-        where = where[:-4]
-        # where clause contains an extra trailing space
-        return where
+        predicate = predicate[:-4]
+
+    # predicate contains an extra trailing space
+    return (predicate, param_values)

@@ -5,7 +5,7 @@ from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata
 
 
-class TestMemorySaver:
+class TestAsyncSqliteSaver:
     @pytest.fixture(autouse=True)
     def setup(self):
         self.sqlite_saver = AsyncSqliteSaver.from_conn_string(":memory:")
