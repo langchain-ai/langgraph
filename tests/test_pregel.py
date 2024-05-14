@@ -2596,7 +2596,9 @@ def test_state_graph_few_shot(snapshot: SnapshotAssertion) -> None:
         messages: Annotated[list[AnyMessage], add_messages]
 
     class AgentState(BaseState):
-        examples: Annotated[Sequence[BaseState], FewShotExamples[BaseState]]
+        examples: Annotated[
+            Sequence[BaseState], FewShotExamples[BaseState].configure(k=1)
+        ]
 
     # Assemble the tools
     @tool()
@@ -2709,6 +2711,27 @@ Some examples of past conversations:
         assert len(hiscored) == 1
         assert hiscored[0].checkpoint["channel_values"]["messages"] == first_messages
 
+        second_messages = [
+            HumanMessage(content="what is weather in la", id=AnyStr()),
+            AIMessage(
+                content="",
+                id=AnyStr(),
+                tool_calls=[
+                    {
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                        "id": "tool_call123",
+                    }
+                ],
+            ),
+            ToolMessage(
+                content="result for query",
+                name="search_api",
+                id=AnyStr(),
+                tool_call_id="tool_call123",
+            ),
+            AIMessage(content="answer", id=AnyStr()),
+        ]
         assert app.invoke(
             {"messages": "what is weather in la"},
             {
@@ -2718,9 +2741,37 @@ Some examples of past conversations:
                     "expected_examples": [{"messages": first_messages}],
                 }
             },
+        ) == {"messages": second_messages}
+
+        # get first checkpoint
+        chkpnt_tuple_2 = saver.get_tuple({"configurable": {"thread_id": "2"}})
+        config = chkpnt_tuple_2.config
+        checkpoint = chkpnt_tuple_2.checkpoint
+        metadata = chkpnt_tuple_2.metadata
+
+        # not needed in application code, only for testing
+        hiscored = list(saver.search({"score": 1}))
+        assert len(hiscored) == 1
+
+        # mark as "good"
+        metadata["score"] = 1
+        saver.put(config, checkpoint, metadata)
+
+        hiscored = list(saver.search({"score": 1}))
+        assert len(hiscored) == 2
+
+        assert app.invoke(
+            {"messages": "what is weather in ny"},
+            {
+                "configurable": {
+                    "thread_id": "3",
+                    # below is only for testing purposes, not part of few shot api
+                    "expected_examples": [{"messages": second_messages}],
+                }
+            },
         ) == {
             "messages": [
-                HumanMessage(content="what is weather in la", id=AnyStr()),
+                HumanMessage(content="what is weather in ny", id=AnyStr()),
                 AIMessage(
                     content="",
                     id=AnyStr(),

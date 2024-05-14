@@ -8,9 +8,10 @@ from typing import (
     AsyncGenerator,
     Generator,
     Generic,
-    Sequence,
+    NamedTuple,
     Type,
     TypeVar,
+    Union,
 )
 
 from langchain_core.runnables import RunnableConfig
@@ -32,10 +33,10 @@ class ManagedValue(ABC, Generic[V]):
     @classmethod
     @contextmanager
     def enter(
-        cls, config: RunnableConfig, graph: "Pregel"
+        cls, config: RunnableConfig, graph: "Pregel", **kwargs: Any
     ) -> Generator[Self, None, None]:
         try:
-            value = cls(config, graph)
+            value = cls(config, graph, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -48,10 +49,10 @@ class ManagedValue(ABC, Generic[V]):
     @classmethod
     @asynccontextmanager
     async def aenter(
-        cls, config: RunnableConfig, graph: "Pregel"
+        cls, config: RunnableConfig, graph: "Pregel", **kwargs: Any
     ) -> AsyncGenerator[Self, None]:
         try:
-            value = cls(config, graph)
+            value = cls(config, graph, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -66,40 +67,64 @@ class ManagedValue(ABC, Generic[V]):
         ...
 
 
-def is_managed_value(value: Any) -> TypeGuard[Type[ManagedValue]]:
-    return isclass(value) and issubclass(value, ManagedValue)
+class ConfiguredManagedValue(NamedTuple):
+    cls: Type[ManagedValue]
+    kwargs: dict[str, Any]
+
+
+ManagedValueSpec = Union[Type[ManagedValue], ConfiguredManagedValue]
+
+ManagedValueMapping = dict[str, ManagedValue]
+
+
+def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
+    return (isclass(value) and issubclass(value, ManagedValue)) or isinstance(
+        value, ConfiguredManagedValue
+    )
 
 
 @contextmanager
 def ManagedValuesManager(
-    values: Sequence[Type[ManagedValue]],
+    values: dict[str, ManagedValueSpec],
     config: RunnableConfig,
     graph: "Pregel",
-) -> Generator[Sequence[ManagedValue], None, None]:
-    with ExitStack() as stack:
-        unique: list[Type[ManagedValue]] = []
-        for value in values:
-            if value not in unique:
-                unique.append(value)
-
-        yield [stack.enter_context(value.enter(config, graph)) for value in unique]
+) -> Generator[ManagedValueMapping, None, None]:
+    if values:
+        with ExitStack() as stack:
+            yield {
+                key: stack.enter_context(
+                    value.cls.enter(config, graph, **value.kwargs)
+                    if isinstance(value, ConfiguredManagedValue)
+                    else value.enter(config, graph)
+                )
+                for key, value in values.items()
+            }
+    else:
+        yield {}
 
 
 @asynccontextmanager
 async def AsyncManagedValuesManager(
-    values: Sequence[Type[ManagedValue]],
+    values: dict[str, ManagedValueSpec],
     config: RunnableConfig,
     graph: "Pregel",
-) -> AsyncGenerator[Sequence[ManagedValue], None]:
-    async with AsyncExitStack() as stack:
-        unique: list[Type[ManagedValue]] = []
-        for value in values:
-            if value not in unique:
-                unique.append(value)
-
-        yield await asyncio.gather(
-            *(
-                stack.enter_async_context(value.aenter(config, graph))
-                for value in unique
-            )
-        )
+) -> AsyncGenerator[ManagedValueMapping, None]:
+    if values:
+        async with AsyncExitStack() as stack:
+            # create enter tasks with reference to spec
+            tasks = {
+                asyncio.create_task(
+                    stack.enter_async_context(
+                        value.cls.aenter(config, graph, **value.kwargs)
+                        if isinstance(value, ConfiguredManagedValue)
+                        else value.aenter(config, graph)
+                    )
+                ): key
+                for key, value in values.items()
+            }
+            # wait for all enter tasks
+            done, _ = await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
+            # build mapping from spec to result
+            yield {tasks[task]: task.result() for task in done}
+    else:
+        yield {}
