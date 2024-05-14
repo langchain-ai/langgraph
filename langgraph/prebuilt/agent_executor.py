@@ -141,7 +141,7 @@ def create_agent_executor(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableCallable(run_agent, arun_agent))
-    workflow.add_node("action", RunnableCallable(execute_tools, aexecute_tools))
+    workflow.add_node("tools", RunnableCallable(execute_tools, aexecute_tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -162,7 +162,7 @@ def create_agent_executor(
         # Based on which one it matches, that node will then be called.
         {
             # If `tools`, then we call the tool node.
-            "continue": "action",
+            "continue": "tools",
             # Otherwise we finish.
             "end": END,
         },
@@ -170,7 +170,7 @@ def create_agent_executor(
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("action", "agent")
+    workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,

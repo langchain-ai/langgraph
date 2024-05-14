@@ -2523,7 +2523,7 @@ async def test_prebuilt_tool_chat() -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     ToolMessage(
                         content="result for query",
@@ -2557,7 +2557,7 @@ async def test_prebuilt_tool_chat() -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     ToolMessage(
                         content="result for another",
@@ -2671,7 +2671,7 @@ async def test_prebuilt_chat() -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     FunctionMessage(
                         content="result for query", name="search_api", id=AnyStr()
@@ -2696,7 +2696,7 @@ async def test_prebuilt_chat() -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     FunctionMessage(
                         content="result for another", name="search_api", id=AnyStr()
@@ -2785,7 +2785,7 @@ async def test_message_graph() -> None:
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", model)
-    workflow.add_node("action", call_tool)
+    workflow.add_node("tools", call_tool)
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -2806,7 +2806,7 @@ async def test_message_graph() -> None:
         # Based on which one it matches, that node will then be called.
         {
             # If `tools`, then we call the tool node.
-            "continue": "action",
+            "continue": "tools",
             # Otherwise we finish.
             "end": END,
         },
@@ -2814,7 +2814,7 @@ async def test_message_graph() -> None:
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("action", "agent")
+    workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
@@ -2855,7 +2855,7 @@ async def test_message_graph() -> None:
             )
         },
         {
-            "action": FunctionMessage(
+            "tools": FunctionMessage(
                 content="result for query", name="search_api", id=AnyStr()
             )
         },
@@ -2869,7 +2869,7 @@ async def test_message_graph() -> None:
             )
         },
         {
-            "action": FunctionMessage(
+            "tools": FunctionMessage(
                 content="result for another", name="search_api", id=AnyStr()
             )
         },
@@ -2913,7 +2913,7 @@ async def test_message_graph() -> None:
                 id="ai1",
             ),
         ],
-        next=("action",),
+        next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         metadata={
             "source": "loop",
@@ -2953,7 +2953,7 @@ async def test_message_graph() -> None:
                 id="ai1",
             ),
         ],
-        next=("action",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         metadata={
             "source": "update",
@@ -2975,7 +2975,7 @@ async def test_message_graph() -> None:
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
         {
-            "action": FunctionMessage(
+            "tools": FunctionMessage(
                 content="result for a different query",
                 name="search_api",
                 id=AnyStr(),
@@ -3021,7 +3021,7 @@ async def test_message_graph() -> None:
                 id="ai2",
             ),
         ],
-        next=("action",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         metadata={
             "source": "loop",

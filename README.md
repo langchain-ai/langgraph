@@ -324,12 +324,12 @@ Let's define the nodes, as well as a function to define the conditional edge to 
 from typing import Literal
 
 # Define the function that determines whether to continue or not
-def should_continue(state: AgentState) -> Literal["action", "__end__"]:
+def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
     messages = state['messages']
     last_message = messages[-1]
-    # If the LLM makes a tool call, then we route to the "action" node
+    # If the LLM makes a tool call, then we route to the "tools" node
     if last_message.tool_calls:
-        return "action"
+        return "tools"
     # Otherwise, we stop (reply to the user)
     return "__end__"
 
@@ -353,7 +353,7 @@ workflow = StateGraph(AgentState)
 
 # Define the two nodes we will cycle between
 workflow.add_node("agent", call_model)
-workflow.add_node("action", tool_node)
+workflow.add_node("tools", tool_node)
 
 # Set the entrypoint as `agent`
 # This means that this node is the first one called

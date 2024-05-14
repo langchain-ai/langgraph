@@ -128,7 +128,7 @@ def create_function_calling_executor(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("action", RunnableLambda(call_tool, acall_tool))
+    workflow.add_node("tools", RunnableLambda(call_tool, acall_tool))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -149,7 +149,7 @@ def create_function_calling_executor(
         # Based on which one it matches, that node will then be called.
         {
             # If `tools`, then we call the tool node.
-            "continue": "action",
+            "continue": "tools",
             # Otherwise we finish.
             "end": END,
         },
@@ -157,7 +157,7 @@ def create_function_calling_executor(
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("action", "agent")
+    workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
@@ -189,10 +189,10 @@ def create_react_agent(
         checkpointer: An optional checkpoint saver object. This is useful for persisting
             the state of the graph (e.g., as chat memory).
         interrupt_before: An optional list of node names to interrupt before.
-            Should be one of the following: "agent", "action".
+            Should be one of the following: "agent", "tools".
             This is useful if you want to add a user confirmation or other interrupt before taking an action.
         interrupt_after: An optional list of node names to interrupt after.
-            Should be one of the following: "agent", "action".
+            Should be one of the following: "agent", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
 
@@ -325,7 +325,7 @@ def create_react_agent(
 
         ```pycon
         >>> graph = create_react_agent(
-        ...     model, tools, interrupt_before=["action"], checkpointer=MemorySaver()
+        ...     model, tools, interrupt_before=["tools"], checkpointer=MemorySaver()
         >>> )
         >>> config = {"configurable": {"thread_id": "thread-1"}}
         >>> def print_stream(graph, inputs, config):
@@ -430,7 +430,7 @@ def create_react_agent(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("action", ToolNode(tools))
+    workflow.add_node("tools", ToolNode(tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -451,7 +451,7 @@ def create_react_agent(
         # Based on which one it matches, that node will then be called.
         {
             # If `tools`, then we call the tool node.
-            "continue": "action",
+            "continue": "tools",
             # Otherwise we finish.
             "end": END,
         },
@@ -459,7 +459,7 @@ def create_react_agent(
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("action", "agent")
+    workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,

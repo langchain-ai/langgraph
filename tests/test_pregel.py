@@ -2772,7 +2772,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     ToolMessage(
                         content="result for query",
@@ -2806,7 +2806,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     ToolMessage(
                         content="result for another",
@@ -2856,7 +2856,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     ToolMessage(
                         content="result for query",
@@ -2890,7 +2890,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     ToolMessage(
                         content="result for another",
@@ -3006,7 +3006,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     FunctionMessage(
                         content="result for query", name="search_api", id=AnyStr()
@@ -3031,7 +3031,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
             }
         },
         {
-            "action": {
+            "tools": {
                 "messages": [
                     FunctionMessage(
                         content="result for another", name="search_api", id=AnyStr()
@@ -3129,7 +3129,7 @@ def test_message_graph(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", model)
-    workflow.add_node("action", ToolNode(tools))
+    workflow.add_node("tools", ToolNode(tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -3150,7 +3150,7 @@ def test_message_graph(
         # Based on which one it matches, that node will then be called.
         {
             # If `tools`, then we call the tool node.
-            "continue": "action",
+            "continue": "tools",
             # Otherwise we finish.
             "end": END,
         },
@@ -3158,7 +3158,7 @@ def test_message_graph(
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("action", "agent")
+    workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
@@ -3227,7 +3227,7 @@ def test_message_graph(
             )
         },
         {
-            "action": [
+            "tools": [
                 ToolMessage(
                     content="result for query",
                     name="search_api",
@@ -3250,7 +3250,7 @@ def test_message_graph(
             )
         },
         {
-            "action": [
+            "tools": [
                 ToolMessage(
                     content="result for another",
                     name="search_api",
@@ -3301,7 +3301,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
-        next=("action",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         metadata={
             "source": "loop",
@@ -3343,7 +3343,7 @@ def test_message_graph(
                 ],
             ),
         ],
-        next=("action",),
+        next=("tools",),
         config=next_config,
         metadata={
             "source": "update",
@@ -3366,7 +3366,7 @@ def test_message_graph(
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
-            "action": [
+            "tools": [
                 ToolMessage(
                     content="result for a different query",
                     name="search_api",
@@ -3425,7 +3425,7 @@ def test_message_graph(
                 id="ai2",
             ),
         ],
-        next=("action",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         metadata={
             "source": "loop",
@@ -3488,7 +3488,7 @@ def test_message_graph(
 
     app_w_interrupt = workflow.compile(
         checkpointer=MemorySaverAssertImmutable(),
-        interrupt_before=["action"],
+        interrupt_before=["tools"],
     )
     config = {"configurable": {"thread_id": "2"}}
     model.i = 0  # reset the llm
@@ -3527,7 +3527,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
-        next=("action",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         metadata={
             "source": "loop",
@@ -3572,7 +3572,7 @@ def test_message_graph(
                 ],
             ),
         ],
-        next=("action",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         metadata={
             "source": "update",
@@ -3595,7 +3595,7 @@ def test_message_graph(
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
-            "action": [
+            "tools": [
                 ToolMessage(
                     content="result for a different query",
                     name="search_api",
@@ -3654,7 +3654,7 @@ def test_message_graph(
                 id="ai2",
             ),
         ],
-        next=("action",),
+        next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         metadata={
             "source": "loop",
@@ -3715,8 +3715,8 @@ def test_message_graph(
         },
     )
 
-    # add an extra message as if it came from "action" node
-    app_w_interrupt.update_state(config, ("ai", "an extra message"), as_node="action")
+    # add an extra message as if it came from "tools" node
+    app_w_interrupt.update_state(config, ("ai", "an extra message"), as_node="tools")
 
     # extra message is coerced BaseMessge and appended
     # now the next node is "agent" per the graph edges
@@ -3751,7 +3751,7 @@ def test_message_graph(
         metadata={
             "source": "update",
             "step": 6,
-            "writes": {"action": ("ai", "an extra message")},
+            "writes": {"tools": ("ai", "an extra message")},
         },
     )
 
