@@ -13,7 +13,6 @@ from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import AsyncChannelsManager, ChannelsManager
-from langgraph.checkpoint.base import CheckpointTuple
 from langgraph.managed.base import ManagedValue, V
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.types import PregelTaskDescription

@@ -1,5 +1,3 @@
-from typing import AsyncIterator
-
 import pytest
 from langchain_core.runnables import RunnableConfig
 

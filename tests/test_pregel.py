@@ -9,7 +9,6 @@ from typing import (
     Annotated,
     Any,
     Generator,
-    Iterator,
     Literal,
     Optional,
     Sequence,
@@ -26,7 +25,6 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
-from langgraph.checkpoint.base import CheckpointMetadata, CheckpointTuple
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph
