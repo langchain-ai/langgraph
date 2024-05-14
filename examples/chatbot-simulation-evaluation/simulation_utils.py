@@ -1,6 +1,7 @@
 import functools
 from typing import Annotated, Any, Callable, Dict, List, Optional, Union
 
+from langchain_community.adapters.openai import convert_message_to_dict
 from langchain_core.messages import AIMessage, AnyMessage, BaseMessage, HumanMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
 from langchain_core.runnables import Runnable, RunnableLambda
@@ -9,7 +10,6 @@ from langchain_openai import ChatOpenAI
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, StateGraph
-from langchain_community.adapters.openai import convert_message_to_dict
 
 
 def langchain_to_openai_messages(messages: List[BaseMessage]):
