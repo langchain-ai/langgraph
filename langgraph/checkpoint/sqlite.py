@@ -340,7 +340,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
     def search(
         self,
-        metadata_query: CheckpointMetadata,
+        metadata_filter: CheckpointMetadata,
         *,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
@@ -348,12 +348,12 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         """Search for checkpoints by metadata.
 
         This method retrieves a list of checkpoint tuples from the SQLite
-        database based on the provided metadata query. The metadata query does
+        database based on the provided metadata filter. The metadata filter does
         not need to contain all keys defined in the CheckpointMetadata class.
         The checkpoints are ordered by timestamp in descending order.
 
         Args:
-            metadata_query (CheckpointMetadata): The metadata query to use for searching the checkpoints.
+            metadata_filter (CheckpointMetadata): The metadata filter to use for searching the checkpoints.
             before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
             limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
 
@@ -363,7 +363,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         # construct query
         SELECT = "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints "
         WHERE = search_where(
-            metadata_query, [] if before is None else ["thread_ts < ?"]
+            metadata_filter, [] if before is None else ["thread_ts < ?"]
         )
         ORDER_BY = "ORDER BY thread_ts DESC "
         LIMIT = f"LIMIT {limit}" if limit else ""
