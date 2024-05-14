@@ -1,4 +1,4 @@
-from typing import Any, Iterator, Mapping, Optional, Sequence, Union
+from typing import Any, Iterator, Mapping, Optional, Sequence, TypeVar, Union
 
 from langchain_core.runnables.utils import AddableDict
 
@@ -120,3 +120,11 @@ def map_output_updates(
             }
         ):
             yield updated
+
+
+T = TypeVar("T")
+
+
+def single(iter: Iterator[T]) -> Optional[T]:
+    for item in iter:
+        return item

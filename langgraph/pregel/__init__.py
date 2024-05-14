@@ -88,6 +88,7 @@ from langgraph.pregel.io import (
     map_output_values,
     read_channel,
     read_channels,
+    single,
 )
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import PregelNode
@@ -751,9 +752,7 @@ class Pregel(
                         )
                         checkpoint_config = {
                             "configurable": {
-                                "thread_id": checkpoint_config["configurable"][
-                                    "thread_id"
-                                ],
+                                **checkpoint_config["configurable"],
                                 "thread_ts": checkpoint["ts"],
                             }
                         }
@@ -786,7 +785,7 @@ class Pregel(
 
                     # if no more tasks, we're done
                     if not next_tasks:
-                        if step == 0:
+                        if step == start:
                             raise ValueError("No tasks to run in graph.")
                         else:
                             break
@@ -884,25 +883,21 @@ class Pregel(
                                 {
                                     "source": "loop",
                                     "step": step,
-                                    "writes": next(
-                                        map_output_updates(output_keys, next_tasks),
-                                        None,
+                                    "writes": single(
+                                        map_output_updates(output_keys, next_tasks)
                                     )
                                     if self.stream_mode == "updates"
-                                    else next(
+                                    else single(
                                         map_output_values(
                                             output_keys, pending_writes, channels
                                         ),
-                                        None,
                                     ),
                                 },
                             )
                         )
                         checkpoint_config = {
                             "configurable": {
-                                "thread_id": checkpoint_config["configurable"][
-                                    "thread_id"
-                                ],
+                                **checkpoint_config["configurable"],
                                 "thread_ts": checkpoint["ts"],
                             }
                         }
@@ -1048,9 +1043,7 @@ class Pregel(
                         )
                         checkpoint_config = {
                             "configurable": {
-                                "thread_id": checkpoint_config["configurable"][
-                                    "thread_id"
-                                ],
+                                **checkpoint_config["configurable"],
                                 "thread_ts": checkpoint["ts"],
                             }
                         }
@@ -1083,7 +1076,7 @@ class Pregel(
 
                     # if no more tasks, we're done
                     if not next_tasks:
-                        if step == 0:
+                        if step == start:
                             raise ValueError("No tasks to run in graph.")
                         else:
                             break
@@ -1191,16 +1184,14 @@ class Pregel(
                                     {
                                         "source": "loop",
                                         "step": step,
-                                        "writes": next(
-                                            map_output_updates(output_keys, next_tasks),
-                                            None,
+                                        "writes": single(
+                                            map_output_updates(output_keys, next_tasks)
                                         )
                                         if self.stream_mode == "updates"
-                                        else next(
+                                        else single(
                                             map_output_values(
                                                 output_keys, pending_writes, channels
-                                            ),
-                                            None,
+                                            )
                                         ),
                                     },
                                 )
@@ -1208,9 +1199,7 @@ class Pregel(
                         )
                         checkpoint_config = {
                             "configurable": {
-                                "thread_id": checkpoint_config["configurable"][
-                                    "thread_id"
-                                ],
+                                **checkpoint_config["configurable"],
                                 "thread_ts": checkpoint["ts"],
                             }
                         }
