@@ -51,7 +51,8 @@ jobs:
           LANGCHAIN_API_KEY: test
         run: |
           if [ "${{ github.event_name }}" != "schedule" ]; then
-            CHANGED_FILES=$(git diff --name-only ${{ github.event.before }} ${{ github.event.after }} | grep '\.ipynb$')
+            git fetch origin main
+            CHANGED_FILES=$(git diff --name-only origin/main | grep '\.ipynb$')
             if [ -n "$CHANGED_FILES" ]; then
               poetry run pytest -o python_files=non_python_only --check-links --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" $CHANGED_FILES 
             else
