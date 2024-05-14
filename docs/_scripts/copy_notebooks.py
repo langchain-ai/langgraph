@@ -27,6 +27,7 @@ _MANUAL = {
         "branching.ipynb",
         "dynamically-returning-directly.ipynb",
         "configuration.ipynb",
+        "extraction/retries.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",
