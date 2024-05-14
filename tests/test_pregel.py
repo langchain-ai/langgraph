@@ -501,7 +501,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "7a3cc398-2e02-5023-ad7b-e4848d3b67fa",
+                "id": "9379da35-ae1c-5a7b-8556-7ce22a1f8fde",
                 "name": "one",
                 "input": 2,
                 "triggers": ["input"],
@@ -512,7 +512,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "34e90af0-f97e-54e0-a159-691da37f175f",
+                "id": "49ac8f60-4ff2-5cdd-a319-66bbd9837e5a",
                 "name": "two",
                 "input": [12],
                 "triggers": ["inbox"],
@@ -523,7 +523,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "7a3cc398-2e02-5023-ad7b-e4848d3b67fa",
+                "id": "9379da35-ae1c-5a7b-8556-7ce22a1f8fde",
                 "name": "one",
                 "result": [("inbox", 3)],
             },
@@ -533,7 +533,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "34e90af0-f97e-54e0-a159-691da37f175f",
+                "id": "49ac8f60-4ff2-5cdd-a319-66bbd9837e5a",
                 "name": "two",
                 "result": [("output", 13)],
             },
@@ -549,7 +549,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "cf7cf374-2a2a-556f-8561-91737af89d2f",
+                "id": "b97f26c1-a34b-51e0-884e-44a41a3a3b47",
                 "name": "two",
                 "input": [3],
                 "triggers": ["inbox"],
@@ -560,7 +560,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "cf7cf374-2a2a-556f-8561-91737af89d2f",
+                "id": "b97f26c1-a34b-51e0-884e-44a41a3a3b47",
                 "name": "two",
                 "result": [("output", 4)],
             },
@@ -4130,7 +4130,10 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "step": 0,
                 "payload": {
                     "config": {
-                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                        "configurable": {
+                            "thread_id": "10",
+                            "thread_ts": AnyStr(),
+                        }
                     },
                     "values": {"my_key": "value", "market": "DE"},
                 },
@@ -4140,7 +4143,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                    "id": "d6e87693-41fb-58f5-8e0d-ee9ab46890b5",
                     "name": "prepare",
                     "input": {"my_key": "value", "market": "DE"},
                     "triggers": ["start:prepare"],
@@ -4151,7 +4154,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "e7879e70-6335-5867-9ec6-957fbb3da6fa",
+                    "id": "d6e87693-41fb-58f5-8e0d-ee9ab46890b5",
                     "name": "prepare",
                     "result": [("my_key", " prepared")],
                 },
@@ -4162,7 +4165,10 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "step": 1,
                 "payload": {
                     "config": {
-                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                        "configurable": {
+                            "thread_id": "10",
+                            "thread_ts": AnyStr(),
+                        }
                     },
                     "values": {"my_key": "value prepared", "market": "DE"},
                 },
@@ -4172,7 +4178,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                    "id": "b1826010-0028-5aa7-abd2-ed24984614ea",
                     "name": "tool_two_slow",
                     "input": {"my_key": "value prepared", "market": "DE"},
                     "triggers": ["branch:prepare:condition:tool_two_slow"],
@@ -4183,7 +4189,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "122f31bd-0e14-5b8f-91e7-4f241047a3fd",
+                    "id": "b1826010-0028-5aa7-abd2-ed24984614ea",
                     "name": "tool_two_slow",
                     "result": [("my_key", " slow")],
                 },
@@ -4194,7 +4200,10 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "step": 2,
                 "payload": {
                     "config": {
-                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                        "configurable": {
+                            "thread_id": "10",
+                            "thread_ts": AnyStr(),
+                        }
                     },
                     "values": {"my_key": "value prepared slow", "market": "DE"},
                 },
@@ -4204,7 +4213,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                    "id": "a22dbd2d-f136-57f0-a86a-bc2c234ffcb1",
                     "name": "finish",
                     "input": {"my_key": "value prepared slow", "market": "DE"},
                     "triggers": ["branch:prepare:condition:then"],
@@ -4215,7 +4224,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "48a16051-2c14-5ff5-9cfe-e8c7c32d5c83",
+                    "id": "a22dbd2d-f136-57f0-a86a-bc2c234ffcb1",
                     "name": "finish",
                     "result": [("my_key", " finished")],
                 },
@@ -4226,7 +4235,10 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "step": 3,
                 "payload": {
                     "config": {
-                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()}
+                        "configurable": {
+                            "thread_id": "10",
+                            "thread_ts": AnyStr(),
+                        }
                     },
                     "values": {
                         "my_key": "value prepared slow finished",
