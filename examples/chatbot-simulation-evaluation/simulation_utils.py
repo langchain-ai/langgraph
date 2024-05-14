@@ -9,6 +9,7 @@ from langchain_openai import ChatOpenAI
 from typing_extensions import TypedDict
 
 from langgraph.graph import END, StateGraph
+from langchain_community.adapters.openai import convert_message_to_dict
 
 
 def langchain_to_openai_messages(messages: List[BaseMessage]):
@@ -21,7 +22,6 @@ def langchain_to_openai_messages(messages: List[BaseMessage]):
     Returns:
         List[dict]: A list of openai messages.
     """
-    from langchain.adapters.openai import convert_message_to_dict  # noqa: I001
 
     return [
         convert_message_to_dict(m) if isinstance(m, BaseMessage) else m
