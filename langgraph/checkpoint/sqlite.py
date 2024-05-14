@@ -367,14 +367,10 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         )
         if limit:
             query += f" LIMIT {limit}"
-
-        print("final query", query)
         with self.cursor(transaction=False) as cur:
             cur.execute(
                 query,
-                (
-                    () if before is None else (before["configurable"]["thread_ts"],)
-                ),
+                (() if before is None else (before["configurable"]["thread_ts"],)),
             )
             for thread_id, thread_ts, parent_ts, value, metadata in cur:
                 yield CheckpointTuple(
@@ -439,11 +435,13 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             }
         }
 
+
 def search_where(metadata_query: CheckpointMetadata) -> str:
     """Return WHERE clause for (a)search() given metadata query.
-    
+
     This method returns the operator as well (=, IS).
     """
+
     def _where_value(query_value: Any) -> str:
         if query_value is None:
             return "IS NULL"

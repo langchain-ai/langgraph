@@ -287,13 +287,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             query += f" LIMIT {limit}"
         async with self.conn.execute(
             query,
-            (
-                ()
-                if before is None
-                else (
-                    str(before["configurable"]["thread_ts"]),
-                )
-            ),
+            (() if before is None else (str(before["configurable"]["thread_ts"]),)),
         ) as cursor:
             async for thread_id, thread_ts, parent_ts, value, metadata in cursor:
                 yield CheckpointTuple(

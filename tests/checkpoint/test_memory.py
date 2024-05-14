@@ -1,6 +1,6 @@
-import pytest
 from typing import AsyncIterator
 
+import pytest
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata
@@ -13,22 +13,26 @@ class TestMemorySaver:
         self.memory_saver = MemorySaver()
 
         # objects for test setup
-        self.config_1: RunnableConfig = {"configurable": {"thread_id": "thread-1", "thread_ts": "1"}}
-        self.config_2: RunnableConfig = {"configurable": {"thread_id": "thread-2", "thread_ts": "2"}}
+        self.config_1: RunnableConfig = {
+            "configurable": {"thread_id": "thread-1", "thread_ts": "1"}
+        }
+        self.config_2: RunnableConfig = {
+            "configurable": {"thread_id": "thread-2", "thread_ts": "2"}
+        }
 
         self.chkpnt_1: Checkpoint = {
             "v": 1,
             "ts": "1",
             "channel_values": {},
             "channel_versions": {},
-            "versions_seen": {}
+            "versions_seen": {},
         }
         self.chkpnt_2: Checkpoint = {
             "v": 2,
             "ts": "2",
             "channel_values": {},
             "channel_versions": {},
-            "versions_seen": {}
+            "versions_seen": {},
         }
 
         self.metadata_1: CheckpointMetadata = {
@@ -52,7 +56,10 @@ class TestMemorySaver:
 
         # call method / assertions
         query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
-        query_2: CheckpointMetadata = {"step": 1, "writes": {"foo": "bar"}}  # search by multiple keys
+        query_2: CheckpointMetadata = {
+            "step": 1,
+            "writes": {"foo": "bar"},
+        }  # search by multiple keys
         query_3: CheckpointMetadata = {}  # search by no keys, return all checkpoints
         query_4: CheckpointMetadata = {"source": "update", "step": 1}  # no match
 
@@ -80,7 +87,10 @@ class TestMemorySaver:
 
         # call method / assertions
         query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
-        query_2: CheckpointMetadata = {"step": 1, "writes": {"foo": "bar"}}  # search by multiple keys
+        query_2: CheckpointMetadata = {
+            "step": 1,
+            "writes": {"foo": "bar"},
+        }  # search by multiple keys
         query_3: CheckpointMetadata = {}  # search by no keys, return all checkpoints
         query_4: CheckpointMetadata = {"source": "update", "step": 1}  # no match
 

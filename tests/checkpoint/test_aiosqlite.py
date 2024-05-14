@@ -1,9 +1,8 @@
 import pytest
-
 from langchain_core.runnables import RunnableConfig
 
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata
 
 
 class TestMemorySaver:
@@ -12,22 +11,26 @@ class TestMemorySaver:
         self.sqlite_saver = AsyncSqliteSaver.from_conn_string(":memory:")
 
         # objects for test setup
-        self.config_1: RunnableConfig = {"configurable": {"thread_id": "thread-1", "thread_ts": "1"}}
-        self.config_2: RunnableConfig = {"configurable": {"thread_id": "thread-2", "thread_ts": "2"}}
+        self.config_1: RunnableConfig = {
+            "configurable": {"thread_id": "thread-1", "thread_ts": "1"}
+        }
+        self.config_2: RunnableConfig = {
+            "configurable": {"thread_id": "thread-2", "thread_ts": "2"}
+        }
 
         self.chkpnt_1: Checkpoint = {
             "v": 1,
             "ts": "1",
             "channel_values": {},
             "channel_versions": {},
-            "versions_seen": {}
+            "versions_seen": {},
         }
         self.chkpnt_2: Checkpoint = {
             "v": 2,
             "ts": "2",
             "channel_values": {},
             "channel_versions": {},
-            "versions_seen": {}
+            "versions_seen": {},
         }
 
         self.metadata_1: CheckpointMetadata = {
@@ -51,22 +54,26 @@ class TestMemorySaver:
 
         # call method / assertions
         query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
-        query_2: CheckpointMetadata = {"step": 1, "writes": {"foo": "bar"}}  # search by multiple keys
+        query_2: CheckpointMetadata = {
+            "step": 1,
+            "writes": {"foo": "bar"},
+        }  # search by multiple keys
         query_3: CheckpointMetadata = {}  # search by no keys, return all checkpoints
         query_4: CheckpointMetadata = {"source": "update", "step": 1}  # no match
 
-        search_results_1 = [c async for c in self.sqlite_saver.asearch(query_1)]
-        assert len(search_results_1) == 1
-        assert search_results_1[0].metadata == self.metadata_1
+        async with self.sqlite_saver as sqlite_saver:
+            search_results_1 = [c async for c in sqlite_saver.asearch(query_1)]
+            assert len(search_results_1) == 1
+            assert search_results_1[0].metadata == self.metadata_1
 
-        search_results_2 = [c async for c in self.sqlite_saver.asearch(query_2)]
-        assert len(search_results_2) == 1
-        assert search_results_2[0].metadata == self.metadata_2
+            search_results_2 = [c async for c in sqlite_saver.asearch(query_2)]
+            assert len(search_results_2) == 1
+            assert search_results_2[0].metadata == self.metadata_2
 
-        search_results_3 = [c async for c in self.sqlite_saver.asearch(query_3)]
-        assert len(search_results_3) == 2
+            search_results_3 = [c async for c in sqlite_saver.asearch(query_3)]
+            assert len(search_results_3) == 2
 
-        search_results_4 = [c async for c in self.sqlite_saver.asearch(query_4)]
-        assert len(search_results_4) == 0
+            search_results_4 = [c async for c in sqlite_saver.asearch(query_4)]
+            assert len(search_results_4) == 0
 
-        # TODO: test before and limit params
+            # TODO: test before and limit params

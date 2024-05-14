@@ -127,7 +127,7 @@ class MemorySaver(BaseCheckpointSaver):
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
         """Search for checkpoints by metadata.
-        
+
         This method retrieves a list of checkpoint tuples from the in-memory
         storage based on the provided metadata query. The metadata query does
         not need to contain all keys defined in the CheckpointMetadata class.
@@ -163,7 +163,9 @@ class MemorySaver(BaseCheckpointSaver):
                         limit -= 1
 
                     yield CheckpointTuple(
-                        config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
+                        config={
+                            "configurable": {"thread_id": thread_id, "thread_ts": ts}
+                        },
                         checkpoint=self.serde.loads(checkpoint_bytes),
                         metadata=metadata,
                     )
