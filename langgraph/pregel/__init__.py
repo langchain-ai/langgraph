@@ -4,7 +4,6 @@ import asyncio
 import concurrent.futures
 from collections import defaultdict, deque
 from functools import partial
-from inspect import isclass
 from typing import (
     Any,
     AsyncIterator,
@@ -70,8 +69,9 @@ from langgraph.constants import (
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
-    ManagedValue,
+    ManagedValueMapping,
     ManagedValuesManager,
+    ManagedValueSpec,
     is_managed_value,
 )
 from langgraph.pregel.debug import (
@@ -324,14 +324,14 @@ class Pregel(
         return self.stream_channels or [k for k in self.channels]
 
     @property
-    def managed_values_list(self) -> Sequence[Type[ManagedValue]]:
-        return [
-            v
+    def managed_values_dict(self) -> dict[str, ManagedValueSpec]:
+        return {
+            k: v
             for node in self.nodes.values()
             if isinstance(node.channels, dict)
-            for v in node.channels.values()
+            for k, v in node.channels.items()
             if is_managed_value(v)
-        ]
+        }
 
     def get_state(self, config: RunnableConfig) -> StateSnapshot:
         """Get the current state of the graph."""
@@ -344,7 +344,7 @@ class Pregel(
         with ChannelsManager(
             self.channels, checkpoint
         ) as channels, ManagedValuesManager(
-            self.managed_values_list, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config), self
         ) as managed:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint,
@@ -375,7 +375,7 @@ class Pregel(
         async with AsyncChannelsManager(
             self.channels, checkpoint
         ) as channels, AsyncManagedValuesManager(
-            self.managed_values_list, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config), self
         ) as managed:
             _, next_tasks = _prepare_next_tasks(
                 checkpoint,
@@ -411,7 +411,7 @@ class Pregel(
             with ChannelsManager(
                 self.channels, checkpoint
             ) as channels, ManagedValuesManager(
-                self.managed_values_list, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config), self
             ) as managed:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint,
@@ -450,7 +450,7 @@ class Pregel(
             async with AsyncChannelsManager(
                 self.channels, checkpoint
             ) as channels, AsyncManagedValuesManager(
-                self.managed_values_list, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config), self
             ) as managed:
                 _, next_tasks = _prepare_next_tasks(
                     checkpoint,
@@ -722,7 +722,7 @@ class Pregel(
             ) as channels, get_executor_for_config(
                 config
             ) as executor, ManagedValuesManager(
-                self.managed_values_list, config, self
+                self.managed_values_dict, config, self
             ) as managed:
                 # map inputs to channel updates
                 if input_writes := deque(map_input(input_keys, input)):
@@ -1018,7 +1018,7 @@ class Pregel(
             async with AsyncChannelsManager(
                 self.channels, checkpoint
             ) as channels, AsyncManagedValuesManager(
-                self.managed_values_list, config, self
+                self.managed_values_dict, config, self
             ) as managed:
                 # map inputs to channel updates
                 if input_writes := deque(map_input(input_keys, input)):
@@ -1474,7 +1474,7 @@ def _prepare_next_tasks(
     checkpoint: Checkpoint,
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
-    managed: Sequence[ManagedValue],
+    managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
     for_execution: Literal[False],
@@ -1487,7 +1487,7 @@ def _prepare_next_tasks(
     checkpoint: Checkpoint,
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
-    managed: Sequence[ManagedValue],
+    managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
     for_execution: Literal[True],
@@ -1499,7 +1499,7 @@ def _prepare_next_tasks(
     checkpoint: Checkpoint,
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
-    managed: Sequence[ManagedValue],
+    managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
     *,
@@ -1532,11 +1532,10 @@ def _prepare_next_tasks(
 
                     managed_values = {}
                     for key, chan in proc.channels.items():
-                        for mv in managed:
-                            if isclass(chan) and isinstance(mv, chan):
-                                managed_values[key] = mv(
-                                    step, PregelTaskDescription(name, val)
-                                )
+                        if is_managed_value(chan):
+                            managed_values[key] = managed[key](
+                                step, PregelTaskDescription(name, val)
+                            )
 
                     val.update(managed_values)
                 except EmptyChannelError:

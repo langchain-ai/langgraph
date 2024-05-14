@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Optional, Sequence, Type, Union
+from typing import Any, Callable, Mapping, Optional, Sequence, Union
 
 from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import (
@@ -15,7 +15,7 @@ from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
-from langgraph.managed.base import ManagedValue
+from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils import RunnableCallable
 
@@ -100,7 +100,7 @@ DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
 
 
 class PregelNode(RunnableBindingBase):
-    channels: Union[list[str], Mapping[str, Union[str, Type[ManagedValue]]]]
+    channels: Union[list[str], Mapping[str, Union[str, ManagedValueSpec]]]
 
     triggers: list[str] = Field(default_factory=list)
 

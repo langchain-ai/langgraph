@@ -1,9 +1,10 @@
+import json
 import pickle
 import sqlite3
 import threading
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
-from typing import Any, Iterator, Optional
+from typing import Any, Iterator, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
@@ -339,6 +340,57 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     ),
                 )
 
+    def search(
+        self,
+        metadata_filter: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        """Search for checkpoints by metadata.
+
+        This method retrieves a list of checkpoint tuples from the SQLite
+        database based on the provided metadata filter. The metadata filter does
+        not need to contain all keys defined in the CheckpointMetadata class.
+        The checkpoints are ordered by timestamp in descending order.
+
+        Args:
+            metadata_filter (CheckpointMetadata): The metadata filter to use for searching the checkpoints.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
+            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+        """
+        # construct query
+        SELECT = "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints "
+        WHERE, params = search_where(metadata_filter, before)
+        ORDER_BY = "ORDER BY thread_ts DESC "
+        LIMIT = f"LIMIT {limit}" if limit else ""
+
+        query = f"{SELECT}{WHERE}{ORDER_BY}{LIMIT}"
+
+        # execute query
+        with self.cursor(transaction=False) as cur:
+            cur.execute(query, params)
+
+            for thread_id, thread_ts, parent_ts, value, metadata in cur:
+                yield CheckpointTuple(
+                    {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
+                    self.serde.loads(value),
+                    self.serde.loads(metadata) if metadata is not None else {},
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
+                        }
+                        if parent_ts
+                        else None
+                    ),
+                )
+
     def put(
         self,
         config: RunnableConfig,
@@ -386,3 +438,89 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 "thread_ts": checkpoint["ts"],
             }
         }
+
+
+def search_where(
+    metadata_filter: CheckpointMetadata,
+    before: Optional[RunnableConfig] = None,
+) -> Tuple[str, Tuple[Any, ...]]:
+    """Return WHERE clause predicates for (a)search() given metadata filter
+    and `before` config.
+
+    This method returns a tuple of a string and a tuple of values. The string
+    is the parametered WHERE clause predicate (including the WHERE keyword):
+    "WHERE column1 = ? AND column2 IS ?". The tuple of values contains the
+    values for each of the corresponding parameters.
+    """
+    where = "WHERE "
+    param_values = ()
+
+    # construct predicate for metadata filter
+    metadata_predicate, metadata_values = _metadata_predicate(metadata_filter)
+    if metadata_predicate != "":
+        where += metadata_predicate
+        param_values += metadata_values
+
+    # construct predicate for `before`
+    if before is not None:
+        if metadata_predicate != "":
+            where += "AND thread_ts < ? "
+        else:
+            where += "thread_ts < ? "
+
+        param_values += (before["configurable"]["thread_ts"],)
+
+    if where == "WHERE ":
+        # no predicates, return an empty WHERE clause string
+        return ("", ())
+    else:
+        return (where, param_values)
+
+
+def _metadata_predicate(
+    metadata_filter: CheckpointMetadata,
+) -> Tuple[str, Tuple[Any, ...]]:
+    """Return WHERE clause predicates for (a)search() given metadata filter.
+
+    This method returns a tuple of a string and a tuple of values. The string
+    is the parametered WHERE clause predicate (excluding the WHERE keyword):
+    "column1 = ? AND column2 IS ?". The tuple of values contains the values
+    for each of the corresponding parameters.
+    """
+
+    def _where_value(query_value: Any) -> Tuple[str, Any]:
+        """Return tuple of operator and value for WHERE clause predicate."""
+        if query_value is None:
+            return ("IS ?", None)
+        elif (
+            isinstance(query_value, str)
+            or isinstance(query_value, int)
+            or isinstance(query_value, float)
+        ):
+            return ("= ?", query_value)
+        elif isinstance(query_value, bool):
+            return ("= ?", 1 if query_value else 0)
+        elif isinstance(query_value, dict) or isinstance(query_value, list):
+            # query value for JSON object cannot have trailing space after separators (, :)
+            # SQLite json_extract() returns JSON string without whitespace
+            return ("= ?", json.dumps(query_value, separators=(",", ":")))
+        else:
+            return ("= ?", str(query_value))
+
+    predicate = ""
+    param_values = ()
+
+    # process metadata query
+    for query_key, query_value in metadata_filter.items():
+        operator, param_value = _where_value(query_value)
+        predicate += (
+            f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator} AND "
+        )
+        param_values += (param_value,)
+
+    if predicate != "":
+        # remove trailing AND
+        predicate = predicate[:-4]
+
+    # predicate contains an extra trailing space
+    return (predicate, param_values)
