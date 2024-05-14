@@ -98,7 +98,7 @@ class ToolNode(RunnableCallable):
 
 def tools_condition(
     state: Union[list[AnyMessage], dict[str, Any]],
-) -> Literal["action", "__end__"]:
+) -> Literal["tools", "__end__"]:
     """Use in the conditional_edge to route to the ToolNode if the last message
 
     has tool calls. Otherwise, route to the end.
@@ -134,15 +134,7 @@ def tools_condition(
         >>> graph_builder.add_node("chatbot", llm.bind_tools(tools))
         >>> graph_builder.add_edge("tools", "chatbot")
         >>> graph_builder.add_conditional_edges(
-        >>>     "chatbot",
-        >>>     # highlight-next-line
-        >>>     tools_condition,
-        >>>     {
-        >>>         # If it returns 'action', route to the 'tools' node
-        >>>         "action": "tools",
-        >>>         # If it returns '__end__', route to the end
-        >>>         "__end__": "__end__",
-        >>>     },
+        >>>     "chatbot", tools_condition
         >>> )
         >>> graph_builder.set_entry_point("chatbot")
         >>> graph = graph_builder.compile()
@@ -156,5 +148,5 @@ def tools_condition(
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
     if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
-        return "action"
+        return "tools"
     return "__end__"
