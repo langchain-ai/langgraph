@@ -108,12 +108,6 @@ WriteValue = Union[
 ]
 
 
-def _coerce_write_value(value: WriteValue) -> Runnable[Input, Output]:
-    if not isinstance(value, Runnable) and not callable(value):
-        return coerce_to_runnable(lambda _: value)
-    return coerce_to_runnable(value)
-
-
 class Channel:
     @overload
     @classmethod
