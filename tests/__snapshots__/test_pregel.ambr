@@ -577,7 +577,7 @@
         }
       },
       {
-        "id": "action",
+        "id": "tools",
         "type": "runnable",
         "data": {
           "id": [
@@ -596,12 +596,12 @@
         "target": "agent"
       },
       {
-        "source": "action",
+        "source": "tools",
         "target": "agent"
       },
       {
         "source": "agent",
-        "target": "action",
+        "target": "tools",
         "data": "continue",
         "conditional": true
       },
@@ -619,8 +619,8 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
+  	tools --> agent;
+  	agent -. continue .-> tools;
   	agent -. end .-> __end__;
   
   '''
@@ -836,7 +836,7 @@
         }
       },
       {
-        "id": "action",
+        "id": "tools",
         "type": "runnable",
         "data": {
           "id": [
@@ -855,12 +855,12 @@
         "target": "agent"
       },
       {
-        "source": "action",
+        "source": "tools",
         "target": "agent"
       },
       {
         "source": "agent",
-        "target": "action",
+        "target": "tools",
         "data": "continue",
         "conditional": true
       },
@@ -878,8 +878,8 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
+  	tools --> agent;
+  	agent -. continue .-> tools;
   	agent -. end .-> __end__;
   
   '''
@@ -918,7 +918,7 @@
         }
       },
       {
-        "id": "action",
+        "id": "tools",
         "type": "runnable",
         "data": {
           "id": [
@@ -937,12 +937,12 @@
         "target": "agent"
       },
       {
-        "source": "action",
+        "source": "tools",
         "target": "agent"
       },
       {
         "source": "agent",
-        "target": "action",
+        "target": "tools",
         "data": "continue",
         "conditional": true
       },
@@ -960,8 +960,8 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
+  	tools --> agent;
+  	agent -. continue .-> tools;
   	agent -. end .-> __end__;
   
   '''
