@@ -242,12 +242,13 @@ class Graph:
         # assemble sources
         all_sources = {src for src, _ in self._all_edges}
         for start, branches in self.branches.items():
+            all_sources.add(start)
             for cond, branch in branches.items():
-                all_sources.add(start)
                 if branch.then is not None:
                     if branch.ends is not None:
                         for end in branch.ends.values():
-                            all_sources.add(end)
+                            if end != END:
+                                all_sources.add(end)
                     else:
                         for node in self.nodes:
                             if node != start and node != branch.then:
@@ -257,7 +258,7 @@ class Graph:
             if node not in all_sources:
                 raise ValueError(f"Node '{node}' is a dead-end")
         for source in all_sources:
-            if node not in self.nodes and node != START:
+            if node not in self.nodes and source != START:
                 raise ValueError(f"Found edge starting at unknown node '{source}'")
 
         # assemble targets

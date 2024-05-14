@@ -269,7 +269,7 @@ class CompiledStateGraph(CompiledGraph):
             elif end != END:
                 # subscribe to start channel
                 self.nodes[end].triggers.append(starts)
-        else:
+        elif end != END:
             channel_name = f"join:{'+'.join(starts)}:{end}"
             # register channel
             self.channels[channel_name] = NamedBarrierValue(str, set(starts))
