@@ -3,12 +3,8 @@ from typing import Generator, Generic, Optional, Sequence, Type
 
 from typing_extensions import Self
 
-from langgraph.channels.base import (
-    BaseChannel,
-    EmptyChannelError,
-    InvalidUpdateError,
-    Value,
-)
+from langgraph.channels.base import BaseChannel, Value
+from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 
 class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):

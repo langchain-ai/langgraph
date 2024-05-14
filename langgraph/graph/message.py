@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated, Union
+from typing import Annotated, TypedDict, Union
 
 from langchain_core.messages import (
     AnyMessage,
@@ -30,35 +30,33 @@ def add_messages(left: Messages, right: Messages) -> Messages:
         message from `right` will replace the message from `left`.
 
     Examples:
+        ```pycon
+        >>> from langchain_core.messages import AIMessage, HumanMessage
+        >>> msgs1 = [HumanMessage(content="Hello", id="1")]
+        >>> msgs2 = [AIMessage(content="Hi there!", id="2")]
+        >>> add_messages(msgs1, msgs2)
+        [HumanMessage(content='Hello', id='1'), AIMessage(content='Hi there!', id='2')]
 
-            msgs1 = [HumanMessage(content="Hello", id="1")]
-            msgs2 = [AIMessage(content="Hi there!", id="2")]
-            add_messages(msgs1, msgs2)
-            # [HumanMessage(content="Hello", id="1"), AIMessage(content="Hi there!", id="2")]
+        >>> msgs1 = [HumanMessage(content="Hello", id="1")]
+        >>> msgs2 = [HumanMessage(content="Hello again", id="1")]
+        >>> add_messages(msgs1, msgs2)
+        [HumanMessage(content='Hello again', id='1')]
 
-
-            msgs1 = [HumanMessage(content="Hello", id="1")]
-            msgs2 = [HumanMessage(content="Hello again", id="1")]
-            add_messages(msgs1, msgs2)
-            # [HumanMessage(content="Hello again", id="1")]
-
-
-            from typing import Annotated
-            from typing_extensions import TypedDict
-            from langgraph.graph import StateGraph
-
-
-            class State(TypedDict):
-                messages: Annotated[list, add_messages]
-
-
-            builder = StateGraph(State)
-            builder.add_node("chatbot", lambda state: {"messages": [("assistant", "Hello")]})
-            builder.set_entry_point("chatbot")
-            builder.set_finish_point("chatbot")
-            graph = builder.compile()
-            graph.invoke({})
-            # {'messages': [AIMessage(content='Hello', id='f657fb65-b6af-4790-a5b5-1d266a2ed26e')]}
+        >>> from typing import Annotated
+        >>> from typing_extensions import TypedDict
+        >>> from langgraph.graph import StateGraph
+        >>>
+        >>> class State(TypedDict):
+        ...     messages: Annotated[list, add_messages]
+        ...
+        >>> builder = StateGraph(State)
+        >>> builder.add_node("chatbot", lambda state: {"messages": [("assistant", "Hello")]})
+        >>> builder.set_entry_point("chatbot")
+        >>> builder.set_finish_point("chatbot")
+        >>> graph = builder.compile()
+        >>> graph.invoke({})
+        {'messages': [AIMessage(content='Hello', id=...)]}
+        ```
 
     """
     # coerce to list
@@ -96,43 +94,46 @@ class MessageGraph(StateGraph):
     into the existing list of messages in the graph's state.
 
     Examples:
+        ```pycon
+        >>> from langgraph.graph.message import MessageGraph
+        ...
+        >>> builder = MessageGraph()
+        >>> builder.add_node("chatbot", lambda state: [("assistant", "Hello!")])
+        >>> builder.set_entry_point("chatbot")
+        >>> builder.set_finish_point("chatbot")
+        >>> builder.compile().invoke([("user", "Hi there.")])
+        [HumanMessage(content="Hi there.", id='...'), AIMessage(content="Hello!", id='...')]
 
-        from langgraph.graph.message import MessageGraph
 
-        builder = MessageGraph()
-        builder.add_node("chatbot", lambda state: [("assistant", "Hello!")])
-        builder.set_entry_point("chatbot")
-        builder.set_finish_point("chatbot")
-        builder.compile().invoke([("user", "Hi there.")])
-        # {'messages': [HumanMessage(content="Hi there.", id='b8b7d8f4-7f4d-4f4d-9c1d-f8b8d8f4d9c1'),
-        #              AIMessage(content="Hello!", id='f4d9c1d8-8d8f-4d9c-b8b7-d8f4f4d9c1d8')]}
-
-
-        from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
-
-        from langgraph.graph.message import MessageGraph
-
-        builder = MessageGraph()
-        builder.add_node(
-            "chatbot",
-            lambda state: [
-                AIMessage(
-                    content="Hello!",
-                    tool_calls=[{"name": "search", "id": "123", "args": {"query": "X"}}],
-                )
-            ],
-        )
-        builder.add_node(
-            "search", lambda state: [ToolMessage(content="Searching...", tool_call_id="123")]
-        )
-        builder.set_entry_point("chatbot")
-        builder.add_edge("chatbot", "search")
-        builder.set_finish_point("search")
-        builder.compile().invoke([HumanMessage(content="Hi there. Can you search for X?")])
-        # {'messages': [HumanMessage(content="Hi there. Can you search for X?", id='b8b7d8f4-7f4d-4f4d-9c1d-f8b8d8f4d9c1'),
-        #              AIMessage(content="Hello!", id='f4d9c1d8-8d8f-4d9c-b8b7-d8f4f4d9c1d8'),
-        #              ToolMessage(content="Searching...", id='d8f4f4d9-c1d8-4f4d-b8b7-d8f4f4d9c1d8', tool_call_id="123")]}
+        >>> from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+        >>> from langgraph.graph.message import MessageGraph
+        ...
+        >>> builder = MessageGraph()
+        >>> builder.add_node(
+        ...     "chatbot",
+        ...     lambda state: [
+        ...         AIMessage(
+        ...             content="Hello!",
+        ...             tool_calls=[{"name": "search", "id": "123", "args": {"query": "X"}}],
+        ...         )
+        ...     ],
+        ... )
+        >>> builder.add_node(
+        ...     "search", lambda state: [ToolMessage(content="Searching...", tool_call_id="123")]
+        ... )
+        >>> builder.set_entry_point("chatbot")
+        >>> builder.add_edge("chatbot", "search")
+        >>> builder.set_finish_point("search")
+        >>> builder.compile().invoke([HumanMessage(content="Hi there. Can you search for X?")])
+        {'messages': [HumanMessage(content="Hi there. Can you search for X?", id='b8b7d8f4-7f4d-4f4d-9c1d-f8b8d8f4d9c1'),
+                     AIMessage(content="Hello!", id='f4d9c1d8-8d8f-4d9c-b8b7-d8f4f4d9c1d8'),
+                     ToolMessage(content="Searching...", id='d8f4f4d9-c1d8-4f4d-b8b7-d8f4f4d9c1d8', tool_call_id="123")]}
+        ```
     """
 
     def __init__(self) -> None:
         super().__init__(Annotated[list[AnyMessage], add_messages])
+
+
+class MessagesState(TypedDict):
+    messages: Annotated[list[AnyMessage], add_messages]

@@ -1,5 +1,5 @@
 # serializer version: 1
-# name: test_branch_then[end_of_run]
+# name: test_branch_then
   '''
   graph TD;
   	__start__ --> prepare;
@@ -11,41 +11,7 @@
   
   '''
 # ---
-# name: test_branch_then[end_of_run].1
-  '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
-  graph TD;
-  	__start__[__start__]:::startclass;
-  	__end__[__end__]:::endclass;
-  	prepare([prepare]):::otherclass;
-  	tool_two_slow([tool_two_slow]):::otherclass;
-  	tool_two_fast([tool_two_fast]):::otherclass;
-  	finish([finish]):::otherclass;
-  	__start__ --> prepare;
-  	finish --> __end__;
-  	prepare -.-> tool_two_slow;
-  	tool_two_slow --> finish;
-  	prepare -.-> tool_two_fast;
-  	tool_two_fast --> finish;
-  	classDef startclass fill:#ffdfba;
-  	classDef endclass fill:#baffc9;
-  	classDef otherclass fill:#fad7de;
-  
-  '''
-# ---
-# name: test_branch_then[end_of_step]
-  '''
-  graph TD;
-  	__start__ --> prepare;
-  	finish --> __end__;
-  	prepare -.-> tool_two_slow;
-  	tool_two_slow --> finish;
-  	prepare -.-> tool_two_fast;
-  	tool_two_fast --> finish;
-  
-  '''
-# ---
-# name: test_branch_then[end_of_step].1
+# name: test_branch_then.1
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
@@ -229,7 +195,7 @@
   
   '''
 # ---
-# name: test_conditional_graph[end_of_run]
+# name: test_conditional_graph
   '''
   {
     "nodes": [
@@ -294,7 +260,7 @@
   }
   '''
 # ---
-# name: test_conditional_graph[end_of_run].1
+# name: test_conditional_graph.1
   '''
   graph TD;
   	__start__ --> agent;
@@ -304,7 +270,7 @@
   
   '''
 # ---
-# name: test_conditional_graph[end_of_run].2
+# name: test_conditional_graph.2
   '''
   {
     "nodes": [
@@ -442,7 +408,7 @@
   }
   '''
 # ---
-# name: test_conditional_graph[end_of_run].3
+# name: test_conditional_graph.3
   '''
   graph TD;
   	PromptTemplate --> FakeStreamingListLLM;
@@ -458,242 +424,13 @@
   
   '''
 # ---
-# name: test_conditional_graph[end_of_step]
-  '''
-  {
-    "nodes": [
-      {
-        "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
-      },
-      {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
-        "id": "agent",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "schema",
-            "runnable",
-            "RunnableAssign"
-          ],
-          "name": "RunnableAssign<agent_outcome>"
-        }
-      },
-      {
-        "id": "tools",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "tools"
-        }
-      }
-    ],
-    "edges": [
-      {
-        "source": "__start__",
-        "target": "agent"
-      },
-      {
-        "source": "tools",
-        "target": "agent"
-      },
-      {
-        "source": "agent",
-        "target": "tools",
-        "data": "continue",
-        "conditional": true
-      },
-      {
-        "source": "agent",
-        "target": "__end__",
-        "data": "exit",
-        "conditional": true
-      }
-    ]
-  }
-  '''
-# ---
-# name: test_conditional_graph[end_of_step].1
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	tools --> agent;
-  	agent -. continue .-> tools;
-  	agent -. exit .-> __end__;
-  
-  '''
-# ---
-# name: test_conditional_graph[end_of_step].2
-  '''
-  {
-    "nodes": [
-      {
-        "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
-      },
-      {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
-        "id": 2,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Input"
-      },
-      {
-        "id": 3,
-        "type": "schema",
-        "data": "Parallel<agent_outcome>Output"
-      },
-      {
-        "id": 4,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "prompts",
-            "prompt",
-            "PromptTemplate"
-          ],
-          "name": "PromptTemplate"
-        }
-      },
-      {
-        "id": 5,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_community",
-            "llms",
-            "fake",
-            "FakeStreamingListLLM"
-          ],
-          "name": "FakeStreamingListLLM"
-        }
-      },
-      {
-        "id": 6,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain_core",
-            "runnables",
-            "base",
-            "RunnableLambda"
-          ],
-          "name": "agent_parser"
-        }
-      },
-      {
-        "id": 7,
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langchain",
-            "schema",
-            "runnable",
-            "RunnablePassthrough"
-          ],
-          "name": "RunnablePassthrough"
-        }
-      },
-      {
-        "id": "tools",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "tools"
-        }
-      }
-    ],
-    "edges": [
-      {
-        "source": 4,
-        "target": 5
-      },
-      {
-        "source": 5,
-        "target": 6
-      },
-      {
-        "source": 2,
-        "target": 4
-      },
-      {
-        "source": 6,
-        "target": 3
-      },
-      {
-        "source": 2,
-        "target": 7
-      },
-      {
-        "source": 7,
-        "target": 3
-      },
-      {
-        "source": "__start__",
-        "target": 2
-      },
-      {
-        "source": "tools",
-        "target": 2
-      },
-      {
-        "source": 3,
-        "target": "tools",
-        "data": "continue",
-        "conditional": true
-      },
-      {
-        "source": 3,
-        "target": "__end__",
-        "data": "exit",
-        "conditional": true
-      }
-    ]
-  }
-  '''
-# ---
-# name: test_conditional_graph[end_of_step].3
-  '''
-  graph TD;
-  	PromptTemplate --> FakeStreamingListLLM;
-  	FakeStreamingListLLM --> Lambda_agent_parser_;
-  	Parallel_agent_outcome_Input --> PromptTemplate;
-  	Lambda_agent_parser_ --> Parallel_agent_outcome_Output;
-  	Parallel_agent_outcome_Input --> Passthrough;
-  	Passthrough --> Parallel_agent_outcome_Output;
-  	__start__ --> Parallel_agent_outcome_Input;
-  	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. continue .-> tools;
-  	Parallel_agent_outcome_Output -. exit .-> __end__;
-  
-  '''
-# ---
-# name: test_conditional_state_graph[end_of_run]
+# name: test_conditional_state_graph
   '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"AgentAction": {"title": "AgentAction", "description": "A full description of an action for an ActionAgent to execute.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "The final return value of an ActionAgent.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}}}}'
 # ---
-# name: test_conditional_state_graph[end_of_run].1
+# name: test_conditional_state_graph.1
   '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "A full description of an action for an ActionAgent to execute.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "The final return value of an ActionAgent.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
 # ---
-# name: test_conditional_state_graph[end_of_run].2
+# name: test_conditional_state_graph.2
   '''
   {
     "nodes": [
@@ -758,7 +495,7 @@
   }
   '''
 # ---
-# name: test_conditional_state_graph[end_of_run].3
+# name: test_conditional_state_graph.3
   '''
   graph TD;
   	__start__ --> agent;
@@ -768,13 +505,52 @@
   
   '''
 # ---
-# name: test_conditional_state_graph[end_of_step]
-  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"AgentAction": {"title": "AgentAction", "description": "A full description of an action for an ActionAgent to execute.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "The final return value of an ActionAgent.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}}}}'
+# name: test_in_one_fan_out_state_graph_waiting_edge
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
+  
+  '''
 # ---
-# name: test_conditional_state_graph[end_of_step].1
-  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "A full description of an action for an ActionAgent to execute.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "The final return value of an ActionAgent.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
 # ---
-# name: test_conditional_state_graph[end_of_step].2
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_message_graph
+  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}}, "required": ["name", "args", "id", "error"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph.1
+  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}}, "required": ["name", "args", "id", "error"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph.2
   '''
   {
     "nodes": [
@@ -793,12 +569,11 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain",
-            "schema",
-            "runnable",
-            "RunnableSequence"
+            "tests",
+            "test_pregel",
+            "FakeFuntionChatModel"
           ],
-          "name": "RunnableSequence"
+          "name": "FakeFuntionChatModel"
         }
       },
       {
@@ -807,8 +582,9 @@
         "data": {
           "id": [
             "langgraph",
-            "utils",
-            "RunnableCallable"
+            "prebuilt",
+            "tool_node",
+            "ToolNode"
           ],
           "name": "tools"
         }
@@ -832,259 +608,19 @@
       {
         "source": "agent",
         "target": "__end__",
-        "data": "exit",
+        "data": "end",
         "conditional": true
       }
     ]
   }
   '''
 # ---
-# name: test_conditional_state_graph[end_of_step].3
+# name: test_message_graph.3
   '''
   graph TD;
   	__start__ --> agent;
   	tools --> agent;
   	agent -. continue .-> tools;
-  	agent -. exit .-> __end__;
-  
-  '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge[end_of_run]
-  '''
-  graph TD;
-  	__start__ --> rewrite_query;
-  	analyzer_one --> retriever_one;
-  	qa --> __end__;
-  	retriever_one --> qa;
-  	retriever_two --> qa;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query --> retriever_two;
-  
-  '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge[end_of_step]
-  '''
-  graph TD;
-  	__start__ --> rewrite_query;
-  	analyzer_one --> retriever_one;
-  	qa --> __end__;
-  	retriever_one --> qa;
-  	retriever_two --> qa;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query --> retriever_two;
-  
-  '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[end_of_run]
-  '''
-  graph TD;
-  	__start__ --> rewrite_query;
-  	analyzer_one --> retriever_one;
-  	qa --> __end__;
-  	retriever_one --> qa;
-  	retriever_two --> qa;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query -.-> retriever_two;
-  
-  '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[end_of_step]
-  '''
-  graph TD;
-  	__start__ --> rewrite_query;
-  	analyzer_one --> retriever_one;
-  	qa --> __end__;
-  	retriever_one --> qa;
-  	retriever_two --> qa;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query -.-> retriever_two;
-  
-  '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[end_of_run]
-  '''
-  graph TD;
-  	__start__ --> rewrite_query;
-  	analyzer_one --> retriever_one;
-  	qa --> __end__;
-  	retriever_one --> qa;
-  	retriever_two --> qa;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query -.-> retriever_two;
-  
-  '''
-# ---
-# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[end_of_step]
-  '''
-  graph TD;
-  	__start__ --> rewrite_query;
-  	analyzer_one --> retriever_one;
-  	qa --> __end__;
-  	retriever_one --> qa;
-  	retriever_two --> qa;
-  	rewrite_query --> analyzer_one;
-  	rewrite_query -.-> retriever_two;
-  
-  '''
-# ---
-# name: test_message_graph[end_of_run]
-  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}}, "required": ["name", "args", "id", "error"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
-# ---
-# name: test_message_graph[end_of_run].1
-  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}}, "required": ["name", "args", "id", "error"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
-# ---
-# name: test_message_graph[end_of_run].2
-  '''
-  {
-    "nodes": [
-      {
-        "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
-      },
-      {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
-        "id": "agent",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "tests",
-            "test_pregel",
-            "FakeFuntionChatModel"
-          ],
-          "name": "FakeFuntionChatModel"
-        }
-      },
-      {
-        "id": "action",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "prebuilt",
-            "tool_node",
-            "ToolNode"
-          ],
-          "name": "tools"
-        }
-      }
-    ],
-    "edges": [
-      {
-        "source": "__start__",
-        "target": "agent"
-      },
-      {
-        "source": "action",
-        "target": "agent"
-      },
-      {
-        "source": "agent",
-        "target": "action",
-        "data": "continue",
-        "conditional": true
-      },
-      {
-        "source": "agent",
-        "target": "__end__",
-        "data": "end",
-        "conditional": true
-      }
-    ]
-  }
-  '''
-# ---
-# name: test_message_graph[end_of_run].3
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
-  	agent -. end .-> __end__;
-  
-  '''
-# ---
-# name: test_message_graph[end_of_step]
-  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}}, "required": ["name", "args", "id", "error"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
-# ---
-# name: test_message_graph[end_of_step].1
-  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}}, "required": ["name", "args", "id", "error"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior, usually passed in as the first of a sequence\\nof input messages.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a function back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
-# ---
-# name: test_message_graph[end_of_step].2
-  '''
-  {
-    "nodes": [
-      {
-        "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
-      },
-      {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
-        "id": "agent",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "tests",
-            "test_pregel",
-            "FakeFuntionChatModel"
-          ],
-          "name": "FakeFuntionChatModel"
-        }
-      },
-      {
-        "id": "action",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "prebuilt",
-            "tool_node",
-            "ToolNode"
-          ],
-          "name": "tools"
-        }
-      }
-    ],
-    "edges": [
-      {
-        "source": "__start__",
-        "target": "agent"
-      },
-      {
-        "source": "action",
-        "target": "agent"
-      },
-      {
-        "source": "agent",
-        "target": "action",
-        "data": "continue",
-        "conditional": true
-      },
-      {
-        "source": "agent",
-        "target": "__end__",
-        "data": "end",
-        "conditional": true
-      }
-    ]
-  }
-  '''
-# ---
-# name: test_message_graph[end_of_step].3
-  '''
-  graph TD;
-  	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
   	agent -. end .-> __end__;
   
   '''
@@ -1267,7 +803,7 @@
   '''
 # ---
 # name: test_prebuilt_chat
-  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
+  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}, "is_last_step": {"title": "Is Last Step", "type": "boolean"}}, "required": ["messages", "is_last_step"]}}}'
 # ---
 # name: test_prebuilt_chat.1
   '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
@@ -1300,7 +836,7 @@
         }
       },
       {
-        "id": "action",
+        "id": "tools",
         "type": "runnable",
         "data": {
           "id": [
@@ -1319,12 +855,12 @@
         "target": "agent"
       },
       {
-        "source": "action",
+        "source": "tools",
         "target": "agent"
       },
       {
         "source": "agent",
-        "target": "action",
+        "target": "tools",
         "data": "continue",
         "conditional": true
       },
@@ -1342,14 +878,14 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
+  	tools --> agent;
+  	agent -. continue .-> tools;
   	agent -. end .-> __end__;
   
   '''
 # ---
 # name: test_prebuilt_tool_chat
-  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
+  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}, "is_last_step": {"title": "Is Last Step", "type": "boolean"}}, "required": ["messages", "is_last_step"]}}}'
 # ---
 # name: test_prebuilt_tool_chat.1
   '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
@@ -1382,7 +918,7 @@
         }
       },
       {
-        "id": "action",
+        "id": "tools",
         "type": "runnable",
         "data": {
           "id": [
@@ -1401,12 +937,12 @@
         "target": "agent"
       },
       {
-        "source": "action",
+        "source": "tools",
         "target": "agent"
       },
       {
         "source": "agent",
-        "target": "action",
+        "target": "tools",
         "data": "continue",
         "conditional": true
       },
@@ -1424,8 +960,8 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
+  	tools --> agent;
+  	agent -. continue .-> tools;
   	agent -. end .-> __end__;
   
   '''
@@ -1457,25 +993,7 @@
   
   '''
 # ---
-# name: test_start_branch_then[end_of_run]
-  '''
-  %%{init: {'flowchart': {'curve': 'linear'}}}%%
-  graph TD;
-  	__start__[__start__]:::startclass;
-  	__end__[__end__]:::endclass;
-  	tool_two_slow([tool_two_slow]):::otherclass;
-  	tool_two_fast([tool_two_fast]):::otherclass;
-  	__start__ -.-> tool_two_slow;
-  	tool_two_slow --> __end__;
-  	__start__ -.-> tool_two_fast;
-  	tool_two_fast --> __end__;
-  	classDef startclass fill:#ffdfba;
-  	classDef endclass fill:#baffc9;
-  	classDef otherclass fill:#fad7de;
-  
-  '''
-# ---
-# name: test_start_branch_then[end_of_step]
+# name: test_start_branch_then
   '''
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;

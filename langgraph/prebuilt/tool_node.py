@@ -98,7 +98,7 @@ class ToolNode(RunnableCallable):
 
 def tools_condition(
     state: Union[list[AnyMessage], dict[str, Any]],
-) -> Literal["action", "__end__"]:
+) -> Literal["tools", "__end__"]:
     """Use in the conditional_edge to route to the ToolNode if the last message
 
     has tool calls. Otherwise, route to the end.
@@ -109,45 +109,37 @@ def tools_condition(
             "messages" key (StateGraph).
 
     Returns:
-        Literal["tools", "__end__"]: The next node to route to.
+        The next node to route to.
 
 
     Examples:
-
-        from langchain_anthropic import ChatAnthropic
-        from langchain_core.tools import tool
-
-        from langgraph.graph import MessageGraph
-        from langgraph.prebuilt import ToolNode, tools_condition
-
-
-        @tool
-        def divide(a: float, b: float) -> int:
-            \"\"\"Return a / b.\"\"\"
-            return a / b
-
-
-        llm = ChatAnthropic(model="claude-3-haiku-20240307")
-        tools = [divide]
-
-        graph_builder = MessageGraph()
-        graph_builder.add_node("tools", ToolNode(tools))
-        graph_builder.add_node("chatbot", llm.bind_tools(tools))
-        graph_builder.add_edge("tools", "chatbot")
-        graph_builder.add_conditional_edges(
-            "chatbot",
-            # highlight-next-line
-            tools_condition,
-            {
-                # If it returns 'action', route to the 'tools' node
-                "action": "tools",
-                # If it returns '__end__', route to the end
-                "__end__": "__end__",
-            },
-        )
-        graph_builder.set_entry_point("chatbot")
-        graph = graph_builder.compile()
-        graph.invoke([("user", "What's 329993 divided by 13662?")])
+        Create a custom ReAct-style agent with tools.
+        ```pycon
+        >>> from langchain_anthropic import ChatAnthropic
+        >>> from langchain_core.tools import tool
+        >>>
+        >>> from langgraph.graph import MessageGraph
+        >>> from langgraph.prebuilt import ToolNode, tools_condition
+        >>>
+        >>> @tool
+        >>> def divide(a: float, b: float) -> int:
+        >>>     \"\"\"Return a / b.\"\"\"
+        >>>     return a / b
+        >>>
+        >>> llm = ChatAnthropic(model="claude-3-haiku-20240307")
+        >>> tools = [divide]
+        >>>
+        >>> graph_builder = MessageGraph()
+        >>> graph_builder.add_node("tools", ToolNode(tools))
+        >>> graph_builder.add_node("chatbot", llm.bind_tools(tools))
+        >>> graph_builder.add_edge("tools", "chatbot")
+        >>> graph_builder.add_conditional_edges(
+        >>>     "chatbot", tools_condition
+        >>> )
+        >>> graph_builder.set_entry_point("chatbot")
+        >>> graph = graph_builder.compile()
+        >>> graph.invoke([("user", "What's 329993 divided by 13662?")])
+        ```
     """
     if isinstance(state, list):
         ai_message = state[-1]
@@ -156,5 +148,5 @@ def tools_condition(
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
     if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
-        return "action"
+        return "tools"
     return "__end__"

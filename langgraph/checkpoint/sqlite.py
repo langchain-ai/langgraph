@@ -1,5 +1,6 @@
 import pickle
 import sqlite3
+import threading
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
 from typing import Any, Iterator, Optional
@@ -10,7 +11,7 @@ from typing_extensions import Self
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
-    CheckpointAt,
+    CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
 )
@@ -26,19 +27,17 @@ class JsonPlusSerializerCompat(JsonPlusSerializer):
     JsonPlusSerializer behavior is used.
 
     Examples:
-
-            import pickle
-
-            from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
-
-            serializer = JsonPlusSerializerCompat()
-            pickled_data = pickle.dumps({"key": "value"})
-            loaded_data = serializer.loads(pickled_data)
-            print(loaded_data)  # Output: {"key": "value"}
-
-            json_data = '{"key": "value"}'.encode("utf-8")
-            loaded_data = serializer.loads(json_data)
-            print(loaded_data)  # Output: {"key": "value"}
+        >>> import pickle
+        >>> from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
+        >>>
+        >>> serializer = JsonPlusSerializerCompat()
+        >>> pickled_data = pickle.dumps({"key": "value"})
+        >>> loaded_data = serializer.loads(pickled_data)
+        >>> print(loaded_data)  # Output: {"key": "value"}
+        >>>
+        >>> json_data = '{"key": "value"}'.encode("utf-8")
+        >>> loaded_data = serializer.loads(json_data)
+        >>> print(loaded_data)  # Output: {"key": "value"}
     """
 
     def loads(self, data: bytes) -> Any:
@@ -50,34 +49,35 @@ class JsonPlusSerializerCompat(JsonPlusSerializer):
 class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
     """A checkpoint saver that stores checkpoints in a SQLite database.
 
-    Note: While useful for demos and small projects, this class does not
-    scale to multiple threads.
+    Note:
+        This class is meant for lightweight, synchronous use cases
+        (demos and small projects) and does not
+        scale to multiple threads.
+        For a similar sqlite saver with `async` support,
+        consider using AsyncSqliteSaver.
 
     Args:
         conn (sqlite3.Connection): The SQLite database connection.
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
-        at (Optional[CheckpointAt]): The checkpoint strategy to use. Defaults to None.
 
     Examples:
 
-            import sqlite3
-
-            from langgraph.checkpoint.sqlite import SqliteSaver
-            from langgraph.graph import StateGraph
-
-            builder = StateGraph(int)
-            builder.add_node("add_one", lambda x: x + 1)
-            builder.set_entry_point("add_one")
-            builder.set_finish_point("add_one")
-            conn = sqlite3.connect("checkpoints.sqlite")
-            memory = SqliteSaver(conn)
-            graph = builder.compile(checkpointer=memory)
-
-            config = {"configurable": {"thread_id": "1"}}
-            # checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
-            result = graph.invoke(3, config)
-            graph.get_state(config)
-            # Output: StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'thread_ts': '2024-05-04T06:32:42.235444+00:00'}}, parent_config=None)
+        >>> import sqlite3
+        >>> from langgraph.checkpoint.sqlite import SqliteSaver
+        >>> from langgraph.graph import StateGraph
+        >>>
+        >>> builder = StateGraph(int)
+        >>> builder.add_node("add_one", lambda x: x + 1)
+        >>> builder.set_entry_point("add_one")
+        >>> builder.set_finish_point("add_one")
+        >>> conn = sqlite3.connect("checkpoints.sqlite")
+        >>> memory = SqliteSaver(conn)
+        >>> graph = builder.compile(checkpointer=memory)
+        >>> config = {"configurable": {"thread_id": "1"}}
+        >>> graph.get_state(config)
+        >>> result = graph.invoke(3, config)
+        >>> graph.get_state(config)
+        StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'thread_ts': '2024-05-04T06:32:42.235444+00:00'}}, parent_config=None)
     """  # noqa
 
     serde = JsonPlusSerializerCompat()
@@ -90,11 +90,11 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         conn: sqlite3.Connection,
         *,
         serde: Optional[SerializerProtocol] = None,
-        at: Optional[CheckpointAt] = None,
     ) -> None:
-        super().__init__(serde=serde, at=at)
+        super().__init__(serde=serde)
         self.conn = conn
         self.is_setup = False
+        self.lock = threading.Lock()
 
     @classmethod
     def from_conn_string(cls, conn_string: str) -> "SqliteSaver":
@@ -116,7 +116,13 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
                 memory = SqliteSaver.from_conn_string("checkpoints.sqlite")
         """
-        return SqliteSaver(conn=sqlite3.connect(conn_string))
+        return SqliteSaver(
+            conn=sqlite3.connect(
+                conn_string,
+                # https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
+                check_same_thread=False,
+            )
+        )
 
     def __enter__(self) -> Self:
         return self
@@ -146,6 +152,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 thread_ts TEXT NOT NULL,
                 parent_ts TEXT,
                 checkpoint BLOB,
+                metadata BLOB,
                 PRIMARY KEY (thread_id, thread_ts)
             );
             """
@@ -192,26 +199,27 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         Examples:
 
             Basic:
-
-                config = {"configurable": {"thread_id": "1"}}
-                checkpoint_tuple = memory.get_tuple(config)
-                print(checkpoint_tuple)  # Output: CheckpointTuple(...)
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> checkpoint_tuple = memory.get_tuple(config)
+            >>> print(checkpoint_tuple)
+            CheckpointTuple(...)
 
             With timestamp:
 
-                config = {
-                    "configurable": {
-                        "thread_id": "1",
-                        "thread_ts": "2024-05-04T06:32:42.235444+00:00",
-                    }
-                }
-                checkpoint_tuple = memory.get_tuple(config)
-                print(checkpoint_tuple)  # Output: CheckpointTuple(...)
+            >>> config = {
+            ...    "configurable": {
+            ...        "thread_id": "1",
+            ...        "thread_ts": "2024-05-04T06:32:42.235444+00:00",
+            ...    }
+            ... }
+            >>> checkpoint_tuple = memory.get_tuple(config)
+            >>> print(checkpoint_tuple)
+            CheckpointTuple(...)
         """  # noqa
         with self.cursor(transaction=False) as cur:
             if config["configurable"].get("thread_ts"):
                 cur.execute(
-                    "SELECT checkpoint, parent_ts FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
+                    "SELECT checkpoint, parent_ts, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
                     (
                         str(config["configurable"]["thread_id"]),
                         str(config["configurable"]["thread_ts"]),
@@ -221,6 +229,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     return CheckpointTuple(
                         config,
                         self.serde.loads(value[0]),
+                        self.serde.loads(value[2]) if value[2] is not None else {},
                         (
                             {
                                 "configurable": {
@@ -234,7 +243,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     )
             else:
                 cur.execute(
-                    "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
+                    "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
                     (str(config["configurable"]["thread_id"]),),
                 )
                 if value := cur.fetchone():
@@ -246,6 +255,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                             }
                         },
                         self.serde.loads(value[3]),
+                        self.serde.loads(value[4]) if value[4] is not None else {},
                         (
                             {
                                 "configurable": {
@@ -279,19 +289,24 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
 
         Examples:
-                config = {"configurable": {"thread_id": "1"}}
-                checkpoints = list(memory.list(config, limit=2))
-                print(checkpoints)  # Output: [CheckpointTuple(...), CheckpointTuple(...)]
+            >>> from langgraph.checkpoint.sqlite import SqliteSaver
+            >>> memory = SqliteSaver.from_conn_string(":memory:")
+            ... # Run a graph, then list the checkpoints
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> checkpoints = list(memory.list(config, limit=2))
+            >>> print(checkpoints)
+            [CheckpointTuple(...), CheckpointTuple(...)]
 
-                config = {"configurable": {"thread_id": "1"}}
-                before = {"configurable": {"thread_ts": "2024-05-04T06:32:42.235444+00:00"}}
-                checkpoints = list(memory.list(config, before=before))
-                print(checkpoints)  # Output: [CheckpointTuple(...), ...]
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> before = {"configurable": {"thread_ts": "2024-05-04T06:32:42.235444+00:00"}}
+            >>> checkpoints = list(memory.list(config, before=before))
+            >>> print(checkpoints)
+            [CheckpointTuple(...), ...]
         """
         query = (
-            "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
+            "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
             if before is None
-            else "SELECT thread_id, thread_ts, parent_ts, checkpoint FROM checkpoints WHERE thread_id = ? AND thread_ts < ? ORDER BY thread_ts DESC"
+            else "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts < ? ORDER BY thread_ts DESC"
         )
         if limit:
             query += f" LIMIT {limit}"
@@ -307,10 +322,11 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     )
                 ),
             )
-            for thread_id, thread_ts, parent_ts, value in cur:
+            for thread_id, thread_ts, parent_ts, value, metadata in cur:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
+                    self.serde.loads(metadata) if metadata is not None else {},
                     (
                         {
                             "configurable": {
@@ -323,7 +339,12 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                     ),
                 )
 
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+    ) -> RunnableConfig:
         """Save a checkpoint to the database.
 
         This method saves a checkpoint to the SQLite database. The checkpoint is associated
@@ -332,27 +353,31 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         Args:
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
+            metadata (Optional[dict[str, Any]]): Additional metadata to save with the checkpoint. Defaults to None.
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
 
         Examples:
 
-                config = {"configurable": {"thread_id": "1"}}
-                checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
-                saved_config = memory.put(config, checkpoint)
-                print(
-                    saved_config
-                )  # Output: {"configurable": {"thread_id": "1", "thread_ts": 2024-05-04T06:32:42.235444+00:00"}}
+            >>> from langgraph.checkpoint.sqlite import SqliteSaver
+            >>> memory = SqliteSaver.from_conn_string(":memory:")
+            ... # Run a graph, then list the checkpoints
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
+            >>> saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}})
+            >>> print(saved_config)
+            {"configurable": {"thread_id": "1", "thread_ts": 2024-05-04T06:32:42.235444+00:00"}}
         """
-        with self.cursor() as cur:
+        with self.lock, self.cursor() as cur:
             cur.execute(
-                "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint) VALUES (?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)",
                 (
                     str(config["configurable"]["thread_id"]),
                     checkpoint["ts"],
                     config["configurable"].get("thread_ts"),
                     self.serde.dumps(checkpoint),
+                    self.serde.dumps(metadata),
                 ),
             )
         return {

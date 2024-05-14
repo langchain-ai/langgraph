@@ -7,7 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
-    CheckpointAt,
+    CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
 )
@@ -18,11 +18,15 @@ class MemorySaver(BaseCheckpointSaver):
 
     This checkpoint saver stores checkpoints in memory using a defaultdict.
 
+    Note:
+        Since checkpoints are saved in memory, they will be lost when the program exits.
+        Only use this saver for debugging or testing purposes.
+
     Args:
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to None.
-        at (Optional[CheckpointAt]): The checkpoint strategy to use. Defaults to None.
 
     Examples:
+
             import asyncio
 
             from langgraph.checkpoint.memory import MemorySaver
@@ -39,15 +43,14 @@ class MemorySaver(BaseCheckpointSaver):
             asyncio.run(coro)  # Output: 2
     """
 
-    storage: defaultdict[str, dict[str, Checkpoint]]
+    storage: defaultdict[str, dict[str, tuple[bytes, bytes]]]
 
     def __init__(
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
-        at: Optional[CheckpointAt] = None,
     ) -> None:
-        super().__init__(serde=serde, at=at)
+        super().__init__(serde=serde)
         self.storage = defaultdict(dict)
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
@@ -66,16 +69,21 @@ class MemorySaver(BaseCheckpointSaver):
         """
         thread_id = config["configurable"]["thread_id"]
         if ts := config["configurable"].get("thread_ts"):
-            if checkpoint := self.storage[thread_id].get(ts):
+            if saved := self.storage[thread_id].get(ts):
+                checkpoint, metadata = saved
                 return CheckpointTuple(
-                    config=config, checkpoint=self.serde.loads(checkpoint)
+                    config=config,
+                    checkpoint=self.serde.loads(checkpoint),
+                    metadata=self.serde.loads(metadata),
                 )
         else:
             if checkpoints := self.storage[thread_id]:
                 ts = max(checkpoints.keys())
+                checkpoint, metadata = checkpoints[ts]
                 return CheckpointTuple(
                     config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
-                    checkpoint=self.serde.loads(checkpoints[ts]),
+                    checkpoint=self.serde.loads(checkpoint),
+                    metadata=self.serde.loads(metadata),
                 )
 
     def list(
@@ -99,7 +107,7 @@ class MemorySaver(BaseCheckpointSaver):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
         """
         thread_id = config["configurable"]["thread_id"]
-        for ts, checkpoint in self.storage[thread_id].items():
+        for ts, (checkpoint, metadata) in self.storage[thread_id].items():
             if before and ts >= before["configurable"]["thread_ts"]:
                 continue
             if limit is not None and limit <= 0:
@@ -108,9 +116,15 @@ class MemorySaver(BaseCheckpointSaver):
             yield CheckpointTuple(
                 config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                 checkpoint=self.serde.loads(checkpoint),
+                metadata=self.serde.loads(metadata),
             )
 
-    def put(self, config: RunnableConfig, checkpoint: Checkpoint) -> RunnableConfig:
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+    ) -> RunnableConfig:
         """Save a checkpoint to the in-memory storage.
 
         This method saves a checkpoint to the in-memory storage. The checkpoint is associated
@@ -124,7 +138,12 @@ class MemorySaver(BaseCheckpointSaver):
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
         self.storage[config["configurable"]["thread_id"]].update(
-            {checkpoint["ts"]: self.serde.dumps(checkpoint)}
+            {
+                checkpoint["ts"]: (
+                    self.serde.dumps(checkpoint),
+                    self.serde.dumps(metadata),
+                )
+            }
         )
         return {
             "configurable": {
@@ -170,8 +189,11 @@ class MemorySaver(BaseCheckpointSaver):
                 return
 
     async def aput(
-        self, config: RunnableConfig, checkpoint: Checkpoint
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint
+            None, self.put, config, checkpoint, metadata
         )

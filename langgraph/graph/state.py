@@ -1,13 +1,13 @@
 import logging
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union, get_type_hints
+from typing import Any, Optional, Sequence, Type, Union, get_origin, get_type_hints
 
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 
-from langgraph.channels.base import BaseChannel, InvalidUpdateError
+from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
 from langgraph.channels.ephemeral_value import EphemeralValue
@@ -15,7 +15,9 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
+from langgraph.errors import InvalidUpdateError
 from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
+from langgraph.managed.base import ManagedValue, is_managed_value
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
@@ -31,7 +33,49 @@ class StateGraph(Graph):
     Each state key can optionally be annotated with a reducer function that
     will be used to aggregate the values of that key received from multiple nodes.
     The signature of a reducer function is (Value, Value) -> Value.
-    """
+
+    Args:
+        state_schema (Type[Any]): The schema class that defines the state.
+        config_schema (Optional[Type[Any]]): The schema class that defines the configuration.
+            Use this to expose configurable parameters in your API.
+
+
+    Examples:
+        >>> from langchain_core.runnables import RunnableConfig
+        >>> from typing_extensions import Annotated, TypedDict
+        >>> from langgraph.checkpoint import MemorySaver
+        >>> from langgraph.graph import StateGraph
+        >>>
+        >>> def reducer(a: list, b: int | None) -> int:
+        ...     if b is not None:
+        ...         return a + [b]
+        ...     return a
+        >>>
+        >>> class State(TypedDict):
+        ...     x: Annotated[list, reducer]
+        >>>
+        >>> class ConfigSchema(TypedDict):
+        ...     r: float
+        >>>
+        >>> graph = StateGraph(State, config_schema=ConfigSchema)
+        >>>
+        >>> def node(state: State, config: RunnableConfig) -> dict:
+        ...     r = config["configurable"].get("r", 1.0)
+        ...     x = state["x"][-1]
+        ...     next_value = x * r * (1 - x)
+        ...     return {"x": next_value}
+        >>>
+        >>> graph.add_node("A", node)
+        >>> graph.set_entry_point("A")
+        >>> graph.set_finish_point("A")
+        >>> compiled = graph.compile()
+        >>>
+        >>> print(compiled.config_specs)
+        [ConfigurableFieldSpec(id='r', annotation=<class 'float'>, name=None, description=None, default=None, is_shared=False, dependencies=None)]
+        >>>
+        >>> step1 = compiled.invoke({"x": 0.5}, {"configurable": {"r": 3.0}})
+        >>> print(step1)
+        {'x': [0.5, 0.75]}"""
 
     def __init__(
         self, state_schema: Type[Any], config_schema: Optional[Type[Any]] = None
@@ -39,7 +83,7 @@ class StateGraph(Graph):
         super().__init__()
         self.schema = state_schema
         self.config_schema = config_schema
-        self.channels = _get_channels(state_schema)
+        self.channels, self.managed = _get_channels(state_schema)
         if any(isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()):
             self.support_multiple_edges = True
         self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
@@ -131,10 +175,11 @@ class StateGraph(Graph):
 
         # validate the graph
         self.validate(
-            interrupt=(interrupt_before if interrupt_before != "*" else [])
-            + interrupt_after
-            if interrupt_after != "*"
-            else []
+            interrupt=(
+                (interrupt_before if interrupt_before != "*" else []) + interrupt_after
+                if interrupt_after != "*"
+                else []
+            )
         )
 
         # prepare output channels
@@ -192,6 +237,8 @@ class CompiledStateGraph(CompiledGraph):
         return super().get_output_schema(config)
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
+        state_keys = list(self.builder.channels)
+
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
@@ -200,7 +247,6 @@ class CompiledStateGraph(CompiledGraph):
             else:
                 return input.get(key, SKIP_WRITE)
 
-        state_keys = list(self.builder.channels)
         # state updaters
         state_write_entries = [
             (
@@ -230,11 +276,11 @@ class CompiledStateGraph(CompiledGraph):
             self.channels[key] = EphemeralValue(Any)
             self.nodes[key] = PregelNode(
                 triggers=[],
-                # read state keys
+                # read state keys and managed values
                 channels=(
                     state_keys
                     if state_keys == ["__root__"]
-                    else {chan: chan for chan in state_keys}
+                    else ({chan: chan for chan in state_keys} | self.builder.managed)
                 ),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=(
@@ -338,19 +384,32 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
     return schema(**input)
 
 
-def _get_channels(schema: Type[dict]) -> dict[str, BaseChannel]:
+def _get_channels(
+    schema: Type[dict],
+) -> tuple[dict[str, BaseChannel], dict[str, Type[ManagedValue]]]:
     if not hasattr(schema, "__annotations__"):
-        return {"__root__": _get_channel(schema)}
+        return {"__root__": _get_channel(schema, allow_managed=False)}, {}
 
-    return {
+    all_keys = {
         name: _get_channel(typ)
         for name, typ in get_type_hints(schema, include_extras=True).items()
         if name != "__slots__"
     }
+    return (
+        {k: v for k, v in all_keys.items() if not is_managed_value(v)},
+        {k: v for k, v in all_keys.items() if is_managed_value(v)},
+    )
 
 
-def _get_channel(annotation: Any) -> BaseChannel:
-    if channel := _is_field_binop(annotation):
+def _get_channel(
+    annotation: Any, *, allow_managed: bool = True
+) -> Union[BaseChannel, Type[ManagedValue]]:
+    if manager := _is_field_managed_value(annotation):
+        if allow_managed:
+            return manager
+        else:
+            raise ValueError(f"This {annotation} not allowed in this position")
+    elif channel := _is_field_binop(annotation):
         return channel
     return LastValue(annotation)
 
@@ -369,4 +428,15 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
                 ]
             ):
                 return BinaryOperatorAggregate(typ, meta[0])
+    return None
+
+
+def _is_field_managed_value(typ: Type[Any]) -> Optional[Type[ManagedValue]]:
+    if hasattr(typ, "__metadata__"):
+        meta = typ.__metadata__
+        if len(meta) == 1:
+            decoration = get_origin(meta[0]) or meta[0]
+            if is_managed_value(decoration):
+                return decoration
+
     return None
