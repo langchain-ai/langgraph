@@ -278,17 +278,20 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
         """
         await self.setup()
-        query = (
-            f"SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints {search_where(metadata_query)}ORDER BY thread_ts DESC"
-            if before is None
-            else f"SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints {search_where(metadata_query)}AND thread_ts < ? ORDER BY thread_ts DESC"
+
+        # construct query
+        SELECT = "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints "
+        WHERE = search_where(
+            metadata_query, [] if before is None else ["thread_ts < ?"]
         )
-        if limit:
-            query += f" LIMIT {limit}"
-        async with self.conn.execute(
-            query,
-            (() if before is None else (str(before["configurable"]["thread_ts"]),)),
-        ) as cursor:
+        ORDER_BY = "ORDER BY thread_ts DESC "
+        LIMIT = f"LIMIT {limit}" if limit else ""
+
+        query = f"{SELECT}{WHERE}{ORDER_BY}{LIMIT}"
+        params = () if before is None else (str(before["configurable"]["thread_ts"]),)
+
+        # execute query
+        async with self.conn.execute(query, params) as cursor:
             async for thread_id, thread_ts, parent_ts, value, metadata in cursor:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},

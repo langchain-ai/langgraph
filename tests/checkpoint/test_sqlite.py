@@ -80,8 +80,10 @@ class TestMemorySaver:
 
     def test_create_where(self):
         # call method / assertions
+        expected_where_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = 'input' AND json_extract(CAST(metadata AS TEXT), '$.step') = 2 AND json_extract(CAST(metadata AS TEXT), '$.writes') = '{}' AND json_extract(CAST(metadata AS TEXT), '$.score') = 1 AND thread_ts < ? "
         expected_where_2 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = 'loop' AND json_extract(CAST(metadata AS TEXT), '$.step') = 1 AND json_extract(CAST(metadata AS TEXT), '$.writes') = '{\"foo\":\"bar\"}' AND json_extract(CAST(metadata AS TEXT), '$.score') IS NULL "
         expected_where_3 = ""
 
+        assert search_where(self.metadata_1, ["thread_ts < ?"]) == expected_where_1
         assert search_where(self.metadata_2) == expected_where_2
         assert search_where(self.metadata_3) == expected_where_3
