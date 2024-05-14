@@ -41,6 +41,7 @@ def create_function_calling_executor(
     """Creates a graph that works with a chat model that utilizes function calling.
 
     Examples:
+        ```pycon
         >>> # Since this is deprecated, you should use `create_react_agent` instead.
         >>> # Example usage:
         >>> from langgraph.prebuilt import create_react_agent
@@ -56,6 +57,7 @@ def create_function_calling_executor(
         >>> for s in app.stream(inputs):
         ...     print(list(s.values())[0])
         ...     print("----")
+        ```
     """
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
@@ -200,16 +202,17 @@ def create_react_agent(
     Examples:
         Use with a simple tool:
 
+        ```pycon
         >>> from datetime import datetime
         >>> from langchain_core.tools import tool
         >>> from langchain_openai import ChatOpenAI
         >>> from langgraph.prebuilt import create_react_agent
-        >>> 
+        >>>
         >>> @tool
         >>> def check_weather(location: str, at_time: datetime | None = None) -> float:
         ...     '''Return the weather forecast for the specified location.'''
         ...     return f"It's always sunny in {location}"
-        >>> 
+        >>>
         >>> tools = [check_weather]
         >>> model = ChatOpenAI(model="gpt-4o")
         >>> graph = create_react_agent(model, tools=tools)
@@ -232,9 +235,10 @@ def create_react_agent(
         It's always sunny in San Francisco
         ================================== Ai Message ==================================
         The weather in San Francisco is sunny.
-
+        ```
         Add a system prompt for the LLM:
 
+        ```pycon
         >>> system_prompt = "You are a helpful bot named Fred."
         >>> graph = create_react_agent(model, tools, messages_modifier=system_prompt)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
@@ -257,9 +261,11 @@ def create_react_agent(
         It's always sunny in San Francisco
         ================================== Ai Message ==================================
         The weather in San Francisco is currently sunny. If you need any more details or have other questions, feel free to ask!
+        ```
 
         Add a more complex prompt for the LLM:
 
+        ```pycon
         >>> from langchain_core.prompts import ChatPromptTemplate
         >>> prompt = ChatPromptTemplate.from_messages([
         ...     ("system", "You are a helpful bot named Fred."),
@@ -269,7 +275,7 @@ def create_react_agent(
         >>> def modify_messages(messages: list):
         ...     # You can do more complex modifications here
         ...     return prompt.invoke(messages=messages)
-        >>> 
+        >>>
         >>> app = create_react_agent(model, tools, messages_modifier=modify_messages)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
@@ -278,9 +284,11 @@ def create_react_agent(
         ...         print(message)
         ...     else:
         ...         message.pretty_print()
+        ```
 
         Add "chat memory" to the graph:
 
+        ```pycon
         >>> from langgraph.checkpoint import MemorySaver
         >>> graph = create_react_agent(model, tools, checkpointer=MemorySaver())
         >>> config = {"configurable": {"thread_id": "thread-1"}}
@@ -311,9 +319,11 @@ def create_react_agent(
         Cool, so then should i go biking today?
         ================================== Ai Message ==================================
         Since the weather in San Francisco is sunny, it sounds like a great day for biking! Enjoy your ride!
+        ```
 
         Add an interrupt to let the user confirm before taking an action:
 
+        ```pycon
         >>> graph = create_react_agent(
         ...     model, tools, interrupt_before=["action"], checkpointer=MemorySaver()
         >>> )
@@ -325,28 +335,31 @@ def create_react_agent(
         ...             print(message)
         ...         else:
         ...             message.pretty_print()
-        
+
         >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
         >>> print_stream(graph, inputs, config)
         >>> snapshot = graph.get_state(config)
         >>> print("Next step: ", snapshot.next)
         >>> print_stream(graph, None, config)
+        ```
 
         Add a timeout for a given step:
 
+        ```pycon
         >>> import time
         >>> @tool
         >>> def check_weather(location: str, at_time: datetime | None = None) -> float:
         ...     '''Return the weather forecast for the specified location.'''
         ...     time.sleep(2)
         ...     return f"It's always sunny in {location}"
-        >>> 
+        >>>
         >>> tools = [check_weather]
         >>> graph = create_react_agent(model, tools)
         >>> graph.step_timeout = 1 # Seconds
         >>> for s in graph.stream({"messages": [("user", "what is the weather in sf")]}):
         ...     print(s)
         TimeoutError: Timed out at step 2
+        ```
     """
 
     if isinstance(tools, ToolExecutor):

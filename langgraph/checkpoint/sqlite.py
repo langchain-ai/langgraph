@@ -27,19 +27,17 @@ class JsonPlusSerializerCompat(JsonPlusSerializer):
     JsonPlusSerializer behavior is used.
 
     Examples:
-
-            import pickle
-
-            from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
-
-            serializer = JsonPlusSerializerCompat()
-            pickled_data = pickle.dumps({"key": "value"})
-            loaded_data = serializer.loads(pickled_data)
-            print(loaded_data)  # Output: {"key": "value"}
-
-            json_data = '{"key": "value"}'.encode("utf-8")
-            loaded_data = serializer.loads(json_data)
-            print(loaded_data)  # Output: {"key": "value"}
+        >>> import pickle
+        >>> from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
+        >>>
+        >>> serializer = JsonPlusSerializerCompat()
+        >>> pickled_data = pickle.dumps({"key": "value"})
+        >>> loaded_data = serializer.loads(pickled_data)
+        >>> print(loaded_data)  # Output: {"key": "value"}
+        >>>
+        >>> json_data = '{"key": "value"}'.encode("utf-8")
+        >>> loaded_data = serializer.loads(json_data)
+        >>> print(loaded_data)  # Output: {"key": "value"}
     """
 
     def loads(self, data: bytes) -> Any:
@@ -64,24 +62,22 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
     Examples:
 
-        import sqlite3
-
-        from langgraph.checkpoint.sqlite import SqliteSaver
-        from langgraph.graph import StateGraph
-
-        builder = StateGraph(int)
-        builder.add_node("add_one", lambda x: x + 1)
-        builder.set_entry_point("add_one")
-        builder.set_finish_point("add_one")
-        conn = sqlite3.connect("checkpoints.sqlite")
-        memory = SqliteSaver(conn)
-        graph = builder.compile(checkpointer=memory)
-
-        config = {"configurable": {"thread_id": "1"}}
-        # checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
-        result = graph.invoke(3, config)
-        graph.get_state(config)
-        # Output: StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'thread_ts': '2024-05-04T06:32:42.235444+00:00'}}, parent_config=None)
+        >>> import sqlite3
+        >>> from langgraph.checkpoint.sqlite import SqliteSaver
+        >>> from langgraph.graph import StateGraph
+        >>>
+        >>> builder = StateGraph(int)
+        >>> builder.add_node("add_one", lambda x: x + 1)
+        >>> builder.set_entry_point("add_one")
+        >>> builder.set_finish_point("add_one")
+        >>> conn = sqlite3.connect("checkpoints.sqlite")
+        >>> memory = SqliteSaver(conn)
+        >>> graph = builder.compile(checkpointer=memory)
+        >>> config = {"configurable": {"thread_id": "1"}}
+        >>> graph.get_state(config)
+        >>> result = graph.invoke(3, config)
+        >>> graph.get_state(config)
+        StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'thread_ts': '2024-05-04T06:32:42.235444+00:00'}}, parent_config=None)
     """  # noqa
 
     serde = JsonPlusSerializerCompat()
@@ -203,21 +199,22 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         Examples:
 
             Basic:
-
-                config = {"configurable": {"thread_id": "1"}}
-                checkpoint_tuple = memory.get_tuple(config)
-                print(checkpoint_tuple)  # Output: CheckpointTuple(...)
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> checkpoint_tuple = memory.get_tuple(config)
+            >>> print(checkpoint_tuple)
+            CheckpointTuple(...)
 
             With timestamp:
 
-                config = {
-                    "configurable": {
-                        "thread_id": "1",
-                        "thread_ts": "2024-05-04T06:32:42.235444+00:00",
-                    }
-                }
-                checkpoint_tuple = memory.get_tuple(config)
-                print(checkpoint_tuple)  # Output: CheckpointTuple(...)
+            >>> config = {
+            ...    "configurable": {
+            ...        "thread_id": "1",
+            ...        "thread_ts": "2024-05-04T06:32:42.235444+00:00",
+            ...    }
+            ... }
+            >>> checkpoint_tuple = memory.get_tuple(config)
+            >>> print(checkpoint_tuple)
+            CheckpointTuple(...)
         """  # noqa
         with self.cursor(transaction=False) as cur:
             if config["configurable"].get("thread_ts"):
@@ -292,14 +289,16 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
 
         Examples:
-                config = {"configurable": {"thread_id": "1"}}
-                checkpoints = list(memory.list(config, limit=2))
-                print(checkpoints)  # Output: [CheckpointTuple(...), CheckpointTuple(...)]
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> checkpoints = list(memory.list(config, limit=2))
+            >>> print(checkpoints)
+            [CheckpointTuple(...), CheckpointTuple(...)]
 
-                config = {"configurable": {"thread_id": "1"}}
-                before = {"configurable": {"thread_ts": "2024-05-04T06:32:42.235444+00:00"}}
-                checkpoints = list(memory.list(config, before=before))
-                print(checkpoints)  # Output: [CheckpointTuple(...), ...]
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> before = {"configurable": {"thread_ts": "2024-05-04T06:32:42.235444+00:00"}}
+            >>> checkpoints = list(memory.list(config, before=before))
+            >>> print(checkpoints)
+            [CheckpointTuple(...), ...]
         """
         query = (
             "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
@@ -358,12 +357,13 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         Examples:
 
-                config = {"configurable": {"thread_id": "1"}}
-                checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
-                saved_config = memory.put(config, checkpoint)
-                print(
-                    saved_config
-                )  # Output: {"configurable": {"thread_id": "1", "thread_ts": 2024-05-04T06:32:42.235444+00:00"}}
+            >>> config = {"configurable": {"thread_id": "1"}}
+            >>> checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
+            >>> saved_config = memory.put(config, checkpoint)
+            >>> print(
+            >>>     saved_config
+            >>> )
+            {"configurable": {"thread_id": "1", "thread_ts": 2024-05-04T06:32:42.235444+00:00"}}
         """
         with self.lock, self.cursor() as cur:
             cur.execute(

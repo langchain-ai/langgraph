@@ -36,43 +36,40 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     Examples:
 
         Usage within a StateGraph:
-
-            import asyncio
-            import aiosqlite
-
-            from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
-            from langgraph.graph import StateGraph
-
-            builder = StateGraph(int)
-            builder.add_node("add_one", lambda x: x + 1)
-            builder.set_entry_point("add_one")
-            builder.set_finish_point("add_one")
-
-            memory = AsyncSqliteSaver.from_conn_string("checkpoints.sqlite")
-            graph = builder.compile(checkpointer=memory)
-            coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
-            asyncio.run(coro)  # Output: 2
-
+        ```pycon
+        >>> import asyncio
+        >>> import aiosqlite
+        >>>
+        >>> from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+        >>> from langgraph.graph import StateGraph
+        >>>
+        >>> builder = StateGraph(int)
+        >>> builder.add_node("add_one", lambda x: x + 1)
+        >>> builder.set_entry_point("add_one")
+        >>> builder.set_finish_point("add_one")
+        >>> memory = AsyncSqliteSaver.from_conn_string("checkpoints.sqlite")
+        >>> graph = builder.compile(checkpointer=memory)
+        >>> coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
+        >>> asyncio.run(coro)
+        Output: 2
+        ```
 
         Raw usage:
-
-            import asyncio
-            import aiosqlite
-            from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
-
-
-            async def main():
-                async with aiosqlite.connect("checkpoints.db") as conn:
-                    saver = AsyncSqliteSaver(conn)
-                    config = {"configurable": {"thread_id": "1"}}
-                    checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
-                    saved_config = await saver.aput(config, checkpoint)
-                    print(
-                        saved_config
-                    )  # Output: {"configurable": {"thread_id": "1", "thread_ts": "2023-05-03T10:00:00Z"}}
-
-
-            asyncio.run(main())
+        ```pycon
+        >>> import asyncio
+        >>> import aiosqlite
+        >>> from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+        >>>
+        >>> async def main():
+        >>>     async with aiosqlite.connect("checkpoints.db") as conn:
+        ...         saver = AsyncSqliteSaver(conn)
+        ...         config = {"configurable": {"thread_id": "1"}}
+        ...         checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
+        ...         saved_config = await saver.aput(config, checkpoint)
+        ...         print(saved_config)
+        >>> asyncio.run(main())
+        {"configurable": {"thread_id": "1", "thread_ts": "2023-05-03T10:00:00Z"}}
+        ```
     """
 
     serde = JsonPlusSerializerCompat()

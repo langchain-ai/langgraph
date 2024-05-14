@@ -114,6 +114,7 @@ def tools_condition(
 
     Examples:
         Create a custom ReAct-style agent with tools.
+        ```pycon
         >>> from langchain_anthropic import ChatAnthropic
         >>> from langchain_core.tools import tool
         >>>
@@ -146,6 +147,7 @@ def tools_condition(
         >>> graph_builder.set_entry_point("chatbot")
         >>> graph = graph_builder.compile()
         >>> graph.invoke([("user", "What's 329993 divided by 13662?")])
+        ```
     """
     if isinstance(state, list):
         ai_message = state[-1]
