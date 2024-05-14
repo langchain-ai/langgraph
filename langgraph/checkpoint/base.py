@@ -189,7 +189,7 @@ class BaseCheckpointSaver(ABC):
 
     def asearch(
         self,
-        metadata: CheckpointMetadata,
+        metadata_filter: CheckpointMetadata,
         *,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
