@@ -209,7 +209,7 @@ def create_react_agent(
         >>> from langgraph.prebuilt import create_react_agent
         >>>
         >>> @tool
-        >>> def check_weather(location: str, at_time: datetime | None = None) -> float:
+        ... def check_weather(location: str, at_time: datetime | None = None) -> float:
         ...     '''Return the weather forecast for the specified location.'''
         ...     return f"It's always sunny in {location}"
         >>>
@@ -348,7 +348,7 @@ def create_react_agent(
         ```pycon
         >>> import time
         >>> @tool
-        >>> def check_weather(location: str, at_time: datetime | None = None) -> float:
+        ... def check_weather(location: str, at_time: datetime | None = None) -> float:
         ...     '''Return the weather forecast for the specified location.'''
         ...     time.sleep(2)
         ...     return f"It's always sunny in {location}"

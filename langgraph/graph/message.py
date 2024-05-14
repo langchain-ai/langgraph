@@ -31,15 +31,16 @@ def add_messages(left: Messages, right: Messages) -> Messages:
 
     Examples:
         ```pycon
+        >>> from langchain_core.messages import AIMessage, HumanMessage
         >>> msgs1 = [HumanMessage(content="Hello", id="1")]
         >>> msgs2 = [AIMessage(content="Hi there!", id="2")]
         >>> add_messages(msgs1, msgs2)
-        [HumanMessage(content="Hello", id="1"), AIMessage(content="Hi there!", id="2")]
+        [HumanMessage(content='Hello', id='1'), AIMessage(content='Hi there!', id='2')]
 
         >>> msgs1 = [HumanMessage(content="Hello", id="1")]
         >>> msgs2 = [HumanMessage(content="Hello again", id="1")]
         >>> add_messages(msgs1, msgs2)
-        [HumanMessage(content="Hello again", id="1")]
+        [HumanMessage(content='Hello again', id='1')]
 
         >>> from typing import Annotated
         >>> from typing_extensions import TypedDict
@@ -54,7 +55,7 @@ def add_messages(left: Messages, right: Messages) -> Messages:
         >>> builder.set_finish_point("chatbot")
         >>> graph = builder.compile()
         >>> graph.invoke({})
-        {'messages': [AIMessage(content='Hello', id='f657fb65-b6af-4790-a5b5-1d266a2ed26e')]}
+        {'messages': [AIMessage(content='Hello', id=...)]}
         ```
 
     """
@@ -101,8 +102,7 @@ class MessageGraph(StateGraph):
         >>> builder.set_entry_point("chatbot")
         >>> builder.set_finish_point("chatbot")
         >>> builder.compile().invoke([("user", "Hi there.")])
-        {'messages': [HumanMessage(content="Hi there.", id='b8b7d8f4-7f4d-4f4d-9c1d-f8b8d8f4d9c1'),
-                     AIMessage(content="Hello!", id='f4d9c1d8-8d8f-4d9c-b8b7-d8f4f4d9c1d8')]}
+        [HumanMessage(content="Hi there.", id='...'), AIMessage(content="Hello!", id='...')]
 
 
         >>> from langchain_core.messages import AIMessage, HumanMessage, ToolMessage

@@ -289,6 +289,9 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
 
         Examples:
+            >>> from langgraph.checkpoint.sqlite import SqliteSaver
+            >>> memory = SqliteSaver.from_conn_string(":memory:")
+            ... # Run a graph, then list the checkpoints
             >>> config = {"configurable": {"thread_id": "1"}}
             >>> checkpoints = list(memory.list(config, limit=2))
             >>> print(checkpoints)
@@ -357,12 +360,13 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         Examples:
 
+            >>> from langgraph.checkpoint.sqlite import SqliteSaver
+            >>> memory = SqliteSaver.from_conn_string(":memory:")
+            ... # Run a graph, then list the checkpoints
             >>> config = {"configurable": {"thread_id": "1"}}
             >>> checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
-            >>> saved_config = memory.put(config, checkpoint)
-            >>> print(
-            >>>     saved_config
-            >>> )
+            >>> saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}})
+            >>> print(saved_config)
             {"configurable": {"thread_id": "1", "thread_ts": 2024-05-04T06:32:42.235444+00:00"}}
         """
         with self.lock, self.cursor() as cur:
