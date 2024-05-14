@@ -64,7 +64,7 @@ def map_debug_tasks(
     step: int, tasks: list[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
     ts = datetime.now(timezone.utc).isoformat()
-    for name, input, _, _, config, triggers in tasks:
+    for idx, (name, input, _, _, config, triggers) in enumerate(tasks):
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
@@ -73,7 +73,7 @@ def map_debug_tasks(
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step)))),
+                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, idx)))),
                 "name": name,
                 "input": input,
                 "triggers": triggers,
@@ -87,7 +87,7 @@ def map_debug_task_results(
     stream_channels_list: Sequence[str],
 ) -> Iterator[DebugOutputTaskResult]:
     ts = datetime.now(timezone.utc).isoformat()
-    for name, _, _, writes, config, _ in tasks:
+    for idx, (name, _, _, writes, config, _) in enumerate(tasks):
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
@@ -96,7 +96,7 @@ def map_debug_task_results(
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step)))),
+                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, idx)))),
                 "name": name,
                 "result": [w for w in writes if w[0] in stream_channels_list],
             },
