@@ -286,7 +286,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         LIMIT = f"LIMIT {limit}" if limit else ""
 
         query = f"{SELECT}{WHERE}{ORDER_BY}{LIMIT}"
-        # params = () if before is None else (str(before["configurable"]["thread_ts"]),)
 
         # execute query
         async with self.conn.execute(query, params) as cursor:
