@@ -1066,7 +1066,6 @@ class Pregel(
                 # channel updates from step N are only visible in step N+1,
                 # channels are guaranteed to be immutable for the duration of the step,
                 # channel updates being applied only at the transition between steps
-                start = saved.metadata.get("step", -1) + 1 if saved else 0
                 stop = start + config["recursion_limit"] + 1
                 for step in range(start, stop):
                     next_checkpoint, next_tasks = _prepare_next_tasks(

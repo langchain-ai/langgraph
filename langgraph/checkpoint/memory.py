@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+from functools import partial
 from typing import AsyncIterator, Iterator, Optional
 
 from langchain_core.runnables import RunnableConfig
@@ -112,7 +113,8 @@ class MemorySaver(BaseCheckpointSaver):
                 continue
             if limit is not None and limit <= 0:
                 break
-            limit -= 1
+            elif limit is not None:
+                limit -= 1
             yield CheckpointTuple(
                 config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                 checkpoint=self.serde.loads(checkpoint),
@@ -168,7 +170,13 @@ class MemorySaver(BaseCheckpointSaver):
             None, self.get_tuple, config
         )
 
-    async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
+    async def alist(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[CheckpointTuple]:
         """Asynchronous version of list.
 
         This method is an asynchronous wrapper around list that runs the synchronous
@@ -181,12 +189,16 @@ class MemorySaver(BaseCheckpointSaver):
             AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
         """
         loop = asyncio.get_running_loop()
-        iter = loop.run_in_executor(None, self.list, config)
+        iter = await loop.run_in_executor(
+            None, partial(self.list, before=before, limit=limit), config
+        )
         while True:
-            try:
-                yield await loop.run_in_executor(None, next, iter)
-            except StopIteration:
-                return
+            # handling StopIteration exception inside coroutine won't work
+            # as expected, so using next() with default value to break the loop
+            if item := await loop.run_in_executor(None, next, iter, None):
+                yield item
+            else:
+                break
 
     async def aput(
         self,
