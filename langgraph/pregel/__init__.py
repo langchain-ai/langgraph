@@ -538,12 +538,13 @@ class Pregel(
             )
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
+            step = saved.metadata.get("step", -2) + 1 if saved else -1
             return self.checkpointer.put(
                 saved.config if saved else config,
-                create_checkpoint(checkpoint, channels),
+                create_checkpoint(checkpoint, channels, step),
                 {
                     "source": "update",
-                    "step": saved.metadata.get("step", 0) + 1 if saved else 0,
+                    "step": step,
                     "writes": {as_node: values},
                 },
             )
@@ -612,12 +613,13 @@ class Pregel(
             )
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
+            step = saved.metadata.get("step", -2) + 1 if saved else -1
             return await self.checkpointer.aput(
                 saved.config if saved else config,
-                create_checkpoint(checkpoint, channels),
+                create_checkpoint(checkpoint, channels, step),
                 {
                     "source": "update",
-                    "step": saved.metadata.get("step", 0) + 1 if saved else 0,
+                    "step": step,
                     "writes": {as_node: values},
                 },
             )
@@ -741,7 +743,7 @@ class Pregel(
                     _apply_writes(checkpoint, channels, input_writes)
                     # save input checkpoint
                     if self.checkpointer is not None:
-                        checkpoint = create_checkpoint(checkpoint, channels)
+                        checkpoint = create_checkpoint(checkpoint, channels, start)
                         bg.append(
                             executor.submit(
                                 self.checkpointer.put,
@@ -753,7 +755,7 @@ class Pregel(
                         checkpoint_config = {
                             "configurable": {
                                 **checkpoint_config["configurable"],
-                                "thread_ts": checkpoint["ts"],
+                                "thread_ts": checkpoint["id"],
                             }
                         }
                     # increment start to 0
@@ -874,7 +876,7 @@ class Pregel(
 
                     # save end of step checkpoint
                     if self.checkpointer is not None:
-                        checkpoint = create_checkpoint(checkpoint, channels)
+                        checkpoint = create_checkpoint(checkpoint, channels, step)
                         bg.append(
                             executor.submit(
                                 self.checkpointer.put,
@@ -898,7 +900,7 @@ class Pregel(
                         checkpoint_config = {
                             "configurable": {
                                 **checkpoint_config["configurable"],
-                                "thread_ts": checkpoint["ts"],
+                                "thread_ts": checkpoint["id"],
                             }
                         }
                     # yield debug checkpoint
@@ -1031,7 +1033,7 @@ class Pregel(
                     _apply_writes(checkpoint, channels, input_writes)
                     # save input checkpoint
                     if self.checkpointer is not None:
-                        checkpoint = create_checkpoint(checkpoint, channels)
+                        checkpoint = create_checkpoint(checkpoint, channels, start)
                         bg.append(
                             asyncio.create_task(
                                 self.checkpointer.aput(
@@ -1044,7 +1046,7 @@ class Pregel(
                         checkpoint_config = {
                             "configurable": {
                                 **checkpoint_config["configurable"],
-                                "thread_ts": checkpoint["ts"],
+                                "thread_ts": checkpoint["id"],
                             }
                         }
                     # increment start to 0
@@ -1175,7 +1177,7 @@ class Pregel(
 
                     # save end of step checkpoint
                     if self.checkpointer is not None:
-                        checkpoint = create_checkpoint(checkpoint, channels)
+                        checkpoint = create_checkpoint(checkpoint, channels, step)
                         bg.append(
                             asyncio.create_task(
                                 self.checkpointer.aput(
@@ -1200,7 +1202,7 @@ class Pregel(
                         checkpoint_config = {
                             "configurable": {
                                 **checkpoint_config["configurable"],
-                                "thread_ts": checkpoint["ts"],
+                                "thread_ts": checkpoint["id"],
                             }
                         }
                     # yield debug checkpoint
@@ -1414,7 +1416,7 @@ def _local_read(
     fresh: bool = False,
 ) -> Union[dict[str, Any], Any]:
     if fresh:
-        checkpoint = create_checkpoint(checkpoint, channels)
+        checkpoint = create_checkpoint(checkpoint, channels, -1)
         with ChannelsManager(channels, checkpoint) as channels:
             _apply_writes(copy_checkpoint(checkpoint), channels, writes)
             return read_channels(channels, select)

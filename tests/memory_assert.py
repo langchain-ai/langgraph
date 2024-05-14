@@ -40,8 +40,8 @@ class MemorySaverAssertImmutable(MemorySaver):
         # assert checkpoint hasn't been modified since last written
         thread_id = config["configurable"]["thread_id"]
         if saved := super().get(config):
-            assert self.storage_for_copies[thread_id][saved["ts"]] == saved
-        self.storage_for_copies[thread_id][checkpoint["ts"]] = copy_checkpoint(
+            assert self.storage_for_copies[thread_id][saved["id"]] == saved
+        self.storage_for_copies[thread_id][checkpoint["id"]] = copy_checkpoint(
             checkpoint
         )
         # call super to write checkpoint
