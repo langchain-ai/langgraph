@@ -14,7 +14,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
 )
-from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
+from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat, search_where
 
 
 class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
@@ -241,6 +241,56 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 if before is None
                 else (
                     str(config["configurable"]["thread_id"]),
+                    str(before["configurable"]["thread_ts"]),
+                )
+            ),
+        ) as cursor:
+            async for thread_id, thread_ts, parent_ts, value, metadata in cursor:
+                yield CheckpointTuple(
+                    {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
+                    self.serde.loads(value),
+                    self.serde.loads(metadata) if metadata is not None else {},
+                    {"configurable": {"thread_id": thread_id, "thread_ts": parent_ts}}
+                    if parent_ts
+                    else None,
+                )
+
+    async def asearch(
+        self,
+        metadata_query: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[CheckpointTuple]:
+        """Search for checkpoints by metadata asynchronously.
+
+        This method retrieves a list of checkpoint tuples from the SQLite
+        database based on the provided metadata query. The metadata query does
+        not need to contain all keys defined in the CheckpointMetadata class.
+        The checkpoints are ordered by timestamp in descending order.
+
+        Args:
+            metadata_query (CheckpointMetadata): The metadata query to use for searching the checkpoints.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
+            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+        """
+        await self.setup()
+        query = (
+            f"SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints {search_where(metadata_query)}ORDER BY thread_ts DESC"
+            if before is None
+            else f"SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints {search_where(metadata_query)}AND thread_ts < ? ORDER BY thread_ts DESC"
+        )
+        if limit:
+            query += f" LIMIT {limit}"
+        async with self.conn.execute(
+            query,
+            (
+                ()
+                if before is None
+                else (
                     str(before["configurable"]["thread_ts"]),
                 )
             ),
