@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+from functools import partial
 from typing import AsyncIterator, Iterator, Optional
 
 from langchain_core.runnables import RunnableConfig
@@ -242,6 +243,9 @@ class MemorySaver(BaseCheckpointSaver):
     async def asearch(
         self,
         metadata_query: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
         """Asynchronous version of search.
 
@@ -249,19 +253,15 @@ class MemorySaver(BaseCheckpointSaver):
         method in a separate thread using asyncio.
         """
         loop = asyncio.get_running_loop()
-        iter = await loop.run_in_executor(None, self.search, metadata_query)
-
-        def next_item(iter: Iterator[CheckpointTuple]) -> CheckpointTuple:
-            try:
-                return next(iter)
-            except StopIteration:
-                return None
+        iter = await loop.run_in_executor(
+            None, partial(self.search, before=before, limit=limit), metadata_query
+        )
 
         while True:
-            result = await loop.run_in_executor(None, next_item, iter)
-            if result is None:
+            if item := await loop.run_in_executor(None, next, iter, None):
+                yield item
+            else:
                 break
-            yield result
 
     async def aput(
         self,
