@@ -2,20 +2,26 @@
 
 Graphs are the core abstraction of LangGraph. Each [StateGraph](#langgraph.graph.StateGraph) implementation is used to create graph workflows. Once compiled, you can run the [CompiledGraph](#compiledgraph) to run the application.
 
-::: langgraph.graph
+## StateGraph
+
+```python
+from langgraph.graph import StateGraph
+from typing_extensions import TypedDict
+class MyState(TypedDict)
+    ...
+graph = StateGraph(MyState)
+```
+
+::: langgraph.graph.StateGraph
     handler: python
-
-## CompiledGraph
-
-::: langgraph.graph.graph.CompiledGraph
-    handler: python
-
 
 ## MessageGraph
 
 ::: langgraph.graph.message.MessageGraph
 
 
-## add_messages
+## CompiledGraph
 
-::: langgraph.graph.message.add_messages
+::: langgraph.graph.graph.CompiledGraph
+    handler: python
+
