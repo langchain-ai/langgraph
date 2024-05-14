@@ -143,6 +143,8 @@ nav:
          - "Managing Agent Steps": how-tos/managing-agent-steps.ipynb
      - Alternative State Definitions:  
          - "Pydantic State": how-tos/state-model.ipynb
+     - Structured Output:
+         - "Extraction with Re-prompting": how-tos/extraction/retries.ipynb
   - 'Conceptual Guides':
      - 'concepts/index.md'
   - Reference:
