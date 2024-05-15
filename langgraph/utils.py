@@ -149,17 +149,12 @@ class DrawableGraph(Graph):
 
 
 def _isgencheck(thing: RunnableLike) -> bool:
-    return (
-        inspect.isasyncgenfunction(thing)
-        or inspect.isgeneratorfunction(thing)
-    )
+    return inspect.isasyncgenfunction(thing) or inspect.isgeneratorfunction(thing)
 
 
 def _isgenerator(thing: RunnableLike) -> bool:
     return (
-        _isgencheck(thing)
-        or hasattr(thing, "__call__")
-        and _isgencheck(thing.__call__)
+        _isgencheck(thing) or hasattr(thing, "__call__") and _isgencheck(thing.__call__)
     )
 
 

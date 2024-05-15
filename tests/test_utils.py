@@ -1,6 +1,6 @@
 import functools
 
-from langgraph.utils import _isgenerator, _iscoroutinefunction
+from langgraph.utils import _iscoroutinefunction, _isgenerator
 
 
 def test_is_async() -> None:
