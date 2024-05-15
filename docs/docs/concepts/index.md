@@ -74,9 +74,9 @@ def my_other_node(state: dict):
 
 builder.add_node("my_node", my_node)
 builder.add_node("other_node", my_other_node)
-builder.set_entry_point("my_node")
+builder.add_edge("__end__", "my_node")
 builder.add_edge("my_node", "other_node")
-builder.set_finish_point("other_node")
+builder.add_edge("other_node", "__end__")
 graph = builder.compile()
 graph.invoke({"input": "Will"}, {"configurable": {"user_id": "abcd-123"}})
 # In node:  abcd-123
@@ -123,8 +123,8 @@ class StateA(TypedDict):
 
 builder = StateGraph(StateA)
 builder.add_node("my_node", lambda state: {"value": 1})
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge("__end__", "my_node")
+builder.add_edge("my_node", "__end__")
 graph = builder.compile()
 graph.invoke({"value": 5})
 ```
@@ -149,8 +149,8 @@ class StateB(TypedDict):
 
 builder = StateGraph(StateB)
 builder.add_node("my_node", lambda state: {"value": 1})
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge("__end__", "my_node")
+builder.add_edge("my_node", "__end__")
 graph = builder.compile()
 graph.invoke({"value": 5})
 ```
@@ -168,8 +168,8 @@ While we typically use `TypedDict`'s as the graph's `state_schema` (i.e., `State
 # Analogous to StateA above
 builder = StateGraph(int)
 builder.add_node("my_node", lambda state: 1)
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge("__end__", "my_node")
+builder.add_edge("my_node", "__end__")
 builder.compile().invoke(5)
 
 # Analogous to StateB
@@ -179,8 +179,8 @@ def add(left, right):
 
 builder = StateGraph(Annotated[int, add])
 builder.add_node("my_node", lambda state: 1)
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge("__end__", "my_node")
+builder.add_edge("my_node", "__end__")
 graph = builder.compile()
 graph.invoke(5)
 ```
@@ -262,8 +262,8 @@ class State(TypedDict):
 
 builder = StateGraph(State)
 builder.add_node("add_one", lambda x: {"total": 1})
-builder.set_entry_point("add_one")
-builder.set_finish_point("add_one")
+builder.add_edge("__end__", "add_one")
+builder.add_edge("add_one", "__end__")
 
 memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
@@ -336,7 +336,7 @@ class State(TypedDict):
 builder = StateGraph(State)
 builder.add_node("add_one", lambda x: {"total": 1})
 builder.add_node("double", lambda x: {"total": x["total"]})
-builder.set_entry_point("add_one")
+builder.add_edge("__end__", "add_one")
 
 
 def route(state: State) -> Literal["double", "__end__"]:

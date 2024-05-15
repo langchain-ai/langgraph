@@ -54,7 +54,7 @@ graph = MessageGraph()
 graph.add_node("oracle", model)
 graph.add_edge("oracle", END)
 
-graph.set_entry_point("oracle")
+graph.add_edge("__end__", "oracle")
 
 runnable = graph.compile()
 ```
@@ -146,7 +146,7 @@ builder.add_node("multiply", tool_node)
 
 builder.add_edge("multiply", END)
 
-builder.set_entry_point("oracle")
+builder.add_edge("__end__", "oracle")
 ```
 
 Now let's think - what do we want to have happened?
@@ -357,7 +357,7 @@ workflow.add_node("tools", tool_node)
 
 # Set the entrypoint as `agent`
 # This means that this node is the first one called
-workflow.set_entry_point("agent")
+workflow.add_edge("__end__", "agent")
 
 # We now add a conditional edge
 workflow.add_conditional_edges(
