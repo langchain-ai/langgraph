@@ -202,3 +202,12 @@ markdown_extensions:
       custom_checkbox: true
 extra_css:
   - css/mkdocstrings.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/js 
+      link: https://langchain-ai.github.io/langgraphjs/
+    - icon: fontawesome/brands/github
+      link: https://github.com/langchain-ai/langgraphjs
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/LangChainAI
