@@ -4,7 +4,7 @@ import inspect
 import sys
 from contextvars import copy_context
 from functools import partial, wraps
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from langchain_core.runnables.base import (
     Runnable,
@@ -20,6 +20,7 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.graph import Edge, Graph, Node, is_uuid
 from langchain_core.runnables.utils import accepts_config
+from typing_extensions import TypeGuard
 
 
 # Before Python 3.11 native StrEnum is not available
@@ -148,21 +149,25 @@ class DrawableGraph(Graph):
         )
 
 
-def _isgencheck(thing: RunnableLike) -> bool:
-    return inspect.isasyncgenfunction(thing) or inspect.isgeneratorfunction(thing)
-
-
-def _isgenerator(thing: RunnableLike) -> bool:
+def is_async_callable(
+    func: Any,
+) -> TypeGuard[Callable[..., Awaitable]]:
+    """Check if a function is async."""
     return (
-        _isgencheck(thing) or hasattr(thing, "__call__") and _isgencheck(thing.__call__)
+        asyncio.iscoroutinefunction(func)
+        or hasattr(func, "__call__")
+        and asyncio.iscoroutinefunction(func.__call__)
     )
 
 
-def _iscoroutinefunction(thing: RunnableLike) -> bool:
+def is_async_generator(
+    func: Any,
+) -> TypeGuard[Callable[..., AsyncIterator]]:
+    """Check if a function is an async generator."""
     return (
-        asyncio.iscoroutinefunction(thing)
-        or hasattr(thing, "__call__")
-        and asyncio.iscoroutinefunction(thing.__call__)
+        inspect.isasyncgenfunction(func)
+        or hasattr(func, "__call__")
+        and inspect.isasyncgenfunction(func.__call__)
     )
 
 
@@ -177,10 +182,10 @@ def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnab
     """
     if isinstance(thing, Runnable):
         return thing
-    elif _isgenerator(thing):
+    elif is_async_generator(thing) or inspect.isgeneratorfunction(thing):
         return RunnableLambda(thing, name=name)
     elif callable(thing):
-        if _iscoroutinefunction(thing):
+        if is_async_callable(thing):
             return RunnableCallable(None, thing, name=name, trace=trace)
         else:
             return RunnableCallable(
