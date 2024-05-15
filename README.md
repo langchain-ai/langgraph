@@ -45,16 +45,16 @@ And now we're ready! The graph below contains a single node called `"oracle"` th
 ```python
 from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage
-from langgraph.graph import END, MessageGraph
+from langgraph.graph import MessageGraph
 
 model = ChatOpenAI(temperature=0)
 
 graph = MessageGraph()
 
 graph.add_node("oracle", model)
-graph.add_edge("oracle", END)
+graph.add_edge("oracle", "__end__")
 
-graph.add_edge("__end__", "oracle")
+graph.add_edge("__start__", "oracle")
 
 runnable = graph.compile()
 ```
@@ -146,7 +146,7 @@ builder.add_node("multiply", tool_node)
 
 builder.add_edge("multiply", END)
 
-builder.add_edge("__end__", "oracle")
+builder.add_edge("__start__", "oracle")
 ```
 
 Now let's think - what do we want to have happened?
@@ -357,7 +357,7 @@ workflow.add_node("tools", tool_node)
 
 # Set the entrypoint as `agent`
 # This means that this node is the first one called
-workflow.add_edge("__end__", "agent")
+workflow.add_edge("__start__", "agent")
 
 # We now add a conditional edge
 workflow.add_conditional_edges(

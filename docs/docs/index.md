@@ -49,7 +49,7 @@ model = ChatAnthropic(model="claude-3-haiku-20240307").bind_tools(tools)
 workflow.add_node("agent", model)
 workflow.add_node("action", ToolNode(tools))
 
-workflow.add_edge("__end__", "agent")
+workflow.add_edge("__start__", "agent")
 
 # Conditional agent -> action OR agent -> END
 workflow.add_conditional_edges(
