@@ -19,7 +19,6 @@ _MANUAL = {
         "visualization.ipynb",
         "state-model.ipynb",
         "subgraph.ipynb",
-        "persistence_postgres.ipynb",
         "force-calling-a-tool-first.ipynb",
         "dynamic-returning-direct.ipynb",
         "managing-agent-steps.ipynb",
