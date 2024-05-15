@@ -148,20 +148,18 @@ class DrawableGraph(Graph):
         )
 
 
-def _isasyncgencheck(thing: RunnableLike) -> bool:
+def _isgencheck(thing: RunnableLike) -> bool:
     return (
         inspect.isasyncgenfunction(thing)
-        or inspect.isasyncgen(thing)
-        or hasattr(thing, "__call__")
-        and inspect.isasyncgenfunction(thing.__call__)
+        or inspect.isgeneratorfunction(thing)
     )
 
 
-def _isasyncgen(thing: RunnableLike) -> bool:
+def _isgenerator(thing: RunnableLike) -> bool:
     return (
-        _isasyncgencheck(thing)
+        _isgencheck(thing)
         or hasattr(thing, "__call__")
-        and _isasyncgencheck(thing.__call__)
+        and _isgencheck(thing.__call__)
     )
 
 
@@ -184,7 +182,7 @@ def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnab
     """
     if isinstance(thing, Runnable):
         return thing
-    elif _isasyncgen(thing):
+    elif _isgenerator(thing):
         return RunnableLambda(thing, name=name)
     elif callable(thing):
         if _iscoroutinefunction(thing):

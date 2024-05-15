@@ -1,6 +1,6 @@
 import functools
 
-from langgraph.utils import _isasyncgen, _iscoroutinefunction
+from langgraph.utils import _isgenerator, _iscoroutinefunction
 
 
 def test_is_async() -> None:
@@ -37,36 +37,36 @@ def test_is_async() -> None:
     assert not _iscoroutinefunction(wrapped_sync_runnable)
 
 
-def test_is_async_generator() -> None:
+def test_is_generator() -> None:
     async def gen():
         yield
 
-    assert _isasyncgen(gen)
+    assert _isgenerator(gen)
 
     wrapped_gen = functools.wraps(gen)(gen)
-    assert _isasyncgen(wrapped_gen)
+    assert _isgenerator(wrapped_gen)
 
     def sync_gen():
         yield
 
-    assert not _isasyncgen(sync_gen)
+    assert _isgenerator(sync_gen)
     wrapped_sync_gen = functools.wraps(sync_gen)(sync_gen)
-    assert not _isasyncgen(wrapped_sync_gen)
+    assert _isgenerator(wrapped_sync_gen)
 
     class AsyncGenCallable:
         async def __call__(self):
             yield
 
     runnable = AsyncGenCallable()
-    assert _isasyncgen(runnable)
+    assert _isgenerator(runnable)
     wrapped_runnable = functools.wraps(runnable)(runnable)
-    assert _isasyncgen(wrapped_runnable)
+    assert _isgenerator(wrapped_runnable)
 
     class SyncGenCallable:
         def __call__(self):
             yield
 
     sync_runnable = SyncGenCallable()
-    assert not _isasyncgen(sync_runnable)
+    assert _isgenerator(sync_runnable)
     wrapped_sync_runnable = functools.wraps(sync_runnable)(sync_runnable)
-    assert not _isasyncgen(wrapped_sync_runnable)
+    assert _isgenerator(wrapped_sync_runnable)
