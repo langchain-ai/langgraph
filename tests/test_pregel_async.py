@@ -801,7 +801,7 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
         assert state.values.get("total") == 2
         assert (
             state.config["configurable"]["thread_ts"]
-            == (await memory.aget(thread_1))["ts"]
+            == (await memory.aget(thread_1))["id"]
         )
         # total is now 2, so output is 2+3=5
         assert await app.ainvoke(3, thread_1) == 5
@@ -810,7 +810,7 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
         assert state.values.get("total") == 7
         assert (
             state.config["configurable"]["thread_ts"]
-            == (await memory.aget(thread_1))["ts"]
+            == (await memory.aget(thread_1))["id"]
         )
         # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
         with pytest.raises(ValueError):
@@ -869,10 +869,10 @@ async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:
         assert thread_1_history[-2].values["total"] == 2
         # can get each checkpoint using aget with config
         assert (await memory.aget(thread_1_history[0].config))[
-            "ts"
+            "id"
         ] == thread_1_history[0].config["configurable"]["thread_ts"]
         assert (await memory.aget(thread_1_history[1].config))[
-            "ts"
+            "id"
         ] == thread_1_history[1].config["configurable"]["thread_ts"]
 
         thread_1_next_config = await app.aupdate_state(thread_1_history[1].config, 10)
@@ -3907,7 +3907,7 @@ async def test_branch_then() -> None:
             config=uconfig,
             metadata={
                 "source": "update",
-                "step": 0,
+                "step": -1,
                 "writes": {START: {"my_key": "key", "market": "DE"}},
             },
         )
@@ -3923,7 +3923,7 @@ async def test_branch_then() -> None:
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
             metadata={
                 "source": "loop",
-                "step": 1,
+                "step": 0,
                 "writes": {"prepare": {"my_key": " prepared"}},
             },
             parent_config=uconfig,
@@ -3939,7 +3939,7 @@ async def test_branch_then() -> None:
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
             metadata={
                 "source": "loop",
-                "step": 3,
+                "step": 2,
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[

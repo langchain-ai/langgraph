@@ -12,6 +12,7 @@ from typing import (
 )
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
+from uuid6 import uuid6
 
 from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
@@ -48,6 +49,9 @@ class Checkpoint(TypedDict):
 
     v: int
     """The version of the checkpoint format. Currently 1."""
+    id: str
+    """The ID of the checkpoint. This is both unique and monotonically 
+    increasing, so can be used for sorting checkpoints from first to last."""
     ts: str
     """The timestamp of the checkpoint in ISO 8601 format."""
     channel_values: dict[str, Any]
@@ -77,6 +81,7 @@ def _seen_dict():
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
         v=1,
+        id=str(uuid6(clock_seq=-2)),
         ts=datetime.now(timezone.utc).isoformat(),
         channel_values={},
         channel_versions=defaultdict(int),
@@ -88,6 +93,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     return Checkpoint(
         v=checkpoint["v"],
         ts=checkpoint["ts"],
+        id=checkpoint["id"],
         channel_values=checkpoint["channel_values"].copy(),
         channel_versions=defaultdict(int, checkpoint["channel_versions"]),
         versions_seen=defaultdict(

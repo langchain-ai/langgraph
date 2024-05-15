@@ -13,6 +13,7 @@ from typing import (
 )
 
 from typing_extensions import Self
+from uuid6 import uuid6
 
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -110,13 +111,10 @@ async def AsyncChannelsManager(
 
 
 def create_checkpoint(
-    checkpoint: Checkpoint, channels: Mapping[str, BaseChannel]
+    checkpoint: Checkpoint, channels: Mapping[str, BaseChannel], step: int
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
     ts = datetime.now(timezone.utc).isoformat()
-    assert (
-        ts > checkpoint["ts"]
-    ), f"Timestamps must be monotonically increasing, got {ts} <= {checkpoint['ts']}"
     values: dict[str, Any] = {}
     for k, v in channels.items():
         try:
@@ -126,6 +124,7 @@ def create_checkpoint(
     return Checkpoint(
         v=1,
         ts=ts,
+        id=str(uuid6(clock_seq=step)),
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
