@@ -121,7 +121,7 @@ def copy_notebooks():
                     with open(dst_path, "r") as f:
                         content = f.read()
                     content = content.replace("(./img/", "(../img/")
-                    content = content.replace('src="./img/', 'src="../img/')
+                    content = content.replace('src=\\"./img/', 'src=\\"../img/')
                     with open(dst_path, "w") as f:
                         f.write(content)
                 dst_dir = dst_dir_
