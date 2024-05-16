@@ -192,7 +192,7 @@ class MemorySaver(BaseCheckpointSaver):
         """
         self.storage[config["configurable"]["thread_id"]].update(
             {
-                checkpoint["ts"]: (
+                checkpoint["id"]: (
                     self.serde.dumps(checkpoint),
                     self.serde.dumps(metadata),
                 )
@@ -201,7 +201,7 @@ class MemorySaver(BaseCheckpointSaver):
         return {
             "configurable": {
                 "thread_id": config["configurable"]["thread_id"],
-                "thread_ts": checkpoint["ts"],
+                "thread_ts": checkpoint["id"],
             }
         }
 

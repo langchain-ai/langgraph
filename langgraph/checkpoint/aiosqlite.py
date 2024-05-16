@@ -319,7 +319,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)",
             (
                 str(config["configurable"]["thread_id"]),
-                checkpoint["ts"],
+                checkpoint["id"],
                 config["configurable"].get("thread_ts"),
                 self.serde.dumps(checkpoint),
                 self.serde.dumps(metadata),
@@ -329,6 +329,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         return {
             "configurable": {
                 "thread_id": config["configurable"]["thread_id"],
-                "thread_ts": checkpoint["ts"],
+                "thread_ts": checkpoint["id"],
             }
         }

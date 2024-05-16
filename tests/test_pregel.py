@@ -818,13 +818,13 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         assert state is not None
         assert state.values.get("total") == 2
         assert state.next == ()
-        assert state.config["configurable"]["thread_ts"] == memory.get(thread_1)["ts"]
+        assert state.config["configurable"]["thread_ts"] == memory.get(thread_1)["id"]
         # total is now 2, so output is 2+3=5
         assert app.invoke(3, thread_1) == 5
         state = app.get_state(thread_1)
         assert state is not None
         assert state.values.get("total") == 7
-        assert state.config["configurable"]["thread_ts"] == memory.get(thread_1)["ts"]
+        assert state.config["configurable"]["thread_ts"] == memory.get(thread_1)["id"]
         # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
         with pytest.raises(ValueError):
             app.invoke(4, thread_1)
@@ -879,11 +879,11 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         assert thread_1_history[-2].values["total"] == 2
         # can get each checkpoint using aget with config
         assert (
-            memory.get(thread_1_history[0].config)["ts"]
+            memory.get(thread_1_history[0].config)["id"]
             == thread_1_history[0].config["configurable"]["thread_ts"]
         )
         assert (
-            memory.get(thread_1_history[1].config)["ts"]
+            memory.get(thread_1_history[1].config)["id"]
             == thread_1_history[1].config["configurable"]["thread_ts"]
         )
 
@@ -4629,7 +4629,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             config=uconfig,
             metadata={
                 "source": "update",
-                "step": 0,
+                "step": -1,
                 "writes": {START: {"my_key": "key", "market": "DE"}},
             },
         )
@@ -4645,7 +4645,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             config=tool_two.checkpointer.get_tuple(thread3).config,
             metadata={
                 "source": "loop",
-                "step": 1,
+                "step": 0,
                 "writes": {"prepare": {"my_key": " prepared"}},
             },
             parent_config=uconfig,
@@ -4661,7 +4661,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             config=tool_two.checkpointer.get_tuple(thread3).config,
             metadata={
                 "source": "loop",
-                "step": 3,
+                "step": 2,
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,

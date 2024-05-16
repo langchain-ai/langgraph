@@ -1,8 +1,9 @@
 import pytest
 from langchain_core.runnables import RunnableConfig
 
+from langgraph.channels.base import create_checkpoint
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata
+from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
 
 
 class TestAsyncSqliteSaver:
@@ -18,20 +19,8 @@ class TestAsyncSqliteSaver:
             "configurable": {"thread_id": "thread-2", "thread_ts": "2"}
         }
 
-        self.chkpnt_1: Checkpoint = {
-            "v": 1,
-            "ts": "1",
-            "channel_values": {},
-            "channel_versions": {},
-            "versions_seen": {},
-        }
-        self.chkpnt_2: Checkpoint = {
-            "v": 2,
-            "ts": "2",
-            "channel_values": {},
-            "channel_versions": {},
-            "versions_seen": {},
-        }
+        self.chkpnt_1: Checkpoint = empty_checkpoint()
+        self.chkpnt_2: Checkpoint = create_checkpoint(self.chkpnt_1, {}, 1)
 
         self.metadata_1: CheckpointMetadata = {
             "source": "input",
