@@ -47,11 +47,15 @@ def _default_format_error(
 
 
 class ValidationNode(RunnableCallable):
-    """A node that validates and runs the tools requested in the last AIMessage.
+    """A node that validates all tools requests from the last AIMessage.
 
     It can be used either in StateGraph with a "messages" key or in MessageGraph.
-    If multiple tool calls are requested, they will be run in parallel. The output
-    will be a list of ToolMessages, one for each tool call.
+
+    !!! note
+
+        This node does not actually **run** the tools, it only validates the tool calls,
+        which is useful for extraction and other use cases where you need to generate
+        structured output that conforms to a complex schema.
 
     Args:
         schemas: A list of schemas to validate the tool calls with. These can be
@@ -64,6 +68,9 @@ class ValidationNode(RunnableCallable):
             exception repr and a message to respond after fixing validation errors.
         name: The name of the node.
         tags: A list of tags to add to the node.
+
+    Returns:
+        A list of ToolMessages with the validated content or error messages.
 
     Examples:
         You can use this for things like re-prompting the model when it generates
@@ -125,6 +132,7 @@ class ValidationNode(RunnableCallable):
         ...
         >>> graph = builder.compile()
         >>> res = graph.invoke(("user", "Select a number, any number"))
+        >>> # Fetch the last AI message
         >>> res[-2].pretty_print()
         ================================== Ai Message ==================================
 
@@ -147,7 +155,7 @@ class ValidationNode(RunnableCallable):
         name: str = "validation",
         tags: Optional[list[str]] = None,
     ) -> None:
-        super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
+        super().__init__(self._func, None, name=name, tags=tags, trace=False)
         self._format_error = format_error or _default_format_error
         self.schemas_by_name: Dict[str, Type[BaseModel]] = {}
         for schema in schemas:
@@ -217,35 +225,3 @@ class ValidationNode(RunnableCallable):
                 return outputs
             else:
                 return {"messages": outputs}
-
-    async def _afunc(
-        self, input: Union[list[AnyMessage], dict[str, Any]], config: RunnableConfig
-    ) -> Any:
-        """Validate and run tool calls asynchronously."""
-        output_type, message = self._get_message(input)
-
-        @as_runnable
-        async def run_one(call: ToolCall):
-            schema = self.schemas_by_name[call["name"]]
-            try:
-                output = schema.validate(call["args"])
-                return ToolMessage(
-                    content=output.json(),
-                    name=call["name"],
-                    tool_call_id=cast(str, call["id"]),
-                )
-            except ValidationError as e:
-                return ToolMessage(
-                    content=self._format_error(e, call, schema),
-                    name=call["name"],
-                    tool_call_id=cast(str, call["id"]),
-                    additional_kwargs={"is_error": True},
-                )
-
-        outputs = await asyncio.gather(
-            *(run_one.ainvoke(call, config) for call in message.tool_calls)
-        )
-        if output_type == "list":
-            return outputs
-        else:
-            return {"messages": outputs}
