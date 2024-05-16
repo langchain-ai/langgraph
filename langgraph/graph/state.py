@@ -1,7 +1,16 @@
 import logging
 from functools import partial
 from inspect import signature
-from typing import Any, Optional, Sequence, Type, Union, get_origin, get_type_hints
+from typing import (
+    Any,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+    get_origin,
+    get_type_hints,
+    overload,
+)
 
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
@@ -94,11 +103,28 @@ class StateGraph(Graph):
             (start, end) for starts, end in self.waiting_edges for start in starts
         }
 
-    def add_node(self, key: str, action: RunnableLike) -> None:
+    @overload
+    def add_node(self, node: RunnableLike) -> None:
+        """Adds a new node to the state graph.
+        Will take the name of the function/runnable as the node name.
+
+        Args:
+            node (RunnableLike): The function or runnable this node will run.
+
+        Raises:
+            ValueError: If the key is already being used as a state key.
+
+        Returns:
+            None
+        """
+        ...
+
+    @overload
+    def add_node(self, node: str, action: RunnableLike) -> None:
         """Adds a new node to the state graph.
 
         Args:
-            key (str): The key of the node.
+            node (str): The key of the node.
             action (RunnableLike): The action associated with the node.
 
         Raises:
@@ -107,9 +133,17 @@ class StateGraph(Graph):
         Returns:
             None
         """
-        if key in self.channels:
-            raise ValueError(f"'{key}' is already being used as a state key")
-        return super().add_node(key, action)
+        ...
+
+    def add_node(
+        self, node: Union[str, RunnableLike], action: Optional[RunnableLike] = None
+    ) -> None:
+        if not isinstance(node, str):
+            action = node
+            node = getattr(action, "name", action.__name__)
+        if node in self.channels:
+            raise ValueError(f"'{node}' is already being used as a state key")
+        return super().add_node(node, action)
 
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
         """Adds a directed edge from the start node to the end node.

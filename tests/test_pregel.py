@@ -4683,6 +4683,9 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
         answer: str
         docs: Annotated[list[str], sorted_add]
 
+    workflow = StateGraph(State)
+
+    @workflow.add_node
     def rewrite_query(data: State) -> State:
         return {"query": f'query: {data["query"]}'}
 
@@ -4698,13 +4701,10 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
     def qa(data: State) -> State:
         return {"answer": ",".join(data["docs"])}
 
-    workflow = StateGraph(State)
-
-    workflow.add_node("rewrite_query", rewrite_query)
-    workflow.add_node("analyzer_one", analyzer_one)
-    workflow.add_node("retriever_one", retriever_one)
-    workflow.add_node("retriever_two", retriever_two)
-    workflow.add_node("qa", qa)
+    workflow.add_node(analyzer_one)
+    workflow.add_node(retriever_one)
+    workflow.add_node(retriever_two)
+    workflow.add_node(qa)
 
     workflow.set_entry_point("rewrite_query")
     workflow.add_edge("rewrite_query", "analyzer_one")

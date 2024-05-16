@@ -14,6 +14,7 @@ from typing import (
     get_args,
     get_origin,
     get_type_hints,
+    overload,
 )
 
 from langchain_core.runnables import Runnable
@@ -106,18 +107,31 @@ class Graph:
     def _all_edges(self) -> set[tuple[str, str]]:
         return self.edges
 
-    def add_node(self, key: str, action: RunnableLike) -> None:
+    @overload
+    def add_node(self, node: RunnableLike) -> None:
+        ...
+
+    @overload
+    def add_node(self, node: str, action: RunnableLike) -> None:
+        ...
+
+    def add_node(
+        self, node: Union[str, RunnableLike], action: Optional[RunnableLike] = None
+    ) -> None:
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "
                 "not be reflected in the compiled graph."
             )
-        if key in self.nodes:
-            raise ValueError(f"Node `{key}` already present.")
-        if key == END or key == START:
-            raise ValueError(f"Node `{key}` is reserved.")
+        if not isinstance(node, str):
+            action = node
+            node = getattr(action, "name", action.__name__)
+        if node in self.nodes:
+            raise ValueError(f"Node `{node}` already present.")
+        if node == END or node == START:
+            raise ValueError(f"Node `{node}` is reserved.")
 
-        self.nodes[key] = coerce_to_runnable(action, name=key, trace=False)
+        self.nodes[node] = coerce_to_runnable(action, name=node, trace=False)
 
     def add_edge(self, start_key: str, end_key: str) -> None:
         if self.compiled:
