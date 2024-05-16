@@ -274,7 +274,7 @@ def create_react_agent(
         ... ])
         >>> def modify_messages(messages: list):
         ...     # You can do more complex modifications here
-        ...     return prompt.invoke(messages=messages)
+        ...     return prompt.invoke({"messages": messages})
         >>>
         >>> app = create_react_agent(model, tools, messages_modifier=modify_messages)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}

@@ -55,6 +55,7 @@ class ToolExecutor(RunnableCallable):
 
     Examples:
 
+        ```pycon
         >>> from langchain_core.tools import tool
         >>> from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
         ...
@@ -71,14 +72,17 @@ class ToolExecutor(RunnableCallable):
         >>> invocation = ToolInvocation(tool="search", tool_input="What is the capital of France?")
         >>> result = executor.invoke(invocation)
         >>> print(result)
-        Output: "Searching for: What is the capital of France?"
+        "Searching for: What is the capital of France?"
+        ```
 
+        ```pycon
         >>> invocation = ToolInvocation(
         ...     tool="nonexistent", tool_input="What is the capital of France?"
         ... )
         >>> result = executor.invoke(invocation)
         >>> print(result)
-        Output: "nonexistent is not a valid tool, try one of [search]."
+        "nonexistent is not a valid tool, try one of [search]."
+        ```
     """
 
     def __init__(
