@@ -4,7 +4,7 @@ import sqlite3
 import threading
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
-from typing import Any, Iterator, Optional, Tuple
+from typing import Any, AsyncIterator, Iterator, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
@@ -45,6 +45,15 @@ class JsonPlusSerializerCompat(JsonPlusSerializer):
         if data.startswith(b"\x80") and data.endswith(b"."):
             return pickle.loads(data)
         return super().loads(data)
+
+
+_AIO_ERROR_MSG = (
+    "The SqliteSaver does not support async methods. "
+    "Consider using AsyncSqliteSaver instead.\n"
+    "from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver\n"
+    "Note: AsyncSqliteSaver requires the aiosqlite package to use.\n"
+    "Install with:\npip install aiosqlite"
+)
 
 
 class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
@@ -524,3 +533,38 @@ def _metadata_predicate(
 
     # predicate contains an extra trailing space
     return (predicate, param_values)
+
+
+async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    raise NotImplementedError(_AIO_ERROR_MSG)
+
+
+def alist(
+    self,
+    config: RunnableConfig,
+    *,
+    before: Optional[RunnableConfig] = None,
+    limit: Optional[int] = None,
+) -> AsyncIterator[CheckpointTuple]:
+    raise NotImplementedError(_AIO_ERROR_MSG)
+    yield
+
+
+def asearch(
+    self,
+    metadata_filter: CheckpointMetadata,
+    *,
+    before: Optional[RunnableConfig] = None,
+    limit: Optional[int] = None,
+) -> AsyncIterator[CheckpointTuple]:
+    raise NotImplementedError(_AIO_ERROR_MSG)
+    yield
+
+
+async def aput(
+    self,
+    config: RunnableConfig,
+    checkpoint: Checkpoint,
+    metadata: CheckpointMetadata,
+) -> RunnableConfig:
+    raise NotImplementedError(_AIO_ERROR_MSG)
