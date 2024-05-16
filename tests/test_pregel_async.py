@@ -38,6 +38,7 @@ from langgraph.prebuilt.chat_agent_executor import (
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
+from langgraph.pregel.retry import RetryPolicy
 from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
 
@@ -743,6 +744,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
         input_channels="input",
         output_channels="output",
         checkpointer=memory,
+        retry_policy=RetryPolicy(),
     )
 
     # total starts out as 0, so output is 0+2=2

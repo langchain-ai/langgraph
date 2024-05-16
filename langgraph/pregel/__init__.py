@@ -214,7 +214,7 @@ class Pregel(
     checkpointer: Optional[BaseCheckpointSaver] = None
     """Checkpointer used to save and load graph state. Defaults to None."""
 
-    retry_policy: Optional[RetryPolicy] = RetryPolicy()
+    retry_policy: Optional[RetryPolicy] = None
     """Retry policy to use when running tasks. Set to None to disable."""
 
     config_type: Optional[Type[Any]] = None

@@ -2,7 +2,7 @@ import asyncio
 import logging
 import random
 import time
-from typing import Callable, NamedTuple, Union
+from typing import Callable, NamedTuple, Optional, Union
 
 import httpx
 import requests
@@ -53,7 +53,7 @@ class RetryPolicy(NamedTuple):
 
 def run_with_retry(
     task: PregelExecutableTask,
-    retry_policy: RetryPolicy,
+    retry_policy: Optional[RetryPolicy],
 ) -> None:
     """Run a task with retries."""
     interval = retry_policy.initial_interval
@@ -67,6 +67,8 @@ def run_with_retry(
             # if successful, end
             break
         except Exception as exc:
+            if retry_policy is None:
+                raise
             # increment attempts
             attempts += 1
             # check if we should retry
@@ -94,7 +96,7 @@ def run_with_retry(
 
 async def arun_with_retry(
     task: PregelExecutableTask,
-    retry_policy: RetryPolicy,
+    retry_policy: Optional[RetryPolicy],
     stream: bool = False,
 ) -> None:
     """Run a task asynchronously with retries."""
@@ -113,6 +115,8 @@ async def arun_with_retry(
             # if successful, end
             break
         except Exception as exc:
+            if retry_policy is None:
+                raise
             # increment attempts
             attempts += 1
             # check if we should retry
