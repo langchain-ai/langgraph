@@ -46,3 +46,12 @@ from langgraph.prebuilt import tools_condition
 ```
 
 ::: langgraph.prebuilt.tools_condition
+
+
+## ValidationNode
+
+```python
+from langgraph.prebuilt import ValidationNode
+```
+
+::: langgraph.prebuilt.ValidationNode
