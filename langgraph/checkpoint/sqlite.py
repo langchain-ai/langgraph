@@ -52,7 +52,9 @@ _AIO_ERROR_MSG = (
     "Consider using AsyncSqliteSaver instead.\n"
     "from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver\n"
     "Note: AsyncSqliteSaver requires the aiosqlite package to use.\n"
-    "Install with:\npip install aiosqlite"
+    "Install with:\n`pip install aiosqlite`\n"
+    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#asyncsqlitesaver"
+    "for more information."
 )
 
 
