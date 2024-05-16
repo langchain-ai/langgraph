@@ -51,7 +51,7 @@ We will go through a full execution of a StateGraph later, but first, lets explo
 
 ## Nodes
 
-In StateGraph, nodes are typically python functions (sync or `async`) where the **first** positional argument is the [state](#state), and (optionally), the **second** positional argument is a "config", containing optional [configurable parameters](#configuration) (such as a `thread_id`).
+In StateGraph, nodes are typically python functions (sync or `async`) where the **first** positional argument is the [state](#state-management), and (optionally), the **second** positional argument is a "config", containing optional [configurable parameters](#configuration) (such as a `thread_id`).
 
 Similar to `NetworkX`, you add these nodes to a graph using the [add_node](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.MessageGraph) method:
 

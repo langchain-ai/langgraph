@@ -4,6 +4,7 @@ from langgraph.prebuilt.agent_executor import create_agent_executor
 from langgraph.prebuilt.chat_agent_executor import create_react_agent
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 from langgraph.prebuilt.tool_node import ToolNode, tools_condition
+from langgraph.prebuilt.tool_validator import ValidationNode
 
 __all__ = [
     "create_agent_executor",
@@ -13,4 +14,5 @@ __all__ = [
     "ToolInvocation",
     "ToolNode",
     "tools_condition",
+    "ValidationNode",
 ]
