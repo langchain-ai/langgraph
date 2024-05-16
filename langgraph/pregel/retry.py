@@ -56,7 +56,7 @@ def run_with_retry(
     retry_policy: Optional[RetryPolicy],
 ) -> None:
     """Run a task with retries."""
-    interval = retry_policy.initial_interval
+    interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     while True:
         try:
@@ -100,7 +100,7 @@ async def arun_with_retry(
     stream: bool = False,
 ) -> None:
     """Run a task asynchronously with retries."""
-    interval = retry_policy.initial_interval
+    interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     while True:
         try:
