@@ -55,7 +55,8 @@ class ValidationNode(RunnableCallable):
 
         This node does not actually **run** the tools, it only validates the tool calls,
         which is useful for extraction and other use cases where you need to generate
-        structured output that conforms to a complex schema.
+        structured output that conforms to a complex schema without losing the original
+        messages and tool IDs (for use in multi-turn conversations).
 
     Args:
         schemas: A list of schemas to validate the tool calls with. These can be
@@ -73,8 +74,7 @@ class ValidationNode(RunnableCallable):
         A list of ToolMessages with the validated content or error messages.
 
     Examples:
-        You can use this for things like re-prompting the model when it generates
-        invalid output.
+        Example usage for re-prompting the model to generate a valid response:
         >>> from typing import Literal
         ...
         >>> from langchain_anthropic import ChatAnthropic
