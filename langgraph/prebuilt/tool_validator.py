@@ -128,7 +128,6 @@ class ValidationNode(RunnableCallable):
         ================================ Human Message =================================
         Select a number, any number
         ================================== Ai Message ==================================
-        \n
         [{'id': 'toolu_01JSjT9Pq8hGmTgmMPc6KnvM', 'input': {'a': 42}, 'name': 'SelectNumber', 'type': 'tool_use'}]
         Tool Calls:
         SelectNumber (toolu_01JSjT9Pq8hGmTgmMPc6KnvM)
@@ -137,12 +136,9 @@ class ValidationNode(RunnableCallable):
             a: 42
         ================================= Tool Message =================================
         Name: SelectNumber
-        \n
         ValidationError(model='SelectNumber', errors=[{'loc': ('a',), 'msg': 'Only 37 is allowed', 'type': 'value_error'}])
-        \n
         Respond after fixing all validation errors.
         ================================== Ai Message ==================================
-        \n
         [{'id': 'toolu_01PkxSVxNxc5wqwCPW1FiSmV', 'input': {'a': 37}, 'name': 'SelectNumber', 'type': 'tool_use'}]
         Tool Calls:
         SelectNumber (toolu_01PkxSVxNxc5wqwCPW1FiSmV)
@@ -151,7 +147,6 @@ class ValidationNode(RunnableCallable):
             a: 37
         ================================= Tool Message =================================
         Name: SelectNumber
-        \n
         {"a": 37}
 
     """
