@@ -139,8 +139,8 @@ def tools_condition(
         >>> graph_builder.add_node("chatbot", llm.bind_tools(tools))
         >>> graph_builder.add_edge("tools", "chatbot")
         >>> graph_builder.add_conditional_edges(
-        >>>     "chatbot", tools_condition
-        >>> )
+        ...     "chatbot", tools_condition
+        ... )
         >>> graph_builder.set_entry_point("chatbot")
         >>> graph = graph_builder.compile()
         >>> graph.invoke([("user", "What's 329993 divided by 13662?")])
