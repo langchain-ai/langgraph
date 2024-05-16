@@ -1,11 +1,12 @@
 import asyncio
 import json
-from typing import Any, Literal, Optional, Sequence, Union
+from typing import Any, Callable, Dict, Literal, Optional, Sequence, Union
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolCall, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool
+from langchain_core.tools import tool as create_tool
 
 from langgraph.utils import RunnableCallable
 
@@ -30,13 +31,17 @@ class ToolNode(RunnableCallable):
 
     def __init__(
         self,
-        tools: Sequence[BaseTool],
+        tools: Sequence[Union[BaseTool, Callable]],
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
-        self.tools_by_name = {tool.name: tool for tool in tools}
+        self.tools_by_name: Dict[str, BaseTool] = {}
+        for tool_ in tools:
+            if not isinstance(tool_, BaseTool):
+                tool_ = create_tool(tool_)
+            self.tools_by_name[tool_.name] = tool_
 
     def _func(
         self, input: Union[list[AnyMessage], dict[str, Any]], config: RunnableConfig

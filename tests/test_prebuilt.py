@@ -7,13 +7,19 @@ from langchain_core.language_models import (
     BaseChatModel,
     LanguageModelInput,
 )
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, SystemMessage
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    HumanMessage,
+    SystemMessage,
+    ToolMessage,
+)
 from langchain_core.outputs import ChatGeneration, ChatResult
 from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 
-from langgraph.prebuilt import create_react_agent
+from langgraph.prebuilt import ToolNode, create_react_agent
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -95,3 +101,54 @@ def test_runnable_modifier():
     response = agent.invoke({"messages": inputs})
     expected_response = {"messages": inputs + [AIMessage(content="Baz", id="0")]}
     assert response == expected_response
+
+
+async def test_tool_node():
+    def tool1(some_val: int, some_other_val: str) -> str:
+        """Tool 1 docstring."""
+        return f"{some_val} - {some_other_val}"
+
+    async def tool2(some_val: int, some_other_val: str) -> str:
+        """Tool 2 docstring."""
+        return f"tool2: {some_val} - {some_other_val}"
+
+    result = ToolNode([tool1]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 1, "some_other_val": "foo"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+    tool_message: ToolMessage = result["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.content == "1 - foo"
+    assert tool_message.tool_call_id == "some 0"
+
+    result2 = await ToolNode([tool2]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool2",
+                            "args": {"some_val": 2, "some_other_val": "bar"},
+                            "id": "some 1",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+    tool_message: ToolMessage = result2["messages"][-1]
+    assert tool_message.type == "tool"
+    assert tool_message.content == "tool2: 2 - bar"
