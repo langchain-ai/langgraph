@@ -134,7 +134,6 @@ class ValidationNode(RunnableCallable):
         >>> # Fetch the last AI message
         >>> res[-2].pretty_print()
         ================================== Ai Message ==================================
-
         [{'text': 'Apologies, it seems the `SelectNumber` function only accepts the number 37. Let me try that again:', 'type': 'text'}, {'id': 'toolu_01G4ivTrLGZnYdQ4MY8pL2cc', 'input': {'a': 37}, 'name': 'SelectNumber', 'type': 'tool_use'}]
         Tool Calls:
         SelectNumber (toolu_01G4ivTrLGZnYdQ4MY8pL2cc)
