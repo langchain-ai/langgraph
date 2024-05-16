@@ -122,24 +122,39 @@ class ValidationNode(RunnableCallable):
         >>> builder.add_conditional_edges("validation", should_reprompt)
         ...
         ...
-        >>> def get_ai_message(state: list):
-        ...     for msg in state[::-1]:
-        ...         if msg.type == "ai":
-        ...             return msg
-        ...     raise ValueError("No AI message found")
-        ...
-        ...
         >>> graph = builder.compile()
         >>> res = graph.invoke(("user", "Select a number, any number"))
-        >>> # Fetch the last AI message
-        >>> res[-2].pretty_print()
+        >>> # Show the retry logic
+        >>> for msg in res:
+        ...     msg.pretty_print()
+        ================================ Human Message =================================
+        Select a number, any number
         ================================== Ai Message ==================================
-        [{'text': 'Apologies, it seems the `SelectNumber` function only accepts the number 37. Let me try that again:', 'type': 'text'}, {'id': 'toolu_01G4ivTrLGZnYdQ4MY8pL2cc', 'input': {'a': 37}, 'name': 'SelectNumber', 'type': 'tool_use'}]
+        \n
+        [{'id': 'toolu_01JSjT9Pq8hGmTgmMPc6KnvM', 'input': {'a': 42}, 'name': 'SelectNumber', 'type': 'tool_use'}]
         Tool Calls:
-        SelectNumber (toolu_01G4ivTrLGZnYdQ4MY8pL2cc)
-        Call ID: toolu_01G4ivTrLGZnYdQ4MY8pL2cc
+        SelectNumber (toolu_01JSjT9Pq8hGmTgmMPc6KnvM)
+        Call ID: toolu_01JSjT9Pq8hGmTgmMPc6KnvM
+        Args:
+            a: 42
+        ================================= Tool Message =================================
+        Name: SelectNumber
+        \n
+        ValidationError(model='SelectNumber', errors=[{'loc': ('a',), 'msg': 'Only 37 is allowed', 'type': 'value_error'}])
+        \n
+        Respond after fixing all validation errors.
+        ================================== Ai Message ==================================
+        \n
+        [{'id': 'toolu_01PkxSVxNxc5wqwCPW1FiSmV', 'input': {'a': 37}, 'name': 'SelectNumber', 'type': 'tool_use'}]
+        Tool Calls:
+        SelectNumber (toolu_01PkxSVxNxc5wqwCPW1FiSmV)
+        Call ID: toolu_01PkxSVxNxc5wqwCPW1FiSmV
         Args:
             a: 37
+        ================================= Tool Message =================================
+        Name: SelectNumber
+        \n
+        {"a": 37}
 
     """
 

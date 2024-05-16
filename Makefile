@@ -55,7 +55,7 @@ build-docs:
 
 serve-clean-docs: clean-docs
 	poetry run python docs/_scripts/copy_notebooks.py
-	poetry run python -m mkdocs serve -c -f mkdocs.yml --strict -w ./langgraph
+	poetry run python -m mkdocs serve -c -f docs/mkdocs.yml --strict -w ./langgraph
 
 serve-docs:
 	poetry run python docs/_scripts/copy_notebooks.py
