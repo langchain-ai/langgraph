@@ -28,12 +28,10 @@ from langchain_core.pydantic_v1 import BaseModel, ValidationError
 from langchain_core.runnables import (
     RunnableConfig,
 )
-from langchain_core.runnables import (
-    chain as as_runnable,
-)
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool, create_schema_from_function
 from pydantic import BaseModel as BaseModelV2
+from pydantic import ValidationError as ValidationErrorV2
 
 from langgraph.utils import RunnableCallable
 
@@ -212,7 +210,6 @@ class ValidationNode(RunnableCallable):
         """Validate and run tool calls synchronously."""
         output_type, message = self._get_message(input)
 
-        @as_runnable
         def run_one(call: ToolCall):
             schema = self.schemas_by_name[call["name"]]
             try:
@@ -222,7 +219,7 @@ class ValidationNode(RunnableCallable):
                     name=call["name"],
                     tool_call_id=cast(str, call["id"]),
                 )
-            except ValidationError as e:
+            except (ValidationError, ValidationErrorV2) as e:
                 return ToolMessage(
                     content=self._format_error(e, call, schema),
                     name=call["name"],
@@ -231,9 +228,7 @@ class ValidationNode(RunnableCallable):
                 )
 
         with get_executor_for_config(config) as executor:
-            outputs = [
-                *executor.map(lambda x: run_one.invoke(x, config), message.tool_calls)
-            ]
+            outputs = [*executor.map(run_one, message.tool_calls)]
             if output_type == "list":
                 return outputs
             else:
