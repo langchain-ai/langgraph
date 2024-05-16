@@ -70,7 +70,7 @@ class ValidationNode(RunnableCallable):
         tags: A list of tags to add to the node.
 
     Returns:
-        A list of ToolMessages with the validated content or error messages.
+        (Union[Dict[str, List[ToolMessage]], Sequence[ToolMessage]]): A list of ToolMessages with the validated content or error messages.
 
     Examples:
         Example usage for re-prompting the model to generate a valid response:
