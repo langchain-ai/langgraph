@@ -1,6 +1,6 @@
 # Graph Definitions
 
-Graphs are the core abstraction of LangGraph. Each [StateGraph](#langgraph.graph.StateGraph) implementation is used to create graph workflows. Once compiled, you can run the [CompiledGraph](#compiledgraph) to run the application.
+Graphs are the core abstraction of LangGraph. Each [StateGraph](#stategraph) implementation is used to create graph workflows. Once compiled, you can run the [CompiledGraph](#compiledgraph) to run the application.
 
 ## StateGraph
 
