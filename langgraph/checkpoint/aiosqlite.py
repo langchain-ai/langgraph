@@ -1,7 +1,8 @@
 import asyncio
+import functools
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Iterator, Optional, TypeVar
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
@@ -15,6 +16,22 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
 )
 from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat, search_where
+
+T = TypeVar("T", bound=callable)
+
+
+def not_implemented_sync_method(func: T) -> T:
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        raise NotImplementedError(
+            "The AsyncSqliteSaver does not support synchronous methods. "
+            "Consider using the SqliteSaver instead.\n"
+            "from langgraph.checkpoint.sqlite import SqliteSaver\n"
+            "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#sqlitesaver "
+            "for more information."
+        )
+
+    return wrapper
 
 
 class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
@@ -34,7 +51,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
 
     Examples:
-
         Usage within a StateGraph:
         ```pycon
         >>> import asyncio
@@ -113,6 +129,54 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         if self.is_setup:
             return await self.conn.close()
 
+    @not_implemented_sync_method
+    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Get a checkpoint tuple from the database.
+
+        Note:
+            This method is not implemented for the AsyncSqliteSaver. Use `aget` instead.
+            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+        """
+
+    @not_implemented_sync_method
+    def list(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        """List checkpoints from the database.
+
+        Note:
+            This method is not implemented for the AsyncSqliteSaver. Use `alist` instead.
+            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+        """
+
+    @not_implemented_sync_method
+    def search(
+        self,
+        metadata_filter: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        """Search for checkpoints by metadata.
+
+        Note:
+            This method is not implemented for the AsyncSqliteSaver. Use `asearch` instead.
+            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+        """
+
+    @not_implemented_sync_method
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+    ) -> RunnableConfig:
+        """Save a checkpoint to the database. FOO"""
+
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
 
@@ -169,14 +233,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                         config,
                         self.serde.loads(value[0]),
                         self.serde.loads(value[2]) if value[2] is not None else {},
-                        {
-                            "configurable": {
-                                "thread_id": config["configurable"]["thread_id"],
-                                "thread_ts": value[1],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": config["configurable"]["thread_id"],
+                                    "thread_ts": value[1],
+                                }
                             }
-                        }
-                        if value[1]
-                        else None,
+                            if value[1]
+                            else None
+                        ),
                     )
         else:
             async with self.conn.execute(
@@ -193,14 +259,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                         },
                         self.serde.loads(value[3]),
                         self.serde.loads(value[4]) if value[4] is not None else {},
-                        {
-                            "configurable": {
-                                "thread_id": value[0],
-                                "thread_ts": value[2],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": value[0],
+                                    "thread_ts": value[2],
+                                }
                             }
-                        }
-                        if value[2]
-                        else None,
+                            if value[2]
+                            else None
+                        ),
                     )
 
     async def alist(
@@ -247,9 +315,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
                     self.serde.loads(metadata) if metadata is not None else {},
-                    {"configurable": {"thread_id": thread_id, "thread_ts": parent_ts}}
-                    if parent_ts
-                    else None,
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
+                        }
+                        if parent_ts
+                        else None
+                    ),
                 )
 
     async def asearch(
@@ -291,9 +366,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
                     self.serde.loads(metadata) if metadata is not None else {},
-                    {"configurable": {"thread_id": thread_id, "thread_ts": parent_ts}}
-                    if parent_ts
-                    else None,
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
+                        }
+                        if parent_ts
+                        else None
+                    ),
                 )
 
     async def aput(

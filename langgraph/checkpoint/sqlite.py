@@ -538,6 +538,12 @@ def _metadata_predicate(
 
 
 async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+    """Get a checkpoint tuple from the database asynchronously.
+
+    Note:
+        This async method is not supported by the SqliteSaver class.
+        Use get_tuple() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+    """
     raise NotImplementedError(_AIO_ERROR_MSG)
 
 
@@ -548,6 +554,12 @@ def alist(
     before: Optional[RunnableConfig] = None,
     limit: Optional[int] = None,
 ) -> AsyncIterator[CheckpointTuple]:
+    """List checkpoints from the database asynchronously.
+
+    Note:
+        This async method is not supported by the SqliteSaver class.
+        Use list() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+    """
     raise NotImplementedError(_AIO_ERROR_MSG)
     yield
 
@@ -559,6 +571,12 @@ def asearch(
     before: Optional[RunnableConfig] = None,
     limit: Optional[int] = None,
 ) -> AsyncIterator[CheckpointTuple]:
+    """Search for checkpoints by metadata asynchronously.
+
+    Note:
+        This async method is not supported by the SqliteSaver class.
+        Use search() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+    """
     raise NotImplementedError(_AIO_ERROR_MSG)
     yield
 
@@ -569,4 +587,10 @@ async def aput(
     checkpoint: Checkpoint,
     metadata: CheckpointMetadata,
 ) -> RunnableConfig:
+    """Save a checkpoint to the database asynchronously.
+
+    Note:
+        This async method is not supported by the SqliteSaver class.
+        Use put() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+    """
     raise NotImplementedError(_AIO_ERROR_MSG)
