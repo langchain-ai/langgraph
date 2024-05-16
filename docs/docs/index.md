@@ -1,3 +1,6 @@
+---
+hide_comments: true
+---
 # 🦜🕸️LangGraph
 
 [![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
