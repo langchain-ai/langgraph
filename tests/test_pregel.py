@@ -729,8 +729,16 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
 
 def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
+    errored_once = False
 
     def raise_if_above_10(input: int) -> int:
+        nonlocal errored_once
+        if input > 4:
+            if errored_once:
+                pass
+            else:
+                errored_once = True
+                raise OSError("I will be retried")
         if input > 10:
             raise ValueError("Input is too large")
         return input
@@ -763,6 +771,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     assert checkpoint["channel_values"].get("total") == 2
     # total is now 2, so output is 2+3=5
     assert app.invoke(3, {"configurable": {"thread_id": "1"}}) == 5
+    assert errored_once, "errored and retried"
     checkpoint = memory.get({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"].get("total") == 7

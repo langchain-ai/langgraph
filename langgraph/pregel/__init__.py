@@ -21,6 +21,7 @@ from typing import (
     overload,
 )
 
+from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.globals import get_debug
 from langchain_core.load.dump import dumpd
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
@@ -92,6 +93,7 @@ from langgraph.pregel.io import (
 )
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import PregelNode
+from langgraph.pregel.retry import RetryPolicy, arun_with_retry, run_with_retry
 from langgraph.pregel.types import (
     All,
     PregelExecutableTask,
@@ -211,6 +213,9 @@ class Pregel(
 
     checkpointer: Optional[BaseCheckpointSaver] = None
     """Checkpointer used to save and load graph state. Defaults to None."""
+
+    retry_policy: Optional[RetryPolicy] = RetryPolicy()
+    """Retry policy to use when running tasks. Set to None to disable."""
 
     config_type: Optional[Type[Any]] = None
 
@@ -487,7 +492,9 @@ class Pregel(
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         # find last node that updated the state, if not provided
-        if as_node is None and not saved:
+        if as_node is None and not any(
+            v for vv in checkpoint["versions_seen"].values() for v in vv.values()
+        ):
             if (
                 isinstance(self.input_channels, str)
                 and self.input_channels in self.nodes
@@ -783,6 +790,7 @@ class Pregel(
                         config,
                         step,
                         for_execution=True,
+                        manager=run_manager,
                     )
 
                     # if no more tasks, we're done
@@ -809,30 +817,9 @@ class Pregel(
                         for chunk in map_debug_tasks(step, next_tasks):
                             yield chunk
 
-                    # prepare tasks with config
-                    tasks_w_config = [
-                        (
-                            proc,
-                            input,
-                            patch_config(
-                                proc_config,
-                                run_name=name,
-                                callbacks=run_manager.get_child(f"graph:step:{step}"),
-                                configurable={
-                                    # deque.extend is thread-safe
-                                    CONFIG_KEY_SEND: writes.extend,
-                                    CONFIG_KEY_READ: partial(
-                                        _local_read, checkpoint, channels, writes
-                                    ),
-                                },
-                            ),
-                        )
-                        for name, input, proc, writes, proc_config, _ in next_tasks
-                    ]
-
                     futures = [
-                        executor.submit(proc.invoke, input, config)
-                        for proc, input, config in tasks_w_config
+                        executor.submit(run_with_retry, task, self.retry_policy)
+                        for task in next_tasks
                     ]
 
                     # execute tasks, and wait for one to fail or all to finish.
@@ -1074,6 +1061,7 @@ class Pregel(
                         config,
                         step,
                         for_execution=True,
+                        manager=run_manager,
                     )
 
                     # if no more tasks, we're done
@@ -1100,38 +1088,12 @@ class Pregel(
                         for chunk in map_debug_tasks(step, next_tasks):
                             yield chunk
 
-                    # prepare tasks with config
-                    tasks_w_config = [
-                        (
-                            proc,
-                            input,
-                            patch_config(
-                                proc_config,
-                                run_name=name,
-                                callbacks=run_manager.get_child(f"graph:step:{step}"),
-                                configurable={
-                                    # deque.extend is thread-safe
-                                    CONFIG_KEY_SEND: writes.extend,
-                                    CONFIG_KEY_READ: partial(
-                                        _local_read, checkpoint, channels, writes
-                                    ),
-                                },
-                            ),
+                    futures = [
+                        asyncio.create_task(
+                            arun_with_retry(task, self.retry_policy, do_stream)
                         )
-                        for name, input, proc, writes, proc_config, _ in next_tasks
+                        for task in next_tasks
                     ]
-
-                    futures = (
-                        [
-                            asyncio.create_task(_aconsume(proc.astream(input, config)))
-                            for proc, input, config in tasks_w_config
-                        ]
-                        if do_stream
-                        else [
-                            asyncio.create_task(proc.ainvoke(input, config))
-                            for proc, input, config in tasks_w_config
-                        ]
-                    )
 
                     # execute tasks, and wait for one to fail or all to finish.
                     # each task is independent from all other concurrent tasks
@@ -1370,7 +1332,6 @@ def _panic_or_proceed(
                 inflight.pop().cancel()
             # raise the exception
             raise exc
-            # TODO this is where retry of an entire step would happen
 
     if inflight:
         # if we got here means we timed out
@@ -1469,6 +1430,7 @@ def _prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[False],
+    manager: Literal[None] = None,
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
 
@@ -1482,6 +1444,7 @@ def _prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[True],
+    manager: Union[ParentRunManager, AsyncParentRunManager],
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
     ...
 
@@ -1495,6 +1458,7 @@ def _prepare_next_tasks(
     step: int,
     *,
     for_execution: bool,
+    manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
@@ -1560,22 +1524,30 @@ def _prepare_next_tasks(
 
             if for_execution:
                 if node := proc.get_node():
+                    writes = deque()
                     tasks.append(
                         PregelExecutableTask(
                             name,
                             val,
                             node,
-                            deque(),
-                            merge_configs(config, proc.config),
+                            writes,
+                            patch_config(
+                                merge_configs(config, proc.config),
+                                run_name=name,
+                                callbacks=manager.get_child(f"graph:step:{step}")
+                                if manager
+                                else None,
+                                configurable={
+                                    # deque.extend is thread-safe
+                                    CONFIG_KEY_SEND: writes.extend,
+                                    CONFIG_KEY_READ: partial(
+                                        _local_read, checkpoint, channels, writes
+                                    ),
+                                },
+                            ),
                             triggers,
                         )
                     )
             else:
                 tasks.append(PregelTaskDescription(name, val))
     return checkpoint, tasks
-
-
-async def _aconsume(iterator: AsyncIterator[Any]) -> None:
-    """Consume an async iterator."""
-    async for _ in iterator:
-        pass
