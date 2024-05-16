@@ -68,49 +68,72 @@ class ValidationNode(RunnableCallable):
     Examples:
         You can use this for things like re-prompting the model when it generates
         invalid output.
-        >>> from pydantic import BaseModel, Field, validator
+        >>> from typing import Literal
+        ... 
         >>> from langchain_anthropic import ChatAnthropic
-        >>> from langgraph.graph import StateGraph, END, START, add_messages
+        >>> from langchain_core.pydantic_v1 import BaseModel, validator
+        ... 
+        >>> from langgraph.graph import END, START, MessageGraph
         >>> from langgraph.prebuilt import ValidationNode
-        >>> from typing_extensions import TypedDict
-        >>> from typing import Literal, Annotated
-        ...
+        ... 
+        ... 
         >>> class SelectNumber(BaseModel):
         ...     a: int
-        ...
+        ... 
         ...     @validator("a")
         ...     def a_must_be_meaningful(cls, v):
-        ...         if v != 42:
-        ...             raise ValueError("Only 42 is allowed")
-        >>> class State(TypedDict):
-        ...     messages: Annotated[list, add_messages]
-        >>> builder = StateGraph(State)
-        >>> llm = ChatAnthropic(model="claude-3-haiku-20240307")
+        ...         if v != 37:
+        ...             raise ValueError("Only 37 is allowed")
+        ...         return v
+        ... 
+        ... 
+        >>> builder = MessageGraph()
+        >>> llm = ChatAnthropic(model="claude-3-haiku-20240307").bind_tools([SelectNumber])
         >>> builder.add_node("model", llm)
-        >>> builder.add_node("validation", ValidationNode([ComplexSchema]))
+        >>> builder.add_node("validation", ValidationNode([SelectNumber]))
         >>> builder.add_edge(START, "model")
-        >>> def should_validate(state: State) -> Literal["validation", "__end__"]:
-        ...     if state["messages"][-1].tool_calls:
+        ... 
+        ... 
+        >>> def should_validate(state: list) -> Literal["validation", "__end__"]:
+        ...     if state[-1].tool_calls:
         ...         return "validation"
         ...     return END
+        ... 
+        ... 
         >>> builder.add_conditional_edges("model", should_validate)
-        >>> def should_reprompt(state: State) -> Literal["model", "__end__"]:
-        ...     for msg in state["messages"][::-1]:
+        ... 
+        ... 
+        >>> def should_reprompt(state: list) -> Literal["model", "__end__"]:
+        ...     for msg in state[::-1]:
         ...         # None of the tool calls were errors
         ...         if msg.type == "ai":
         ...             return END
         ...         if msg.additional_kwargs.get("is_error"):
         ...             return "model"
         ...     return END
+        ... 
+        ... 
         >>> builder.add_conditional_edges("validation", should_reprompt)
-        >>> builder.add_edge("validation", "model")
-        >>> def get_ai_message(state: State) -> AIMessage:
-        ...     for msg in state["messages"][::-1]:
+        ... 
+        ... 
+        >>> def get_ai_message(state: list):
+        ...     for msg in state[::-1]:
         ...         if msg.type == "ai":
         ...             return msg
         ...     raise ValueError("No AI message found")
+        ... 
+        ... 
         >>> graph = builder.compile()
-        >>> res = graph.invoke({"messages": [("user", "Select a number, any number")]})
+        >>> res = graph.invoke(("user", "Select a number, any number"))
+        >>> res[-2].pretty_print()
+        ================================== Ai Message ==================================
+
+        [{'text': 'Apologies, it seems the `SelectNumber` function only accepts the number 37. Let me try that again:', 'type': 'text'}, {'id': 'toolu_01G4ivTrLGZnYdQ4MY8pL2cc', 'input': {'a': 37}, 'name': 'SelectNumber', 'type': 'tool_use'}]
+        Tool Calls:
+        SelectNumber (toolu_01G4ivTrLGZnYdQ4MY8pL2cc)
+        Call ID: toolu_01G4ivTrLGZnYdQ4MY8pL2cc
+        Args:
+            a: 37
 
     """
 
