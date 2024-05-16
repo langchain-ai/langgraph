@@ -1,5 +1,13 @@
 # Prebuilt
 
+## create_react_agent
+
+```python
+from langgraph.prebuilt import create_react_agent
+```
+
+::: langgraph.prebuilt.create_react_agent
+
 ## ToolNode
 
 ```python
@@ -31,13 +39,6 @@ from langgraph.prebuilt import ToolInvocation
     heading_level: 4
 
 
-## create_react_agent
-
-```python
-from langgraph.prebuilt import create_react_agent
-```
-
-::: langgraph.prebuilt.create_react_agent
 
 ## `tools_condition`
 
