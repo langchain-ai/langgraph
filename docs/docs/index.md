@@ -7,6 +7,10 @@ hide_comments: true
 
 ⚡ Build language agents as graphs ⚡
 
+!!! note "Python version :material-language-python:"
+
+    Looking for the JS version? Click [:fontawesome-brands-square-js: here](https://github.com/langchain-ai/langgraphjs) ([:simple-readme: JS docs](https://langchain-ai.github.io/langgraphjs/)).
+
 ## Overview
 
 Suppose you're building a customer support assistant. You want your assistant to be able to:
