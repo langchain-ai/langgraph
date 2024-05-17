@@ -38,6 +38,7 @@ from langgraph.prebuilt.chat_agent_executor import (
 from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
+from langgraph.pregel.retry import RetryPolicy
 from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
 
@@ -710,8 +711,16 @@ async def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) 
 
 async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
+    errored_once = False
 
     def raise_if_above_10(input: int) -> int:
+        nonlocal errored_once
+        if input > 4:
+            if errored_once:
+                pass
+            else:
+                errored_once = True
+                raise OSError("I will be retried")
         if input > 10:
             raise ValueError("Input is too large")
         return input
@@ -735,6 +744,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
         input_channels="input",
         output_channels="output",
         checkpointer=memory,
+        retry_policy=RetryPolicy(),
     )
 
     # total starts out as 0, so output is 0+2=2
@@ -744,6 +754,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     assert checkpoint["channel_values"].get("total") == 2
     # total is now 2, so output is 2+3=5
     assert await app.ainvoke(3, {"configurable": {"thread_id": "1"}}) == 5
+    assert errored_once, "errored and retried"
     checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"].get("total") == 7
