@@ -312,8 +312,8 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_community",
-            "llms",
+            "langchain_core",
+            "language_models",
             "fake",
             "FakeStreamingListLLM"
           ],
