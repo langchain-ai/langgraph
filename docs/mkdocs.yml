@@ -208,6 +208,6 @@ extra:
     - icon: fontawesome/brands/js 
       link: https://langchain-ai.github.io/langgraphjs/
     - icon: fontawesome/brands/github
-      link: https://github.com/langchain-ai/langgraphjs
+      link: https://github.com/langchain-ai/langgraph
     - icon: fontawesome/brands/twitter
       link: https://twitter.com/LangChainAI
