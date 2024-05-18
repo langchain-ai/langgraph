@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from typing import (
     Annotated,
     Any,
+    Dict,
     Generator,
     Literal,
     Optional,
@@ -2697,18 +2698,25 @@ def test_state_graph_w_config(snapshot: SnapshotAssertion) -> None:
     assert app.config_schema().schema_json() == snapshot
 
 
-def test_state_graph_few_shot(snapshot: SnapshotAssertion) -> None:
+def test_state_graph_few_shot() -> None:
     from langchain.chat_models.fake import FakeMessagesListChatModel
     from langchain_community.tools import tool
     from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
     from langchain_core.prompts import ChatPromptTemplate
+
+    def filter_by_source(config: RunnableConfig) -> Dict[str, Any]:
+        """This function is a trivial example that demonstrates that passing
+        a Callable to metadata_filter works as expected.
+        """
+        return {"source": "loop"}
 
     class BaseState(TypedDict):
         messages: Annotated[list[AnyMessage], add_messages]
 
     class AgentState(BaseState):
         examples: Annotated[
-            Sequence[BaseState], FewShotExamples[BaseState].configure(k=1)
+            Sequence[BaseState],
+            FewShotExamples[BaseState].configure(k=1, metadata_filter=filter_by_source),
         ]
 
     # Assemble the tools
@@ -2800,7 +2808,12 @@ Some examples of past conversations:
         ]
         assert app.invoke(
             {"messages": "what is weather in sf"},
-            {"configurable": {"thread_id": "1", "expected_examples": []}},
+            {
+                "configurable": {
+                    "thread_id": "1",
+                    "expected_examples": [],
+                },
+            },
         ) == {"messages": first_messages}
 
         # get first checkpoint

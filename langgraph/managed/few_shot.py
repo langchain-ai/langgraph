@@ -4,10 +4,14 @@ from typing import (
     Any,
     AsyncGenerator,
     AsyncIterator,
+    Callable,
+    Dict,
     Generator,
     Generic,
     Iterator,
+    Optional,
     Sequence,
+    Union,
 )
 
 from langchain_core.runnables import RunnableConfig
@@ -22,6 +26,11 @@ from langgraph.pregel.types import PregelTaskDescription
 if TYPE_CHECKING:
     from langgraph.pregel import Pregel
 
+# Metadata filter can be a dict (static) or a function (dynamic) that takes a
+# RunnableConfig and returns a dict. Functions are used for filtering on
+# metadata values that are only available at runtime.
+MetadataFilter = Union[Dict[str, Any], Callable[[RunnableConfig], Dict[str, Any]]]
+
 
 class FewShotExamples(ManagedValue[Sequence[V]], Generic[V]):
     examples: list[V]
@@ -31,7 +40,7 @@ class FewShotExamples(ManagedValue[Sequence[V]], Generic[V]):
         config: RunnableConfig,
         graph: Pregel,
         k: int = 5,
-        metadata_filter: dict[str, Any] = None,
+        metadata_filter: Optional[MetadataFilter] = None,
     ) -> None:
         super().__init__(config, graph)
         self.k = k
@@ -39,7 +48,7 @@ class FewShotExamples(ManagedValue[Sequence[V]], Generic[V]):
 
     @classmethod
     def configure(
-        cls, k: int = 5, metadata_filter: dict[str, Any] = None
+        cls, k: int = 5, metadata_filter: Optional[MetadataFilter] = None
     ) -> ConfiguredManagedValue:
         return ConfiguredManagedValue(
             cls,
@@ -49,16 +58,23 @@ class FewShotExamples(ManagedValue[Sequence[V]], Generic[V]):
             },
         )
 
+    @property
+    def metadata_filter_dict(self) -> Dict[str, Any]:
+        if isinstance(self.metadata_filter, Callable):
+            return self.metadata_filter(self.config)
+        else:
+            return self.metadata_filter
+
     def iter(self, score: int = 1) -> Iterator[V]:
         for example in self.graph.checkpointer.search(
-            {"score": score, **self.metadata_filter}, limit=self.k
+            {"score": score, **self.metadata_filter_dict}, limit=self.k
         ):
             with ChannelsManager(self.graph.channels, example.checkpoint) as channels:
                 yield read_channels(channels, self.graph.output_channels)
 
     async def aiter(self, score: int = 1) -> AsyncIterator[V]:
         async for example in self.graph.checkpointer.asearch(
-            {"score": score, **self.metadata_filter}, limit=self.k
+            {"score": score, **self.metadata_filter_dict}, limit=self.k
         ):
             async with AsyncChannelsManager(
                 self.graph.channels, example.checkpoint

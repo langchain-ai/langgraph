@@ -8,6 +8,7 @@ from typing import (
     Any,
     AsyncGenerator,
     AsyncIterator,
+    Dict,
     Generator,
     Optional,
     Sequence,
@@ -2435,11 +2436,20 @@ async def test_state_graph_few_shot() -> None:
     from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
     from langchain_core.prompts import ChatPromptTemplate
 
+    def filter_by_source(config: RunnableConfig) -> Dict[str, Any]:
+        """This function is a trivial example that demonstrates that passing
+        a Callable to metadata_filter works as expected.
+        """
+        return {"source": "loop"}
+
     class BaseState(TypedDict):
         messages: Annotated[list[AnyMessage], add_messages]
 
     class AgentState(BaseState):
-        examples: Annotated[Sequence[BaseState], FewShotExamples[BaseState]]
+        examples: Annotated[
+            Sequence[BaseState],
+            FewShotExamples[BaseState].configure(k=1, metadata_filter=filter_by_source),
+        ]
 
     # Assemble the tools
     @tool()
