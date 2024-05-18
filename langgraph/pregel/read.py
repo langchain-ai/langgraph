@@ -15,6 +15,7 @@ from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
+from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils import RunnableCallable
 
@@ -99,7 +100,7 @@ DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
 
 
 class PregelNode(RunnableBindingBase):
-    channels: Union[list[str], Mapping[str, str]]
+    channels: Union[list[str], Mapping[str, Union[str, ManagedValueSpec]]]
 
     triggers: list[str] = Field(default_factory=list)
 

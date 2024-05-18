@@ -1,0 +1,4 @@
+{
+  "aliveStatusCodes": [200, 206, 402],
+  "ignorePatterns": ["*dcbadge.vercel.app*"]
+}

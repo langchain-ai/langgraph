@@ -4,6 +4,7 @@ from typing import Annotated, Sequence, TypedDict, Union
 from langchain_core.agents import AgentAction, AgentFinish
 from langchain_core.messages import BaseMessage
 
+from langgraph._api.deprecation import deprecated
 from langgraph.graph import END, StateGraph
 from langgraph.graph.state import CompiledStateGraph
 from langgraph.prebuilt.tool_executor import ToolExecutor
@@ -40,6 +41,15 @@ def _get_agent_state(input_schema=None):
     return AgentState
 
 
+@deprecated(
+    "0.0.44",
+    alternative="create_react_agent",
+    example="""
+from langgraph.prebuilt import create_react_agent 
+
+create_react_agent(...)
+""",
+)
 def create_agent_executor(
     agent_runnable, tools, input_schema=None
 ) -> CompiledStateGraph:
@@ -53,32 +63,24 @@ def create_agent_executor(
     Returns:
         The `CompiledStateGraph` object.
 
+
     Examples:
 
-        from langgraph.prebuilt import create_agent_executor
+        # Since this is deprecated, you should use `create_react_agent` instead.
+        # Example usage:
+        from langgraph.prebuilt import create_react_agent
         from langchain_openai import ChatOpenAI
-        from langchain import hub
-        from langchain.agents import create_openai_functions_agent
         from langchain_community.tools.tavily_search import TavilySearchResults
 
         tools = [TavilySearchResults(max_results=1)]
+        model = ChatOpenAI()
 
-        # Get the prompt to use - you can modify this!
-        prompt = hub.pull("hwchase17/openai-functions-agent")
+        app = create_react_agent(model, tools)
 
-        # Choose the LLM that will drive the agent
-        llm = ChatOpenAI(model="gpt-3.5-turbo-1106")
-
-        # Construct the OpenAI Functions agent
-        agent_runnable = create_openai_functions_agent(llm, tools, prompt)
-
-        app = create_agent_executor(agent_runnable, tools)
-
-        inputs = {"input": "what is the weather in sf", "chat_history": []}
+        inputs = {"messages": [("user", "what is the weather in sf")]}
         for s in app.stream(inputs):
             print(list(s.values())[0])
             print("----")
-
     """
 
     if isinstance(tools, ToolExecutor):
@@ -139,7 +141,7 @@ def create_agent_executor(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableCallable(run_agent, arun_agent))
-    workflow.add_node("action", RunnableCallable(execute_tools, aexecute_tools))
+    workflow.add_node("tools", RunnableCallable(execute_tools, aexecute_tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -160,7 +162,7 @@ def create_agent_executor(
         # Based on which one it matches, that node will then be called.
         {
             # If `tools`, then we call the tool node.
-            "continue": "action",
+            "continue": "tools",
             # Otherwise we finish.
             "end": END,
         },
@@ -168,7 +170,7 @@ def create_agent_executor(
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("action", "agent")
+    workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,

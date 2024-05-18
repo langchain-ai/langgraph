@@ -1,4 +1,4 @@
-.PHONY: all clean docs_build docs_clean docs_linkcheck api_docs_build api_docs_clean api_docs_linkcheck format lint test tests test_watch integration_tests docker_tests help extended_tests coverage spell_check spell_fix build-docs serve-docs
+.PHONY: all clean format lint test tests test_watch integration_tests docker_tests help extended_tests coverage spell_check spell_fix build-docs serve-docs serve-clean-docs clean-docs
 
 # Default target executed when no arguments are given to make.
 all: help
@@ -53,8 +53,18 @@ build-docs:
 	poetry run python docs/_scripts/copy_notebooks.py
 	poetry run mkdocs build --clean -f docs/mkdocs.yml --strict
 
-serve-docs: build-docs
-	poetry run mkdocs serve -f docs/mkdocs.yml
+serve-clean-docs: clean-docs
+	poetry run python docs/_scripts/copy_notebooks.py
+	poetry run python -m mkdocs serve -c -f docs/mkdocs.yml --strict -w ./langgraph
+
+serve-docs:
+	poetry run python docs/_scripts/copy_notebooks.py
+	poetry run python -m mkdocs serve -f docs/mkdocs.yml -w ./langgraph --dirty
+
+clean-docs:
+	find ./docs/docs -name "*.ipynb" -type f -delete
+	rm -rf docs/site
+
 
 ######################
 # HELP
@@ -63,13 +73,7 @@ serve-docs: build-docs
 help:
 	@echo '===================='
 	@echo '-- DOCUMENTATION --'
-	@echo 'clean                        - run docs_clean and api_docs_clean'
-	@echo 'docs_build                   - build the documentation'
-	@echo 'docs_clean                   - clean the documentation build artifacts'
-	@echo 'docs_linkcheck               - run linkchecker on the documentation'
-	@echo 'api_docs_build               - build the API Reference documentation'
-	@echo 'api_docs_clean               - clean the API Reference documentation build artifacts'
-	@echo 'api_docs_linkcheck           - run linkchecker on the API Reference documentation'
+	
 	@echo '-- LINTING --'
 	@echo 'format                       - run code formatters'
 	@echo 'lint                         - run linters'

@@ -1,11 +1,12 @@
 import asyncio
 import json
-from typing import Any, Literal, Optional, Sequence, Union
+from typing import Any, Callable, Dict, Literal, Optional, Sequence, Union
 
 from langchain_core.messages import AIMessage, AnyMessage, ToolCall, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool
+from langchain_core.tools import tool as create_tool
 
 from langgraph.utils import RunnableCallable
 
@@ -30,13 +31,17 @@ class ToolNode(RunnableCallable):
 
     def __init__(
         self,
-        tools: Sequence[BaseTool],
+        tools: Sequence[Union[BaseTool, Callable]],
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
-        self.tools_by_name = {tool.name: tool for tool in tools}
+        self.tools_by_name: Dict[str, BaseTool] = {}
+        for tool_ in tools:
+            if not isinstance(tool_, BaseTool):
+                tool_ = create_tool(tool_)
+            self.tools_by_name[tool_.name] = tool_
 
     def _func(
         self, input: Union[list[AnyMessage], dict[str, Any]], config: RunnableConfig
@@ -98,7 +103,7 @@ class ToolNode(RunnableCallable):
 
 def tools_condition(
     state: Union[list[AnyMessage], dict[str, Any]],
-) -> Literal["action", "__end__"]:
+) -> Literal["tools", "__end__"]:
     """Use in the conditional_edge to route to the ToolNode if the last message
 
     has tool calls. Otherwise, route to the end.
@@ -109,45 +114,37 @@ def tools_condition(
             "messages" key (StateGraph).
 
     Returns:
-        Literal["tools", "__end__"]: The next node to route to.
+        The next node to route to.
 
 
     Examples:
-      .. code-block:: python
-
-            from langchain_anthropic import ChatAnthropic
-            from langchain_core.tools import tool
-
-            from langgraph.graph import MessageGraph
-            from langgraph.prebuilt import ToolNode, tools_condition
-
-
-            @tool
-            def divide(a: float, b: float) -> int:
-                \"\"\"Return a / b.\"\"\"
-                return a / b
-
-
-            llm = ChatAnthropic(model="claude-3-haiku-20240307")
-            tools = [divide]
-
-            graph_builder = MessageGraph()
-            graph_builder.add_node("tools", ToolNode(tools))
-            graph_builder.add_node("chatbot", llm.bind_tools(tools))
-            graph_builder.add_edge("tools", "chatbot")
-            graph_builder.add_conditional_edges(
-                "chatbot",
-                tools_condition,
-                {
-                    # If it returns 'action', route to the 'tools' node
-                    "action": "tools",
-                    # If it returns '__end__', route to the end
-                    "__end__": "__end__",
-                },
-            )
-            graph_builder.set_entry_point("chatbot")
-            graph = graph_builder.compile()
-            graph.invoke([("user", "What's 329993 divided by 13662?")])
+        Create a custom ReAct-style agent with tools.
+        ```pycon
+        >>> from langchain_anthropic import ChatAnthropic
+        >>> from langchain_core.tools import tool
+        >>>
+        >>> from langgraph.graph import MessageGraph
+        >>> from langgraph.prebuilt import ToolNode, tools_condition
+        >>>
+        >>> @tool
+        >>> def divide(a: float, b: float) -> int:
+        >>>     \"\"\"Return a / b.\"\"\"
+        >>>     return a / b
+        >>>
+        >>> llm = ChatAnthropic(model="claude-3-haiku-20240307")
+        >>> tools = [divide]
+        >>>
+        >>> graph_builder = MessageGraph()
+        >>> graph_builder.add_node("tools", ToolNode(tools))
+        >>> graph_builder.add_node("chatbot", llm.bind_tools(tools))
+        >>> graph_builder.add_edge("tools", "chatbot")
+        >>> graph_builder.add_conditional_edges(
+        ...     "chatbot", tools_condition
+        ... )
+        >>> graph_builder.set_entry_point("chatbot")
+        >>> graph = graph_builder.compile()
+        >>> graph.invoke([("user", "What's 329993 divided by 13662?")])
+        ```
     """
     if isinstance(state, list):
         ai_message = state[-1]
@@ -156,5 +153,5 @@ def tools_condition(
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
     if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
-        return "action"
+        return "tools"
     return "__end__"

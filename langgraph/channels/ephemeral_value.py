@@ -3,12 +3,8 @@ from typing import Generator, Generic, Optional, Sequence, Type
 
 from typing_extensions import Self
 
-from langgraph.channels.base import (
-    BaseChannel,
-    EmptyChannelError,
-    InvalidUpdateError,
-    Value,
-)
+from langgraph.channels.base import BaseChannel, Value
+from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 
 class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
@@ -58,7 +54,9 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
             finally:
                 return
         if len(values) != 1 and self.guard:
-            raise InvalidUpdateError("LastValue can only receive one value per step.")
+            raise InvalidUpdateError(
+                "EphemeralValue can only receive one value per step."
+            )
 
         self.value = values[-1]
 
