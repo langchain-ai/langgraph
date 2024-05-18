@@ -4372,10 +4372,15 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "step": 0,
                 "payload": {
                     "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
-                        }
+                        },
                     },
                     "values": {"my_key": "value", "market": "DE"},
                 },
@@ -4407,10 +4412,15 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "step": 1,
                 "payload": {
                     "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
-                        }
+                        },
                     },
                     "values": {"my_key": "value prepared", "market": "DE"},
                 },
@@ -4442,10 +4452,15 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "step": 2,
                 "payload": {
                     "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
-                        }
+                        },
                     },
                     "values": {"my_key": "value prepared slow", "market": "DE"},
                 },
@@ -4477,10 +4492,15 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "step": 3,
                 "payload": {
                     "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
-                        }
+                        },
                     },
                     "values": {
                         "my_key": "value prepared slow finished",

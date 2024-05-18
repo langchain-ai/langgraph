@@ -760,10 +760,11 @@ class Pregel(
                             )
                         )
                         checkpoint_config = {
+                            **checkpoint_config,
                             "configurable": {
                                 **checkpoint_config["configurable"],
                                 "thread_ts": checkpoint["id"],
-                            }
+                            },
                         }
                     # increment start to 0
                     start += 1
@@ -885,10 +886,11 @@ class Pregel(
                             )
                         )
                         checkpoint_config = {
+                            **checkpoint_config,
                             "configurable": {
                                 **checkpoint_config["configurable"],
                                 "thread_ts": checkpoint["id"],
-                            }
+                            },
                         }
                     # yield debug checkpoint
                     if stream_mode == "debug":
@@ -1031,10 +1033,11 @@ class Pregel(
                             )
                         )
                         checkpoint_config = {
+                            **checkpoint_config,
                             "configurable": {
                                 **checkpoint_config["configurable"],
                                 "thread_ts": checkpoint["id"],
-                            }
+                            },
                         }
                     # increment start to 0
                     start += 1
@@ -1162,10 +1165,11 @@ class Pregel(
                             )
                         )
                         checkpoint_config = {
+                            **checkpoint_config,
                             "configurable": {
                                 **checkpoint_config["configurable"],
                                 "thread_ts": checkpoint["id"],
-                            }
+                            },
                         }
                     # yield debug checkpoint
                     if stream_mode == "debug":
