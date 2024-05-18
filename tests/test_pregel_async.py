@@ -1121,11 +1121,11 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 async def test_conditional_graph() -> None:
     from copy import deepcopy
 
-    from langchain.llms.fake import FakeStreamingListLLM
-    from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
+    from langchain_core.tools import tool
 
     # Assemble the tools
     @tool()
@@ -1924,10 +1924,10 @@ async def test_conditional_graph() -> None:
 
 
 async def test_conditional_graph_state() -> None:
-    from langchain.llms.fake import FakeStreamingListLLM
-    from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
+    from langchain_core.tools import tool
 
     class AgentState(TypedDict):
         input: str
@@ -2431,10 +2431,12 @@ async def test_conditional_graph_state() -> None:
 
 
 async def test_state_graph_few_shot() -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
     from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
     from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.tools import tool
 
     def filter_by_source(config: RunnableConfig) -> Dict[str, Any]:
         """This function is a trivial example that demonstrates that passing
@@ -2678,9 +2680,11 @@ async def test_conditional_entrypoint_graph_state() -> None:
 
 
 async def test_prebuilt_tool_chat() -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+    from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_tools(self, functions: list):
@@ -2861,9 +2865,11 @@ async def test_prebuilt_tool_chat() -> None:
 
 
 async def test_prebuilt_chat() -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+    from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -2991,10 +2997,12 @@ async def test_prebuilt_chat() -> None:
 
 
 async def test_message_graph() -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
     from langchain_core.agents import AgentAction
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+    from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -4599,7 +4607,7 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     times_called = 0
     async for event in app.astream_events(
         {"my_key": "my value", "never_called": never_called},
-        version="v1",
+        version="v2",
         config={"run_id": UUID(int=0)},
         stream_mode="values",
     ):
@@ -4615,16 +4623,16 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     times_called = 0
     async for event in app.astream_events(
         {"my_key": "my value", "never_called": never_called},
-        version="v1",
+        version="v2",
         config={"run_id": UUID(int=0)},
     ):
         if event["event"] == "on_chain_end" and event["run_id"] == str(UUID(int=0)):
             times_called += 1
             assert event["data"] == {
-                "output": [
-                    {"inner": {"my_key": "my value there"}},
-                    {"side": {"my_key": "my value there and back again"}},
-                ]
+                "output": {
+                    "my_key": "my value there and back again",
+                    "never_called": never_called,
+                }
             }
     assert times_called == 1
 
@@ -4648,7 +4656,7 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     times_called = 0
     async for event in chain.astream_events(
         {"my_key": "my value", "never_called": never_called},
-        version="v1",
+        version="v2",
         config={"run_id": UUID(int=0)},
     ):
         if event["event"] == "on_chain_end" and event["run_id"] == str(UUID(int=0)):
