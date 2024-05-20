@@ -8,6 +8,7 @@ from typing import (
     Any,
     AsyncGenerator,
     AsyncIterator,
+    Dict,
     Generator,
     Optional,
     Sequence,
@@ -2437,11 +2438,20 @@ async def test_state_graph_few_shot() -> None:
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
 
+    def filter_by_source(config: RunnableConfig) -> Dict[str, Any]:
+        """This function is a trivial example that demonstrates that passing
+        a Callable to metadata_filter works as expected.
+        """
+        return {"source": "loop"}
+
     class BaseState(TypedDict):
         messages: Annotated[list[AnyMessage], add_messages]
 
     class AgentState(BaseState):
-        examples: Annotated[Sequence[BaseState], FewShotExamples[BaseState]]
+        examples: Annotated[
+            Sequence[BaseState],
+            FewShotExamples[BaseState].configure(k=1, metadata_filter=filter_by_source),
+        ]
 
     # Assemble the tools
     @tool()
@@ -3582,8 +3592,6 @@ async def test_start_branch_then() -> None:
 
 
 async def test_branch_then() -> None:
-    pass
-
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -3627,10 +3635,15 @@ async def test_branch_then() -> None:
                 "step": 0,
                 "payload": {
                     "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
-                        }
+                        },
                     },
                     "values": {"my_key": "value", "market": "DE"},
                 },
@@ -3662,10 +3675,15 @@ async def test_branch_then() -> None:
                 "step": 1,
                 "payload": {
                     "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
-                        }
+                        },
                     },
                     "values": {"my_key": "value prepared", "market": "DE"},
                 },
@@ -3697,10 +3715,15 @@ async def test_branch_then() -> None:
                 "step": 2,
                 "payload": {
                     "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
-                        }
+                        },
                     },
                     "values": {"my_key": "value prepared slow", "market": "DE"},
                 },
@@ -3732,10 +3755,15 @@ async def test_branch_then() -> None:
                 "step": 3,
                 "payload": {
                     "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
-                        }
+                        },
                     },
                     "values": {
                         "my_key": "value prepared slow finished",
