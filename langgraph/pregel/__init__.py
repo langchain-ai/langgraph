@@ -45,7 +45,7 @@ from langchain_core.runnables.utils import (
     create_model,
     get_unique_config_specs,
 )
-from langchain_core.tracers.log_stream import LogStreamCallbackHandler
+from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import Self
 
 from langgraph.channels.base import (
@@ -960,7 +960,7 @@ class Pregel(
             (
                 h
                 for h in run_manager.handlers
-                if isinstance(h, LogStreamCallbackHandler)
+                if isinstance(h, _StreamingCallbackHandler)
             ),
             None,
         )
