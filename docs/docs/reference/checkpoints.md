@@ -41,7 +41,3 @@ LangGraph also natively provides the following checkpoint implementations.
 
 ::: langgraph.checkpoint.sqlite.SqliteSaver
     handler: python
-    members:
-      - put
-      - list
-      - get_tuple
