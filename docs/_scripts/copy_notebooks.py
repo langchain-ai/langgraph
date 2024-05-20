@@ -60,6 +60,7 @@ _HIDE = set(
         "chatbots/customer-support.ipynb",
         "rag/langgraph_rag_agent_llama3_local.ipynb",
         "rag/langgraph_self_rag_pinecone_movies.ipynb",
+        "rag/langgraph_adaptive_rag_cohere.ipynb",
     ]
 )
 

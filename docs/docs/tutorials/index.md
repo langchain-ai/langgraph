@@ -28,7 +28,6 @@ Learn from example implementations of graphs designed for specific scenarios and
 #### RAG
 
 - [Adaptive RAG](rag/langgraph_adaptive_rag.ipynb)
-    - [Adaptive RAG using Cohere](rag/langgraph_adaptive_rag_cohere.ipynb) 
     - [Adaptive RAG using local models](rag/langgraph_adaptive_rag_local.ipynb)
 - [Agentic RAG.ipynb](rag/langgraph_agentic_rag.ipynb)
 - [Corrective RAG](rag/langgraph_crag.ipynb)
