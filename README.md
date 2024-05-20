@@ -370,7 +370,7 @@ workflow.add_conditional_edges(
 
 # We now add a normal edge from `tools` to `agent`.
 # This means that after `tools` is called, `agent` node is called next.
-workflow.add_edge('tool', 'agent')
+workflow.add_edge("tools", 'agent')
 
 # Finally, we compile it!
 # This compiles it into a LangChain Runnable,
