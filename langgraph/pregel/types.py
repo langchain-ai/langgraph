@@ -29,6 +29,8 @@ class StateSnapshot(NamedTuple):
     """Config used to fetch this snapshot"""
     metadata: CheckpointMetadata
     """Metadata associated with this snapshot"""
+    created_at: str
+    """Timestamp of snapshot creation"""
     parent_config: Optional[RunnableConfig] = None
     """Config used to fetch the parent snapshot, if any"""
 

@@ -347,6 +347,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "input", "step": -1, "writes": 2},
             parent_config=None,
         ),
@@ -359,6 +360,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=None,
         ),
@@ -371,6 +373,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 1, "writes": 4},
             parent_config=None,
         ),
@@ -383,6 +386,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "input", "step": 2, "writes": 20},
             parent_config=None,
         ),
@@ -395,6 +399,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 3, "writes": None},
             parent_config=None,
         ),
@@ -407,6 +412,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "input", "step": 4, "writes": 3},
             parent_config=None,
         ),
@@ -419,6 +425,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 5, "writes": None},
             parent_config=None,
         ),
@@ -431,6 +438,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 6, "writes": 5},
             parent_config=None,
         ),
@@ -1418,6 +1426,9 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "loop",
             "step": 0,
@@ -1459,6 +1470,9 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 1,
@@ -1556,6 +1570,9 @@ async def test_conditional_graph() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 4,
@@ -1617,6 +1634,9 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "loop",
             "step": 0,
@@ -1658,6 +1678,9 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 1,
@@ -1755,6 +1778,9 @@ async def test_conditional_graph() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 4,
@@ -1816,6 +1842,9 @@ async def test_conditional_graph() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "loop",
             "step": 0,
@@ -2149,6 +2178,9 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "loop",
             "step": 1,
@@ -2187,6 +2219,9 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 2,
@@ -2258,6 +2293,9 @@ async def test_conditional_graph_state() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 5,
@@ -2306,6 +2344,9 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "loop",
             "step": 1,
@@ -2344,6 +2385,9 @@ async def test_conditional_graph_state() -> None:
         },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 2,
@@ -2415,6 +2459,9 @@ async def test_conditional_graph_state() -> None:
         },
         next=(),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 5,
@@ -3205,6 +3252,9 @@ async def test_message_graph() -> None:
         ],
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "loop",
             "step": 1,
@@ -3245,6 +3295,9 @@ async def test_message_graph() -> None:
         ],
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 2,
@@ -3313,6 +3366,9 @@ async def test_message_graph() -> None:
         ],
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "loop",
             "step": 4,
@@ -3362,6 +3418,9 @@ async def test_message_graph() -> None:
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
+            "ts"
+        ],
         metadata={
             "source": "update",
             "step": 5,
@@ -3483,6 +3542,9 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
+                "ts"
+            ],
             metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread1, limit=2)
@@ -3497,6 +3559,9 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value slow", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -3517,6 +3582,9 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
+                "ts"
+            ],
             metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread2, limit=2)
@@ -3531,6 +3599,9 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value fast", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -3551,6 +3622,9 @@ async def test_start_branch_then() -> None:
             values={"my_key": "value", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
+                "ts"
+            ],
             metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=[
                 c async for c in tool_two.checkpointer.alist(thread3, limit=2)
@@ -3562,6 +3636,9 @@ async def test_start_branch_then() -> None:
             values={"my_key": "valuekey", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "update",
                 "step": 1,
@@ -3580,6 +3657,9 @@ async def test_start_branch_then() -> None:
             values={"my_key": "valuekey fast", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 2,
@@ -3791,6 +3871,9 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -3809,6 +3892,9 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 3,
@@ -3829,6 +3915,9 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -3847,6 +3936,9 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 3,
@@ -3876,6 +3968,9 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -3894,6 +3989,9 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 3,
@@ -3914,6 +4012,9 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -3932,6 +4033,9 @@ async def test_branch_then() -> None:
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 3,
@@ -3952,6 +4056,7 @@ async def test_branch_then() -> None:
             values={"my_key": "key", "market": "DE"},
             next=("prepare",),
             config=uconfig,
+            created_at=AnyStr(),
             metadata={
                 "source": "update",
                 "step": -1,
@@ -3968,6 +4073,9 @@ async def test_branch_then() -> None:
             values={"my_key": "key prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 0,
@@ -3984,6 +4092,9 @@ async def test_branch_then() -> None:
             values={"my_key": "key prepared slow finished", "market": "DE"},
             next=(),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
+            created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "source": "loop",
                 "step": 2,

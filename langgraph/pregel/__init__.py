@@ -366,6 +366,7 @@ class Pregel(
                 tuple(name for name, _ in next_tasks),
                 saved.config if saved else config,
                 saved.metadata if saved else None,
+                saved.checkpoint["ts"] if saved else None,
                 saved.parent_config if saved else None,
             )
 
@@ -397,6 +398,7 @@ class Pregel(
                 tuple(name for name, _ in next_tasks),
                 saved.config if saved else config,
                 saved.metadata if saved else None,
+                saved.checkpoint["ts"] if saved else None,
                 saved.parent_config if saved else None,
             )
 
@@ -433,6 +435,7 @@ class Pregel(
                     tuple(name for name, _ in next_tasks),
                     config,
                     metadata,
+                    checkpoint["ts"],
                     parent_config,
                 )
 
@@ -472,6 +475,7 @@ class Pregel(
                     tuple(name for name, _ in next_tasks),
                     config,
                     metadata,
+                    checkpoint["ts"],
                     parent_config,
                 )
 

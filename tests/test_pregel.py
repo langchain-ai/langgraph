@@ -374,6 +374,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "input", "step": -1, "writes": 2},
             parent_config=None,
         ),
@@ -386,6 +387,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=None,
         ),
@@ -398,6 +400,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 1, "writes": 4},
             parent_config=None,
         ),
@@ -410,6 +413,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "input", "step": 2, "writes": 20},
             parent_config=None,
         ),
@@ -422,6 +426,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 3, "writes": None},
             parent_config=None,
         ),
@@ -434,6 +439,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "input", "step": 4, "writes": 3},
             parent_config=None,
         ),
@@ -446,6 +452,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 5, "writes": None},
             parent_config=None,
         ),
@@ -458,6 +465,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                     "thread_ts": AnyStr(),
                 }
             },
+            created_at=AnyStr(),
             metadata={"source": "loop", "step": 6, "writes": 5},
             parent_config=None,
         ),
@@ -1350,6 +1358,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
             },
         },
         next=("tools",),
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         metadata={
             "source": "loop",
@@ -1398,6 +1407,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 1,
@@ -1495,6 +1505,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 4,
@@ -1553,6 +1564,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 0,
@@ -1594,6 +1606,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 1,
@@ -1691,6 +1704,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 4,
@@ -1749,6 +1763,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 0,
@@ -2094,6 +2109,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 1,
@@ -2132,6 +2148,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 2,
@@ -2203,6 +2220,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 5,
@@ -2249,6 +2267,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 1,
@@ -2287,6 +2306,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 2,
@@ -2358,6 +2378,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 5,
@@ -2392,6 +2413,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={"source": "loop", "step": 0, "writes": None},
     )
 
@@ -2415,6 +2437,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 1,
@@ -2466,6 +2489,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 2,
@@ -2528,6 +2552,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 1,
@@ -2579,6 +2604,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         },
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 2,
@@ -3653,6 +3679,7 @@ def test_message_graph(
         ],
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 1,
@@ -3695,6 +3722,7 @@ def test_message_graph(
         ],
         next=("tools",),
         config=next_config,
+        created_at=AnyStr(),
         metadata={
             "source": "update",
             "step": 2,
@@ -3777,6 +3805,7 @@ def test_message_graph(
         ],
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 4,
@@ -3829,6 +3858,7 @@ def test_message_graph(
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 5,
@@ -3879,6 +3909,7 @@ def test_message_graph(
         ],
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 1,
@@ -3924,6 +3955,7 @@ def test_message_graph(
         ],
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 2,
@@ -4006,6 +4038,7 @@ def test_message_graph(
         ],
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 4,
@@ -4058,6 +4091,7 @@ def test_message_graph(
         ],
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 5,
@@ -4098,6 +4132,7 @@ def test_message_graph(
         ],
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 6,
@@ -4225,6 +4260,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value", "market": "DE"},
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
@@ -4237,6 +4273,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value slow", "market": "DE"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -4255,6 +4292,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value", "market": "US"},
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
             metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
@@ -4267,6 +4305,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value fast", "market": "US"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -4285,6 +4324,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value", "market": "US"},
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread3).config,
+            created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
             metadata={"source": "loop", "step": 0, "writes": None},
             parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
         )
@@ -4294,6 +4334,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "valuekey", "market": "US"},
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread3).config,
+            created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
             metadata={
                 "source": "update",
                 "step": 1,
@@ -4310,6 +4351,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "valuekey fast", "market": "US"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread3).config,
+            created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 2,
@@ -4536,6 +4578,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -4552,6 +4595,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 3,
@@ -4570,6 +4614,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -4586,6 +4631,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 3,
@@ -4613,6 +4659,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -4629,6 +4676,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared slow finished", "market": "DE"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 3,
@@ -4647,6 +4695,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared", "market": "US"},
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 1,
@@ -4663,6 +4712,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared fast finished", "market": "US"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
+            created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 3,
@@ -4679,6 +4729,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "key", "market": "DE"},
             next=("prepare",),
             config=uconfig,
+            created_at=AnyStr(),
             metadata={
                 "source": "update",
                 "step": -1,
@@ -4695,6 +4746,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "key prepared", "market": "DE"},
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread3).config,
+            created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 0,
@@ -4711,6 +4763,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "key prepared slow finished", "market": "DE"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread3).config,
+            created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
             metadata={
                 "source": "loop",
                 "step": 2,
