@@ -100,7 +100,6 @@ nav:
               - Hierarchical Teams: tutorials/multi_agent/hierarchical_agent_teams.ipynb
           - RAG:
               - tutorials/rag/langgraph_adaptive_rag.ipynb
-              - tutorials/rag/langgraph_adaptive_rag_cohere.ipynb
               - tutorials/rag/langgraph_adaptive_rag_local.ipynb
               - tutorials/rag/langgraph_agentic_rag.ipynb
               - tutorials/rag/langgraph_crag.ipynb
