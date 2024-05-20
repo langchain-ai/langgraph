@@ -1,4 +1,6 @@
 import logging
+import typing
+import warnings
 from functools import partial
 from inspect import signature
 from typing import (
@@ -33,6 +35,18 @@ from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.utils import RunnableCallable
 
 logger = logging.getLogger(__name__)
+
+
+def _warn_invalid_state_schema(schema: Union[Type[Any], Any]) -> None:
+    if isinstance(schema, type):
+        return
+    if typing.get_args(schema):
+        return
+    warnings.warn(
+        f"Invalid state_schema: {schema}. Expected a type or Annotated[type, reducer]. "
+        "Please provide a valid schema to ensure correct updates.\n"
+        " See: https://langchain-ai.github.io/langgraph/reference/graphs/#stategraph"
+    )
 
 
 class StateGraph(Graph):
@@ -90,6 +104,7 @@ class StateGraph(Graph):
         self, state_schema: Type[Any], config_schema: Optional[Type[Any]] = None
     ) -> None:
         super().__init__()
+        _warn_invalid_state_schema(state_schema)
         self.schema = state_schema
         self.config_schema = config_schema
         self.channels, self.managed = _get_channels(state_schema)
