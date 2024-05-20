@@ -92,6 +92,8 @@ class Branch(NamedTuple):
             destinations = [self.ends[r] for r in result]
         else:
             destinations = result
+        if any(dest is None for dest in destinations):
+            raise ValueError("Branch did not return a valid destination")
         return writer(destinations) or input
 
 
