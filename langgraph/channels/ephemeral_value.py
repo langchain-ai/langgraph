@@ -54,7 +54,9 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
             finally:
                 return
         if len(values) != 1 and self.guard:
-            raise InvalidUpdateError("LastValue can only receive one value per step.")
+            raise InvalidUpdateError(
+                "EphemeralValue can only receive one value per step."
+            )
 
         self.value = values[-1]
 

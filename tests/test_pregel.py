@@ -1122,11 +1122,11 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     from copy import deepcopy
 
-    from langchain.llms.fake import FakeStreamingListLLM
-    from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
+    from langchain_core.tools import tool
 
     # Assemble the tools
     @tool()
@@ -1900,10 +1900,10 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
 
 
 def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
-    from langchain.llms.fake import FakeStreamingListLLM
-    from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
+    from langchain_core.tools import tool
 
     class AgentState(TypedDict, total=False):
         input: str
@@ -2612,10 +2612,10 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
 
 def test_state_graph_w_config(snapshot: SnapshotAssertion) -> None:
-    from langchain.llms.fake import FakeStreamingListLLM
-    from langchain_community.tools import tool
     from langchain_core.agents import AgentAction, AgentFinish
+    from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
+    from langchain_core.tools import tool
 
     class AgentState(TypedDict, total=False):
         input: str
@@ -2698,10 +2698,12 @@ def test_state_graph_w_config(snapshot: SnapshotAssertion) -> None:
 
 
 def test_state_graph_few_shot(snapshot: SnapshotAssertion) -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
     from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
     from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.tools import tool
 
     class BaseState(TypedDict):
         messages: Annotated[list[AnyMessage], add_messages]
@@ -2957,9 +2959,11 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 
 
 def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
     from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+    from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_tools(self, functions: list):
@@ -3241,9 +3245,11 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
 
 def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+    from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -3378,9 +3384,10 @@ def test_message_graph(
 ) -> None:
     from copy import deepcopy
 
-    from langchain.chat_models.fake import FakeMessagesListChatModel
-    from langchain_community.tools import tool
     from langchain_core.callbacks import CallbackManagerForLLMRun
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
     from langchain_core.messages import (
         AIMessage,
         BaseMessage,
@@ -3388,6 +3395,7 @@ def test_message_graph(
         ToolMessage,
     )
     from langchain_core.outputs import ChatGeneration, ChatResult
+    from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):

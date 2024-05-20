@@ -159,6 +159,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         self.conn.executescript(
             """
+            PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS checkpoints (
                 thread_id TEXT NOT NULL,
                 thread_ts TEXT NOT NULL,
