@@ -18,7 +18,13 @@ from typing import (
 )
 
 import pytest
-from langchain_core.runnables import RunnableConfig, RunnableLambda, RunnablePassthrough
+from langchain_core.runnables import (
+    RunnableConfig,
+    RunnableLambda,
+    RunnableMap,
+    RunnablePassthrough,
+    RunnablePick,
+)
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
@@ -4142,6 +4148,841 @@ def test_message_graph(
             "writes": {"tools": ("ai", "an extra message")},
         },
     )
+
+
+def test_root_graph(
+    snapshot: SnapshotAssertion,
+    deterministic_uuids: MockerFixture,
+) -> None:
+    from copy import deepcopy
+
+    from langchain_core.callbacks import CallbackManagerForLLMRun
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
+    from langchain_core.messages import (
+        AIMessage,
+        BaseMessage,
+        HumanMessage,
+        ToolMessage,
+    )
+    from langchain_core.outputs import ChatGeneration, ChatResult
+    from langchain_core.tools import tool
+
+    class FakeFuntionChatModel(FakeMessagesListChatModel):
+        def bind_functions(self, functions: list):
+            return self
+
+        def _generate(
+            self,
+            messages: list[BaseMessage],
+            stop: Optional[list[str]] = None,
+            run_manager: Optional[CallbackManagerForLLMRun] = None,
+            **kwargs: Any,
+        ) -> ChatResult:
+            response = deepcopy(self.responses[self.i])
+            if self.i < len(self.responses) - 1:
+                self.i += 1
+            else:
+                self.i = 0
+            generation = ChatGeneration(message=response)
+            return ChatResult(generations=[generation])
+
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    model = FakeFuntionChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
+                id="ai1",
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
+                id="ai2",
+            ),
+            AIMessage(content="answer", id="ai3"),
+        ]
+    )
+
+    # Define the function that determines whether to continue or not
+    def should_continue(messages):
+        last_message = messages[-1]
+        # If there is no function call, then we finish
+        if not last_message.tool_calls:
+            return "end"
+        # Otherwise if there is, we continue
+        else:
+            return "continue"
+
+    class State(TypedDict):
+        __root__: Annotated[list[BaseMessage], add_messages]
+
+    # Define a new graph
+    workflow = StateGraph(State)
+
+    # Define the two nodes we will cycle between
+    workflow.add_node("agent", model)
+    workflow.add_node("tools", ToolNode(tools))
+
+    # Set the entrypoint as `agent`
+    # This means that this node is the first one called
+    workflow.set_entry_point("agent")
+
+    # We now add a conditional edge
+    workflow.add_conditional_edges(
+        # First, we define the start node. We use `agent`.
+        # This means these are the edges taken after the `agent` node is called.
+        "agent",
+        # Next, we pass in the function that will determine which node is called next.
+        should_continue,
+        # Finally we pass in a mapping.
+        # The keys are strings, and the values are other nodes.
+        # END is a special node marking that the graph should finish.
+        # What will happen is we will call `should_continue`, and then the output of that
+        # will be matched against the keys in this mapping.
+        # Based on which one it matches, that node will then be called.
+        {
+            # If `tools`, then we call the tool node.
+            "continue": "tools",
+            # Otherwise we finish.
+            "end": END,
+        },
+    )
+
+    # We now add a normal edge from `tools` to `agent`.
+    # This means that after `tools` is called, `agent` node is called next.
+    workflow.add_edge("tools", "agent")
+
+    # Finally, we compile it!
+    # This compiles it into a LangChain Runnable,
+    # meaning you can use it as you would any other runnable
+    app = workflow.compile()
+
+    assert app.invoke(HumanMessage(content="what is weather in sf")) == [
+        HumanMessage(
+            content="what is weather in sf",
+            id="00000000-0000-4000-8000-000000000002",  # adds missing ids
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "id": "tool_call123",
+                    "name": "search_api",
+                    "args": {"query": "query"},
+                }
+            ],
+            id="ai1",  # respects ids passed in
+        ),
+        ToolMessage(
+            content="result for query",
+            name="search_api",
+            tool_call_id="tool_call123",
+            id="00000000-0000-4000-8000-000000000011",
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "id": "tool_call456",
+                    "name": "search_api",
+                    "args": {"query": "another"},
+                }
+            ],
+            id="ai2",
+        ),
+        ToolMessage(
+            content="result for another",
+            name="search_api",
+            tool_call_id="tool_call456",
+            id="00000000-0000-4000-8000-000000000020",
+        ),
+        AIMessage(content="answer", id="ai3"),
+    ]
+
+    assert [*app.stream([HumanMessage(content="what is weather in sf")])] == [
+        {
+            "agent": AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
+                id="ai1",
+            )
+        },
+        {
+            "tools": [
+                ToolMessage(
+                    content="result for query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id="00000000-0000-4000-8000-000000000036",
+                )
+            ]
+        },
+        {
+            "agent": AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
+                id="ai2",
+            )
+        },
+        {
+            "tools": [
+                ToolMessage(
+                    content="result for another",
+                    name="search_api",
+                    tool_call_id="tool_call456",
+                    id="00000000-0000-4000-8000-000000000045",
+                )
+            ]
+        },
+        {"agent": AIMessage(content="answer", id="ai3")},
+    ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(),
+        interrupt_after=["agent"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c for c in app_w_interrupt.stream(("human", "what is weather in sf"), config)
+    ] == [
+        {
+            "agent": AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
+                id="ai1",
+            )
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
+                id="ai1",
+            ),
+        ],
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        }
+                    ],
+                    id="ai1",
+                )
+            },
+        },
+    )
+
+    # modify ai message
+    last_message = app_w_interrupt.get_state(config).values[-1]
+    last_message.tool_calls[0]["args"] = {"query": "a different query"}
+    next_config = app_w_interrupt.update_state(config, last_message)
+
+    # message was replaced instead of appended
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
+            ),
+        ],
+        next=("tools",),
+        config=next_config,
+        created_at=AnyStr(),
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        }
+                    ],
+                    id="ai1",
+                )
+            },
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": [
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id=AnyStr(),
+                )
+            ]
+        },
+        {
+            "agent": AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
+                id="ai2",
+            )
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
+            ),
+            ToolMessage(
+                content="result for a different query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
+                id="ai2",
+            ),
+        ],
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "loop",
+            "step": 4,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call456",
+                            "name": "search_api",
+                            "args": {"query": "another"},
+                        }
+                    ],
+                    id="ai2",
+                )
+            },
+        },
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        AIMessage(content="answer", id="ai2"),  # replace existing message
+    )
+
+    # replaces message even if object identity is different, as long as id is the same
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
+            ),
+            ToolMessage(
+                content="result for a different query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
+            AIMessage(content="answer", id="ai2"),
+        ],
+        next=(),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {"agent": AIMessage(content="answer", id="ai2")},
+        },
+    )
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(),
+        interrupt_before=["tools"],
+    )
+    config = {"configurable": {"thread_id": "2"}}
+    model.i = 0  # reset the llm
+
+    assert [c for c in app_w_interrupt.stream("what is weather in sf", config)] == [
+        {
+            "agent": AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
+                id="ai1",
+            )
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
+                id="ai1",
+            ),
+        ],
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        }
+                    ],
+                    id="ai1",
+                )
+            },
+        },
+    )
+
+    # modify ai message
+    last_message = app_w_interrupt.get_state(config).values[-1]
+    last_message.tool_calls[0]["args"] = {"query": "a different query"}
+    app_w_interrupt.update_state(config, last_message)
+
+    # message was replaced instead of appended
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
+            ),
+        ],
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        }
+                    ],
+                    id="ai1",
+                )
+            },
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": [
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id=AnyStr(),
+                )
+            ]
+        },
+        {
+            "agent": AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
+                id="ai2",
+            )
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
+            ),
+            ToolMessage(
+                content="result for a different query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
+                id="ai2",
+            ),
+        ],
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "loop",
+            "step": 4,
+            "writes": {
+                "agent": AIMessage(
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call456",
+                            "name": "search_api",
+                            "args": {"query": "another"},
+                        }
+                    ],
+                    id="ai2",
+                )
+            },
+        },
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        AIMessage(content="answer", id="ai2"),
+    )
+
+    # replaces message even if object identity is different, as long as id is the same
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
+            ),
+            ToolMessage(
+                content="result for a different query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
+            AIMessage(content="answer", id="ai2"),
+        ],
+        next=(),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {"agent": AIMessage(content="answer", id="ai2")},
+        },
+    )
+
+    # add an extra message as if it came from "tools" node
+    app_w_interrupt.update_state(config, ("ai", "an extra message"), as_node="tools")
+
+    # extra message is coerced BaseMessge and appended
+    # now the next node is "agent" per the graph edges
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values=[
+            HumanMessage(
+                content="what is weather in sf",
+                id=AnyStr(),
+            ),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                    }
+                ],
+            ),
+            ToolMessage(
+                content="result for a different query",
+                name="search_api",
+                tool_call_id="tool_call123",
+                id=AnyStr(),
+            ),
+            AIMessage(content="answer", id="ai2"),
+            AIMessage(content="an extra message", id=AnyStr()),
+        ],
+        next=("agent",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "update",
+            "step": 6,
+            "writes": {"tools": ("ai", "an extra message")},
+        },
+    )
+
+    # create new graph with one more state key, reuse previous thread history
+
+    def simple_add(left, right):
+        if not isinstance(right, list):
+            right = [right]
+        return left + right
+
+    class MoreState(TypedDict):
+        __root__: Annotated[list[BaseMessage], simple_add]
+        something_else: str
+
+    # Define a new graph
+    new_workflow = StateGraph(MoreState)
+    new_workflow.add_node(
+        "agent", RunnableMap(__root__=RunnablePick("__root__") | model)
+    )
+    new_workflow.add_node(
+        "tools", RunnableMap(__root__=RunnablePick("__root__") | ToolNode(tools))
+    )
+    new_workflow.set_entry_point("agent")
+    new_workflow.add_conditional_edges(
+        "agent",
+        RunnablePick("__root__") | should_continue,
+        {
+            # If `tools`, then we call the tool node.
+            "continue": "tools",
+            # Otherwise we finish.
+            "end": END,
+        },
+    )
+    new_workflow.add_edge("tools", "agent")
+    new_app = new_workflow.compile(checkpointer=app_w_interrupt.checkpointer)
+    model.i = 0  # reset the llm
+
+    # previous state is converted to new schema
+    assert new_app.get_state(config) == StateSnapshot(
+        values={
+            "__root__": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id=AnyStr(),
+                ),
+                AIMessage(
+                    content="",
+                    id="ai1",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        }
+                    ],
+                ),
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                    id=AnyStr(),
+                ),
+                AIMessage(content="answer", id="ai2"),
+                AIMessage(content="an extra message", id=AnyStr()),
+            ]
+        },
+        next=("agent",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "update",
+            "step": 6,
+            "writes": {"tools": ("ai", "an extra message")},
+        },
+    )
+
+    # new input is merged to old state
+    assert new_app.invoke(
+        {
+            "__root__": [HumanMessage(content="what is weather in la")],
+            "something_else": "value",
+        },
+        config,
+        interrupt_before=["agent"],
+    ) == {
+        "__root__": [
+            HumanMessage(
+                content="what is weather in sf",
+                id="00000000-0000-4000-8000-000000000077",
+            ),
+            AIMessage(
+                content="",
+                id="ai1",
+                tool_calls=[
+                    {
+                        "name": "search_api",
+                        "args": {"query": "a different query"},
+                        "id": "tool_call123",
+                    }
+                ],
+            ),
+            ToolMessage(
+                content="result for a different query",
+                name="search_api",
+                id="00000000-0000-4000-8000-000000000091",
+                tool_call_id="tool_call123",
+            ),
+            AIMessage(content="answer", id="ai2"),
+            AIMessage(
+                content="an extra message", id="00000000-0000-4000-8000-000000000101"
+            ),
+            HumanMessage(content="what is weather in la"),
+        ],
+        "something_else": "value",
+    }
 
 
 def test_in_one_fan_out_out_one_graph_state() -> None:

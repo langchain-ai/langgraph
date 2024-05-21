@@ -297,19 +297,19 @@ class CompiledStateGraph(CompiledGraph):
                 return input.get(key, SKIP_WRITE)
 
         # state updaters
-        state_write_entries = [
-            (
-                ChannelWriteEntry(key, skip_none=True)
-                if key == "__root__"
-                else ChannelWriteEntry(
+        state_write_entries = (
+            [ChannelWriteEntry("__root__", skip_none=True)]
+            if state_keys == ["__root__"]
+            else [
+                ChannelWriteEntry(
                     key,
                     mapper=RunnableCallable(
                         _get_state_key, key=key, trace=False, recurse=False
                     ),
                 )
-            )
-            for key in state_keys
-        ]
+                for key in state_keys
+            ]
+        )
 
         # add node and output channel
         if key == START:
