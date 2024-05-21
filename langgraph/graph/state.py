@@ -310,6 +310,17 @@ class CompiledStateGraph(CompiledGraph):
             )
             for key in state_keys
         ]
+        # collect updates to each node's private state
+        if state_keys != ["__root__"]:
+            state_write_entries.extend(
+                ChannelWriteEntry(
+                    f"private:{node}",
+                    mapper=RunnableCallable(
+                        _get_state_key, key=node, trace=False, recurse=False
+                    ),
+                )
+                for node in self.builder.nodes
+            )
 
         # add node and output channel
         if key == START:
@@ -323,13 +334,18 @@ class CompiledStateGraph(CompiledGraph):
             )
         else:
             self.channels[key] = EphemeralValue(Any)
+            self.channels[f"private:{key}"] = LastValue(Any)
             self.nodes[key] = PregelNode(
                 triggers=[],
-                # read state keys and managed values
+                # read state keys, managed values and this node's private state
                 channels=(
                     state_keys
                     if state_keys == ["__root__"]
-                    else ({chan: chan for chan in state_keys} | self.builder.managed)
+                    else (
+                        {chan: chan for chan in state_keys}
+                        | {key: f"private:{key}"}
+                        | self.builder.managed
+                    )
                 ),
                 # coerce state dict to schema class (eg. pydantic model)
                 mapper=(

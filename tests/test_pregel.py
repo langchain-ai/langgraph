@@ -4792,18 +4792,22 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
 
     @workflow.add_node
     def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f'query: {data["query"]}', "qa": "private info for qa node"}
 
     def analyzer_one(data: State) -> State:
+        assert "qa" not in data, "private info should not be passed to other nodes"
         return {"query": f'analyzed: {data["query"]}'}
 
     def retriever_one(data: State) -> State:
+        assert "qa" not in data, "private info should not be passed to other nodes"
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        assert "qa" not in data, "private info should not be passed to other nodes"
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
+        assert data["qa"] == "private info for qa node"
         return {"answer": ",".join(data["docs"])}
 
     workflow.add_node(analyzer_one)

@@ -1487,11 +1487,16 @@ def _prepare_next_tasks(
             # then invoke the process with the values of all non-empty channels
             if isinstance(proc.channels, dict):
                 try:
-                    val: dict = {
-                        k: read_channel(channels, chan, catch=chan not in proc.triggers)
-                        for k, chan in proc.channels.items()
-                        if isinstance(chan, str)
-                    }
+                    val: dict[str, Any] = {}
+                    for k, chan in proc.channels.items():
+                        if isinstance(chan, str):
+                            if chan in proc.triggers:
+                                val[k] = read_channel(channels, chan, catch=False)
+                            else:
+                                try:
+                                    val[k] = read_channel(channels, chan, catch=False)
+                                except EmptyChannelError:
+                                    pass
 
                     managed_values = {}
                     for key, chan in proc.channels.items():
