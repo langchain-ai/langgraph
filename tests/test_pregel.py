@@ -5545,6 +5545,15 @@ def test_checkpoint_metadata() -> None:
     assert chkpnt_metadata_1["test_config_1"] == "foo"
     assert chkpnt_metadata_1["test_config_2"] == "bar"
 
+    # Verify that all checkpoint metadata have the expected keys. This check
+    # is needed because a run may have an arbitrary number of steps depending
+    # on how the graph is constructed.
+    chkpnt_tuples_1 = checkpointer_1.list(config)
+    for chkpnt_tuple in chkpnt_tuples_1:
+        assert chkpnt_tuple.metadata["thread_id"] == "1"
+        assert chkpnt_tuple.metadata["test_config_1"] == "foo"
+        assert chkpnt_tuple.metadata["test_config_2"] == "bar"
+
     # invoke graph, but interrupt before tool call
     app_w_interrupt.invoke(
         {"messages": ["what is weather in sf"]},
@@ -5582,3 +5591,12 @@ def test_checkpoint_metadata() -> None:
     assert chkpnt_metadata_3["thread_id"] == "2"
     assert chkpnt_metadata_3["test_config_3"] == "foo"
     assert chkpnt_metadata_3["test_config_4"] == "bar"
+
+    # Verify that all checkpoint metadata have the expected keys. This check
+    # is needed because a run may have an arbitrary number of steps depending
+    # on how the graph is constructed.
+    chkpnt_tuples_2 = checkpointer_2.list(config)
+    for chkpnt_tuple in chkpnt_tuples_2:
+        assert chkpnt_tuple.metadata["thread_id"] == "2"
+        assert chkpnt_tuple.metadata["test_config_3"] == "foo"
+        assert chkpnt_tuple.metadata["test_config_4"] == "bar"
