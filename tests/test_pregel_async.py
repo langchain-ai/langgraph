@@ -4122,18 +4122,22 @@ async def test_in_one_fan_out_state_graph_waiting_edge() -> None:
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        return {"query": f'query: {data["query"]}'}
+        return {"query": f'query: {data["query"]}', "qa": "private info for qa node"}
 
     async def analyzer_one(data: State) -> State:
+        assert "qa" not in data, "private info should not be passed to other nodes"
         return {"query": f'analyzed: {data["query"]}'}
 
     async def retriever_one(data: State) -> State:
+        assert "qa" not in data, "private info should not be passed to other nodes"
         return {"docs": ["doc1", "doc2"]}
 
     async def retriever_two(data: State) -> State:
+        assert "qa" not in data, "private info should not be passed to other nodes"
         return {"docs": ["doc3", "doc4"]}
 
     async def qa(data: State) -> State:
+        assert data["qa"] == "private info for qa node"
         return {"answer": ",".join(data["docs"])}
 
     workflow = StateGraph(State)
