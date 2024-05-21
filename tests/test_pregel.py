@@ -41,7 +41,10 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from tests.any_str import AnyStr
-from tests.memory_assert import MemorySaverAssertImmutable
+from tests.memory_assert import (
+    MemorySaverAssertCheckpointMetadata,
+    MemorySaverAssertImmutable,
+)
 
 
 def test_graph_validation() -> None:
@@ -5492,3 +5495,161 @@ def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
 
     app = workflow.compile()
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+
+def test_checkpoint_metadata() -> None:
+    """This test verifies that a run's configurable fields are merged with the
+    previous checkpoint config for each step in the run.
+    """
+    # set up test
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
+    from langchain_core.messages import AIMessage, AnyMessage
+    from langchain_core.prompts import ChatPromptTemplate
+    from langchain_core.tools import tool
+
+    # graph state
+    class BaseState(TypedDict):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    # initialize graph nodes
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+
+    prompt = ChatPromptTemplate.from_messages(
+        [
+            ("system", "You are a nice assistant."),
+            ("placeholder", "{messages}"),
+        ]
+    )
+
+    model = FakeMessagesListChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
+            ),
+            AIMessage(content="answer"),
+        ]
+    )
+
+    def agent(state: BaseState, config: RunnableConfig) -> BaseState:
+        formatted = prompt.invoke(state)
+        response = model.invoke(formatted)
+        return {"messages": response}
+
+    def should_continue(data: BaseState) -> str:
+        # Logic to decide whether to continue in the loop or exit
+        if not data["messages"][-1].tool_calls:
+            return "exit"
+        else:
+            return "continue"
+
+    # define graphs w/ and w/o interrupt
+    workflow = StateGraph(BaseState)
+    workflow.add_node("agent", agent)
+    workflow.add_node("tools", ToolNode(tools))
+    workflow.set_entry_point("agent")
+    workflow.add_conditional_edges(
+        "agent", should_continue, {"continue": "tools", "exit": END}
+    )
+    workflow.add_edge("tools", "agent")
+
+    # graph w/o interrupt
+    checkpointer_1 = MemorySaverAssertCheckpointMetadata()
+    app = workflow.compile(checkpointer=checkpointer_1)
+
+    # graph w/ interrupt
+    checkpointer_2 = MemorySaverAssertCheckpointMetadata()
+    app_w_interrupt = workflow.compile(
+        checkpointer=checkpointer_2, interrupt_before=["tools"]
+    )
+
+    # assertions
+
+    # invoke graph w/o interrupt
+    app.invoke(
+        {"messages": ["what is weather in sf"]},
+        {
+            "configurable": {
+                "thread_id": "1",
+                "test_config_1": "foo",
+                "test_config_2": "bar",
+            },
+        },
+    )
+
+    config = {"configurable": {"thread_id": "1"}}
+
+    # assert that checkpoint metadata contains the run's configurable fields
+    chkpnt_metadata_1 = checkpointer_1.get_tuple(config).metadata
+    assert chkpnt_metadata_1["thread_id"] == "1"
+    assert chkpnt_metadata_1["test_config_1"] == "foo"
+    assert chkpnt_metadata_1["test_config_2"] == "bar"
+
+    # Verify that all checkpoint metadata have the expected keys. This check
+    # is needed because a run may have an arbitrary number of steps depending
+    # on how the graph is constructed.
+    chkpnt_tuples_1 = checkpointer_1.list(config)
+    for chkpnt_tuple in chkpnt_tuples_1:
+        assert chkpnt_tuple.metadata["thread_id"] == "1"
+        assert chkpnt_tuple.metadata["test_config_1"] == "foo"
+        assert chkpnt_tuple.metadata["test_config_2"] == "bar"
+
+    # invoke graph, but interrupt before tool call
+    app_w_interrupt.invoke(
+        {"messages": ["what is weather in sf"]},
+        {
+            "configurable": {
+                "thread_id": "2",
+                "test_config_3": "foo",
+                "test_config_4": "bar",
+            },
+        },
+    )
+
+    config = {"configurable": {"thread_id": "2"}}
+
+    # assert that checkpoint metadata contains the run's configurable fields
+    chkpnt_metadata_2 = checkpointer_2.get_tuple(config).metadata
+    assert chkpnt_metadata_2["thread_id"] == "2"
+    assert chkpnt_metadata_2["test_config_3"] == "foo"
+    assert chkpnt_metadata_2["test_config_4"] == "bar"
+
+    # resume graph execution
+    app_w_interrupt.invoke(
+        input=None,
+        config={
+            "configurable": {
+                "thread_id": "2",
+                "test_config_3": "foo",
+                "test_config_4": "bar",
+            }
+        },
+    )
+
+    # assert that checkpoint metadata contains the run's configurable fields
+    chkpnt_metadata_3 = checkpointer_2.get_tuple(config).metadata
+    assert chkpnt_metadata_3["thread_id"] == "2"
+    assert chkpnt_metadata_3["test_config_3"] == "foo"
+    assert chkpnt_metadata_3["test_config_4"] == "bar"
+
+    # Verify that all checkpoint metadata have the expected keys. This check
+    # is needed because a run may have an arbitrary number of steps depending
+    # on how the graph is constructed.
+    chkpnt_tuples_2 = checkpointer_2.list(config)
+    for chkpnt_tuple in chkpnt_tuples_2:
+        assert chkpnt_tuple.metadata["thread_id"] == "2"
+        assert chkpnt_tuple.metadata["test_config_3"] == "foo"
+        assert chkpnt_tuple.metadata["test_config_4"] == "bar"

@@ -550,8 +550,19 @@ class Pregel(
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
             step = saved.metadata.get("step", -2) + 1 if saved else -1
+
+            # merge configurable fields with previous checkpoint config
+            checkpoint_config = config
+            if saved:
+                checkpoint_config = {
+                    "configurable": {
+                        **config.get("configurable", {}),
+                        **saved.config["configurable"],
+                    }
+                }
+
             return self.checkpointer.put(
-                saved.config if saved else config,
+                checkpoint_config,
                 create_checkpoint(checkpoint, channels, step),
                 {
                     "source": "update",
@@ -625,8 +636,19 @@ class Pregel(
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
             step = saved.metadata.get("step", -2) + 1 if saved else -1
+
+            # merge configurable fields with previous checkpoint config
+            checkpoint_config = config
+            if saved:
+                checkpoint_config = {
+                    "configurable": {
+                        **config.get("configurable", {}),
+                        **saved.config["configurable"],
+                    }
+                }
+
             return await self.checkpointer.aput(
-                saved.config if saved else config,
+                checkpoint_config,
                 create_checkpoint(checkpoint, channels, step),
                 {
                     "source": "update",
@@ -728,7 +750,17 @@ class Pregel(
             # get checkpoint from saver, or create an empty one
             saved = self.checkpointer.get_tuple(config) if self.checkpointer else None
             checkpoint = saved.checkpoint if saved else empty_checkpoint()
-            checkpoint_config = saved.config if saved else config
+
+            # merge configurable fields with previous checkpoint config
+            checkpoint_config = config
+            if saved:
+                checkpoint_config = {
+                    "configurable": {
+                        **config.get("configurable", {}),
+                        **saved.config["configurable"],
+                    }
+                }
+
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
             with ChannelsManager(
@@ -1002,7 +1034,17 @@ class Pregel(
                 else None
             )
             checkpoint = saved.checkpoint if saved else empty_checkpoint()
-            checkpoint_config = saved.config if saved else config
+
+            # merge configurable fields with previous checkpoint config
+            checkpoint_config = config
+            if saved:
+                checkpoint_config = {
+                    "configurable": {
+                        **config.get("configurable", {}),
+                        **saved.config["configurable"],
+                    }
+                }
+
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
             async with AsyncChannelsManager(
