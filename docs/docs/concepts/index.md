@@ -83,7 +83,7 @@ graph.invoke({"input": "Will"}, {"configurable": {"user_id": "abcd-123"}})
 # {'results': 'Hello, Will!'}
 ```
 
-Behind the seens, functions are converted to [RunnableLambda's](https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.base.RunnableLambda.html#langchain_core.runnables.base.RunnableLambda), which add batch and async support to your function, along with native tracing and debugging.
+Behind the scenes, functions are converted to [RunnableLambda's](https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.base.RunnableLambda.html#langchain_core.runnables.base.RunnableLambda), which add batch and async support to your function, along with native tracing and debugging.
 
 ## Edges
 
@@ -103,12 +103,12 @@ If a node has multiple out-going edges, **all** of those destination nodes will 
 
 LangGraph introduces two key ideas to state management: state schemas and reducers.
 
-The state schema defines the type of the object that is given to each of the graph's `Node`'s.
+The state schema defines the type of the object that is given to each of the graph's `Node`.
 
 
 Reducers define how to apply `Node` outputs to the current `State`. For example, you might use a reducer to merge a new dialogue response into a conversation history, or average together outputs from multiple agent nodes. By annotating your `State` fields with reducer functions, you can precisely control how data flows through your application.
 
-We'll illustrate how reducers work with an example. Compare the following two `State`'s. Can you guess the output in both case?
+We'll illustrate how reducers work with an example. Compare the following two `State`. Can you guess the output in both case?
 
 ```python
 from typing import Annotated
@@ -162,7 +162,7 @@ In the second case (`StateB`), the result is "6" since we have have created the 
 
 In general, **reducers** provided as annotations tell the graph **how to process updates for this field**.
 
-While we typically use `TypedDict`'s as the graph's `state_schema` (i.e., `State`), it can be most any [type](https://docs.python.org/3/library/stdtypes.html#type-objects), meaning the following graph is also completely valid:
+While we typically use `TypedDict` as the graph's `state_schema` (i.e., `State`), it can be almost any [type](https://docs.python.org/3/library/stdtypes.html#type-objects), meaning the following graph is also completely valid:
 
 ```python
 # Analogous to StateA above
@@ -185,7 +185,7 @@ graph = builder.compile()
 graph.invoke(5)
 ```
 
-This also means you can [use a pydantic BaseModel](https://langchain-ai.github.io/langgraph/how-tos/state-model/) as your graph state to add **default values** and additional data validation.
+This also means you can [use a Pydantic BaseModel](https://langchain-ai.github.io/langgraph/how-tos/state-model/) as your graph state to add **default values** and additional data validation.
 
 When building simple chatbots like ChatGPT, the state can be as simple as a list of chat messages. This is the state used by [MessageGraph](https://langchain-ai.github.io/langgraph/reference/graphs/?h=message+graph#langgraph.graph.MessageGraph) (a light wrapper of `StateGraph`), which is only slightly more involved than the following:
 
@@ -196,7 +196,7 @@ builder = StateGraph(Annotated[list, add])
 Using a shared state within a graph comes with some design tradeoffs. For instance, you may think it feels like using dreaded global variables (though this can be addressed by namespacing arguments). However, sharing a typed state provides a number of benefits relevant to building AI workflows, including:
 
 1. The data flow is fully inspectable before and after each "superstep".
-2. The state is mutable, making it easy to let users or other software write to the same state between supersteps to control an agent's direction (using [update_state](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.graph.CompiledGraph.update_state))
+2. The state is mutable, making it easy to let users or other software write to the same state between supersteps to control an agent's direction (using [update_state](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.graph.CompiledGraph.update_state)).
 3. It is well-defined when checkpointing, making it easy to save and resume or even fully version control the execution of your entire workflows in whatever storage backend you wish.
 
 We will talk about checkpointing more in the next section.
@@ -205,11 +205,11 @@ We will talk about checkpointing more in the next section.
 
 Any "intelligent" system needs memory to function. AI agents are no different, requiring memory across one or more timeframes:
 
-- they _always_ need to remember the steps already taken **within this task** (to avoid repeating itself when answering a given query)
-- they _typically_ need to remember the previous turns within a multi-turn conversation with a user (for coreference resolution and additional context)
-- they _ideally_ "remember" context from previous interactions with the user and from actions in a given "environment" (such as an application context) to be more personalized and efficient in its behavior
+- they _always_ need to remember the steps already taken **within this task** (to avoid repeating itself when answering a given query).
+- they _typically_ need to remember the previous turns within a multi-turn conversation with a user (for coreference resolution and additional context).
+- they _ideally_ need to "remember" context from previous interactions with the user and from actions in a given "environment" (such as an application context) to be more personalized and efficient in its behavior.
 
-That last form of memory covers a lot (personalization, optimization, continual learning, etc.) and is beyond the scope of this conversation, though it can be easily integrated in any LangGraph workflow, and we are actively exploring the best way to expose this functionality natively.
+That last form of memory covers a lot (personalization, optimization, continual learning, etc.) and is beyond the scope of this conversation, although it can be easily integrated in any LangGraph workflow, and we are actively exploring the best way to expose this functionality natively.
 
 The first two forms of memory are natively supported by the [StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph) API via [checkpointers](https://langchain-ai.github.io/langgraph/reference/checkpoints/#basecheckpointsaver).
 
@@ -217,7 +217,7 @@ The first two forms of memory are natively supported by the [StateGraph](https:/
 
 A checkpoint represents the state of a `thread` within a (potentially) multi-turn interaction between your application and a user (or users or other systems). Checkpoints that are made _within_ a single run will have a set of `next` nodes that will be executed when starting from this state. Checkpoints that are made at the end of a given run are identical, except there are no `next` nodes to transition to (the graph is awaiting user input).
 
-Checkpointing supports chat memory and much more, letting you tag and persist every state your system has taken, regardless of whether it is within a single run or across many turns. Let's explore a bit why that is useful:
+Checkpointing supports chat memory and much more, letting you tag and persist every state your system has taken, regardless of whether it is within a single run or across many turns. Let's explore a bit why that is useful.
 
 #### Single-turn Memory
 
@@ -317,7 +317,7 @@ As engineers, we are never really satisfied until we know what's going on "under
 
 Let's extend our toy example above with a conditional edge and then walk through two consecutive invocations.
 
-```
+```python
 from typing import Annotated, Literal
 
 from langgraph.checkpoint.memory import MemorySaver
