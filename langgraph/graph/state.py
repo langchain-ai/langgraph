@@ -22,7 +22,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
 from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.channels.last_value import LastValue
+from langgraph.channels.last_value import CLEAR, LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
@@ -356,7 +356,11 @@ class CompiledStateGraph(CompiledGraph):
                 writers=[
                     # publish to this channel and state keys
                     ChannelWrite(
-                        [ChannelWriteEntry(key, key)] + state_write_entries,
+                        [
+                            ChannelWriteEntry(key, key),
+                            ChannelWriteEntry(f"private:{key}", CLEAR),
+                        ]
+                        + state_write_entries,
                         tags=[TAG_HIDDEN],
                     ),
                 ],

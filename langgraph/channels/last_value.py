@@ -6,6 +6,8 @@ from typing_extensions import Self
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
+CLEAR = object()
+
 
 class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
     """Stores the last value received, can receive at most one value per step."""
@@ -45,6 +47,13 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
                 pass
 
     def update(self, values: Sequence[Value]) -> None:
+        if any(value for value in values if value is CLEAR):
+            try:
+                del self.value
+            except AttributeError:
+                pass
+            finally:
+                values = [value for value in values if value is not CLEAR]
         if len(values) == 0:
             return
         if len(values) != 1:

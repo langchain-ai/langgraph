@@ -5162,25 +5162,38 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         answer: str
         docs: Annotated[list[str], sorted_add]
 
+    def start(data: State) -> State:
+        return {"rewrite_query": "private info for rewrite_query node"}
+
     def rewrite_query(data: State) -> State:
+        if data["query"].count("analyzed") > 1:
+            assert "rewrite_query" not in data, "private info cleared after used"
+        else:
+            assert data["rewrite_query"] == "private info for rewrite_query node"
         return {"query": f'query: {data["query"]}'}
 
     def analyzer_one(data: State) -> State:
+        assert "rewrite_query" not in data, "private info not sent to others"
         return {"query": f'analyzed: {data["query"]}'}
 
     def retriever_one(data: State) -> State:
+        assert "rewrite_query" not in data, "private info not sent to others"
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        assert "rewrite_query" not in data, "private info not sent to others"
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
+        assert "rewrite_query" not in data, "private info not sent to others"
         return {"answer": ",".join(data["docs"])}
 
     def decider(data: State) -> None:
+        assert "rewrite_query" not in data, "private info not sent to others"
         return None
 
     def decider_cond(data: State) -> str:
+        assert "rewrite_query" not in data, "private info not sent to others"
         if data["query"].count("analyzed") > 1:
             return "qa"
         else:
@@ -5188,6 +5201,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
 
     workflow = StateGraph(State)
 
+    workflow.add_node("start", start)
     workflow.add_node("rewrite_query", rewrite_query)
     workflow.add_node("analyzer_one", analyzer_one)
     workflow.add_node("retriever_one", retriever_one)
@@ -5195,7 +5209,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
     workflow.add_node("decider", decider)
     workflow.add_node("qa", qa)
 
-    workflow.set_entry_point("rewrite_query")
+    workflow.set_entry_point("start")
+    workflow.add_edge("start", "rewrite_query")
     workflow.add_edge("rewrite_query", "analyzer_one")
     workflow.add_edge("analyzer_one", "retriever_one")
     workflow.add_edge("rewrite_query", "retriever_two")
