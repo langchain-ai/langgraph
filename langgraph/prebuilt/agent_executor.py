@@ -103,33 +103,35 @@ def create_agent_executor(
         else:
             return "continue"
 
-    def run_agent(data):
-        agent_outcome = agent_runnable.invoke(data)
+    def run_agent(data, config):
+        agent_outcome = agent_runnable.invoke(data, config)
         return {"agent_outcome": agent_outcome}
 
-    async def arun_agent(data):
-        agent_outcome = await agent_runnable.ainvoke(data)
+    async def arun_agent(data, config):
+        agent_outcome = await agent_runnable.ainvoke(data, config)
         return {"agent_outcome": agent_outcome}
 
     # Define the function to execute tools
-    def execute_tools(data):
+    def execute_tools(data, config):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
         if not isinstance(agent_action, list):
             agent_action = [agent_action]
-        output = tool_executor.batch(agent_action, return_exceptions=True)
+        output = tool_executor.batch(agent_action, config, return_exceptions=True)
         return {
             "intermediate_steps": [
                 (action, str(out)) for action, out in zip(agent_action, output)
             ]
         }
 
-    async def aexecute_tools(data):
+    async def aexecute_tools(data, config):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
         if not isinstance(agent_action, list):
             agent_action = [agent_action]
-        output = await tool_executor.abatch(agent_action, return_exceptions=True)
+        output = await tool_executor.abatch(
+            agent_action, config, return_exceptions=True
+        )
         return {
             "intermediate_steps": [
                 (action, str(out)) for action, out in zip(agent_action, output)
