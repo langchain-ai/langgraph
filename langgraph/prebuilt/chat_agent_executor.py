@@ -8,7 +8,7 @@ from langchain_core.messages import (
     FunctionMessage,
     SystemMessage,
 )
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
@@ -79,15 +79,15 @@ def create_function_calling_executor(
             return "continue"
 
     # Define the function that calls the model
-    def call_model(state: AgentState):
+    def call_model(state: AgentState, config: RunnableConfig):
         messages = state["messages"]
-        response = model.invoke(messages)
+        response = model.invoke(messages, config)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState):
+    async def acall_model(state: AgentState, config: RunnableConfig):
         messages = state["messages"]
-        response = await model.ainvoke(messages)
+        response = await model.ainvoke(messages, config)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
@@ -105,19 +105,19 @@ def create_function_calling_executor(
             ),
         )
 
-    def call_tool(state: AgentState):
+    def call_tool(state: AgentState, config: RunnableConfig):
         action = _get_action(state)
         # We call the tool_executor and get back a response
-        response = tool_executor.invoke(action)
+        response = tool_executor.invoke(action, config)
         # We use the response to create a FunctionMessage
         function_message = FunctionMessage(content=str(response), name=action.tool)
         # We return a list, because this will get added to the existing list
         return {"messages": [function_message]}
 
-    async def acall_tool(state: AgentState):
+    async def acall_tool(state: AgentState, config: RunnableConfig):
         action = _get_action(state)
         # We call the tool_executor and get back a response
-        response = await tool_executor.ainvoke(action)
+        response = await tool_executor.ainvoke(action, config)
         # We use the response to create a FunctionMessage
         function_message = FunctionMessage(content=str(response), name=action.tool)
         # We return a list, because this will get added to the existing list
@@ -395,9 +395,12 @@ def create_react_agent(
         )
 
     # Define the function that calls the model
-    def call_model(state: AgentState):
+    def call_model(
+        state: AgentState,
+        config: RunnableConfig,
+    ):
         messages = state["messages"]
-        response = model_runnable.invoke(messages)
+        response = model_runnable.invoke(messages, config)
         if state["is_last_step"] and response.tool_calls:
             return {
                 "messages": [
@@ -410,9 +413,9 @@ def create_react_agent(
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState):
+    async def acall_model(state: AgentState, config: RunnableConfig):
         messages = state["messages"]
-        response = await model_runnable.ainvoke(messages)
+        response = await model_runnable.ainvoke(messages, config)
         if state["is_last_step"] and response.tool_calls:
             return {
                 "messages": [
