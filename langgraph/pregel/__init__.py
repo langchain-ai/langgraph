@@ -1642,7 +1642,7 @@ def _prepare_next_tasks(
                                     ),
                                 },
                             ),
-                            triggers,
+                            sorted(triggers),
                         )
                     )
             else:
