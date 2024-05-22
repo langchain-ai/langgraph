@@ -108,9 +108,9 @@ def map_debug_checkpoint(
     config: RunnableConfig,
     channels: Mapping[str, BaseChannel],
     stream_channels: Union[str, Sequence[str]],
-) -> DebugOutputCheckpoint:
+) -> Iterator[DebugOutputCheckpoint]:
     ts = datetime.now(timezone.utc).isoformat()
-    return {
+    yield {
         "type": "checkpoint",
         "timestamp": ts,
         "step": step,

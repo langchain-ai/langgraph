@@ -3503,6 +3503,220 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
         },
     ]
 
+    assert [
+        c
+        async for c in app.astream(
+            {"query": "what is weather in sf"},
+            stream_mode=["values", "updates", "debug"],
+        )
+    ] == [
+        ("values", {"query": "what is weather in sf", "docs": []}),
+        (
+            "debug",
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 0,
+                "payload": {
+                    "config": None,
+                    "values": {"query": "what is weather in sf", "docs": []},
+                },
+            },
+        ),
+        (
+            "debug",
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": "03dadab4-fb41-5308-a8a4-6eeb9ef7b9aa",
+                    "name": "rewrite_query",
+                    "input": {
+                        "query": "what is weather in sf",
+                        "answer": None,
+                        "docs": [],
+                    },
+                    "triggers": ["start:rewrite_query"],
+                },
+            },
+        ),
+        ("updates", {"rewrite_query": {"query": "query: what is weather in sf"}}),
+        (
+            "debug",
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": "03dadab4-fb41-5308-a8a4-6eeb9ef7b9aa",
+                    "name": "rewrite_query",
+                    "result": [("query", "query: what is weather in sf")],
+                },
+            },
+        ),
+        ("values", {"query": "query: what is weather in sf", "docs": []}),
+        (
+            "debug",
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "config": None,
+                    "values": {"query": "query: what is weather in sf", "docs": []},
+                },
+            },
+        ),
+        (
+            "debug",
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": "96f499e2-e203-5a13-9259-08cb62f4a2e5",
+                    "name": "retriever_one",
+                    "input": {
+                        "query": "query: what is weather in sf",
+                        "answer": None,
+                        "docs": [],
+                    },
+                    "triggers": ["rewrite_query"],
+                },
+            },
+        ),
+        (
+            "debug",
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": "6b344a90-a061-5f17-8714-51f0cf67cf01",
+                    "name": "retriever_two",
+                    "input": {
+                        "query": "query: what is weather in sf",
+                        "answer": None,
+                        "docs": [],
+                    },
+                    "triggers": ["rewrite_query"],
+                },
+            },
+        ),
+        (
+            "updates",
+            {
+                "retriever_one": {"docs": ["doc1", "doc2"]},
+                "retriever_two": {"docs": ["doc3", "doc4"]},
+            },
+        ),
+        (
+            "debug",
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": "96f499e2-e203-5a13-9259-08cb62f4a2e5",
+                    "name": "retriever_one",
+                    "result": [("docs", ["doc1", "doc2"])],
+                },
+            },
+        ),
+        (
+            "debug",
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": "6b344a90-a061-5f17-8714-51f0cf67cf01",
+                    "name": "retriever_two",
+                    "result": [("docs", ["doc3", "doc4"])],
+                },
+            },
+        ),
+        (
+            "values",
+            {
+                "query": "query: what is weather in sf",
+                "docs": ["doc1", "doc2", "doc3", "doc4"],
+            },
+        ),
+        (
+            "debug",
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "config": None,
+                    "values": {
+                        "query": "query: what is weather in sf",
+                        "docs": ["doc1", "doc2", "doc3", "doc4"],
+                    },
+                },
+            },
+        ),
+        (
+            "debug",
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "id": "0dda6269-4ce3-5b98-9cea-d40737a68500",
+                    "name": "qa",
+                    "input": {
+                        "query": "query: what is weather in sf",
+                        "answer": None,
+                        "docs": ["doc1", "doc2", "doc3", "doc4"],
+                    },
+                    "triggers": ["retriever_one", "retriever_two"],
+                },
+            },
+        ),
+        ("updates", {"qa": {"answer": "doc1,doc2,doc3,doc4"}}),
+        (
+            "debug",
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "id": "0dda6269-4ce3-5b98-9cea-d40737a68500",
+                    "name": "qa",
+                    "result": [("answer", "doc1,doc2,doc3,doc4")],
+                },
+            },
+        ),
+        (
+            "values",
+            {
+                "query": "query: what is weather in sf",
+                "answer": "doc1,doc2,doc3,doc4",
+                "docs": ["doc1", "doc2", "doc3", "doc4"],
+            },
+        ),
+        (
+            "debug",
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "config": None,
+                    "values": {
+                        "query": "query: what is weather in sf",
+                        "answer": "doc1,doc2,doc3,doc4",
+                        "docs": ["doc1", "doc2", "doc3", "doc4"],
+                    },
+                },
+            },
+        ),
+    ]
+
 
 async def test_start_branch_then() -> None:
     class State(TypedDict):
