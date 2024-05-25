@@ -152,7 +152,9 @@ class Graph:
                 f"Already found path for node '{start_key}'.\n"
                 "For multiple edges, use StateGraph with an annotated state key."
             )
-
+        missing_keys = [key for key in (start_key, end_key) if key not in self.nodes]
+        if missing_keys:
+            raise ValueError(f"Key(s) {', '.join(missing_keys)} not found in nodes.")
         self.edges.add((start_key, end_key))
 
     def add_conditional_edges(
