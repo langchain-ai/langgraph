@@ -95,8 +95,20 @@ class JsonPlusSerializer(SerializerProtocol):
 
         return LC_REVIVER(value)
 
-    def dumps(self, obj: Any) -> bytes:
-        return json.dumps(obj, default=self._default, sort_keys=True).encode()
+    def dumps(self, obj):
+        return json.dumps(self._convert_generators(obj), default=self._default, sort_keys=True).encode()
+
+    def _convert_generators(self, obj):
+        import types
+        if isinstance(obj, types.GeneratorType):
+            return list(obj)
+        elif isinstance(obj, dict):
+            return {k: self._convert_generators(v) for k, v in obj.items()}
+        elif isinstance(obj, list):
+            return [self._convert_generators(elem) for elem in obj]
+        elif isinstance(obj, tuple):
+            return tuple(self._convert_generators(elem) for elem in obj)
+        return obj
 
     def loads(self, data: bytes) -> Any:
         return json.loads(data, object_hook=self._reviver)
