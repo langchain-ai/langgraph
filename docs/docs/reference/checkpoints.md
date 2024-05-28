@@ -4,7 +4,7 @@ You can [compile](https://langchain-ai.github.io/langgraph/reference/graphs/#lan
 
 - Remembering things across multiple interactions
 - Interrupting to wait for user input
-- Resiliance for long-running, error-prone agents
+- Resilience for long-running, error-prone agents
 - Time travel retry and branch from a previous checkpoint
 
 ### Checkpoint
