@@ -43,7 +43,7 @@ At its core, LangGraph models agent workflows as state machines. You define the 
 
 By composing `Nodes` and `Edges`, you can create complex, looping workflows that evolve the `State` over time. The real power, though, comes from how LangGraph manages that `State`.
 
-Or in short: *nodes do the work. edges tell what to do next*.
+Or in short: _nodes do the work. edges tell what to do next_.
 
 LangGraph's underlying graph algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a general program. When a `Node` completes, it sends a message along one or more edges to other node(s). These nodes run their functions, pass the resulting messages to the next set of nodes, and on and on it goes. Inspired by [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/), the program proceeds in discrete "super-steps" that are all executed conceptually in parallel. Whenever the graph is run, all the nodes start in an `inactive` state. Whenever an incoming edge (or "channel") receives a new message (state), the node becomes `active`, runs the function, and responds with updates. At the end of each superstep, each node votes to `halt` by marking itself as `inactive` if it has no more incoming messages. The graph terminates when all nodes are `inactive` and when no messages are in transit.
 
@@ -104,7 +104,6 @@ If a node has multiple out-going edges, **all** of those destination nodes will 
 LangGraph introduces two key ideas to state management: state schemas and reducers.
 
 The state schema defines the type of the object that is given to each of the graph's `Node`.
-
 
 Reducers define how to apply `Node` outputs to the current `State`. For example, you might use a reducer to merge a new dialogue response into a conversation history, or average together outputs from multiple agent nodes. By annotating your `State` fields with reducer functions, you can precisely control how data flows through your application.
 
@@ -235,6 +234,16 @@ Checkpoints are saved under a "thread_id" to support multi-turn interactions bet
 If you have some portion of state that you want to retain across turns and some state that you want to treat as "ephemeral", you can always clear the relevant state in the graph's final node.
 
 Using checkpointing is as easy as calling `compile(checkpointer=my_checkpointer)` and then invoking it with a `thread_id` within its `configurable` parameters. You can see more in the following sections!
+
+## Thread
+
+Threads in LangGraph represent separate **sessions** of a graph. They organize state checkpoints within discrete sessions to facilitate multi-conversation and multi-user support in an application.
+
+A typical chat bot application would have multiple threads for each user. Each thread represents a single conversation, with its own persistent chat history and other state. Checkpoints within a thread can be rewound and branched as needed.
+
+Threads in LangGraph are distinct from [operating system threads](https://docs.python.org/3/library/threading.html), which are units of execution managed by the OS. They are more akin to a [conversational thread](<https://en.wikipedia.org/wiki/Thread_(online_communication)>) in email, twitter, and other messaging apps.
+
+When a `StateGraph` is compiled with a checkpointer, each invocation of the graph requires a `thread_id` to be provided via [configuration (see below)](#configuration).
 
 ## Configuration
 
@@ -416,4 +425,3 @@ To inspect the trace of this run, check out the [LangSmith link here](https://sm
 3. After that, the 'add_one' node is called with this state. It returns 10.
 4. That update is applied using the reducer, raising the value to 10.
 5. Next, the "route" conditional edge is triggered. Since the value is greater than 6, we terminate the program, ending where we started at (11).
-
