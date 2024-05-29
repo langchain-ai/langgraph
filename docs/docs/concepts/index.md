@@ -43,7 +43,7 @@ At its core, LangGraph models agent workflows as state machines. You define the 
 
 By composing `Nodes` and `Edges`, you can create complex, looping workflows that evolve the `State` over time. The real power, though, comes from how LangGraph manages that `State`.
 
-Or in short: *nodes do the work. edges tell what to do next*.
+Or in short: _nodes do the work. edges tell what to do next_.
 
 LangGraph's underlying graph algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a general program. When a `Node` completes, it sends a message along one or more edges to other node(s). These nodes run their functions, pass the resulting messages to the next set of nodes, and on and on it goes. Inspired by [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/), the program proceeds in discrete "super-steps" that are all executed conceptually in parallel. Whenever the graph is run, all the nodes start in an `inactive` state. Whenever an incoming edge (or "channel") receives a new message (state), the node becomes `active`, runs the function, and responds with updates. At the end of each superstep, each node votes to `halt` by marking itself as `inactive` if it has no more incoming messages. The graph terminates when all nodes are `inactive` and when no messages are in transit.
 
@@ -57,7 +57,7 @@ Similar to `NetworkX`, you add these nodes to a graph using the [add_node](https
 
 ```python
 from langchain_core.runnables import RunnableConfig
-from langgraph.graph import StateGraph
+from langgraph.graph import END, START, StateGraph
 
 builder = StateGraph(dict)
 
@@ -74,9 +74,9 @@ def my_other_node(state: dict):
 
 builder.add_node("my_node", my_node)
 builder.add_node("other_node", my_other_node)
-builder.set_entry_point("my_node")
+builder.add_edge(START, "my_node")
 builder.add_edge("my_node", "other_node")
-builder.set_finish_point("other_node")
+builder.add_edge("other_node", END)
 graph = builder.compile()
 graph.invoke({"input": "Will"}, {"configurable": {"user_id": "abcd-123"}})
 # In node:  abcd-123
@@ -105,7 +105,6 @@ LangGraph introduces two key ideas to state management: state schemas and reduce
 
 The state schema defines the type of the object that is given to each of the graph's `Node`.
 
-
 Reducers define how to apply `Node` outputs to the current `State`. For example, you might use a reducer to merge a new dialogue response into a conversation history, or average together outputs from multiple agent nodes. By annotating your `State` fields with reducer functions, you can precisely control how data flows through your application.
 
 We'll illustrate how reducers work with an example. Compare the following two `State`. Can you guess the output in both case?
@@ -113,8 +112,9 @@ We'll illustrate how reducers work with an example. Compare the following two `S
 ```python
 from typing import Annotated
 
-from langgraph.graph import StateGraph
 from typing_extensions import TypedDict
+
+from langgraph.graph import END, START, StateGraph
 
 
 class StateA(TypedDict):
@@ -123,8 +123,8 @@ class StateA(TypedDict):
 
 builder = StateGraph(StateA)
 builder.add_node("my_node", lambda state: {"value": 1})
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
 graph = builder.compile()
 graph.invoke({"value": 5})
 ```
@@ -134,8 +134,10 @@ And `StateB`:
 ```python
 from typing import Annotated
 
-from langgraph.graph import StateGraph
 from typing_extensions import TypedDict
+
+from langgraph.graph import END, START, StateGraph
+
 
 
 def add(existing: int, new: int):
@@ -149,8 +151,8 @@ class StateB(TypedDict):
 
 builder = StateGraph(StateB)
 builder.add_node("my_node", lambda state: {"value": 1})
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
 graph = builder.compile()
 graph.invoke({"value": 5})
 ```
@@ -168,8 +170,8 @@ While we typically use `TypedDict` as the graph's `state_schema` (i.e., `State`)
 # Analogous to StateA above
 builder = StateGraph(int)
 builder.add_node("my_node", lambda state: 1)
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
 builder.compile().invoke(5)
 
 # Analogous to StateB
@@ -179,8 +181,8 @@ def add(left, right):
 
 builder = StateGraph(Annotated[int, add])
 builder.add_node("my_node", lambda state: 1)
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
 graph = builder.compile()
 graph.invoke(5)
 ```
@@ -233,6 +235,16 @@ If you have some portion of state that you want to retain across turns and some 
 
 Using checkpointing is as easy as calling `compile(checkpointer=my_checkpointer)` and then invoking it with a `thread_id` within its `configurable` parameters. You can see more in the following sections!
 
+## Thread
+
+Threads in LangGraph represent separate **sessions** of a graph. They organize state checkpoints within discrete sessions to facilitate multi-conversation and multi-user support in an application.
+
+A typical chat bot application would have multiple threads for each user. Each thread represents a single conversation, with its own persistent chat history and other state. Checkpoints within a thread can be rewound and branched as needed.
+
+Threads in LangGraph are distinct from [operating system threads](https://docs.python.org/3/library/threading.html), which are units of execution managed by the OS. They are more akin to a [conversational thread](<https://en.wikipedia.org/wiki/Thread_(online_communication)>) in email, twitter, and other messaging apps.
+
+When a `StateGraph` is compiled with a checkpointer, each invocation of the graph requires a `thread_id` to be provided via [configuration (see below)](#configuration).
+
 ## Configuration
 
 For any given graph deployment, you'll likely want some amount of configurable values that you can control at runtime. These differ from the graph **inputs** in that they aren't meant to be treated as state variables. They are more akin to "[out-of-band](https://en.wikipedia.org/wiki/Out-of-band)" communication.
@@ -246,9 +258,10 @@ Let's review another example to see how our multi-turn memory works! Can you gue
 ```python
 from typing import Annotated
 
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph
 from typing_extensions import TypedDict
+
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
 
 
 def add(left, right):
@@ -262,8 +275,8 @@ class State(TypedDict):
 
 builder = StateGraph(State)
 builder.add_node("add_one", lambda x: {"total": 1})
-builder.set_entry_point("add_one")
-builder.set_finish_point("add_one")
+builder.add_edge(START, "add_one")
+builder.add_edge("add_one", END)
 
 memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
@@ -320,9 +333,11 @@ Let's extend our toy example above with a conditional edge and then walk through
 ```python
 from typing import Annotated, Literal
 
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph
 from typing_extensions import TypedDict
+
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+
 
 
 def add(left, right):
@@ -336,13 +351,13 @@ class State(TypedDict):
 builder = StateGraph(State)
 builder.add_node("add_one", lambda x: {"total": 1})
 builder.add_node("double", lambda x: {"total": x["total"]})
-builder.set_entry_point("add_one")
+builder.add_edge(START, "add_one")
 
 
 def route(state: State) -> Literal["double", "__end__"]:
     if state["total"] < 6:
         return "double"
-    return "__end__"
+    return "__end__" # This is what END is
 
 
 builder.add_conditional_edges("add_one", route)
@@ -393,18 +408,20 @@ To inspect the trace of this run, check out the [LangSmith link here](https://sm
 For our second run, we will use the same configuration:
 
 ```python
-result2 = graph.invoke({"total": -2, "turn": "First Turn"}, config)
-7 checkpoint {'total': 10}
-8 task None
-8 task_result None
-8 checkpoint {'total': 11}
+for step in graph.stream(
+    {"total": -2, "turn": "First Turn"}, config, stream_mode="debug"
+):
+    print(step["step"], step["type"], step["payload"].get("values"))
+# 7 checkpoint {'total': 9}
+# 8 task None
+# 8 task_result None
+# 8 checkpoint {'total': 10}
 ```
 
-To inspect the trace of this run, check out the [LangSmith link here](https://smith.langchain.com/public/f64d6733-b22e-403d-a822-e45fbaa5051d/r). We'll walk through the execution below:
+To inspect the trace of this run, check out the [LangSmith link here](https://smith.langchain.com/public/494f1817-46f5-4051-b41c-2dc416ce8b4d/r). We'll walk through the execution below:
 
-1. First, the graph looks for the checkpoint. It loads it to memory as the initial state. Total is (11) as before.
-2. Next, it applies the update from the user's input. The `add` **reducer** updates the total from 11 to -9.
-3. After that, the 'add_one' node is called with this state. It returns 1.
+1. First, it applies the update from the user's input. The `add` **reducer** updates the total from 0 to -2.
+2. Next, the graph looks for the checkpoint. It loads it to memory as the initial state. Total is (9) now ((-2) + 11).
+3. After that, the 'add_one' node is called with this state. It returns 10.
 4. That update is applied using the reducer, raising the value to 10.
 5. Next, the "route" conditional edge is triggered. Since the value is greater than 6, we terminate the program, ending where we started at (11).
-
