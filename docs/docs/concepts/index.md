@@ -249,7 +249,7 @@ When a `StateGraph` is compiled with a checkpointer, each invocation of the grap
 
 For any given graph deployment, you'll likely want some amount of configurable values that you can control at runtime. These differ from the graph **inputs** in that they aren't meant to be treated as state variables. They are more akin to "[out-of-band](https://en.wikipedia.org/wiki/Out-of-band)" communication.
 
-A common example is a conversational `thread_id`, a `user_id`, a choice of which LLM to use, how many documents to return in a retriever, etc. While you **could** pass this within the state, it is nicer to separate out from the regular data flow.
+A common example is a conversational `thread_id`, a `user_id`, a choice of which LLM to use, how many documents to return in a retriever, etc. While you **could** pass this within the state, it is nicer to separate out from the regular data flow. Configurable values are also automatically added to LangSmith traces as [metadata](https://docs.smith.langchain.com/concepts/tracing#metadata).
 
 #### Example
 
