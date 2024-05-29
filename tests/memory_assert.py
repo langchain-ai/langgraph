@@ -90,6 +90,7 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
                     self.serde.dumps(checkpoint),
                     # merge configurable fields and metadata
                     self.serde.dumps({**configurable, **metadata}),
+                    config["configurable"].get("thread_ts"),
                 )
             }
         )

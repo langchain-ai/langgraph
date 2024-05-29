@@ -1,6 +1,7 @@
 import asyncio
 from collections import defaultdict
 from functools import partial
+from operator import itemgetter
 from typing import AsyncIterator, Iterator, Optional
 
 from langchain_core.runnables import RunnableConfig
@@ -44,7 +45,7 @@ class MemorySaver(BaseCheckpointSaver):
             asyncio.run(coro)  # Output: 2
     """
 
-    storage: defaultdict[str, dict[str, tuple[bytes, bytes]]]
+    storage: defaultdict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]
 
     def __init__(
         self,
@@ -71,20 +72,30 @@ class MemorySaver(BaseCheckpointSaver):
         thread_id = config["configurable"]["thread_id"]
         if ts := config["configurable"].get("thread_ts"):
             if saved := self.storage[thread_id].get(ts):
-                checkpoint, metadata = saved
+                checkpoint, metadata, parent_ts = saved
                 return CheckpointTuple(
                     config=config,
                     checkpoint=self.serde.loads(checkpoint),
                     metadata=self.serde.loads(metadata),
+                    parent_config={
+                        "configurable": {"thread_id": thread_id, "thread_ts": parent_ts}
+                    }
+                    if parent_ts
+                    else None,
                 )
         else:
             if checkpoints := self.storage[thread_id]:
                 ts = max(checkpoints.keys())
-                checkpoint, metadata = checkpoints[ts]
+                checkpoint, metadata, parent_ts = checkpoints[ts]
                 return CheckpointTuple(
                     config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                     checkpoint=self.serde.loads(checkpoint),
                     metadata=self.serde.loads(metadata),
+                    parent_config={
+                        "configurable": {"thread_id": thread_id, "thread_ts": parent_ts}
+                    }
+                    if parent_ts
+                    else None,
                 )
 
     def list(
@@ -108,7 +119,9 @@ class MemorySaver(BaseCheckpointSaver):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
         """
         thread_id = config["configurable"]["thread_id"]
-        for ts, (checkpoint, metadata) in self.storage[thread_id].items():
+        for ts, (checkpoint, metadata, parent_ts) in sorted(
+            self.storage[thread_id].items(), key=itemgetter(0), reverse=True
+        ):
             if before and ts >= before["configurable"]["thread_ts"]:
                 continue
             if limit is not None and limit <= 0:
@@ -119,6 +132,11 @@ class MemorySaver(BaseCheckpointSaver):
                 config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                 checkpoint=self.serde.loads(checkpoint),
                 metadata=self.serde.loads(metadata),
+                parent_config={
+                    "configurable": {"thread_id": thread_id, "thread_ts": parent_ts}
+                }
+                if parent_ts
+                else None,
             )
 
     def search(
@@ -144,7 +162,11 @@ class MemorySaver(BaseCheckpointSaver):
             Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
         """
         for thread_id, checkpoints in self.storage.items():
-            for ts, (checkpoint_bytes, metadata_bytes) in checkpoints.items():
+            for ts, (
+                checkpoint_bytes,
+                metadata_bytes,
+                parent_ts,
+            ) in checkpoints.items():
                 # filter by thread_ts
                 if before and ts >= before["configurable"]["thread_ts"]:
                     continue
@@ -170,6 +192,14 @@ class MemorySaver(BaseCheckpointSaver):
                         },
                         checkpoint=self.serde.loads(checkpoint_bytes),
                         metadata=metadata,
+                        parent_config={
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
+                        }
+                        if parent_ts
+                        else None,
                     )
 
     def put(
@@ -195,6 +225,7 @@ class MemorySaver(BaseCheckpointSaver):
                 checkpoint["id"]: (
                     self.serde.dumps(checkpoint),
                     self.serde.dumps(metadata),
+                    config["configurable"].get("thread_ts"),
                 )
             }
         )

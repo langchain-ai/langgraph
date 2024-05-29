@@ -34,6 +34,10 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.errors import InvalidUpdateError
+from langgraph.eval import (
+    extract_graph_test_case_from_thread,
+    extract_node_test_cases_from_thread,
+)
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
@@ -375,33 +379,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     # list history
     assert [c for c in app.get_state_history({"configurable": {"thread_id": 1}})] == [
         StateSnapshot(
-            values={"input": 2},
-            next=("one",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "thread_ts": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={"source": "input", "step": -1, "writes": 2},
-            parent_config=None,
-        ),
-        StateSnapshot(
-            values={"inbox": 3, "input": 2},
-            next=("two",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "thread_ts": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={"source": "loop", "step": 0, "writes": None},
-            parent_config=None,
-        ),
-        StateSnapshot(
-            values={"inbox": 3, "output": 4, "input": 2},
+            values={"inbox": 4, "output": 5, "input": 3},
             next=(),
             config={
                 "configurable": {
@@ -410,47 +388,13 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                 }
             },
             created_at=AnyStr(),
-            metadata={"source": "loop", "step": 1, "writes": 4},
-            parent_config=None,
-        ),
-        StateSnapshot(
-            values={"inbox": 3, "output": 4, "input": 20},
-            next=("one",),
-            config={
+            metadata={"source": "loop", "step": 6, "writes": 5},
+            parent_config={
                 "configurable": {
                     "thread_id": 1,
                     "thread_ts": AnyStr(),
                 }
             },
-            created_at=AnyStr(),
-            metadata={"source": "input", "step": 2, "writes": 20},
-            parent_config=None,
-        ),
-        StateSnapshot(
-            values={"inbox": 21, "output": 4, "input": 20},
-            next=("two",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "thread_ts": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={"source": "loop", "step": 3, "writes": None},
-            parent_config=None,
-        ),
-        StateSnapshot(
-            values={"inbox": 21, "output": 4, "input": 3},
-            next=("one",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "thread_ts": AnyStr(),
-                }
-            },
-            created_at=AnyStr(),
-            metadata={"source": "input", "step": 4, "writes": 3},
-            parent_config=None,
         ),
         StateSnapshot(
             values={"inbox": 4, "output": 4, "input": 3},
@@ -463,10 +407,69 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             },
             created_at=AnyStr(),
             metadata={"source": "loop", "step": 5, "writes": None},
-            parent_config=None,
+            parent_config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
         ),
         StateSnapshot(
-            values={"inbox": 4, "output": 5, "input": 3},
+            values={"inbox": 21, "output": 4, "input": 3},
+            next=("one",),
+            config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+            created_at=AnyStr(),
+            metadata={"source": "input", "step": 4, "writes": 3},
+            parent_config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+        ),
+        StateSnapshot(
+            values={"inbox": 21, "output": 4, "input": 20},
+            next=("two",),
+            config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+            created_at=AnyStr(),
+            metadata={"source": "loop", "step": 3, "writes": None},
+            parent_config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+        ),
+        StateSnapshot(
+            values={"inbox": 3, "output": 4, "input": 20},
+            next=("one",),
+            config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+            created_at=AnyStr(),
+            metadata={"source": "input", "step": 2, "writes": 20},
+            parent_config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+        ),
+        StateSnapshot(
+            values={"inbox": 3, "output": 4, "input": 2},
             next=(),
             config={
                 "configurable": {
@@ -475,7 +478,43 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
                 }
             },
             created_at=AnyStr(),
-            metadata={"source": "loop", "step": 6, "writes": 5},
+            metadata={"source": "loop", "step": 1, "writes": 4},
+            parent_config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+        ),
+        StateSnapshot(
+            values={"inbox": 3, "input": 2},
+            next=("two",),
+            config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+            created_at=AnyStr(),
+            metadata={"source": "loop", "step": 0, "writes": None},
+            parent_config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+        ),
+        StateSnapshot(
+            values={"input": 2},
+            next=("one",),
+            config={
+                "configurable": {
+                    "thread_id": 1,
+                    "thread_ts": AnyStr(),
+                }
+            },
+            created_at=AnyStr(),
+            metadata={"source": "input", "step": -1, "writes": 2},
             parent_config=None,
         ),
     ]
@@ -1383,6 +1422,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 },
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
     assert (
         app_w_interrupt.checkpointer.get_tuple(config).config["configurable"][
@@ -1431,6 +1471,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 },
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1538,8 +1579,8 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
-
     # test state get/update methods with interrupt_before
 
     app_w_interrupt = workflow.compile(
@@ -1588,6 +1629,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     app_w_interrupt.update_state(
@@ -1630,6 +1672,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -1737,6 +1780,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     # test re-invoke to continue with interrupt_before
@@ -1787,6 +1831,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2132,6 +2177,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     app_w_interrupt.update_state(
@@ -2171,6 +2217,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 },
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2242,7 +2289,233 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
+
+    assert extract_node_test_cases_from_thread(app_w_interrupt, config) == {
+        "agent": [
+            {
+                "id": AnyStr(),
+                "inputs": {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                },
+                "outputs": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="another",
+                        log="tool:search_api:another",
+                    )
+                },
+                "metadata": {
+                    "source": "loop",
+                    "step": 4,
+                    "thread_id": "1",
+                    "thread_ts": AnyStr(),
+                },
+            },
+            {
+                "id": AnyStr(),
+                "inputs": {"input": "what is weather in sf", "intermediate_steps": []},
+                "outputs": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    )
+                },
+                "metadata": {
+                    "source": "loop",
+                    "step": 1,
+                    "thread_id": "1",
+                    "thread_ts": AnyStr(),
+                },
+            },
+        ],
+        "tools": [
+            {
+                "id": AnyStr(),
+                "inputs": {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:a different query",
+                    ),
+                    "intermediate_steps": [],
+                },
+                "outputs": {
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ]
+                },
+                "metadata": {
+                    "source": "loop",
+                    "step": 3,
+                    "thread_id": "1",
+                    "thread_ts": AnyStr(),
+                },
+            }
+        ],
+    }
+
+    assert extract_graph_test_case_from_thread(app_w_interrupt, config) == {
+        "id": "1",
+        "inputs": {"input": [{"input": "what is weather in sf"}]},
+        "outputs": {
+            "output": [
+                {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    ),
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                }
+            ],
+            "steps": [["agent", "tools", "agent"]],
+        },
+        "metadata": {
+            "thread_id": "1",
+            "thread_ts": AnyStr(),
+        },
+    }
+
+    llm.i = 0  # reset the llm
+
+    assert app_w_interrupt.invoke(
+        {"input": "what is weather in la"}, config, interrupt_after=[]
+    ) == {
+        "input": "what is weather in la",
+        "agent_outcome": AgentFinish(
+            return_values={"answer": "answer"}, log="finish:answer"
+        ),
+        "intermediate_steps": [
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "result for query",
+            ),
+            (
+                AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+                "result for query",
+            ),
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+                "result for another",
+            ),
+        ],
+    }
+
+    assert extract_graph_test_case_from_thread(app_w_interrupt, config) == {
+        "id": "1",
+        "inputs": {
+            "input": [
+                {"input": "what is weather in sf"},
+                {"input": "what is weather in la"},
+            ]
+        },
+        "outputs": {
+            "output": [
+                {
+                    "input": "what is weather in sf",
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "a really nice answer"},
+                        log="finish:a really nice answer",
+                    ),
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                },
+                {
+                    "input": "what is weather in la",
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "answer"}, log="finish:answer"
+                    ),
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        ),
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:query",
+                            ),
+                            "result for query",
+                        ),
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="another",
+                                log="tool:search_api:another",
+                            ),
+                            "result for another",
+                        ),
+                    ],
+                },
+            ],
+            "steps": [
+                ["agent", "tools", "agent"],
+                ["agent", "tools", "agent", "tools", "agent"],
+            ],
+        },
+        "metadata": {
+            "thread_id": "1",
+            "thread_ts": AnyStr(),
+        },
+    }
 
     # test state get/update methods with interrupt_before
 
@@ -2290,6 +2563,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     app_w_interrupt.update_state(
@@ -2329,6 +2603,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2400,6 +2675,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     # test w interrupt before all
@@ -2424,6 +2700,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={"source": "loop", "step": 0, "writes": None},
+        parent_config={"configurable": {"thread_id": "3", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2460,6 +2737,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "3", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2517,6 +2795,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "3", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2575,6 +2854,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -2632,6 +2912,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
                 }
             },
         },
+        parent_config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3706,6 +3987,7 @@ def test_message_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     # modify ai message
@@ -3749,6 +4031,7 @@ def test_message_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -3832,6 +4115,7 @@ def test_message_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     app_w_interrupt.update_state(
@@ -3873,6 +4157,7 @@ def test_message_graph(
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     app_w_interrupt = workflow.compile(
@@ -3936,6 +4221,7 @@ def test_message_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     # modify ai message
@@ -3982,6 +4268,7 @@ def test_message_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -4065,6 +4352,7 @@ def test_message_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     app_w_interrupt.update_state(
@@ -4106,6 +4394,7 @@ def test_message_graph(
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     # add an extra message as if it came from "tools" node
@@ -4147,6 +4436,7 @@ def test_message_graph(
             "step": 6,
             "writes": {"tools": ("ai", "an extra message")},
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
 
@@ -4428,6 +4718,7 @@ def test_root_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     # modify ai message
@@ -4471,6 +4762,7 @@ def test_root_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -4554,6 +4846,7 @@ def test_root_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     app_w_interrupt.update_state(
@@ -4595,6 +4888,7 @@ def test_root_graph(
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
         },
+        parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
     )
 
     app_w_interrupt = workflow.compile(
@@ -4658,6 +4952,7 @@ def test_root_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     # modify ai message
@@ -4704,6 +4999,7 @@ def test_root_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
@@ -4787,6 +5083,7 @@ def test_root_graph(
                 )
             },
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     app_w_interrupt.update_state(
@@ -4828,6 +5125,7 @@ def test_root_graph(
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     # add an extra message as if it came from "tools" node
@@ -4869,6 +5167,7 @@ def test_root_graph(
             "step": 6,
             "writes": {"tools": ("ai", "an extra message")},
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     # create new graph with one more state key, reuse previous thread history
@@ -4942,6 +5241,7 @@ def test_root_graph(
             "step": 6,
             "writes": {"tools": ("ai", "an extra message")},
         },
+        parent_config={"configurable": {"thread_id": "2", "thread_ts": AnyStr()}},
     )
 
     # new input is merged to old state

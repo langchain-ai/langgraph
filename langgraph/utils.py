@@ -14,6 +14,7 @@ from langchain_core.runnables.base import (
     RunnableParallel,
 )
 from langchain_core.runnables.config import (
+    ensure_config,
     merge_configs,
     run_in_executor,
     var_child_runnable_config,
@@ -84,6 +85,7 @@ class RunnableCallable(Runnable):
                 self.func, input, merge_configs(self.config, config), **self.kwargs
             )
         else:
+            config = ensure_config(config)
             config = merge_configs(self.config, config)
             context = copy_context()
             context.run(var_child_runnable_config.set, config)
@@ -105,6 +107,7 @@ class RunnableCallable(Runnable):
                 self.afunc, input, merge_configs(self.config, config), **self.kwargs
             )
         else:
+            config = ensure_config(config)
             config = merge_configs(self.config, config)
             context = copy_context()
             context.run(var_child_runnable_config.set, config)
