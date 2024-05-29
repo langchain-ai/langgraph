@@ -235,7 +235,7 @@ If you have some portion of state that you want to retain across turns and some 
 
 Using checkpointing is as easy as calling `compile(checkpointer=my_checkpointer)` and then invoking it with a `thread_id` within its `configurable` parameters. You can see more in the following sections!
 
-## Thread
+## Threads
 
 Threads in LangGraph represent separate **sessions** of a graph. They organize state checkpoints within discrete sessions to facilitate multi-conversation and multi-user support in an application.
 
