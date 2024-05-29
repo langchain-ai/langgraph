@@ -57,7 +57,7 @@ Similar to `NetworkX`, you add these nodes to a graph using the [add_node](https
 
 ```python
 from langchain_core.runnables import RunnableConfig
-from langgraph.graph import StateGraph
+from langgraph.graph import END, START, StateGraph
 
 builder = StateGraph(dict)
 
@@ -74,9 +74,9 @@ def my_other_node(state: dict):
 
 builder.add_node("my_node", my_node)
 builder.add_node("other_node", my_other_node)
-builder.set_entry_point("my_node")
+builder.add_edge(START, "my_node")
 builder.add_edge("my_node", "other_node")
-builder.set_finish_point("other_node")
+builder.add_edge("other_node", END)
 graph = builder.compile()
 graph.invoke({"input": "Will"}, {"configurable": {"user_id": "abcd-123"}})
 # In node:  abcd-123
@@ -113,8 +113,9 @@ We'll illustrate how reducers work with an example. Compare the following two `S
 ```python
 from typing import Annotated
 
-from langgraph.graph import StateGraph
 from typing_extensions import TypedDict
+
+from langgraph.graph import END, START, StateGraph
 
 
 class StateA(TypedDict):
@@ -123,8 +124,8 @@ class StateA(TypedDict):
 
 builder = StateGraph(StateA)
 builder.add_node("my_node", lambda state: {"value": 1})
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
 graph = builder.compile()
 graph.invoke({"value": 5})
 ```
@@ -134,8 +135,10 @@ And `StateB`:
 ```python
 from typing import Annotated
 
-from langgraph.graph import StateGraph
 from typing_extensions import TypedDict
+
+from langgraph.graph import END, START, StateGraph
+
 
 
 def add(existing: int, new: int):
@@ -149,8 +152,8 @@ class StateB(TypedDict):
 
 builder = StateGraph(StateB)
 builder.add_node("my_node", lambda state: {"value": 1})
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
 graph = builder.compile()
 graph.invoke({"value": 5})
 ```
@@ -168,8 +171,8 @@ While we typically use `TypedDict` as the graph's `state_schema` (i.e., `State`)
 # Analogous to StateA above
 builder = StateGraph(int)
 builder.add_node("my_node", lambda state: 1)
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
 builder.compile().invoke(5)
 
 # Analogous to StateB
@@ -179,8 +182,8 @@ def add(left, right):
 
 builder = StateGraph(Annotated[int, add])
 builder.add_node("my_node", lambda state: 1)
-builder.set_entry_point("my_node")
-builder.set_finish_point("my_node")
+builder.add_edge(START, "my_node")
+builder.add_edge("my_node", END)
 graph = builder.compile()
 graph.invoke(5)
 ```
@@ -246,9 +249,10 @@ Let's review another example to see how our multi-turn memory works! Can you gue
 ```python
 from typing import Annotated
 
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph
 from typing_extensions import TypedDict
+
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
 
 
 def add(left, right):
@@ -262,8 +266,8 @@ class State(TypedDict):
 
 builder = StateGraph(State)
 builder.add_node("add_one", lambda x: {"total": 1})
-builder.set_entry_point("add_one")
-builder.set_finish_point("add_one")
+builder.add_edge(START, "add_one")
+builder.add_edge("add_one", END)
 
 memory = MemorySaver()
 graph = builder.compile(checkpointer=memory)
@@ -320,9 +324,11 @@ Let's extend our toy example above with a conditional edge and then walk through
 ```python
 from typing import Annotated, Literal
 
-from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import StateGraph
 from typing_extensions import TypedDict
+
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.graph import END, START, StateGraph
+
 
 
 def add(left, right):
@@ -336,13 +342,13 @@ class State(TypedDict):
 builder = StateGraph(State)
 builder.add_node("add_one", lambda x: {"total": 1})
 builder.add_node("double", lambda x: {"total": x["total"]})
-builder.set_entry_point("add_one")
+builder.add_edge(START, "add_one")
 
 
 def route(state: State) -> Literal["double", "__end__"]:
     if state["total"] < 6:
         return "double"
-    return "__end__"
+    return "__end__" # This is what END is
 
 
 builder.add_conditional_edges("add_one", route)
@@ -393,18 +399,21 @@ To inspect the trace of this run, check out the [LangSmith link here](https://sm
 For our second run, we will use the same configuration:
 
 ```python
-result2 = graph.invoke({"total": -2, "turn": "First Turn"}, config)
-7 checkpoint {'total': 10}
-8 task None
-8 task_result None
-8 checkpoint {'total': 11}
+for step in graph.stream(
+    {"total": -2, "turn": "First Turn"}, config, stream_mode="debug"
+):
+    print(step["step"], step["type"], step["payload"].get("values"))
+# 7 checkpoint {'total': 9}
+# 8 task None
+# 8 task_result None
+# 8 checkpoint {'total': 10}
 ```
 
-To inspect the trace of this run, check out the [LangSmith link here](https://smith.langchain.com/public/f64d6733-b22e-403d-a822-e45fbaa5051d/r). We'll walk through the execution below:
+To inspect the trace of this run, check out the [LangSmith link here](https://smith.langchain.com/public/494f1817-46f5-4051-b41c-2dc416ce8b4d/r). We'll walk through the execution below:
 
-1. First, the graph looks for the checkpoint. It loads it to memory as the initial state. Total is (11) as before.
-2. Next, it applies the update from the user's input. The `add` **reducer** updates the total from 11 to -9.
-3. After that, the 'add_one' node is called with this state. It returns 1.
+1. First, it applies the update from the user's input. The `add` **reducer** updates the total from 0 to -2.
+2. Next, the graph looks for the checkpoint. It loads it to memory as the initial state. Total is (9) now ((-2) + 11).
+3. After that, the 'add_one' node is called with this state. It returns 10.
 4. That update is applied using the reducer, raising the value to 10.
 5. Next, the "route" conditional edge is triggered. Since the value is greater than 6, we terminate the program, ending where we started at (11).
 
