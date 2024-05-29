@@ -466,7 +466,7 @@ def _get_channel(
 def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
-        if len(meta) > 1 and callable(meta[-1]):
+        if len(meta) >= 1 and callable(meta[-1]):
             sig = signature(meta[0])
             params = list(sig.parameters.values())
             if len(params) == 2 and len(
