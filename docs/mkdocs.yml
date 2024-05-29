@@ -84,6 +84,7 @@ plugins:
   - git-committers:
       repository: langchain-ai/langgraph
       branch: main
+      token: !ENV ["MKDOCS_GIT_COMMITTERS_APIKEY"]
   # TODO: Add minify plugin once it works alright with code block copying
   # - minify:
   #     minify_html: true
@@ -231,4 +232,4 @@ extra:
           name: This page could be improved
           data: 0
           note: >- 
-            Thanks for your feedback! Help us improve this page by commenting below.
+            Thanks for your feedback! Please help us improve this page by adding to the discussion below.

@@ -41,9 +41,11 @@ jobs:
         run: |
           poetry install
           poetry run pip install -r docs/docs-requirements.txt
-
+      
       - name: Build site
         run: make build-docs
+        env:
+          MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
 
       - name: Configure GitHub Pages
         if: github.ref == 'refs/heads/main'
