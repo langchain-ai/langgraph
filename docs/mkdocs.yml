@@ -1,11 +1,14 @@
 site_name: LangGraph
 site_description: Build language agents as graphs
 site_url: https://langchain-ai.github.io/langgraph/
+repo_url: https://github.com/langchain-ai/langgraph
 theme:
   name: material
   custom_dir: overrides
   logo: static/wordmark.png
   favicon: static/favicon.png
+  icon:
+    repo: fontawesome/brands/git-alt
   features:
     - announce.dismiss
     - content.action.edit
@@ -78,6 +81,9 @@ plugins:
       execute: false
       include_source: True
       include_requirejs: true
+  - git-committers:
+      repository: langchain-ai/langgraph
+      branch: main
   # TODO: Add minify plugin once it works alright with code block copying
   # - minify:
   #     minify_html: true
@@ -210,3 +216,19 @@ extra:
       link: https://github.com/langchain-ai/langgraph
     - icon: fontawesome/brands/twitter
       link: https://twitter.com/LangChainAI
+  analytics:
+    - provider: google
+    - script: "G-G8X6ELZYE0"
+    - feedback:
+      title: Was this page helpful?
+      ratings:
+        - icon: material/emoticon-happy-outline
+          name: This page was helpful
+          data: 1
+          note: >-
+            Thanks for your feedback!
+        - icon: material/emoticon-sad-outline
+          name: This page could be improved
+          data: 0
+          note: >- 
+            Thanks for your feedback! Help us improve this page by commenting below.
