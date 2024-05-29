@@ -73,6 +73,12 @@ class RunnableCallable(Runnable):
         return f"{self.get_name()}({', '.join(f'{k}={v!r}' for k, v in repr_args.items())})"
 
     def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+        if self.func is None:
+            raise TypeError(
+                f'No synchronous function provided to "{self.name}".'
+                "\nEither initialize with a synchronous function or invoke"
+                " via the async API (ainvoke, astream, etc.)"
+            )
         if self.trace:
             ret = self._call_with_config(
                 self.func, input, merge_configs(self.config, config), **self.kwargs
