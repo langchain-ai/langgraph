@@ -8,6 +8,8 @@ import time
 from typing import Optional
 from uuid import UUID
 
+_last_v6_timestamp = None
+
 
 def uuid6(node: Optional[int] = None, clock_seq: Optional[int] = None) -> UUID:
     r"""UUID version 6 is a field-compatible version of UUIDv1, reordered for
