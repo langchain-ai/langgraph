@@ -3841,17 +3841,6 @@ socks = ["pysocks (>=1.5.6,!=1.5.7,<2.0)"]
 zstd = ["zstandard (>=0.18.0)"]
 
 [[package]]
-name = "uuid6"
-version = "2024.1.12"
-description = "New time-based UUID formats which are suited for use as a database key"
-optional = false
-python-versions = ">=3.8"
-files = [
-    {file = "uuid6-2024.1.12-py3-none-any.whl", hash = "sha256:8150093c8d05a331bc0535bc5ef6cf57ac6eceb2404fd319bc10caee2e02c065"},
-    {file = "uuid6-2024.1.12.tar.gz", hash = "sha256:ed0afb3a973057575f9883201baefe402787ca5e11e1d24e377190f0c43f1993"},
-]
-
-[[package]]
 name = "watchdog"
 version = "4.0.0"
 description = "Filesystem events monitoring"
@@ -4077,4 +4066,4 @@ testing = ["big-O", "jaraco.functools", "jaraco.itertools", "more-itertools", "p
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "396cb9a3938f1cc31440d45292757c13d3894d11374799e0c8ccfa1aa877fcb5"
+content-hash = "47f653979a2e0bcb14264ceedef65670ff2ddce7e70c6de46043194aa4688c1a"
