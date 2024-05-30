@@ -5,6 +5,7 @@ from typing import (
     Any,
     AsyncIterator,
     Iterator,
+    List,
     Literal,
     NamedTuple,
     Optional,
@@ -14,6 +15,7 @@ from typing import (
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
 from langgraph.checkpoint.id import uuid6
+from langgraph.constants import Packet
 from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
 
@@ -72,6 +74,9 @@ class Checkpoint(TypedDict):
     
     Used to determine which nodes to execute next.
     """
+    pending_packets: List[Packet]
+    """List of packets sent to nodes but not yet processed.
+    Cleared by the next checkpoint."""
 
 
 def _seen_dict():
@@ -86,6 +91,7 @@ def empty_checkpoint() -> Checkpoint:
         channel_values={},
         channel_versions=defaultdict(int),
         versions_seen=defaultdict(_seen_dict),
+        pending_packets=[],
     )
 
 
@@ -100,6 +106,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
             _seen_dict,
             {k: defaultdict(int, v) for k, v in checkpoint["versions_seen"].items()},
         ),
+        pending_packets=checkpoint["pending_packets"].copy(),
     )
 
 

@@ -59,7 +59,7 @@ class RunnableCallable(Runnable):
                 pass
         self.func = func
         self.afunc = afunc
-        self.config = {"tags": tags} if tags else None
+        self.config: Optional[RunnableConfig] = {"tags": tags} if tags else None
         self.kwargs = kwargs
         self.trace = trace
         self.recurse = recurse
@@ -72,47 +72,47 @@ class RunnableCallable(Runnable):
         }
         return f"{self.get_name()}({', '.join(f'{k}={v!r}' for k, v in repr_args.items())})"
 
-    def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+    def invoke(
+        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Any:
         if self.func is None:
             raise TypeError(
                 f'No synchronous function provided to "{self.name}".'
                 "\nEither initialize with a synchronous function or invoke"
                 " via the async API (ainvoke, astream, etc.)"
             )
+        kwargs = {**self.kwargs, **kwargs}
         if self.trace:
             ret = self._call_with_config(
-                self.func, input, merge_configs(self.config, config), **self.kwargs
+                self.func, input, merge_configs(self.config, config), **kwargs
             )
         else:
             config = merge_configs(self.config, config)
             context = copy_context()
             context.run(var_child_runnable_config.set, config)
-            kwargs = (
-                {**self.kwargs, "config": config}
-                if accepts_config(self.func)
-                else self.kwargs
-            )
+            if accepts_config(self.func):
+                kwargs["config"] = config
             ret = context.run(self.func, input, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
             return ret.invoke(input, config)
         return ret
 
-    async def ainvoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+    async def ainvoke(
+        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Any:
         if not self.afunc:
             return self.invoke(input, config)
+        kwargs = {**self.kwargs, **kwargs}
         if self.trace:
             ret = await self._acall_with_config(
-                self.afunc, input, merge_configs(self.config, config), **self.kwargs
+                self.afunc, input, merge_configs(self.config, config), **kwargs
             )
         else:
             config = merge_configs(self.config, config)
             context = copy_context()
             context.run(var_child_runnable_config.set, config)
-            kwargs = (
-                {**self.kwargs, "config": config}
-                if accepts_config(self.afunc)
-                else self.kwargs
-            )
+            if accepts_config(self.afunc):
+                kwargs["config"] = config
             if sys.version_info >= (3, 11):
                 ret = await asyncio.create_task(
                     self.afunc(input, **kwargs), context=context

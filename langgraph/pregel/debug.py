@@ -64,20 +64,23 @@ def map_debug_tasks(
     step: int, tasks: list[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
     ts = datetime.now(timezone.utc).isoformat()
-    for idx, (name, input, _, _, config, triggers) in enumerate(tasks):
+    for idx, (name, input, _, _, config, triggers, kwargs) in enumerate(tasks):
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
+        payload = {
+            "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, idx)))),
+            "name": name,
+            "input": input,
+            "triggers": triggers,
+        }
+        if kwargs is not None:
+            payload["kwargs"] = kwargs
         yield {
             "type": "task",
             "timestamp": ts,
             "step": step,
-            "payload": {
-                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, idx)))),
-                "name": name,
-                "input": input,
-                "triggers": triggers,
-            },
+            "payload": payload,
         }
 
 
@@ -87,7 +90,7 @@ def map_debug_task_results(
     stream_channels_list: Sequence[str],
 ) -> Iterator[DebugOutputTaskResult]:
     ts = datetime.now(timezone.utc).isoformat()
-    for idx, (name, _, _, writes, config, _) in enumerate(tasks):
+    for idx, (name, _, _, writes, config, _, _) in enumerate(tasks):
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
@@ -130,7 +133,7 @@ def print_step_tasks(step: int, next_tasks: list[PregelExecutableTask]) -> None:
         )
         + "\n".join(
             f"- {get_colored_text(name, 'green')} -> {pformat(val)}"
-            for name, val, _, _, _, _ in next_tasks
+            for name, val, _, _, _, _, _ in next_tasks
         )
     )
 

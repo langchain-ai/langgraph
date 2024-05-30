@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Optional, Sequence, Union
+from typing import Any, Callable, Dict, Mapping, Optional, Sequence, Union
 
 from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import (
@@ -121,11 +121,17 @@ class PregelNode(RunnableBindingBase):
             and isinstance(writers[-2], ChannelWrite)
         ):
             # we can combine writes if they are consecutive
-            writers[-2].writes += writers[-1].writes
+            # careful to not modify the original writers list or ChannelWrite
+            writers[-2] = ChannelWrite(
+                writes=writers[-2].writes + writers[-1].writes,
+                tags=writers[-2].config["tags"] if writers[-2].config else None,
+            )
             writers.pop()
         return writers
 
-    def get_node(self) -> Optional[Runnable[Any, Any]]:
+    def get_node(
+        self, kwargs: Optional[Dict[str, Any]] = None
+    ) -> Optional[Runnable[Any, Any]]:
         writers = self.get_writers()
         if self.bound is DEFAULT_BOUND and not writers:
             return None
@@ -134,9 +140,12 @@ class PregelNode(RunnableBindingBase):
         elif self.bound is DEFAULT_BOUND:
             return RunnableSequence(*writers)
         elif writers:
-            return RunnableSequence(self.bound, *writers)
+            return RunnableSequence(
+                self.bound.bind(**kwargs) if kwargs is not None else self.bound,
+                *writers,
+            )
         else:
-            return self.bound
+            return self.bound.bind(**kwargs) if kwargs is not None else self.bound
 
     def __init__(
         self,

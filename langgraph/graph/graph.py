@@ -26,7 +26,8 @@ from langchain_core.runnables.graph import (
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.constants import TAG_HIDDEN
+from langgraph.constants import TAG_HIDDEN, Packet
+from langgraph.errors import InvalidUpdateError
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All
@@ -69,13 +70,7 @@ class Branch(NamedTuple):
         writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
         result = self.path.invoke(reader(config) if reader else input, config)
-        if not isinstance(result, list):
-            result = [result]
-        if self.ends:
-            destinations = [self.ends[r] for r in result]
-        else:
-            destinations = result
-        return writer(destinations) or input
+        return self._finish(writer, input, result)
 
     async def _aroute(
         self,
@@ -86,14 +81,25 @@ class Branch(NamedTuple):
         writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
         result = await self.path.ainvoke(reader(config) if reader else input, config)
+        return self._finish(writer, input, result)
+
+    def _finish(
+        self, writer: Callable[[list[str]], Optional[Runnable]], input: Any, result: Any
+    ):
         if not isinstance(result, list):
             result = [result]
         if self.ends:
-            destinations = [self.ends[r] for r in result]
+            destinations = [
+                r if isinstance(r, Packet) else self.ends[r] for r in result
+            ]
         else:
             destinations = result
-        if any(dest is None for dest in destinations):
+        if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
+        if any(p.node == END for p in destinations if isinstance(p, Packet)):
+            raise InvalidUpdateError(
+                "Cannot send a packet with keyword arguments to the END node"
+            )
         return writer(destinations) or input
 
 
@@ -384,13 +390,14 @@ class CompiledGraph(Pregel):
             self.nodes[end].channels.append(start)
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(ends: list[str]) -> Optional[ChannelWrite]:
-            channels = [
-                f"branch:{start}:{name}:{end}" if end != END else END for end in ends
+        def branch_writer(packets: list[Union[str, Packet]]) -> Optional[ChannelWrite]:
+            writes = [
+                ChannelWriteEntry(f"branch:{start}:{name}:{p}" if p != END else END)
+                if not isinstance(p, Packet)
+                else p
+                for p in packets
             ]
-            return ChannelWrite(
-                [ChannelWriteEntry(ch) for ch in channels], tags=[TAG_HIDDEN]
-            )
+            return ChannelWrite(writes, tags=[TAG_HIDDEN])
 
         # add hidden start node
         if start == START and start not in self.nodes:
