@@ -17,6 +17,7 @@ from typing import (
     Union,
 )
 
+from langsmith import traceable
 import pytest
 from langchain_core.runnables import (
     RunnableConfig,
@@ -6598,10 +6599,11 @@ def test_checkpoint_metadata() -> None:
         ]
     )
 
-    def agent(state: BaseState, config: RunnableConfig) -> BaseState:
+    @traceable(run_type="llm")
+    def agent(state: BaseState) -> BaseState:
         formatted = prompt.invoke(state)
         response = model.invoke(formatted)
-        return {"messages": response}
+        return {"messages": response, "usage_metadata": {"total_tokens": 123}}
 
     def should_continue(data: BaseState) -> str:
         # Logic to decide whether to continue in the loop or exit
