@@ -17,7 +17,6 @@ from typing import (
     Union,
 )
 
-from langsmith import traceable
 import pytest
 from langchain_core.runnables import (
     RunnableConfig,
@@ -26,6 +25,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnablePick,
 )
+from langsmith import traceable
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
