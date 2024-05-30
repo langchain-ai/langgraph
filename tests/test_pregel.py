@@ -6029,11 +6029,16 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
 
+    class StateUpdate(BaseModel):
+        query: Optional[str] = None
+        answer: Optional[str] = None
+        docs: Optional[list[str]] = None
+
     def rewrite_query(data: State) -> State:
         return {"query": f"query: {data.query}"}
 
     def analyzer_one(data: State) -> State:
-        return {"query": f"analyzed: {data.query}"}
+        return StateUpdate(query=f"analyzed: {data.query}")
 
     def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
