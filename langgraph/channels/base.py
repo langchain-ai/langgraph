@@ -13,9 +13,9 @@ from typing import (
 )
 
 from typing_extensions import Self
-from uuid6 import uuid6
 
 from langgraph.checkpoint.base import Checkpoint
+from langgraph.checkpoint.id import uuid6
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 Value = TypeVar("Value")
