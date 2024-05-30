@@ -3500,8 +3500,17 @@ def test_state_graph_packets() -> None:
         ]
     )
 
+    def agent(data: AgentState) -> AgentState:
+        return {
+            "messages": model.invoke(data["messages"]),
+            "something_extra": "hi there",
+        }
+
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
+        assert (
+            data["something_extra"] == "hi there"
+        ), "nodes can pass extra data to their cond edges, which isn't saved in state"
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
             return [Packet("tools", tool_call=tool_call) for tool_call in tool_calls]
@@ -3522,7 +3531,7 @@ def test_state_graph_packets() -> None:
     workflow = StateGraph(AgentState)
 
     # Define the two nodes we will cycle between
-    workflow.add_node("agent", {"messages": RunnablePick("messages") | model})
+    workflow.add_node("agent", agent)
     workflow.add_node("tools", tools_node)
 
     # Set the entrypoint as `agent`
@@ -3745,7 +3754,9 @@ def test_state_graph_packets() -> None:
     # modify ai message
     last_message = (app_w_interrupt.get_state(config)).values["messages"][-1]
     last_message.tool_calls[0]["args"]["query"] = "a different query"
-    app_w_interrupt.update_state(config, {"messages": last_message})
+    app_w_interrupt.update_state(
+        config, {"messages": last_message, "something_extra": "hi there"}
+    )
 
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
@@ -3786,7 +3797,8 @@ def test_state_graph_packets() -> None:
                                 "args": {"query": "a different query"},
                             },
                         ],
-                    )
+                    ),
+                    "something_extra": "hi there",
                 }
             },
         },
@@ -3900,7 +3912,10 @@ def test_state_graph_packets() -> None:
 
     app_w_interrupt.update_state(
         config,
-        {"messages": AIMessage(content="answer", id="ai2")},
+        {
+            "messages": AIMessage(content="answer", id="ai2"),
+            "something_extra": "hi there",
+        },
     )
 
     # replaces message even if object identity is different, as long as id is the same
@@ -3937,7 +3952,12 @@ def test_state_graph_packets() -> None:
         metadata={
             "source": "update",
             "step": 5,
-            "writes": {"agent": {"messages": AIMessage(content="answer", id="ai2")}},
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(content="answer", id="ai2"),
+                    "something_extra": "hi there",
+                }
+            },
         },
     )
 

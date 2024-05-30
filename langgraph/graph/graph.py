@@ -69,7 +69,15 @@ class Branch(NamedTuple):
         reader: Optional[Callable[[], Any]],
         writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
-        result = self.path.invoke(reader(config) if reader else input, config)
+        if reader:
+            value = reader(config)
+            # passthrough additional keys from node to branch
+            # only doable when using dict states
+            if isinstance(value, dict) and isinstance(input, dict):
+                value = {**input, **value}
+        else:
+            value = input
+        result = self.path.invoke(value, config)
         return self._finish(writer, input, result)
 
     async def _aroute(
@@ -80,7 +88,15 @@ class Branch(NamedTuple):
         reader: Optional[Callable[[], Any]],
         writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
-        result = await self.path.ainvoke(reader(config) if reader else input, config)
+        if reader:
+            value = reader(config)
+            # passthrough additional keys from node to branch
+            # only doable when using dict states
+            if isinstance(value, dict) and isinstance(input, dict):
+                value = {**input, **value}
+        else:
+            value = input
+        result = await self.path.ainvoke(value, config)
         return self._finish(writer, input, result)
 
     def _finish(
