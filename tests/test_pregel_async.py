@@ -10,6 +10,7 @@ from typing import (
     AsyncIterator,
     Dict,
     Generator,
+    NamedTuple,
     Optional,
     Sequence,
     TypedDict,
@@ -2496,6 +2497,7 @@ async def test_state_graph_few_shot() -> None:
 
     class BaseState(TypedDict):
         messages: Annotated[list[AnyMessage], add_messages]
+        tool_results: Annotated[list[str], operator.add]
 
     class AgentState(BaseState):
         examples: Annotated[
@@ -2547,19 +2549,29 @@ Some examples of past conversations:
         response = await model.ainvoke(formatted)
         return {"messages": response}
 
+    class Do(NamedTuple):
+        node: str
+        kwargs: dict[str, Any]
+
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
         # Logic to decide whether to continue in the loop or exit
-        if not data["messages"][-1].tool_calls:
-            return "exit"
+        if tool_calls := data["messages"][-1].tool_calls:
+            return [
+                Do(node="tools", kwargs={"tool_call": tool_call})
+                for tool_call in tool_calls
+            ]
         else:
-            return "continue"
+            return "exit"
+
+    def tools_node(data: AgentState, *, tool_call: ToolCall) -> AgentState:
+        return {"tool_results": ...}
 
     # Define a new graph
     workflow = StateGraph(AgentState)
 
     workflow.add_node("agent", agent)
-    workflow.add_node("tools", ToolNode(tools))
+    workflow.add_node("tools", tools_node)
     workflow.set_entry_point("agent")
     workflow.add_conditional_edges(
         "agent", should_continue, {"continue": "tools", "exit": END}
