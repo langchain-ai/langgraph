@@ -141,6 +141,21 @@ def test_graph_validation() -> None:
     with pytest.raises(ValueError):  # extra is dead-end
         workflow.compile()
 
+    class State(TypedDict):
+        hello: str
+
+    def node_a(state: State) -> State:
+        # typo
+        return {"hel": "world"}
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.set_entry_point("a")
+    builder.set_finish_point("a")
+    graph = builder.compile()
+    with pytest.raises(InvalidUpdateError):
+        assert graph.invoke({"hello": "there"}) == {"hello": "world"}
+
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)

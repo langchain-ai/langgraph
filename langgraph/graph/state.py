@@ -321,7 +321,11 @@ class CompiledStateGraph(CompiledGraph):
                 triggers=[START],
                 channels=[START],
                 writers=[
-                    ChannelWrite(state_write_entries, tags=[TAG_HIDDEN]),
+                    ChannelWrite(
+                        state_write_entries,
+                        tags=[TAG_HIDDEN],
+                        require_at_least_one_of=state_keys,
+                    ),
                 ],
             )
         else:
@@ -345,6 +349,7 @@ class CompiledStateGraph(CompiledGraph):
                     ChannelWrite(
                         [ChannelWriteEntry(key, key)] + state_write_entries,
                         tags=[TAG_HIDDEN],
+                        require_at_least_one_of=state_keys,
                     ),
                 ],
             ).pipe(node)

@@ -43,15 +43,21 @@ class ChannelWrite(RunnableCallable):
     - runnable to map input, or None to use the input, or any other value to use instead
     - whether to skip writing if the mapped value is None
     """
+    require_at_least_one_of: Optional[Sequence[str]]
+    """
+    If defined, at least one of these channels must be written to.
+    """
 
     def __init__(
         self,
         writes: Sequence[Union[ChannelWriteEntry, Packet]],
         *,
         tags: Optional[list[str]] = None,
+        require_at_least_one_of: Optional[Sequence[str]] = None,
     ):
         super().__init__(func=self._write, afunc=self._awrite, name=None, tags=tags)
         self.writes = writes
+        self.require_at_least_one_of = require_at_least_one_of
 
     def __repr_args__(self) -> Any:
         return [("writes", self.writes)]
@@ -100,7 +106,11 @@ class ChannelWrite(RunnableCallable):
             if not write.skip_none or val is not None
         ]
         # write packets and values
-        self.do_write(config, writes + values)
+        self.do_write(
+            config,
+            writes + values,
+            self.require_at_least_one_of if input is not None else None,
+        )
         return input
 
     async def _awrite(self, input: Any, config: RunnableConfig) -> None:
@@ -132,13 +142,27 @@ class ChannelWrite(RunnableCallable):
             if not write.skip_none or val is not None
         ]
         # write packets and values
-        self.do_write(config, writes + values)
+        self.do_write(
+            config,
+            writes + values,
+            self.require_at_least_one_of if input is not None else None,
+        )
         return input
 
     @staticmethod
-    def do_write(config: RunnableConfig, values: List[Tuple[str, Any]]) -> None:
+    def do_write(
+        config: RunnableConfig,
+        values: List[Tuple[str, Any]],
+        require_at_least_one_of: Optional[Sequence[str]] = None,
+    ) -> None:
+        filtered = [(chan, val) for chan, val in values if val is not SKIP_WRITE]
+        if require_at_least_one_of is not None:
+            if not {chan for chan, _ in filtered} & set(require_at_least_one_of):
+                raise InvalidUpdateError(
+                    f"Must write to at least one of {require_at_least_one_of}"
+                )
         write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
-        write([(chan, val) for chan, val in values if val is not SKIP_WRITE])
+        write(filtered)
 
     @staticmethod
     def is_writer(runnable: Runnable) -> bool:
