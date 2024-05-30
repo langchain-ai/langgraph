@@ -1,11 +1,20 @@
 from __future__ import annotations
 
 import asyncio
-from typing import Any, Callable, List, NamedTuple, Optional, Sequence, Tuple, TypeVar
+from typing import (
+    Any,
+    Callable,
+    List,
+    NamedTuple,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+    Union,
+)
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
-from sympy import Union
 
 from langgraph.constants import CONFIG_KEY_SEND, TASKS, Packet
 from langgraph.errors import InvalidUpdateError
