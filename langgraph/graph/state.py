@@ -1,3 +1,4 @@
+from dataclasses import dataclass
 import logging
 import typing
 import warnings
@@ -291,10 +292,13 @@ class CompiledStateGraph(CompiledGraph):
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
-            elif not isinstance(input, dict):
-                raise InvalidUpdateError(f"Expected dict, got {input}")
-            else:
+            elif isinstance(input, dict):
                 return input.get(key, SKIP_WRITE)
+            elif get_type_hints(type(input)).get(key):
+                value = getattr(input, key, SKIP_WRITE)
+                return value if value is not None else SKIP_WRITE
+            else:
+                raise InvalidUpdateError(f"Expected dict, got {input}")
 
         # state updaters
         state_write_entries = (
