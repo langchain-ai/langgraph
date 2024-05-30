@@ -2485,7 +2485,13 @@ async def test_state_graph_few_shot() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+    from langchain_core.messages import (
+        AIMessage,
+        AnyMessage,
+        HumanMessage,
+        ToolCall,
+        ToolMessage,
+    )
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
 
@@ -2549,18 +2555,15 @@ Some examples of past conversations:
         response = await model.ainvoke(formatted)
         return {"messages": response}
 
-    class Do(NamedTuple):
-        node: str
-        kwargs: dict[str, Any]
+    class GoTo:
+        def __init__(self, /, __node__: str, **kwargs: Any) -> None:
+            pass
 
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [
-                Do(node="tools", kwargs={"tool_call": tool_call})
-                for tool_call in tool_calls
-            ]
+            return [GoTo("tools", tool_call=tool_call) for tool_call in tool_calls]
         else:
             return "exit"
 
