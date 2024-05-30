@@ -1500,7 +1500,7 @@ def _apply_writes(
     pending_writes: Sequence[tuple[str, Any]],
 ) -> None:
     if checkpoint["pending_packets"]:
-        raise RuntimeError("Cannot apply writes when there are pending packets")
+        checkpoint["pending_packets"].clear()
 
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
@@ -1630,8 +1630,8 @@ def _prepare_next_tasks(
                         packet.kwargs,
                     )
                 )
-            else:
-                tasks.append(PregelTaskDescription(packet.node, val))
+        else:
+            tasks.append(PregelTaskDescription(packet.node, val))
     checkpoint["pending_packets"].clear()
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them

@@ -2508,7 +2508,6 @@ async def test_state_graph_few_shot() -> None:
 
     class BaseState(TypedDict):
         messages: Annotated[list[AnyMessage], add_messages]
-        # tool_results: Annotated[list[str], operator.add]
 
     class AgentState(BaseState):
         examples: Annotated[
@@ -3097,7 +3096,7 @@ async def test_state_graph_packets() -> None:
     model = FakeMessagesListChatModel(
         responses=[
             AIMessage(
-                id="a1",
+                id="ai1",
                 content="",
                 tool_calls=[
                     {
@@ -3108,7 +3107,7 @@ async def test_state_graph_packets() -> None:
                 ],
             ),
             AIMessage(
-                id="a2",
+                id="ai2",
                 content="",
                 tool_calls=[
                     {
@@ -3174,7 +3173,7 @@ async def test_state_graph_packets() -> None:
         "messages": [
             HumanMessage(content="what is weather in sf", id=AnyStr()),
             AIMessage(
-                id="a1",
+                id="ai1",
                 content="",
                 tool_calls=[
                     {
@@ -3191,7 +3190,7 @@ async def test_state_graph_packets() -> None:
                 tool_call_id="tool_call123",
             ),
             AIMessage(
-                id="a2",
+                id="ai2",
                 content="",
                 tool_calls=[
                     {
@@ -3231,7 +3230,7 @@ async def test_state_graph_packets() -> None:
         {
             "agent": {
                 "messages": AIMessage(
-                    id="a1",
+                    id="ai1",
                     content="",
                     tool_calls=[
                         {
@@ -3258,7 +3257,7 @@ async def test_state_graph_packets() -> None:
         {
             "agent": {
                 "messages": AIMessage(
-                    id="a2",
+                    id="ai2",
                     content="",
                     tool_calls=[
                         {
@@ -3307,34 +3306,46 @@ async def test_state_graph_packets() -> None:
     assert [
         c
         async for c in app_w_interrupt.astream(
-            HumanMessage(content="what is weather in sf"), config
+            {"messages": HumanMessage(content="what is weather in sf")}, config
         )
     ] == [
         {
-            "agent": AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
-                id="ai1",
-            )
+            "agent": {
+                "messages": AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                )
+            }
         },
     ]
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-        values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
-            AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
-                id="ai1",
-            ),
-        ],
+        values={
+            "messages": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id=AnyStr(),
+                ),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                ),
+            ]
+        },
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -3344,40 +3355,49 @@ async def test_state_graph_packets() -> None:
             "source": "loop",
             "step": 1,
             "writes": {
-                "agent": AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {"name": "search_api", "arguments": '"query"'}
-                    },
-                    id="ai1",
-                )
+                "agent": {
+                    "messages": AIMessage(
+                        id="ai1",
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                            },
+                        ],
+                    )
+                }
             },
         },
     )
 
     # modify ai message
-    last_message = (await app_w_interrupt.aget_state(config)).values[-1]
-    last_message.additional_kwargs["function_call"]["arguments"] = '"a different query"'
-    await app_w_interrupt.aupdate_state(config, last_message)
+    last_message = (await app_w_interrupt.aget_state(config)).values["messages"][-1]
+    last_message.tool_calls[0]["args"]["query"] = "a different query"
+    await app_w_interrupt.aupdate_state(config, {"messages": last_message})
 
     # message was replaced instead of appended
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-        values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
-            AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
-                id="ai1",
-            ),
-        ],
+        values={
+            "messages": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id=AnyStr(),
+                ),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+            ]
+        },
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -3387,69 +3407,101 @@ async def test_state_graph_packets() -> None:
             "source": "update",
             "step": 2,
             "writes": {
-                "agent": AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"a different query"',
-                        }
-                    },
-                    id="ai1",
-                )
+                "agent": {
+                    "messages": AIMessage(
+                        id="ai1",
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "a different query"},
+                            },
+                        ],
+                    )
+                }
             },
         },
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
         {
-            "tools": FunctionMessage(
-                content="result for a different query",
-                name="search_api",
-                id=AnyStr(),
-            )
+            "tools": [
+                {
+                    "messages": ToolMessage(
+                        content="result for a different query",
+                        name="search_api",
+                        id=AnyStr(),
+                        tool_call_id="tool_call123",
+                    )
+                }
+            ]
         },
         {
-            "agent": AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
-                id="ai2",
-            )
+            "agent": {
+                "messages": AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another"},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one"},
+                        },
+                    ],
+                )
+            },
         },
     ]
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-        values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
-            AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
-                id="ai1",
-            ),
-            FunctionMessage(
-                content="result for a different query",
-                name="search_api",
-                id=AnyStr(),
-            ),
-            AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
-                id="ai2",
-            ),
-        ],
-        next=("tools",),
+        values={
+            "messages": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id=AnyStr(),
+                ),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another"},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one"},
+                        },
+                    ],
+                ),
+            ]
+        },
+        next=("tools", "tools"),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
             "ts"
@@ -3458,49 +3510,61 @@ async def test_state_graph_packets() -> None:
             "source": "loop",
             "step": 4,
             "writes": {
-                "agent": AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"another"',
-                        }
-                    },
-                    id="ai2",
-                )
+                "agent": {
+                    "messages": AIMessage(
+                        id="ai2",
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call234",
+                                "name": "search_api",
+                                "args": {"query": "another"},
+                            },
+                            {
+                                "id": "tool_call567",
+                                "name": "search_api",
+                                "args": {"query": "a third one"},
+                            },
+                        ],
+                    )
+                },
             },
         },
     )
 
     await app_w_interrupt.aupdate_state(
         config,
-        AIMessage(content="answer", id="ai2"),
+        {"messages": AIMessage(content="answer", id="ai2")},
     )
 
     # replaces message even if object identity is different, as long as id is the same
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
-        values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
-            AIMessage(
-                content="",
-                additional_kwargs={
-                    "function_call": {
-                        "name": "search_api",
-                        "arguments": '"a different query"',
-                    }
-                },
-                id="ai1",
-            ),
-            FunctionMessage(
-                content="result for a different query",
-                name="search_api",
-                id=AnyStr(),
-            ),
-            AIMessage(content="answer", id="ai2"),
-        ],
+        values={
+            "messages": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id=AnyStr(),
+                ),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(content="answer", id="ai2"),
+            ]
+        },
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -3509,7 +3573,7 @@ async def test_state_graph_packets() -> None:
         metadata={
             "source": "update",
             "step": 5,
-            "writes": {"agent": AIMessage(content="answer", id="ai2")},
+            "writes": {"agent": {"messages": AIMessage(content="answer", id="ai2")}},
         },
     )
 
