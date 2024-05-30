@@ -5,10 +5,74 @@ Bundled in to avoid install issues with uuid6 package
 
 import secrets
 import time
-from typing import Optional
-from uuid import UUID
+import uuid
+from typing import Optional, Tuple
 
 _last_v6_timestamp = None
+
+
+class UUID(uuid.UUID):
+    r"""UUID draft version objects"""
+
+    __slots__ = ()
+
+    def __init__(
+        self,
+        hex: Optional[str] = None,
+        bytes: Optional[bytes] = None,
+        bytes_le: Optional[bytes] = None,
+        fields: Optional[Tuple[int, int, int, int, int, int]] = None,
+        int: Optional[int] = None,
+        version: Optional[int] = None,
+        *,
+        is_safe: uuid.SafeUUID = uuid.SafeUUID.unknown,
+    ) -> None:
+        r"""Create a UUID."""
+
+        if int is None or [hex, bytes, bytes_le, fields].count(None) != 4:
+            return super().__init__(
+                hex=hex,
+                bytes=bytes,
+                bytes_le=bytes_le,
+                fields=fields,
+                int=int,
+                version=version,
+                is_safe=is_safe,
+            )
+        if not 0 <= int < 1 << 128:
+            raise ValueError("int is out of range (need a 128-bit value)")
+        if version is not None:
+            if not 6 <= version <= 8:
+                raise ValueError("illegal version number")
+            # Set the variant to RFC 4122.
+            int &= ~(0xC000 << 48)
+            int |= 0x8000 << 48
+            # Set the version number.
+            int &= ~(0xF000 << 64)
+            int |= version << 76
+        super().__init__(int=int, is_safe=is_safe)
+
+    @property
+    def subsec(self) -> int:
+        return ((self.int >> 64) & 0x0FFF) << 8 | ((self.int >> 54) & 0xFF)
+
+    @property
+    def time(self) -> int:
+        if self.version == 6:
+            return (
+                (self.time_low << 28)
+                | (self.time_mid << 12)
+                | (self.time_hi_version & 0x0FFF)
+            )
+        if self.version == 7:
+            return self.int >> 80
+        if self.version == 8:
+            return (self.int >> 80) * 10**6 + _subsec_decode(self.subsec)
+        return super().time
+
+
+def _subsec_decode(value: int) -> int:
+    return -(-value * 10**6 // 2**20)
 
 
 def uuid6(node: Optional[int] = None, clock_seq: Optional[int] = None) -> UUID:
