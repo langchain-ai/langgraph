@@ -65,7 +65,7 @@ class JsonPlusSerializer(SerializerProtocol):
         elif isinstance(obj, Enum):
             return self._encode_constructor_args(obj.__class__, args=[obj.value])
         elif isinstance(obj, NamedTuple):
-            return self._encode_constructor_args(Send, args=[*obj])
+            return self._encode_constructor_args(obj.__class__, args=[*obj])
         else:
             raise TypeError(
                 f"Object of type {obj.__class__.__name__} is not JSON serializable"
