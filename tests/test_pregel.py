@@ -3613,16 +3613,14 @@ def test_state_graph_packets() -> None:
             },
         },
         {
-            "tools": [
-                {
-                    "messages": ToolMessage(
-                        content="result for query",
-                        name="search_api",
-                        id=AnyStr(),
-                        tool_call_id="tool_call123",
-                    )
-                }
-            ]
+            "tools": {
+                "messages": ToolMessage(
+                    content="result for query",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call123",
+                )
+            }
         },
         {
             "agent": {
@@ -3645,28 +3643,24 @@ def test_state_graph_packets() -> None:
             }
         },
         {
-            "tools": [
-                {
-                    "messages": ToolMessage(
-                        content="result for another",
-                        name="search_api",
-                        id=AnyStr(),
-                        tool_call_id="tool_call234",
-                    )
-                },
-            ]
+            "tools": {
+                "messages": ToolMessage(
+                    content="result for another",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call234",
+                )
+            },
         },
         {
-            "tools": [
-                {
-                    "messages": ToolMessage(
-                        content="result for a third one",
-                        name="search_api",
-                        id=AnyStr(),
-                        tool_call_id="tool_call567",
-                    ),
-                },
-            ]
+            "tools": {
+                "messages": ToolMessage(
+                    content="result for a third one",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call567",
+                ),
+            },
         },
         {"agent": {"messages": AIMessage(content="answer", id="ai3")}},
     ]
@@ -3799,16 +3793,14 @@ def test_state_graph_packets() -> None:
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
-            "tools": [
-                {
-                    "messages": ToolMessage(
-                        content="result for a different query",
-                        name="search_api",
-                        id=AnyStr(),
-                        tool_call_id="tool_call123",
-                    )
-                }
-            ]
+            "tools": {
+                "messages": ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call123",
+                )
+            }
         },
         {
             "agent": {
