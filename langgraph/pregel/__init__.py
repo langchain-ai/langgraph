@@ -58,6 +58,7 @@ from langgraph.channels.base import (
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
+    CheckpointMetadata,
     copy_checkpoint,
     empty_checkpoint,
 )
@@ -774,6 +775,52 @@ class Pregel(
             ) as executor, ManagedValuesManager(
                 self.managed_values_dict, config, self
             ) as managed:
+
+                def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
+                    nonlocal checkpoint, checkpoint_config, channels
+
+                    if self.checkpointer is None:
+                        return
+                    if debug:
+                        print_step_checkpoint(
+                            metadata["step"], channels, self.stream_channels_list
+                        )
+
+                    # create new checkpoint
+                    checkpoint = create_checkpoint(
+                        checkpoint, channels, metadata["step"]
+                    )
+                    # save it, without blocking
+                    bg.append(
+                        executor.submit(
+                            self.checkpointer.put,
+                            checkpoint_config,
+                            copy_checkpoint(checkpoint),
+                            metadata,
+                        )
+                    )
+                    # update checkpoint config
+                    checkpoint_config = {
+                        **checkpoint_config,
+                        "configurable": {
+                            **checkpoint_config["configurable"],
+                            "thread_ts": checkpoint["id"],
+                        },
+                    }
+                    # yield debug checkpoint event
+                    if "debug" in stream_modes:
+                        yield from _with_mode(
+                            "debug",
+                            isinstance(stream_mode, list),
+                            map_debug_checkpoint(
+                                metadata["step"],
+                                checkpoint_config,
+                                channels,
+                                self.stream_channels_asis,
+                                metadata,
+                            ),
+                        )
+
                 # map inputs to channel updates
                 if input_writes := deque(map_input(input_keys, input)):
                     # discard any unfinished tasks from previous checkpoint
@@ -789,23 +836,13 @@ class Pregel(
                     # apply input writes
                     _apply_writes(checkpoint, channels, input_writes)
                     # save input checkpoint
-                    if self.checkpointer is not None:
-                        checkpoint = create_checkpoint(checkpoint, channels, start)
-                        bg.append(
-                            executor.submit(
-                                self.checkpointer.put,
-                                checkpoint_config,
-                                copy_checkpoint(checkpoint),
-                                {"source": "input", "step": start, "writes": input},
-                            )
-                        )
-                        checkpoint_config = {
-                            **checkpoint_config,
-                            "configurable": {
-                                **checkpoint_config["configurable"],
-                                "thread_ts": checkpoint["id"],
-                            },
+                    yield from put_checkpoint(
+                        {
+                            "source": "input",
+                            "step": start,
+                            "writes": input,
                         }
+                    )
                     # increment start to 0
                     start += 1
                 else:
@@ -890,9 +927,6 @@ class Pregel(
                     # apply writes to channels
                     _apply_writes(checkpoint, channels, pending_writes)
 
-                    if debug:
-                        print_step_checkpoint(step, channels, self.stream_channels_list)
-
                     # yield current value or updates
                     if "updates" in stream_modes:
                         yield from _with_mode(
@@ -916,47 +950,21 @@ class Pregel(
                         )
 
                     # save end of step checkpoint
-                    if self.checkpointer is not None:
-                        checkpoint = create_checkpoint(checkpoint, channels, step)
-                        bg.append(
-                            executor.submit(
-                                self.checkpointer.put,
-                                checkpoint_config,
-                                copy_checkpoint(checkpoint),
-                                {
-                                    "source": "loop",
-                                    "step": step,
-                                    "writes": single(
-                                        map_output_updates(output_keys, next_tasks)
-                                    )
-                                    if self.stream_mode == "updates"
-                                    else single(
-                                        map_output_values(
-                                            output_keys, pending_writes, channels
-                                        ),
-                                    ),
-                                },
+                    yield from put_checkpoint(
+                        {
+                            "source": "loop",
+                            "step": step,
+                            "writes": single(
+                                map_output_updates(output_keys, next_tasks)
                             )
-                        )
-                        checkpoint_config = {
-                            **checkpoint_config,
-                            "configurable": {
-                                **checkpoint_config["configurable"],
-                                "thread_ts": checkpoint["id"],
-                            },
-                        }
-                    # yield debug checkpoint
-                    if "debug" in stream_modes:
-                        yield from _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_checkpoint(
-                                step,
-                                checkpoint_config if self.checkpointer else None,
-                                channels,
-                                self.stream_channels_asis,
+                            if self.stream_mode == "updates"
+                            else single(
+                                map_output_values(
+                                    output_keys, pending_writes, channels
+                                ),
                             ),
-                        )
+                        }
+                    )
 
                     # after execution, check if we should interrupt
                     if _should_interrupt(
@@ -1073,6 +1081,51 @@ class Pregel(
             ) as channels, AsyncManagedValuesManager(
                 self.managed_values_dict, config, self
             ) as managed:
+
+                def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
+                    nonlocal checkpoint, checkpoint_config, channels
+
+                    if self.checkpointer is None:
+                        return
+                    if debug:
+                        print_step_checkpoint(
+                            metadata["step"], channels, self.stream_channels_list
+                        )
+
+                    # create new checkpoint
+                    checkpoint = create_checkpoint(
+                        checkpoint, channels, metadata["step"]
+                    )
+                    # save it, without blocking
+                    bg.append(
+                        asyncio.create_task(
+                            self.checkpointer.aput(
+                                checkpoint_config, copy_checkpoint(checkpoint), metadata
+                            )
+                        )
+                    )
+                    # update checkpoint config
+                    checkpoint_config = {
+                        **checkpoint_config,
+                        "configurable": {
+                            **checkpoint_config["configurable"],
+                            "thread_ts": checkpoint["id"],
+                        },
+                    }
+                    # yield debug checkpoint event
+                    if "debug" in stream_modes:
+                        yield from _with_mode(
+                            "debug",
+                            isinstance(stream_mode, list),
+                            map_debug_checkpoint(
+                                metadata["step"],
+                                checkpoint_config,
+                                channels,
+                                self.stream_channels_asis,
+                                metadata,
+                            ),
+                        )
+
                 # map inputs to channel updates
                 if input_writes := deque(map_input(input_keys, input)):
                     # discard any unfinished tasks from previous checkpoint
@@ -1088,24 +1141,10 @@ class Pregel(
                     # apply input writes
                     _apply_writes(checkpoint, channels, input_writes)
                     # save input checkpoint
-                    if self.checkpointer is not None:
-                        checkpoint = create_checkpoint(checkpoint, channels, start)
-                        bg.append(
-                            asyncio.create_task(
-                                self.checkpointer.aput(
-                                    checkpoint_config,
-                                    copy_checkpoint(checkpoint),
-                                    {"source": "input", "step": start, "writes": input},
-                                )
-                            )
-                        )
-                        checkpoint_config = {
-                            **checkpoint_config,
-                            "configurable": {
-                                **checkpoint_config["configurable"],
-                                "thread_ts": checkpoint["id"],
-                            },
-                        }
+                    for chunk in put_checkpoint(
+                        {"source": "input", "step": start, "writes": input}
+                    ):
+                        yield chunk
                     # increment start to 0
                     start += 1
                 else:
@@ -1193,9 +1232,6 @@ class Pregel(
                     # apply writes to channels
                     _apply_writes(checkpoint, channels, pending_writes)
 
-                    if debug:
-                        print_step_checkpoint(step, channels, self.stream_channels_list)
-
                     # yield current value or updates
                     if "updates" in stream_modes:
                         for chunk in _with_mode(
@@ -1222,49 +1258,20 @@ class Pregel(
                             yield chunk
 
                     # save end of step checkpoint
-                    if self.checkpointer is not None:
-                        checkpoint = create_checkpoint(checkpoint, channels, step)
-                        bg.append(
-                            asyncio.create_task(
-                                self.checkpointer.aput(
-                                    checkpoint_config,
-                                    checkpoint,
-                                    {
-                                        "source": "loop",
-                                        "step": step,
-                                        "writes": single(
-                                            map_output_updates(output_keys, next_tasks)
-                                        )
-                                        if self.stream_mode == "updates"
-                                        else single(
-                                            map_output_values(
-                                                output_keys, pending_writes, channels
-                                            )
-                                        ),
-                                    },
-                                )
+                    for chunk in put_checkpoint(
+                        {
+                            "source": "loop",
+                            "step": step,
+                            "writes": single(
+                                map_output_updates(output_keys, next_tasks)
                             )
-                        )
-                        checkpoint_config = {
-                            **checkpoint_config,
-                            "configurable": {
-                                **checkpoint_config["configurable"],
-                                "thread_ts": checkpoint["id"],
-                            },
-                        }
-                    # yield debug checkpoint
-                    if "debug" in stream_modes:
-                        for chunk in _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_checkpoint(
-                                step,
-                                checkpoint_config if self.checkpointer else None,
-                                channels,
-                                self.stream_channels_asis,
+                            if self.stream_mode == "updates"
+                            else single(
+                                map_output_values(output_keys, pending_writes, channels)
                             ),
-                        ):
-                            yield chunk
+                        }
+                    ):
+                        yield chunk
 
                     # after execution, check if we should interrupt
                     if _should_interrupt(
