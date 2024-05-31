@@ -9,7 +9,6 @@ from uuid import UUID
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
 
-from langgraph.constants import Send
 from langgraph.serde.base import SerializerProtocol
 
 LC_REVIVER = Reviver()
