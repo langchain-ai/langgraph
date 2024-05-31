@@ -545,12 +545,6 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             },
         },
         {
-            "type": "checkpoint",
-            "timestamp": AnyStr(),
-            "step": 0,
-            "payload": {"config": None, "values": {"output": 13, "inbox": [3]}},
-        },
-        {
             "type": "task",
             "timestamp": AnyStr(),
             "step": 1,
@@ -570,12 +564,6 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "name": "two",
                 "result": [("output", 4)],
             },
-        },
-        {
-            "type": "checkpoint",
-            "timestamp": AnyStr(),
-            "step": 1,
-            "payload": {"config": None, "values": {"output": 4, "inbox": []}},
         },
     ]
 
@@ -4042,18 +4030,6 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
         (
             "debug",
             {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 0,
-                "payload": {
-                    "config": None,
-                    "values": {"query": "what is weather in sf", "docs": []},
-                },
-            },
-        ),
-        (
-            "debug",
-            {
                 "type": "task",
                 "timestamp": AnyStr(),
                 "step": 1,
@@ -4084,18 +4060,6 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
             },
         ),
         ("values", {"query": "query: what is weather in sf", "docs": []}),
-        (
-            "debug",
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "config": None,
-                    "values": {"query": "query: what is weather in sf", "docs": []},
-                },
-            },
-        ),
         (
             "debug",
             {
@@ -4175,21 +4139,6 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
         (
             "debug",
             {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 2,
-                "payload": {
-                    "config": None,
-                    "values": {
-                        "query": "query: what is weather in sf",
-                        "docs": ["doc1", "doc2", "doc3", "doc4"],
-                    },
-                },
-            },
-        ),
-        (
-            "debug",
-            {
                 "type": "task",
                 "timestamp": AnyStr(),
                 "step": 3,
@@ -4225,22 +4174,6 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "query": "query: what is weather in sf",
                 "answer": "doc1,doc2,doc3,doc4",
                 "docs": ["doc1", "doc2", "doc3", "doc4"],
-            },
-        ),
-        (
-            "debug",
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 3,
-                "payload": {
-                    "config": None,
-                    "values": {
-                        "query": "query: what is weather in sf",
-                        "answer": "doc1,doc2,doc3,doc4",
-                        "docs": ["doc1", "doc2", "doc3", "doc4"],
-                    },
-                },
             },
         ),
     ]
@@ -4457,6 +4390,27 @@ async def test_branch_then() -> None:
             {
                 "type": "checkpoint",
                 "timestamp": AnyStr(),
+                "step": -1,
+                "payload": {
+                    "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "run_id": None,
+                        "configurable": {"thread_id": "10", "thread_ts": AnyStr()},
+                    },
+                    "values": {"my_key": ""},
+                    "metadata": {
+                        "source": "input",
+                        "step": -1,
+                        "writes": {"my_key": "value", "market": "DE"},
+                    },
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
                 "step": 0,
                 "payload": {
                     "config": {
@@ -4470,7 +4424,11 @@ async def test_branch_then() -> None:
                             "thread_ts": AnyStr(),
                         },
                     },
-                    "values": {"my_key": "value", "market": "DE"},
+                    "values": {
+                        "my_key": "value",
+                        "market": "DE",
+                    },
+                    "metadata": {"source": "loop", "step": 0, "writes": None},
                 },
             },
             {
@@ -4511,6 +4469,11 @@ async def test_branch_then() -> None:
                         },
                     },
                     "values": {"my_key": "value prepared", "market": "DE"},
+                    "metadata": {
+                        "source": "loop",
+                        "step": 1,
+                        "writes": {"prepare": {"my_key": " prepared"}},
+                    },
                 },
             },
             {
@@ -4550,7 +4513,15 @@ async def test_branch_then() -> None:
                             "thread_ts": AnyStr(),
                         },
                     },
-                    "values": {"my_key": "value prepared slow", "market": "DE"},
+                    "values": {
+                        "my_key": "value prepared slow",
+                        "market": "DE",
+                    },
+                    "metadata": {
+                        "source": "loop",
+                        "step": 2,
+                        "writes": {"tool_two_slow": {"my_key": " slow"}},
+                    },
                 },
             },
             {
@@ -4593,6 +4564,11 @@ async def test_branch_then() -> None:
                     "values": {
                         "my_key": "value prepared slow finished",
                         "market": "DE",
+                    },
+                    "metadata": {
+                        "source": "loop",
+                        "step": 3,
+                        "writes": {"finish": {"my_key": " finished"}},
                     },
                 },
             },
