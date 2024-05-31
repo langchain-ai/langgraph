@@ -105,6 +105,36 @@ async def test_node_cancellation_on_other_node_exception() -> None:
     assert inner_task_cancelled
 
 
+async def test_step_timeout_on_stream_hang() -> None:
+    inner_task_cancelled = False
+
+    async def awhile(input: Any) -> None:
+        try:
+            await asyncio.sleep(1.5)
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+
+    async def alittlewhile(input: Any) -> None:
+        await asyncio.sleep(0.6)
+        return "1"
+
+    builder = Graph()
+    builder.add_node(awhile)
+    builder.add_node(alittlewhile)
+    builder.set_conditional_entry_point(lambda _: ["awhile", "alittlewhile"], then=END)
+    graph = builder.compile()
+    graph.step_timeout = 1
+
+    with pytest.raises(asyncio.CancelledError):
+        async for chunk in graph.astream(1, stream_mode="updates"):
+            assert chunk == {"alittlewhile": {"alittlewhile": "1"}}
+            await asyncio.sleep(0.6)
+
+    assert inner_task_cancelled
+
+
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")

@@ -915,7 +915,9 @@ class Pregel(
                         done, inflight = concurrent.futures.wait(
                             futures,
                             return_when=concurrent.futures.FIRST_COMPLETED,
-                            timeout=end_time - time.monotonic() if end_time else None,
+                            timeout=max(0, end_time - time.monotonic())
+                            if end_time
+                            else None,
                         )
                         for fut in done:
                             task = futures.pop(fut)
@@ -1050,6 +1052,7 @@ class Pregel(
             None,
         )
         try:
+            loop = asyncio.get_event_loop()
             bg: list[asyncio.Task] = []
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
@@ -1231,15 +1234,15 @@ class Pregel(
                         for task in next_tasks
                     }
                     end_time = (
-                        self.step_timeout + time.monotonic()
-                        if self.step_timeout
-                        else None
+                        self.step_timeout + loop.time() if self.step_timeout else None
                     )
                     while futures:
                         done, inflight = await asyncio.wait(
                             futures,
                             return_when=asyncio.FIRST_COMPLETED,
-                            timeout=end_time - time.monotonic() if end_time else None,
+                            timeout=max(0, end_time - loop.time())
+                            if end_time
+                            else None,
                         )
                         for fut in done:
                             task = futures.pop(fut)
