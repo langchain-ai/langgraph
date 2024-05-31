@@ -15,7 +15,7 @@ from typing import (
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
 from langgraph.checkpoint.id import uuid6
-from langgraph.constants import Packet
+from langgraph.constants import Send
 from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
 
@@ -74,7 +74,7 @@ class Checkpoint(TypedDict):
     
     Used to determine which nodes to execute next.
     """
-    pending_packets: List[Packet]
+    pending_packets: List[Send]
     """List of packets sent to nodes but not yet processed.
     Cleared by the next checkpoint."""
 

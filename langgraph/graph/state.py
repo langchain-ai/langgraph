@@ -27,7 +27,7 @@ from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
-from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Packet
+from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
 from langgraph.managed.base import ManagedValue, is_managed_value
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All
@@ -382,11 +382,11 @@ class CompiledStateGraph(CompiledGraph):
                 )
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(packets: list[Union[str, Packet]]) -> Optional[ChannelWrite]:
+        def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
             if filtered := [p for p in packets if p != END]:
                 writes = [
                     ChannelWriteEntry(f"branch:{start}:{name}:{p}", start)
-                    if not isinstance(p, Packet)
+                    if not isinstance(p, Send)
                     else p
                     for p in filtered
                 ]
@@ -395,10 +395,7 @@ class CompiledStateGraph(CompiledGraph):
                         ChannelWriteEntry(
                             f"branch:{start}:{name}:then",
                             WaitForNames(
-                                {
-                                    p.node if isinstance(p, Packet) else p
-                                    for p in filtered
-                                }
+                                {p.node if isinstance(p, Send) else p for p in filtered}
                             ),
                         )
                     )

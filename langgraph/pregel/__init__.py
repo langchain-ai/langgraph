@@ -69,7 +69,7 @@ from langgraph.constants import (
     INTERRUPT,
     TAG_HIDDEN,
     TASKS,
-    Packet,
+    Send,
 )
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
@@ -1532,7 +1532,7 @@ def _local_write(
 ) -> None:
     for chan, value in writes:
         if chan == TASKS:
-            if not isinstance(value, Packet):
+            if not isinstance(value, Send):
                 raise InvalidUpdateError(
                     f"Invalid packet type, expected Packet, got {value}"
                 )

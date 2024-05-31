@@ -16,7 +16,7 @@ from typing import (
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
-from langgraph.constants import CONFIG_KEY_SEND, TASKS, Packet
+from langgraph.constants import CONFIG_KEY_SEND, TASKS, Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.utils import RunnableCallable
 
@@ -36,7 +36,7 @@ class ChannelWriteEntry(NamedTuple):
 
 
 class ChannelWrite(RunnableCallable):
-    writes: Sequence[Union[ChannelWriteEntry, Packet]]
+    writes: Sequence[Union[ChannelWriteEntry, Send]]
     """
     Sequence of write entries, each of which is a tuple of:
     - channel name
@@ -50,7 +50,7 @@ class ChannelWrite(RunnableCallable):
 
     def __init__(
         self,
-        writes: Sequence[Union[ChannelWriteEntry, Packet]],
+        writes: Sequence[Union[ChannelWriteEntry, Send]],
         *,
         tags: Optional[list[str]] = None,
         require_at_least_one_of: Optional[Sequence[str]] = None,
@@ -83,9 +83,7 @@ class ChannelWrite(RunnableCallable):
 
     def _write(self, input: Any, config: RunnableConfig) -> None:
         # split packets and entries
-        writes = [
-            (TASKS, packet) for packet in self.writes if isinstance(packet, Packet)
-        ]
+        writes = [(TASKS, packet) for packet in self.writes if isinstance(packet, Send)]
         entries = [
             write for write in self.writes if isinstance(write, ChannelWriteEntry)
         ]
@@ -115,9 +113,7 @@ class ChannelWrite(RunnableCallable):
 
     async def _awrite(self, input: Any, config: RunnableConfig) -> None:
         # split packets and entries
-        writes = [
-            (TASKS, packet) for packet in self.writes if isinstance(packet, Packet)
-        ]
+        writes = [(TASKS, packet) for packet in self.writes if isinstance(packet, Send)]
         entries = [
             write for write in self.writes if isinstance(write, ChannelWriteEntry)
         ]
