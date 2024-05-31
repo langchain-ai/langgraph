@@ -1548,14 +1548,14 @@ def _apply_writes(
     channels: Mapping[str, BaseChannel],
     pending_writes: Sequence[tuple[str, Any]],
 ) -> None:
-    if checkpoint["pending_packets"]:
-        checkpoint["pending_packets"].clear()
+    if checkpoint["pending_sends"]:
+        checkpoint["pending_sends"].clear()
 
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
     for chan, val in pending_writes:
         if chan == TASKS:
-            checkpoint["pending_packets"].append(val)
+            checkpoint["pending_sends"].append(val)
         else:
             pending_writes_by_channel[chan].append(val)
 
@@ -1625,7 +1625,7 @@ def _prepare_next_tasks(
     checkpoint = copy_checkpoint(checkpoint)
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
     # Consume pending packets
-    for packet in checkpoint["pending_packets"]:
+    for packet in checkpoint["pending_sends"]:
         if for_execution:
             if node := processes[packet.node].get_node():
                 writes = deque()
@@ -1668,7 +1668,7 @@ def _prepare_next_tasks(
         else:
             tasks.append(PregelTaskDescription(packet.node, packet.arg))
     if for_execution:
-        checkpoint["pending_packets"].clear()
+        checkpoint["pending_sends"].clear()
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
