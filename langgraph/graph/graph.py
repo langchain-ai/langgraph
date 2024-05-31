@@ -113,9 +113,7 @@ class Branch(NamedTuple):
         if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Packet)):
-            raise InvalidUpdateError(
-                "Cannot send a packet with keyword arguments to the END node"
-            )
+            raise InvalidUpdateError("Cannot send a packet to the END node")
         return writer(destinations) or input
 
 

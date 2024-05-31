@@ -68,17 +68,16 @@ def map_debug_tasks(
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
-        payload = {
-            "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, idx)))),
-            "name": name,
-            "input": input,
-            "triggers": triggers,
-        }
         yield {
             "type": "task",
             "timestamp": ts,
             "step": step,
-            "payload": payload,
+            "payload": {
+                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, idx)))),
+                "name": name,
+                "input": input,
+                "triggers": triggers,
+            },
         }
 
 
