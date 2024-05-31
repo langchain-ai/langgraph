@@ -1686,6 +1686,7 @@ def _prepare_next_tasks(
                                             "langgraph_step": step,
                                             "langgraph_node": name,
                                             "langgraph_triggers": triggers,
+                                            "langgraph_task_idx": len(tasks),
                                         }
                                     },
                                 ),
