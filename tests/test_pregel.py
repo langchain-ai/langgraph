@@ -34,7 +34,7 @@ from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.constants import Packet
+from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
@@ -3503,7 +3503,7 @@ def test_state_graph_packets() -> None:
         ), "nodes can pass extra data to their cond edges, which isn't saved in state"
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [Packet("tools", tool_call) for tool_call in tool_calls]
+            return [Send("tools", tool_call) for tool_call in tool_calls]
         else:
             return END
 

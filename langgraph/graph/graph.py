@@ -26,7 +26,7 @@ from langchain_core.runnables.graph import (
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.constants import TAG_HIDDEN, Packet
+from langgraph.constants import TAG_HIDDEN, Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
@@ -105,14 +105,12 @@ class Branch(NamedTuple):
         if not isinstance(result, list):
             result = [result]
         if self.ends:
-            destinations = [
-                r if isinstance(r, Packet) else self.ends[r] for r in result
-            ]
+            destinations = [r if isinstance(r, Send) else self.ends[r] for r in result]
         else:
             destinations = result
         if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
-        if any(p.node == END for p in destinations if isinstance(p, Packet)):
+        if any(p.node == END for p in destinations if isinstance(p, Send)):
             raise InvalidUpdateError("Cannot send a packet to the END node")
         return writer(destinations) or input
 
@@ -404,10 +402,10 @@ class CompiledGraph(Pregel):
             self.nodes[end].channels.append(start)
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(packets: list[Union[str, Packet]]) -> Optional[ChannelWrite]:
+        def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
             writes = [
                 ChannelWriteEntry(f"branch:{start}:{name}:{p}" if p != END else END)
-                if not isinstance(p, Packet)
+                if not isinstance(p, Send)
                 else p
                 for p in packets
             ]

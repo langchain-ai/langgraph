@@ -11,6 +11,6 @@ RESERVED = {INTERRUPT, TASKS, CONFIG_KEY_SEND, CONFIG_KEY_READ}
 TAG_HIDDEN = "langsmith:hidden"
 
 
-class Packet(NamedTuple):
+class Send(NamedTuple):
     node: str
     arg: Any

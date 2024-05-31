@@ -32,7 +32,7 @@ from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
-from langgraph.constants import Packet
+from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
@@ -2584,7 +2584,7 @@ Some examples of past conversations:
     def should_continue(data: AgentState) -> str:
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [Packet("tools", tool_call) for tool_call in tool_calls]
+            return [Send("tools", tool_call) for tool_call in tool_calls]
         else:
             return "exit"
 
@@ -3148,7 +3148,7 @@ async def test_state_graph_packets() -> None:
     def should_continue(data: AgentState) -> str:
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [Packet("tools", tool_call) for tool_call in tool_calls]
+            return [Send("tools", tool_call) for tool_call in tool_calls]
         else:
             return END
 
