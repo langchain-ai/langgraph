@@ -898,18 +898,45 @@ class Pregel(
                             map_debug_tasks(step, next_tasks),
                         )
 
-                    futures = [
-                        executor.submit(run_with_retry, task, self.retry_policy)
+                    futures = {
+                        executor.submit(run_with_retry, task, self.retry_policy): task
                         for task in next_tasks
-                    ]
+                    }
 
                     # execute tasks, and wait for one to fail or all to finish.
                     # each task is independent from all other concurrent tasks
-                    done, inflight = concurrent.futures.wait(
-                        futures,
-                        return_when=concurrent.futures.FIRST_EXCEPTION,
-                        timeout=self.step_timeout,
-                    )
+                    # yield updates output as they come in
+                    while futures:
+                        # TODO fix timeout on each iteration
+                        # TODO add test for two parallel tasks, first one fails
+                        # should not wait for second one to finish
+                        done, inflight = concurrent.futures.wait(
+                            futures,
+                            return_when=concurrent.futures.FIRST_COMPLETED,
+                            timeout=self.step_timeout,
+                        )
+                        for fut in done:
+                            task = futures.pop(fut)
+                            if fut.exception() is not None:
+                                # we got an exception, break out of while loop
+                                # exception will be handle in panic_or_proceed
+                                futures.clear()
+                            else:
+                                # yield updates output for the finished task
+                                if "updates" in stream_modes:
+                                    yield from _with_mode(
+                                        "updates",
+                                        isinstance(stream_mode, list),
+                                        map_output_updates(output_keys, [task]),
+                                    )
+                                if "debug" in stream_modes:
+                                    yield from _with_mode(
+                                        "debug",
+                                        isinstance(stream_mode, list),
+                                        map_debug_task_results(
+                                            step, [task], self.stream_channels_list
+                                        ),
+                                    )
 
                     # panic on failure or timeout
                     _panic_or_proceed(done, inflight, step)
@@ -927,21 +954,7 @@ class Pregel(
                     # apply writes to channels
                     _apply_writes(checkpoint, channels, pending_writes)
 
-                    # yield current value or updates
-                    if "updates" in stream_modes:
-                        yield from _with_mode(
-                            "updates",
-                            isinstance(stream_mode, list),
-                            map_output_updates(output_keys, next_tasks),
-                        )
-                    if "debug" in stream_modes:
-                        yield from _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_task_results(
-                                step, next_tasks, self.stream_channels_list
-                            ),
-                        )
+                    # yield values output
                     if "values" in stream_modes:
                         yield from _with_mode(
                             "values",
@@ -1602,6 +1615,7 @@ def _prepare_next_tasks(
                                         "langgraph_step": step,
                                         "langgraph_node": packet.node,
                                         "langgraph_triggers": [TASKS],
+                                        "langgraph_task_idx": len(tasks),
                                     }
                                 },
                             ),

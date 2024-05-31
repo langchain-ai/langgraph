@@ -504,6 +504,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     two = (
         Channel.subscribe_to("inbox")
         | RunnableLambda(add_one).batch
+        | RunnablePassthrough(lambda _: time.sleep(0.1))
         | Channel.write_to("output").batch
     )
 
@@ -534,7 +535,8 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
 
     assert [*app.stream({"input": 2, "inbox": 12}, stream_mode="updates")] == [
-        {"one": {"inbox": 3}, "two": {"output": 13}},
+        {"one": {"inbox": 3}},
+        {"two": {"output": 13}},
         {"two": {"output": 4}},
     ]
     assert [*app.stream({"input": 2, "inbox": 12})] == [
@@ -547,7 +549,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "9379da35-ae1c-5a7b-8556-7ce22a1f8fde",
+                "id": "d3a22fff-dde7-5343-a8c6-aa4339237999",
                 "name": "one",
                 "input": 2,
                 "triggers": ["input"],
@@ -558,7 +560,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "49ac8f60-4ff2-5cdd-a319-66bbd9837e5a",
+                "id": "f6b9dbc2-ec0e-51f7-aa72-86b56da1ec48",
                 "name": "two",
                 "input": [12],
                 "triggers": ["inbox"],
@@ -569,7 +571,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "9379da35-ae1c-5a7b-8556-7ce22a1f8fde",
+                "id": "d3a22fff-dde7-5343-a8c6-aa4339237999",
                 "name": "one",
                 "result": [("inbox", 3)],
             },
@@ -579,7 +581,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "49ac8f60-4ff2-5cdd-a319-66bbd9837e5a",
+                "id": "f6b9dbc2-ec0e-51f7-aa72-86b56da1ec48",
                 "name": "two",
                 "result": [("output", 13)],
             },
@@ -589,7 +591,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "b97f26c1-a34b-51e0-884e-44a41a3a3b47",
+                "id": "a7b858a4-42d5-5be4-ab93-7f9ae51ee175",
                 "name": "two",
                 "input": [3],
                 "triggers": ["inbox"],
@@ -600,7 +602,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "b97f26c1-a34b-51e0-884e-44a41a3a3b47",
+                "id": "a7b858a4-42d5-5be4-ab93-7f9ae51ee175",
                 "name": "two",
                 "result": [("output", 4)],
             },
@@ -3475,12 +3477,12 @@ def test_state_graph_packets() -> None:
                     {
                         "id": "tool_call234",
                         "name": "search_api",
-                        "args": {"query": "another"},
+                        "args": {"query": "another", "idx": 0},
                     },
                     {
                         "id": "tool_call567",
                         "name": "search_api",
-                        "args": {"query": "a third one"},
+                        "args": {"query": "a third one", "idx": 1},
                     },
                 ],
             ),
@@ -3506,6 +3508,7 @@ def test_state_graph_packets() -> None:
             return END
 
     def tools_node(tool_call: ToolCall, config: RunnableConfig) -> AgentState:
+        time.sleep(tool_call["args"].get("idx", 0) / 10)
         output = tools_by_name[tool_call["name"]].invoke(tool_call["args"], config)
         return {
             "messages": ToolMessage(
@@ -3563,12 +3566,12 @@ def test_state_graph_packets() -> None:
                     {
                         "id": "tool_call234",
                         "name": "search_api",
-                        "args": {"query": "another"},
+                        "args": {"query": "another", "idx": 0},
                     },
                     {
                         "id": "tool_call567",
                         "name": "search_api",
-                        "args": {"query": "a third one"},
+                        "args": {"query": "a third one", "idx": 1},
                     },
                 ],
             ),
@@ -3630,12 +3633,12 @@ def test_state_graph_packets() -> None:
                         {
                             "id": "tool_call234",
                             "name": "search_api",
-                            "args": {"query": "another"},
+                            "args": {"query": "another", "idx": 0},
                         },
                         {
                             "id": "tool_call567",
                             "name": "search_api",
-                            "args": {"query": "a third one"},
+                            "args": {"query": "a third one", "idx": 1},
                         },
                     ],
                 )
@@ -3651,6 +3654,10 @@ def test_state_graph_packets() -> None:
                         tool_call_id="tool_call234",
                     )
                 },
+            ]
+        },
+        {
+            "tools": [
                 {
                     "messages": ToolMessage(
                         content="result for a third one",
@@ -3812,12 +3819,12 @@ def test_state_graph_packets() -> None:
                         {
                             "id": "tool_call234",
                             "name": "search_api",
-                            "args": {"query": "another"},
+                            "args": {"query": "another", "idx": 0},
                         },
                         {
                             "id": "tool_call567",
                             "name": "search_api",
-                            "args": {"query": "a third one"},
+                            "args": {"query": "a third one", "idx": 1},
                         },
                     ],
                 )
@@ -3856,12 +3863,12 @@ def test_state_graph_packets() -> None:
                         {
                             "id": "tool_call234",
                             "name": "search_api",
-                            "args": {"query": "another"},
+                            "args": {"query": "another", "idx": 0},
                         },
                         {
                             "id": "tool_call567",
                             "name": "search_api",
-                            "args": {"query": "a third one"},
+                            "args": {"query": "a third one", "idx": 1},
                         },
                     ],
                 ),
@@ -3882,12 +3889,12 @@ def test_state_graph_packets() -> None:
                             {
                                 "id": "tool_call234",
                                 "name": "search_api",
-                                "args": {"query": "another"},
+                                "args": {"query": "another", "idx": 0},
                             },
                             {
                                 "id": "tool_call567",
                                 "name": "search_api",
-                                "args": {"query": "a third one"},
+                                "args": {"query": "a third one", "idx": 1},
                             },
                         ],
                     )
@@ -5520,6 +5527,11 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
         return {"query": f'query: {data["query"]}'}
 
     def retriever_one(data: State) -> State:
+        # timer ensures stream output order is stable
+        # also, it confirms that the update order is not dependent on finishing order
+        # instead being defined by the order of the nodes/edges in the graph definition
+        # ie. stable between invocations
+        time.sleep(0.1)
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
@@ -5552,10 +5564,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-            "retriever_one": {"docs": ["doc1", "doc2"]},
-        },
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
@@ -5587,7 +5597,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "03dadab4-fb41-5308-a8a4-6eeb9ef7b9aa",
+                    "id": "3b1f6f15-3dd2-5d16-a708-067211f32291",
                     "name": "rewrite_query",
                     "input": {
                         "query": "what is weather in sf",
@@ -5606,7 +5616,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "03dadab4-fb41-5308-a8a4-6eeb9ef7b9aa",
+                    "id": "3b1f6f15-3dd2-5d16-a708-067211f32291",
                     "name": "rewrite_query",
                     "result": [("query", "query: what is weather in sf")],
                 },
@@ -5620,7 +5630,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "96f499e2-e203-5a13-9259-08cb62f4a2e5",
+                    "id": "b47120c2-fc93-550d-a74a-d4d41be0e2c5",
                     "name": "retriever_one",
                     "input": {
                         "query": "query: what is weather in sf",
@@ -5638,7 +5648,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "6b344a90-a061-5f17-8714-51f0cf67cf01",
+                    "id": "0589805a-3dd0-59db-a87e-59dc8504ebdb",
                     "name": "retriever_two",
                     "input": {
                         "query": "query: what is weather in sf",
@@ -5651,10 +5661,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
         ),
         (
             "updates",
-            {
-                "retriever_one": {"docs": ["doc1", "doc2"]},
-                "retriever_two": {"docs": ["doc3", "doc4"]},
-            },
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
         ),
         (
             "debug",
@@ -5663,22 +5670,26 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "96f499e2-e203-5a13-9259-08cb62f4a2e5",
-                    "name": "retriever_one",
-                    "result": [("docs", ["doc1", "doc2"])],
+                    "id": "0589805a-3dd0-59db-a87e-59dc8504ebdb",
+                    "name": "retriever_two",
+                    "result": [("docs", ["doc3", "doc4"])],
                 },
             },
         ),
         (
+            "updates",
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        ),
+        (
             "debug",
             {
                 "type": "task_result",
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "6b344a90-a061-5f17-8714-51f0cf67cf01",
-                    "name": "retriever_two",
-                    "result": [("docs", ["doc3", "doc4"])],
+                    "id": "b47120c2-fc93-550d-a74a-d4d41be0e2c5",
+                    "name": "retriever_one",
+                    "result": [("docs", ["doc1", "doc2"])],
                 },
             },
         ),
@@ -5696,7 +5707,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "0dda6269-4ce3-5b98-9cea-d40737a68500",
+                    "id": "2385234c-c956-5f86-9f53-08ffe59df3bd",
                     "name": "qa",
                     "input": {
                         "query": "query: what is weather in sf",
@@ -5715,7 +5726,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "0dda6269-4ce3-5b98-9cea-d40737a68500",
+                    "id": "2385234c-c956-5f86-9f53-08ffe59df3bd",
                     "name": "qa",
                     "result": [("answer", "doc1,doc2,doc3,doc4")],
                 },
@@ -5996,7 +6007,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "d6e87693-41fb-58f5-8e0d-ee9ab46890b5",
+                    "id": "89ee8b4c-838c-5323-86a5-8d7c22eaa003",
                     "name": "prepare",
                     "input": {"my_key": "value", "market": "DE"},
                     "triggers": ["start:prepare"],
@@ -6007,7 +6018,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "d6e87693-41fb-58f5-8e0d-ee9ab46890b5",
+                    "id": "89ee8b4c-838c-5323-86a5-8d7c22eaa003",
                     "name": "prepare",
                     "result": [("my_key", " prepared")],
                 },
@@ -6044,7 +6055,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "b1826010-0028-5aa7-abd2-ed24984614ea",
+                    "id": "533cb7e5-452f-5d15-aeae-534805c09da5",
                     "name": "tool_two_slow",
                     "input": {"my_key": "value prepared", "market": "DE"},
                     "triggers": ["branch:prepare:condition:tool_two_slow"],
@@ -6055,7 +6066,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "b1826010-0028-5aa7-abd2-ed24984614ea",
+                    "id": "533cb7e5-452f-5d15-aeae-534805c09da5",
                     "name": "tool_two_slow",
                     "result": [("my_key", " slow")],
                 },
@@ -6092,7 +6103,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "a22dbd2d-f136-57f0-a86a-bc2c234ffcb1",
+                    "id": "d39f876a-1453-5349-af9a-f14c462cb393",
                     "name": "finish",
                     "input": {"my_key": "value prepared slow", "market": "DE"},
                     "triggers": ["branch:prepare:condition:then"],
@@ -6103,7 +6114,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "a22dbd2d-f136-57f0-a86a-bc2c234ffcb1",
+                    "id": "d39f876a-1453-5349-af9a-f14c462cb393",
                     "name": "finish",
                     "result": [("my_key", " finished")],
                 },
@@ -6378,6 +6389,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)  # to ensure stream order
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6407,10 +6419,8 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
@@ -6425,10 +6435,8 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
     ]
 
@@ -6464,6 +6472,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6499,10 +6508,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
@@ -6517,10 +6524,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
     ]
 
@@ -6563,6 +6568,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6604,10 +6610,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
@@ -6622,10 +6626,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
     ]
 
@@ -6653,12 +6655,14 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
         return {"query": f'query: {data["query"]}'}
 
     def analyzer_one(data: State) -> State:
+        time.sleep(0.1)
         return {"query": f'analyzed: {data["query"]}'}
 
     def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.2)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6693,11 +6697,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-            "qa": {"answer": ""},
-        },
+        {"qa": {"answer": ""}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
@@ -6712,11 +6714,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-            "qa": {"answer": ""},
-        },
+        {"qa": {"answer": ""}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
     ]
 
@@ -6750,6 +6750,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6791,21 +6792,17 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
         {
             "analyzer_one": {
                 "query": "analyzed: query: analyzed: query: what is weather in sf"
-            },
-            "retriever_two": {"docs": ["doc3", "doc4"]},
+            }
         },
-        {
-            "retriever_one": {"docs": ["doc1", "doc2"]},
-        },
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
 
@@ -6838,6 +6835,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6878,21 +6876,17 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
         {
             "analyzer_one": {
                 "query": "analyzed: query: analyzed: query: what is weather in sf"
-            },
-            "retriever_two": {"docs": ["doc3", "doc4"]},
+            }
         },
-        {
-            "retriever_one": {"docs": ["doc1", "doc2"]},
-        },
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
 
