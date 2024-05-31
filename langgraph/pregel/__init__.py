@@ -879,7 +879,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _, _ in next_tasks:
+                    for _, _, _, writes, _, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     if debug:
@@ -1182,7 +1182,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _, _ in next_tasks:
+                    for _, _, _, writes, _, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     if debug:
@@ -1449,7 +1449,7 @@ def _should_interrupt(
         # and any triggered node is in interrupt_nodes list
         and any(
             node
-            for node, _, _, _, config, _, _ in tasks
+            for node, _, _, _, config, _ in tasks
             if (
                 (not config or TAG_HIDDEN not in config.get("tags"))
                 if interrupt_nodes == "*"
@@ -1577,27 +1577,13 @@ def _prepare_next_tasks(
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
     # Consume pending packets
     for packet in checkpoint["pending_packets"]:
-        try:
-            val = next(
-                _proc_input(
-                    step,
-                    packet.node,
-                    processes[packet.node],
-                    managed,
-                    channels,
-                    catch=True,
-                )
-            )
-        except StopIteration:
-            logger.warn('No input for node "%s" in packet, skipping', packet.node)
-            continue
         if for_execution:
-            if node := processes[packet.node].get_node(packet.kwargs):
+            if node := processes[packet.node].get_node():
                 writes = deque()
                 tasks.append(
                     PregelExecutableTask(
                         packet.node,
-                        val,
+                        packet.arg,
                         node,
                         writes,
                         patch_config(
@@ -1627,11 +1613,10 @@ def _prepare_next_tasks(
                             },
                         ),
                         [TASKS],
-                        packet.kwargs,
                     )
                 )
         else:
-            tasks.append(PregelTaskDescription(packet.node, val))
+            tasks.append(PregelTaskDescription(packet.node, packet.arg))
     if for_execution:
         checkpoint["pending_packets"].clear()
     # Check if any processes should be run in next step

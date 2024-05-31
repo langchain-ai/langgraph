@@ -3513,13 +3513,11 @@ def test_state_graph_packets() -> None:
         ), "nodes can pass extra data to their cond edges, which isn't saved in state"
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [Packet("tools", tool_call=tool_call) for tool_call in tool_calls]
+            return [Packet("tools", tool_call) for tool_call in tool_calls]
         else:
             return END
 
-    def tools_node(
-        _: AgentState, config: RunnableConfig, *, tool_call: ToolCall
-    ) -> AgentState:
+    def tools_node(tool_call: ToolCall, config: RunnableConfig) -> AgentState:
         output = tools_by_name[tool_call["name"]].invoke(tool_call["args"], config)
         return {
             "messages": ToolMessage(

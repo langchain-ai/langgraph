@@ -105,7 +105,7 @@ def map_output_updates(
     if isinstance(output_channels, str):
         if updated := [
             (triggers == [TASKS], node, value)
-            for node, _, _, writes, _, triggers, _ in output_tasks
+            for node, _, _, writes, _, triggers in output_tasks
             for chan, value in writes
             if chan == output_channels
         ]:
@@ -127,7 +127,7 @@ def map_output_updates(
                 node,
                 {chan: value for chan, value in writes if chan in output_channels},
             )
-            for node, _, _, writes, _, triggers, _ in output_tasks
+            for node, _, _, writes, _, triggers in output_tasks
             if any(chan in output_channels for chan, _ in writes)
         ]:
             grouped = defaultdict(list)

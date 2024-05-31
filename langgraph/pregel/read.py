@@ -130,9 +130,7 @@ class PregelNode(RunnableBindingBase):
             writers.pop()
         return writers
 
-    def get_node(
-        self, kwargs: Optional[Dict[str, Any]] = None
-    ) -> Optional[Runnable[Any, Any]]:
+    def get_node(self) -> Optional[Runnable[Any, Any]]:
         writers = self.get_writers()
         if self.bound is DEFAULT_BOUND and not writers:
             return None
@@ -141,12 +139,9 @@ class PregelNode(RunnableBindingBase):
         elif self.bound is DEFAULT_BOUND:
             return RunnableSequence(*writers)
         elif writers:
-            return RunnableSequence(
-                self.bound.bind(**kwargs) if kwargs is not None else self.bound,
-                *writers,
-            )
+            return RunnableSequence(self.bound, *writers)
         else:
-            return self.bound.bind(**kwargs) if kwargs is not None else self.bound
+            return self.bound
 
     def __init__(
         self,

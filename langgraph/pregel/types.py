@@ -18,7 +18,6 @@ class PregelExecutableTask(NamedTuple):
     writes: deque[tuple[str, Any]]
     config: Optional[RunnableConfig]
     triggers: list[str]
-    kwargs: Optional[dict[str, Any]] = None
 
 
 class StateSnapshot(NamedTuple):
