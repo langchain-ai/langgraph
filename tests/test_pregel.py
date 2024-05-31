@@ -146,7 +146,7 @@ def test_graph_validation() -> None:
 
     def node_a(state: State) -> State:
         # typo
-        return {"hel": "world"}
+        return {"hell": "world"}
 
     builder = StateGraph(State)
     builder.add_node("a", node_a)
@@ -154,7 +154,7 @@ def test_graph_validation() -> None:
     builder.set_finish_point("a")
     graph = builder.compile()
     with pytest.raises(InvalidUpdateError):
-        assert graph.invoke({"hello": "there"}) == {"hello": "world"}
+        graph.invoke({"hello": "there"})
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
