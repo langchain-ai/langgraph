@@ -3,12 +3,13 @@ import importlib
 import json
 from datetime import datetime, timedelta, timezone
 from enum import Enum
-from typing import Any, Optional
+from typing import Any, NamedTuple, Optional
 from uuid import UUID
 
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
 
+from langgraph.constants import Packet
 from langgraph.serde.base import SerializerProtocol
 
 LC_REVIVER = Reviver()
@@ -63,6 +64,8 @@ class JsonPlusSerializer(SerializerProtocol):
             )
         elif isinstance(obj, Enum):
             return self._encode_constructor_args(obj.__class__, args=[obj.value])
+        elif isinstance(obj, NamedTuple):
+            return self._encode_constructor_args(Packet, args=[*obj])
         else:
             raise TypeError(
                 f"Object of type {obj.__class__.__name__} is not JSON serializable"

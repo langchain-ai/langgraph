@@ -66,6 +66,8 @@ from langgraph.constants import (
     CONFIG_KEY_SEND,
     INTERRUPT,
     TAG_HIDDEN,
+    TASKS,
+    Packet,
 )
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
@@ -1444,7 +1446,7 @@ def _should_interrupt(
             checkpoint["channel_versions"][chan] > seen[chan]
             for chan in snapshot_channels
         )
-        # and any channel written to is in interrupt_nodes list
+        # and any triggered node is in interrupt_nodes list
         and any(
             node
             for node, _, _, _, config, _ in tasks
@@ -1473,15 +1475,40 @@ def _local_read(
         return read_channels(channels, select)
 
 
+def _local_write(
+    commit: Callable[[Sequence[tuple[str, Any]]], None],
+    processes: Mapping[str, PregelNode],
+    channels: Mapping[str, BaseChannel],
+    writes: Sequence[tuple[str, Any]],
+) -> None:
+    for chan, value in writes:
+        if chan == TASKS:
+            if not isinstance(value, Packet):
+                raise InvalidUpdateError(
+                    f"Invalid packet type, expected Packet, got {value}"
+                )
+            if value.node not in processes:
+                raise InvalidUpdateError(f"Invalid node name {value.node} in packet")
+        elif chan not in channels:
+            logger.warning(f"Skipping write for channel '{chan}' which has no readers")
+    commit(writes)
+
+
 def _apply_writes(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
     pending_writes: Sequence[tuple[str, Any]],
 ) -> None:
+    if checkpoint["pending_packets"]:
+        checkpoint["pending_packets"].clear()
+
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
     for chan, val in pending_writes:
-        pending_writes_by_channel[chan].append(val)
+        if chan == TASKS:
+            checkpoint["pending_packets"].append(val)
+        else:
+            pending_writes_by_channel[chan].append(val)
 
     # Find the highest version of all channels
     if checkpoint["channel_versions"]:
@@ -1497,12 +1524,10 @@ def _apply_writes(
                 channels[chan].update(vals)
             except InvalidUpdateError as e:
                 raise InvalidUpdateError(
-                    f"Invalid update for channel {chan}: {e}"
+                    f"Invalid update for channel {chan} with values {vals}"
                 ) from e
             checkpoint["channel_versions"][chan] = max_version + 1
             updated_channels.add(chan)
-        else:
-            logger.warning(f"Skipping write for channel '{chan}' which has no readers")
     # Channels that weren't updated in this step are notified of a new step
     for chan in channels:
         if chan not in updated_channels:
@@ -1550,6 +1575,50 @@ def _prepare_next_tasks(
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
+    # Consume pending packets
+    for packet in checkpoint["pending_packets"]:
+        if for_execution:
+            if node := processes[packet.node].get_node():
+                writes = deque()
+                tasks.append(
+                    PregelExecutableTask(
+                        packet.node,
+                        packet.arg,
+                        node,
+                        writes,
+                        patch_config(
+                            merge_configs(
+                                config,
+                                processes[packet.node].config,
+                                {
+                                    "metadata": {
+                                        "langgraph_step": step,
+                                        "langgraph_node": packet.node,
+                                        "langgraph_triggers": [TASKS],
+                                    }
+                                },
+                            ),
+                            run_name=packet.node,
+                            callbacks=manager.get_child(f"graph:step:{step}")
+                            if manager
+                            else None,
+                            configurable={
+                                # deque.extend is thread-safe
+                                CONFIG_KEY_SEND: partial(
+                                    _local_write, writes.extend, processes, channels
+                                ),
+                                CONFIG_KEY_READ: partial(
+                                    _local_read, checkpoint, channels, tasks
+                                ),
+                            },
+                        ),
+                        [TASKS],
+                    )
+                )
+        else:
+            tasks.append(PregelTaskDescription(packet.node, packet.arg))
+    if for_execution:
+        checkpoint["pending_packets"].clear()
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
@@ -1563,43 +1632,10 @@ def _prepare_next_tasks(
             )
             and checkpoint["channel_versions"][chan] > seen[chan]
         ]:
-            # If all trigger channels subscribed by this process are not empty
-            # then invoke the process with the values of all non-empty channels
-            if isinstance(proc.channels, dict):
-                try:
-                    val: dict = {
-                        k: read_channel(channels, chan, catch=chan not in proc.triggers)
-                        for k, chan in proc.channels.items()
-                        if isinstance(chan, str)
-                    }
-
-                    managed_values = {}
-                    for key, chan in proc.channels.items():
-                        if is_managed_value(chan):
-                            managed_values[key] = managed[key](
-                                step, PregelTaskDescription(name, val)
-                            )
-
-                    val.update(managed_values)
-                except EmptyChannelError:
-                    continue
-            elif isinstance(proc.channels, list):
-                for chan in proc.channels:
-                    try:
-                        val = read_channel(channels, chan, catch=False)
-                        break
-                    except EmptyChannelError:
-                        pass
-                else:
-                    continue
-            else:
-                raise RuntimeError(
-                    "Invalid channels type, expected list or dict, got {proc.channels}"
-                )
-
-            # If the process has a mapper, apply it to the value
-            if proc.mapper is not None:
-                val = proc.mapper(val)
+            try:
+                val = next(_proc_input(step, name, proc, managed, channels))
+            except StopIteration:
+                continue
 
             # update seen versions
             if for_execution:
@@ -1613,6 +1649,7 @@ def _prepare_next_tasks(
             if for_execution:
                 if node := proc.get_node():
                     writes = deque()
+                    triggers = sorted(triggers)
                     tasks.append(
                         PregelExecutableTask(
                             name,
@@ -1627,6 +1664,7 @@ def _prepare_next_tasks(
                                         "metadata": {
                                             "langgraph_step": step,
                                             "langgraph_node": name,
+                                            "langgraph_triggers": triggers,
                                         }
                                     },
                                 ),
@@ -1636,18 +1674,71 @@ def _prepare_next_tasks(
                                 else None,
                                 configurable={
                                     # deque.extend is thread-safe
-                                    CONFIG_KEY_SEND: writes.extend,
+                                    CONFIG_KEY_SEND: partial(
+                                        _local_write, writes.extend, processes, channels
+                                    ),
                                     CONFIG_KEY_READ: partial(
                                         _local_read, checkpoint, channels, writes
                                     ),
                                 },
                             ),
-                            sorted(triggers),
+                            triggers,
                         )
                     )
             else:
                 tasks.append(PregelTaskDescription(name, val))
     return checkpoint, tasks
+
+
+def _proc_input(
+    step: int,
+    name: str,
+    proc: PregelNode,
+    managed: ManagedValueMapping,
+    channels: Mapping[str, BaseChannel],
+    catch: bool = False,
+) -> Iterator[Any]:
+    # If all trigger channels subscribed by this process are not empty
+    # then invoke the process with the values of all non-empty channels
+    if isinstance(proc.channels, dict):
+        try:
+            val: dict = {
+                k: read_channel(
+                    channels, chan, catch=catch or chan not in proc.triggers
+                )
+                for k, chan in proc.channels.items()
+                if isinstance(chan, str)
+            }
+
+            managed_values = {}
+            for key, chan in proc.channels.items():
+                if is_managed_value(chan):
+                    managed_values[key] = managed[key](
+                        step, PregelTaskDescription(name, val)
+                    )
+
+            val.update(managed_values)
+        except EmptyChannelError:
+            return
+    elif isinstance(proc.channels, list):
+        for chan in proc.channels:
+            try:
+                val = read_channel(channels, chan, catch=False)
+                break
+            except EmptyChannelError:
+                pass
+        else:
+            return
+    else:
+        raise RuntimeError(
+            "Invalid channels type, expected list or dict, got {proc.channels}"
+        )
+
+    # If the process has a mapper, apply it to the value
+    if proc.mapper is not None:
+        val = proc.mapper(val)
+
+    yield val
 
 
 def _with_mode(mode: StreamMode, on: bool, iter: Iterator[Any]) -> Iterator[Any]:
