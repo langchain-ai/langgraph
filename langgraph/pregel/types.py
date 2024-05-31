@@ -16,7 +16,7 @@ class PregelExecutableTask(NamedTuple):
     input: Any
     proc: Runnable
     writes: deque[tuple[str, Any]]
-    config: Optional[RunnableConfig]
+    config: RunnableConfig
     triggers: list[str]
 
 

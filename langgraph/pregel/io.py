@@ -4,7 +4,7 @@ from typing import Any, Iterator, Mapping, Optional, Sequence, TypeVar, Union
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
-from langgraph.constants import TAG_HIDDEN, TASKS
+from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel.log import logger
 from langgraph.pregel.types import PregelExecutableTask
 
@@ -104,42 +104,33 @@ def map_output_updates(
     ]
     if isinstance(output_channels, str):
         if updated := [
-            (triggers == [TASKS], node, value)
-            for node, _, _, writes, _, triggers in output_tasks
+            (node, value)
+            for node, _, _, writes, _, _ in output_tasks
             for chan, value in writes
             if chan == output_channels
         ]:
             grouped = defaultdict(list)
-            for from_packet, node, value in updated:
-                if from_packet:
-                    grouped[node].append(value)
-            for from_packet, node, value in updated:
-                if not from_packet:
-                    if grouped[node]:
-                        grouped[node].append(value)
-                    else:
-                        grouped[node] = value
+            for node, value in updated:
+                grouped[node].append(value)
+            for node, value in grouped.items():
+                if len(value) == 1:
+                    grouped[node] = value[0]
             yield AddableUpdatesDict(grouped)
     else:
         if updated := [
             (
-                triggers == [TASKS],
                 node,
                 {chan: value for chan, value in writes if chan in output_channels},
             )
-            for node, _, _, writes, _, triggers in output_tasks
+            for node, _, _, writes, _, _ in output_tasks
             if any(chan in output_channels for chan, _ in writes)
         ]:
             grouped = defaultdict(list)
-            for from_packet, node, value in updated:
-                if from_packet:
-                    grouped[node].append(value)
-            for from_packet, node, value in updated:
-                if not from_packet:
-                    if grouped[node]:
-                        grouped[node].append(value)
-                    else:
-                        grouped[node] = value
+            for node, value in updated:
+                grouped[node].append(value)
+            for node, value in grouped.items():
+                if len(value) == 1:
+                    grouped[node] = value[0]
             yield AddableUpdatesDict(grouped)
 
 

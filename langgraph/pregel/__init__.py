@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import time
 from collections import defaultdict, deque
 from functools import partial
 from typing import (
@@ -898,21 +899,56 @@ class Pregel(
                             map_debug_tasks(step, next_tasks),
                         )
 
-                    futures = [
-                        executor.submit(run_with_retry, task, self.retry_policy)
-                        for task in next_tasks
-                    ]
-
                     # execute tasks, and wait for one to fail or all to finish.
                     # each task is independent from all other concurrent tasks
-                    done, inflight = concurrent.futures.wait(
-                        futures,
-                        return_when=concurrent.futures.FIRST_EXCEPTION,
-                        timeout=self.step_timeout,
+                    # yield updates/debug output as each task finishes
+                    futures = {
+                        executor.submit(run_with_retry, task, self.retry_policy): task
+                        for task in next_tasks
+                    }
+                    end_time = (
+                        self.step_timeout + time.monotonic()
+                        if self.step_timeout
+                        else None
                     )
+                    while futures:
+                        done, inflight = concurrent.futures.wait(
+                            futures,
+                            return_when=concurrent.futures.FIRST_COMPLETED,
+                            timeout=max(0, end_time - time.monotonic())
+                            if end_time
+                            else None,
+                        )
+                        for fut in done:
+                            task = futures.pop(fut)
+                            if fut.exception() is not None:
+                                # we got an exception, break out of while loop
+                                # exception will be handle in panic_or_proceed
+                                futures.clear()
+                            else:
+                                # yield updates output for the finished task
+                                if "updates" in stream_modes:
+                                    yield from _with_mode(
+                                        "updates",
+                                        isinstance(stream_mode, list),
+                                        map_output_updates(output_keys, [task]),
+                                    )
+                                if "debug" in stream_modes:
+                                    yield from _with_mode(
+                                        "debug",
+                                        isinstance(stream_mode, list),
+                                        map_debug_task_results(
+                                            step, [task], self.stream_channels_list
+                                        ),
+                                    )
+                        else:
+                            # remove references to loop vars
+                            del fut, task
 
                     # panic on failure or timeout
                     _panic_or_proceed(done, inflight, step)
+                    # don't keep futures around in memory longer than needed
+                    del done, inflight, futures
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
@@ -927,21 +963,7 @@ class Pregel(
                     # apply writes to channels
                     _apply_writes(checkpoint, channels, pending_writes)
 
-                    # yield current value or updates
-                    if "updates" in stream_modes:
-                        yield from _with_mode(
-                            "updates",
-                            isinstance(stream_mode, list),
-                            map_output_updates(output_keys, next_tasks),
-                        )
-                    if "debug" in stream_modes:
-                        yield from _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_task_results(
-                                step, next_tasks, self.stream_channels_list
-                            ),
-                        )
+                    # yield values output
                     if "values" in stream_modes:
                         yield from _with_mode(
                             "values",
@@ -1030,6 +1052,7 @@ class Pregel(
             None,
         )
         try:
+            loop = asyncio.get_event_loop()
             bg: list[asyncio.Task] = []
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
@@ -1201,23 +1224,58 @@ class Pregel(
                         ):
                             yield chunk
 
-                    futures = [
-                        asyncio.create_task(
-                            arun_with_retry(task, self.retry_policy, do_stream)
-                        )
-                        for task in next_tasks
-                    ]
-
                     # execute tasks, and wait for one to fail or all to finish.
                     # each task is independent from all other concurrent tasks
-                    done, inflight = await asyncio.wait(
-                        futures,
-                        return_when=asyncio.FIRST_EXCEPTION,
-                        timeout=self.step_timeout,
+                    # yield updates/debug output as each task finishes
+                    futures = {
+                        asyncio.create_task(
+                            arun_with_retry(task, self.retry_policy, do_stream)
+                        ): task
+                        for task in next_tasks
+                    }
+                    end_time = (
+                        self.step_timeout + loop.time() if self.step_timeout else None
                     )
+                    while futures:
+                        done, inflight = await asyncio.wait(
+                            futures,
+                            return_when=asyncio.FIRST_COMPLETED,
+                            timeout=max(0, end_time - loop.time())
+                            if end_time
+                            else None,
+                        )
+                        for fut in done:
+                            task = futures.pop(fut)
+                            if fut.exception() is not None:
+                                # we got an exception, break out of while loop
+                                # exception will be handle in panic_or_proceed
+                                futures.clear()
+                            else:
+                                # yield updates output for the finished task
+                                if "updates" in stream_modes:
+                                    for chunk in _with_mode(
+                                        "updates",
+                                        isinstance(stream_mode, list),
+                                        map_output_updates(output_keys, [task]),
+                                    ):
+                                        yield chunk
+                                if "debug" in stream_modes:
+                                    for chunk in _with_mode(
+                                        "debug",
+                                        isinstance(stream_mode, list),
+                                        map_debug_task_results(
+                                            step, [task], self.stream_channels_list
+                                        ),
+                                    ):
+                                        yield chunk
+                        else:
+                            # remove references to loop vars
+                            del fut, task
 
                     # panic on failure or timeout
                     _panic_or_proceed(done, inflight, step)
+                    # don't keep futures around in memory longer than needed
+                    del done, inflight, futures
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
@@ -1232,23 +1290,7 @@ class Pregel(
                     # apply writes to channels
                     _apply_writes(checkpoint, channels, pending_writes)
 
-                    # yield current value or updates
-                    if "updates" in stream_modes:
-                        for chunk in _with_mode(
-                            "updates",
-                            isinstance(stream_mode, list),
-                            map_output_updates(output_keys, next_tasks),
-                        ):
-                            yield chunk
-                    if "debug" in stream_modes:
-                        for chunk in _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_task_results(
-                                step, next_tasks, self.stream_channels_list
-                            ),
-                        ):
-                            yield chunk
+                    # yield current values
                     if "values" in stream_modes:
                         for chunk in _with_mode(
                             "values",
@@ -1602,6 +1644,7 @@ def _prepare_next_tasks(
                                         "langgraph_step": step,
                                         "langgraph_node": packet.node,
                                         "langgraph_triggers": [TASKS],
+                                        "langgraph_task_idx": len(tasks),
                                     }
                                 },
                             ),
@@ -1672,6 +1715,7 @@ def _prepare_next_tasks(
                                             "langgraph_step": step,
                                             "langgraph_node": name,
                                             "langgraph_triggers": triggers,
+                                            "langgraph_task_idx": len(tasks),
                                         }
                                     },
                                 ),
