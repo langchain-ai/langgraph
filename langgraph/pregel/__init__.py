@@ -1632,7 +1632,8 @@ def _prepare_next_tasks(
                 )
         else:
             tasks.append(PregelTaskDescription(packet.node, val))
-    checkpoint["pending_packets"].clear()
+    if for_execution:
+        checkpoint["pending_packets"].clear()
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
