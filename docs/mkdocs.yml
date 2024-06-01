@@ -221,7 +221,7 @@ extra:
       link: https://twitter.com/LangChainAI
   analytics:
     - provider: google
-    - script: "G-G8X6ELZYE0"
+    - property: G-G8X6ELZYE0
     - feedback:
       title: Was this page helpful?
       ratings:
