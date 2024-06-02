@@ -128,7 +128,7 @@ def create_checkpoint(
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
-        pending_sends=checkpoint["pending_sends"],
+        pending_sends=checkpoint.get("pending_sends", []),
     )
 
 

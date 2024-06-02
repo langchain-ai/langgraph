@@ -106,7 +106,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
             _seen_dict,
             {k: defaultdict(int, v) for k, v in checkpoint["versions_seen"].items()},
         ),
-        pending_sends=checkpoint["pending_sends"].copy(),
+        pending_sends=checkpoint.get("pending_sends", []).copy(),
     )
 
 
