@@ -5783,12 +5783,12 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
 
         thread1 = {"configurable": {"thread_id": "1"}}
         # stop when about to enter node
-        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
-            "my_key": "value",
+        assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
+            "my_key": "value ⛰️",
             "market": "DE",
         }
         assert tool_two.get_state(thread1) == StateSnapshot(
-            values={"my_key": "value", "market": "DE"},
+            values={"my_key": "value ⛰️", "market": "DE"},
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -5797,11 +5797,11 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread1, debug=1) == {
-            "my_key": "value slow",
+            "my_key": "value ⛰️ slow",
             "market": "DE",
         }
         assert tool_two.get_state(thread1) == StateSnapshot(
-            values={"my_key": "value slow", "market": "DE"},
+            values={"my_key": "value ⛰️ slow", "market": "DE"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
