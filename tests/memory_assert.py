@@ -43,9 +43,12 @@ class MemorySaverAssertImmutable(MemorySaver):
         # assert checkpoint hasn't been modified since last written
         thread_id = config["configurable"]["thread_id"]
         if saved := super().get(config):
-            assert self.storage_for_copies[thread_id][saved["id"]] == saved
-        self.storage_for_copies[thread_id][checkpoint["id"]] = copy_checkpoint(
-            checkpoint
+            assert (
+                self.serde.loads(self.storage_for_copies[thread_id][saved["id"]])
+                == saved
+            )
+        self.storage_for_copies[thread_id][checkpoint["id"]] = self.serde.dumps(
+            copy_checkpoint(checkpoint)
         )
         # call super to write checkpoint
         return super().put(config, checkpoint, metadata)

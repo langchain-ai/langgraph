@@ -48,10 +48,13 @@ from langgraph.prebuilt.chat_agent_executor import (
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
+from langgraph.serde.base import SerializerProtocol
+from langgraph.serde.jsonplus import JsonPlusSerializer
 from tests.any_str import AnyStr
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
+    NoopSerializer,
 )
 
 
@@ -3433,7 +3436,8 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
     ]
 
 
-def test_state_graph_packets() -> None:
+@pytest.mark.parametrize("serde", [NoopSerializer(), JsonPlusSerializer()])
+def test_state_graph_packets(serde: SerializerProtocol) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
@@ -3666,7 +3670,7 @@ def test_state_graph_packets() -> None:
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(),
+        checkpointer=MemorySaverAssertImmutable(serde=serde),
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
