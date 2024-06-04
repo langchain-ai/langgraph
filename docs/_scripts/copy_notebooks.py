@@ -26,6 +26,7 @@ _MANUAL = {
         "branching.ipynb",
         "dynamically-returning-directly.ipynb",
         "configuration.ipynb",
+        "map-reduce.ipynb",
         "extraction/retries.ipynb",
     ],
     "tutorials": [
