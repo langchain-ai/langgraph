@@ -79,16 +79,14 @@ Now, run the graph:
 # Run the graph
 thread = {"configurable": {"thread_id": "4"}}
 for event in app.stream("what is the weather in sf currently", thread, stream_mode="values"):
-    for v in event.values():
-        print(v)
+    event[-1].pretty_print()
 
 ```
 We configured the graph to **wait** before executing the `action`. The `SqliteSaver` persists the state. Resume at any time.
 
 ```python
 for event in app.stream(None, thread, stream_mode="values"):
-    for v in event.values():
-        print(v)
+    event[-1].pretty_print()
 ```
 
 The graph orchestrates everything:
