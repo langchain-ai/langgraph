@@ -144,6 +144,7 @@ nav:
      - Design Patterns:
          - "Subgraphs": how-tos/subgraph.ipynb
          - "Branching": how-tos/branching.ipynb
+         - "Map-reduce": how-tos/map-reduce.ipynb
          - "Human-in-the-Loop": how-tos/human-in-the-loop.ipynb
          - "Force Calling a Tool First": how-tos/force-calling-a-tool-first.ipynb
          - "Dynamic Direct Return": how-tos/dynamically-returning-directly.ipynb

@@ -19,6 +19,7 @@ Recipes showing how to apply common design patterns in your workflows:
 
 - [Subgraphs](subgraph.ipynb): How to compose subgraphs within a larger graph
 - [Branching](branching.ipynb): How to create branching logic in your graphs for parallel node execution
+- [Map-reduce](map-reduce.ipynb): How to branch **different views** of the state for parallel node execution (even applying the same node in parallel N times)
 - [Human-in-the-loop](human-in-the-loop.ipynb): How to incorporate human feedback and intervention
 
 The following examples are useful especially if you are used to LangChain's AgentExecutor configurations.
