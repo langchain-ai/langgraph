@@ -27,7 +27,7 @@ graph = StateGraph(MyState)
 
 ## Constants
 
-The following constants are used to help control graph execution.
+The following constants and classes are used to help control graph execution.
 
 ## START
 
