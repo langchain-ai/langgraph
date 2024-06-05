@@ -761,10 +761,12 @@ class Pregel(
             checkpoint_config = config
             if saved:
                 checkpoint_config = {
+                    **config,
+                    **saved.config,
                     "configurable": {
                         **config.get("configurable", {}),
                         **saved.config["configurable"],
-                    }
+                    },
                 }
 
             start = saved.metadata.get("step", -2) + 1 if saved else -1
@@ -1091,10 +1093,12 @@ class Pregel(
             checkpoint_config = config
             if saved:
                 checkpoint_config = {
+                    **config,
+                    **saved.config,
                     "configurable": {
                         **config.get("configurable", {}),
                         **saved.config["configurable"],
-                    }
+                    },
                 }
 
             start = saved.metadata.get("step", -2) + 1 if saved else -1
