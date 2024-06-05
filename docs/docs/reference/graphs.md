@@ -25,7 +25,9 @@ graph = StateGraph(MyState)
 ::: langgraph.graph.graph.CompiledGraph
     handler: python
 
-# Constants
+## Constants
+
+The following constants and classes are used to help control graph execution.
 
 ## START
 
