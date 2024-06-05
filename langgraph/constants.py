@@ -7,6 +7,9 @@ TASKS = "__pregel_tasks"
 RESERVED = {INTERRUPT, TASKS, CONFIG_KEY_SEND, CONFIG_KEY_READ}
 TAG_HIDDEN = "langsmith:hidden"
 
+START = "__start__"
+END = "__end__"
+
 
 class Send:
     """A message or packet to send to a specific node in the graph.

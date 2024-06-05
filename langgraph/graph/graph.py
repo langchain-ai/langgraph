@@ -26,7 +26,7 @@ from langchain_core.runnables.graph import (
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.constants import TAG_HIDDEN, Send
+from langgraph.constants import END, START, TAG_HIDDEN, Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
@@ -35,9 +35,6 @@ from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.utils import DrawableGraph, RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
-
-START = "__start__"
-END = "__end__"
 
 
 class Branch(NamedTuple):
@@ -341,10 +338,11 @@ class Graph:
 
         # validate the graph
         self.validate(
-            interrupt=(interrupt_before if interrupt_before != "*" else [])
-            + interrupt_after
-            if interrupt_after != "*"
-            else []
+            interrupt=(
+                (interrupt_before if interrupt_before != "*" else []) + interrupt_after
+                if interrupt_after != "*"
+                else []
+            )
         )
 
         # create empty compiled graph
@@ -404,9 +402,11 @@ class CompiledGraph(Pregel):
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
         def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
             writes = [
-                ChannelWriteEntry(f"branch:{start}:{name}:{p}" if p != END else END)
-                if not isinstance(p, Send)
-                else p
+                (
+                    ChannelWriteEntry(f"branch:{start}:{name}:{p}" if p != END else END)
+                    if not isinstance(p, Send)
+                    else p
+                )
                 for p in packets
             ]
             return ChannelWrite(writes, tags=[TAG_HIDDEN])
