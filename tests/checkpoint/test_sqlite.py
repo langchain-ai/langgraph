@@ -3,7 +3,12 @@ from langchain_core.runnables import RunnableConfig
 
 from langgraph.channels.base import create_checkpoint
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
-from langgraph.checkpoint.sqlite import SqliteSaver, _metadata_predicate, search_where
+from langgraph.checkpoint.sqlite import (
+    _AIO_ERROR_MSG,
+    SqliteSaver,
+    _metadata_predicate,
+    search_where,
+)
 
 
 class TestSqliteSaver:
@@ -98,3 +103,16 @@ class TestSqliteSaver:
             expected_predicate_3,
             expected_param_values_3,
         )
+
+    async def test_informative_async_errors(self):
+        # call method / assertions
+        with pytest.raises(NotImplementedError, match=_AIO_ERROR_MSG):
+            await self.sqlite_saver.aget(self.config_1)
+        with pytest.raises(NotImplementedError, match=_AIO_ERROR_MSG):
+            await self.sqlite_saver.aget_tuple(self.config_1)
+        with pytest.raises(NotImplementedError, match=_AIO_ERROR_MSG):
+            async for _ in self.sqlite_saver.alist(self.config_1):
+                pass
+        with pytest.raises(NotImplementedError, match=_AIO_ERROR_MSG):
+            async for _ in self.sqlite_saver.asearch(self.metadata_1):
+                pass
