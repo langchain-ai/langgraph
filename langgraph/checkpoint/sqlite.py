@@ -4,7 +4,7 @@ import sqlite3
 import threading
 from contextlib import AbstractContextManager, contextmanager
 from types import TracebackType
-from typing import Any, AsyncIterator, Iterator, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
@@ -283,8 +283,9 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
     def list(
         self,
-        config: RunnableConfig,
+        config: Optional[RunnableConfig],
         *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
@@ -316,76 +317,15 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             >>> print(checkpoints)
             [CheckpointTuple(...), ...]
         """
-        query = (
-            "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
-            if before is None
-            else "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts < ? ORDER BY thread_ts DESC"
-        )
+        where, param_values = search_where(config, filter, before)
+        query = f"""SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata
+        FROM checkpoints
+        {where}
+        ORDER BY thread_ts DESC"""
         if limit:
             query += f" LIMIT {limit}"
         with self.cursor(transaction=False) as cur:
-            cur.execute(
-                query,
-                (
-                    (str(config["configurable"]["thread_id"]),)
-                    if before is None
-                    else (
-                        str(config["configurable"]["thread_id"]),
-                        before["configurable"]["thread_ts"],
-                    )
-                ),
-            )
-            for thread_id, thread_ts, parent_ts, value, metadata in cur:
-                yield CheckpointTuple(
-                    {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
-                    self.serde.loads(value),
-                    self.serde.loads(metadata) if metadata is not None else {},
-                    (
-                        {
-                            "configurable": {
-                                "thread_id": thread_id,
-                                "thread_ts": parent_ts,
-                            }
-                        }
-                        if parent_ts
-                        else None
-                    ),
-                )
-
-    def search(
-        self,
-        metadata_filter: CheckpointMetadata,
-        *,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> Iterator[CheckpointTuple]:
-        """Search for checkpoints by metadata.
-
-        This method retrieves a list of checkpoint tuples from the SQLite
-        database based on the provided metadata filter. The metadata filter does
-        not need to contain all keys defined in the CheckpointMetadata class.
-        The checkpoints are ordered by timestamp in descending order.
-
-        Args:
-            metadata_filter (CheckpointMetadata): The metadata filter to use for searching the checkpoints.
-            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
-            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
-
-        Yields:
-            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
-        """
-        # construct query
-        SELECT = "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints "
-        WHERE, params = search_where(metadata_filter, before)
-        ORDER_BY = "ORDER BY thread_ts DESC "
-        LIMIT = f"LIMIT {limit}" if limit else ""
-
-        query = f"{SELECT}{WHERE}{ORDER_BY}{LIMIT}"
-
-        # execute query
-        with self.cursor(transaction=False) as cur:
-            cur.execute(query, params)
-
+            cur.execute(query, param_values)
             for thread_id, thread_ts, parent_ts, value, metadata in cur:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
@@ -462,8 +402,9 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
     async def alist(
         self,
-        config: RunnableConfig,
+        config: Optional[RunnableConfig],
         *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
@@ -472,22 +413,6 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         Note:
             This async method is not supported by the SqliteSaver class.
             Use list() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
-        """
-        raise NotImplementedError(_AIO_ERROR_MSG)
-        yield
-
-    async def asearch(
-        self,
-        metadata_filter: CheckpointMetadata,
-        *,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> AsyncIterator[CheckpointTuple]:
-        """Search for checkpoints by metadata asynchronously.
-
-        Note:
-            This async method is not supported by the SqliteSaver class.
-            Use search() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
         yield
@@ -508,8 +433,8 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
 
 def _metadata_predicate(
-    metadata_filter: CheckpointMetadata,
-) -> Tuple[str, Tuple[Any, ...]]:
+    metadata_filter: Dict[str, Any],
+) -> Tuple[Sequence[str], Sequence[Any]]:
     """Return WHERE clause predicates for (a)search() given metadata filter.
 
     This method returns a tuple of a string and a tuple of values. The string
@@ -537,29 +462,25 @@ def _metadata_predicate(
         else:
             return ("= ?", str(query_value))
 
-    predicate = ""
-    param_values = ()
+    predicates = []
+    param_values = []
 
     # process metadata query
     for query_key, query_value in metadata_filter.items():
         operator, param_value = _where_value(query_value)
-        predicate += (
-            f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator} AND "
+        predicates.append(
+            f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator}"
         )
-        param_values += (param_value,)
+        param_values.append(param_value)
 
-    if predicate != "":
-        # remove trailing AND
-        predicate = predicate[:-4]
-
-    # predicate contains an extra trailing space
-    return (predicate, param_values)
+    return (predicates, param_values)
 
 
 def search_where(
-    metadata_filter: CheckpointMetadata,
+    config: Optional[RunnableConfig],
+    filter: Optional[Dict[str, Any]],
     before: Optional[RunnableConfig] = None,
-) -> Tuple[str, Tuple[Any, ...]]:
+) -> Tuple[str, Sequence[Any]]:
     """Return WHERE clause predicates for (a)search() given metadata filter
     and `before` config.
 
@@ -568,26 +489,23 @@ def search_where(
     "WHERE column1 = ? AND column2 IS ?". The tuple of values contains the
     values for each of the corresponding parameters.
     """
-    where = "WHERE "
-    param_values = ()
+    wheres = []
+    param_values = []
+
+    # construct predicate for config filter
+    if config is not None:
+        wheres.append("thread_id = ?")
+        param_values.append(config["configurable"]["thread_id"])
 
     # construct predicate for metadata filter
-    metadata_predicate, metadata_values = _metadata_predicate(metadata_filter)
-    if metadata_predicate != "":
-        where += metadata_predicate
-        param_values += metadata_values
+    if filter:
+        metadata_predicates, metadata_values = _metadata_predicate(filter)
+        wheres.extend(metadata_predicates)
+        param_values.extend(metadata_values)
 
     # construct predicate for `before`
     if before is not None:
-        if metadata_predicate != "":
-            where += "AND thread_ts < ? "
-        else:
-            where += "thread_ts < ? "
+        wheres.append("thread_ts < ?")
+        param_values.append(before["configurable"]["thread_ts"])
 
-        param_values += (before["configurable"]["thread_ts"],)
-
-    if where == "WHERE ":
-        # no predicates, return an empty WHERE clause string
-        return ("", ())
-    else:
-        return (where, param_values)
+    return ("WHERE " + " AND ".join(wheres) if wheres else "", param_values)

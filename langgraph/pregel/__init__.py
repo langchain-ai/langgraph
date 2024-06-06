@@ -5,11 +5,13 @@ import concurrent.futures
 import time
 from collections import defaultdict, deque
 from functools import partial
+from inspect import signature
 from typing import (
     Any,
     AsyncIterator,
     Awaitable,
     Callable,
+    Dict,
     Iterator,
     Literal,
     Mapping,
@@ -410,15 +412,20 @@ class Pregel(
         self,
         config: RunnableConfig,
         *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
-
+        if (
+            filter is not None
+            and signature(self.checkpointer.list).parameters.get("filter") is None
+        ):
+            raise ValueError("Checkpointer does not support filtering")
         for config, checkpoint, metadata, parent_config in self.checkpointer.list(
-            config, before=before, limit=limit
+            config, before=before, limit=limit, filter=filter
         ):
             with ChannelsManager(
                 self.channels, checkpoint
@@ -447,19 +454,24 @@ class Pregel(
         self,
         config: RunnableConfig,
         *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
-
+        if (
+            filter is not None
+            and signature(self.checkpointer.list).parameters.get("filter") is None
+        ):
+            raise ValueError("Checkpointer does not support filtering")
         async for (
             config,
             checkpoint,
             metadata,
             parent_config,
-        ) in self.checkpointer.alist(config, before=before, limit=limit):
+        ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             async with AsyncChannelsManager(
                 self.channels, checkpoint
             ) as channels, AsyncManagedValuesManager(

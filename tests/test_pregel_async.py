@@ -2643,14 +2643,14 @@ Some examples of past conversations:
         metadata = chkpnt_tuple_1.metadata
 
         # not needed in application code, only for testing
-        assert [c async for c in saver.asearch({"score": 1})] == []
+        assert [c async for c in saver.alist(None, filter={"score": 1})] == []
 
         # mark as "good"
         metadata["score"] = 1
         await saver.aput(config, checkpoint, metadata)
 
         # not needed in application code, only for testing
-        hiscored = [c async for c in saver.asearch({"score": 1})]
+        hiscored = [c async for c in saver.alist(None, filter={"score": 1})]
         assert len(hiscored) == 1
         assert hiscored[0].checkpoint["channel_values"]["messages"] == first_messages
 

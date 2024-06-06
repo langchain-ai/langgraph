@@ -2870,7 +2870,7 @@ Some examples of past conversations:
         metadata = chkpnt_tuple_1.metadata
 
         # not needed in application code, only for testing
-        hiscored = list(saver.search({"score": 1}))
+        hiscored = list(saver.list(None, filter={"score": 1}))
         assert hiscored == []
 
         # mark as "good"
@@ -2878,7 +2878,7 @@ Some examples of past conversations:
         saver.put(config, checkpoint, metadata)
 
         # not needed in application code, only for testing
-        hiscored = list(saver.search({"score": 1}))
+        hiscored = list(saver.list(None, filter={"score": 1}))
         assert len(hiscored) == 1
         assert hiscored[0].checkpoint["channel_values"]["messages"] == first_messages
 
@@ -2921,14 +2921,14 @@ Some examples of past conversations:
         metadata = chkpnt_tuple_2.metadata
 
         # not needed in application code, only for testing
-        hiscored = list(saver.search({"score": 1}))
+        hiscored = list(saver.list(None, filter={"score": 1}))
         assert len(hiscored) == 1
 
         # mark as "good"
         metadata["score"] = 1
         saver.put(config, checkpoint, metadata)
 
-        hiscored = list(saver.search({"score": 1}))
+        hiscored = list(saver.list(None, filter={"score": 1}))
         assert len(hiscored) == 2
 
         assert app.invoke(

@@ -2,7 +2,7 @@ import asyncio
 import functools
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
-from typing import AsyncIterator, Iterator, Optional, TypeVar
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, TypeVar
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
@@ -141,8 +141,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     @not_implemented_sync_method
     def list(
         self,
-        config: RunnableConfig,
+        config: Optional[RunnableConfig],
         *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
@@ -150,21 +151,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         Note:
             This method is not implemented for the AsyncSqliteSaver. Use `alist` instead.
-            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
-        """
-
-    @not_implemented_sync_method
-    def search(
-        self,
-        metadata_filter: CheckpointMetadata,
-        *,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> Iterator[CheckpointTuple]:
-        """Search for checkpoints by metadata.
-
-        Note:
-            This method is not implemented for the AsyncSqliteSaver. Use `asearch` instead.
             Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
         """
 
@@ -274,8 +260,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
     async def alist(
         self,
-        config: RunnableConfig,
+        config: Optional[RunnableConfig],
         *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
@@ -293,75 +280,14 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
         """
         await self.setup()
-        query = (
-            "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC"
-            if before is None
-            else "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts < ? ORDER BY thread_ts DESC"
-        )
+        where, param_values = search_where(config, filter, before)
+        query = f"""SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata
+        FROM checkpoints
+        {where}
+        ORDER BY thread_ts DESC"""
         if limit:
             query += f" LIMIT {limit}"
-        async with self.conn.execute(
-            query,
-            (
-                (str(config["configurable"]["thread_id"]),)
-                if before is None
-                else (
-                    str(config["configurable"]["thread_id"]),
-                    str(before["configurable"]["thread_ts"]),
-                )
-            ),
-        ) as cursor:
-            async for thread_id, thread_ts, parent_ts, value, metadata in cursor:
-                yield CheckpointTuple(
-                    {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
-                    self.serde.loads(value),
-                    self.serde.loads(metadata) if metadata is not None else {},
-                    (
-                        {
-                            "configurable": {
-                                "thread_id": thread_id,
-                                "thread_ts": parent_ts,
-                            }
-                        }
-                        if parent_ts
-                        else None
-                    ),
-                )
-
-    async def asearch(
-        self,
-        metadata_filter: CheckpointMetadata,
-        *,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> AsyncIterator[CheckpointTuple]:
-        """Search for checkpoints by metadata asynchronously.
-
-        This method retrieves a list of checkpoint tuples from the SQLite
-        database based on the provided metadata filter. The metadata filter does
-        not need to contain all keys defined in the CheckpointMetadata class.
-        The checkpoints are ordered by timestamp in descending order.
-
-        Args:
-            metadata_filter (CheckpointMetadata): The metadata filter to use for searching the checkpoints.
-            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
-            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
-
-        Yields:
-            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
-        """
-        await self.setup()
-
-        # construct query
-        SELECT = "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints "
-        WHERE, params = search_where(metadata_filter, before)
-        ORDER_BY = "ORDER BY thread_ts DESC "
-        LIMIT = f"LIMIT {limit}" if limit else ""
-
-        query = f"{SELECT}{WHERE}{ORDER_BY}{LIMIT}"
-
-        # execute query
-        async with self.conn.execute(query, params) as cursor:
+        async with self.conn.execute(query, param_values) as cursor:
             async for thread_id, thread_ts, parent_ts, value, metadata in cursor:
                 yield CheckpointTuple(
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
