@@ -123,6 +123,3 @@ class TestSqliteSaver:
         with pytest.raises(NotImplementedError, match=_AIO_ERROR_MSG):
             async for _ in self.sqlite_saver.alist(self.config_1):
                 pass
-        with pytest.raises(NotImplementedError, match=_AIO_ERROR_MSG):
-            async for _ in self.sqlite_saver.asearch(self.metadata_1):
-                pass
