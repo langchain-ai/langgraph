@@ -147,7 +147,7 @@ nav:
          - "Map-reduce": how-tos/map-reduce.ipynb
          - "Human-in-the-Loop": how-tos/human-in-the-loop.ipynb
          - "Force Calling a Tool First": how-tos/force-calling-a-tool-first.ipynb
-         - "Passing Run-Time Values to Tools": how-tos/passing-run-time-values-to-tools.ipynb
+         - "Pass Run-Time Values to Tools": how-tos/pass-run-time-values-to-tools.ipynb
          - "Dynamic Direct Return": how-tos/dynamically-returning-directly.ipynb
          - "Respond in Structured Format": how-tos/respond-in-format.ipynb
          - "Managing Agent Steps": how-tos/managing-agent-steps.ipynb
