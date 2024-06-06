@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 from typing import (
     Any,
     AsyncIterator,
+    Dict,
     Iterator,
     List,
     Literal,
@@ -159,17 +160,9 @@ class BaseCheckpointSaver(ABC):
 
     def list(
         self,
-        config: RunnableConfig,
+        config: Optional[RunnableConfig],
         *,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> Iterator[CheckpointTuple]:
-        raise NotImplementedError
-
-    def search(
-        self,
-        metadata_filter: CheckpointMetadata,
-        *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
@@ -192,17 +185,7 @@ class BaseCheckpointSaver(ABC):
 
     def alist(
         self,
-        config: RunnableConfig,
-        *,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> AsyncIterator[CheckpointTuple]:
-        raise NotImplementedError
-        yield
-
-    def asearch(
-        self,
-        metadata_filter: CheckpointMetadata,
+        config: Optional[RunnableConfig],
         *,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
