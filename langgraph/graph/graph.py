@@ -4,7 +4,7 @@ from typing import (
     Any,
     Awaitable,
     Callable,
-    Dict,
+    Hashable,
     Literal,
     NamedTuple,
     Optional,
@@ -38,8 +38,8 @@ logger = logging.getLogger(__name__)
 
 
 class Branch(NamedTuple):
-    path: Runnable[Any, Union[str, list[str]]]
-    ends: Optional[dict[str, str]]
+    path: Runnable[Any, Union[Hashable, list[Hashable]]]
+    ends: Optional[dict[Hashable, str]]
     then: Optional[str] = None
 
     def run(
@@ -174,11 +174,11 @@ class Graph:
         self,
         source: str,
         path: Union[
-            Callable[..., Union[str, list[str]]],
-            Callable[..., Awaitable[Union[str, list[str]]]],
-            Runnable[Any, Union[str, list[str]]],
+            Callable[..., Union[Hashable, list[Hashable]]],
+            Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+            Runnable[Any, Union[Hashable, list[Hashable]]],
         ],
-        path_map: Optional[Union[dict[str, str], list[str]]] = None,
+        path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
         then: Optional[str] = None,
     ) -> None:
         """Add a conditional edge from the starting node to any number of destination nodes.
@@ -189,7 +189,7 @@ class Graph:
             path (Union[Callable, Runnable]): The callable that determines the next
                 node or nodes. If not specifying `path_map` it should return one or
                 more nodes. If it returns END, the graph will stop execution.
-            path_map (Optional[dict[str, str]]): Optional mapping of paths to node
+            path_map (Optional[dict[Hashable, str]]): Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
             then (Optional[str]): The name of a node to execute after the nodes
                 selected by `path`.
@@ -235,9 +235,11 @@ class Graph:
     def set_conditional_entry_point(
         self,
         path: Union[
-            Callable[..., str], Callable[..., Awaitable[str]], Runnable[Any, str]
+            Callable[..., Union[Hashable, list[Hashable]]],
+            Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+            Runnable[Any, Union[Hashable, list[Hashable]]],
         ],
-        path_map: Optional[Dict[str, str]] = None,
+        path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
         then: Optional[str] = None,
     ) -> None:
         """Sets a conditional entry point in the graph.
