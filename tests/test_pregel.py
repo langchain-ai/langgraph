@@ -1941,12 +1941,12 @@ def test_conditional_entrypoint_to_multiple_state_graph(
         locations: list[str]
         results: Annotated[list[str], operator.add]
 
-    def get_weather(state: str) -> str:
+    def get_weather(state: OverallState) -> OverallState:
         location = state["location"]
         weather = "sunny" if len(location) > 2 else "cloudy"
         return {"results": [f"It's {weather} in {location}"]}
 
-    def continue_to_weather(state: OverallState) -> str | list[str]:
+    def continue_to_weather(state: OverallState) -> list[Send]:
         return [
             Send("get_weather", {"location": location})
             for location in state["locations"]
