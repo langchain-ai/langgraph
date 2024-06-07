@@ -174,9 +174,9 @@ class Graph:
         self,
         source: str,
         path: Union[
-            Callable[..., Union[str, list[str]]],
-            Callable[..., Awaitable[Union[str, list[str]]]],
-            Runnable[Any, Union[str, list[str]]],
+            Callable[..., Union[Any, list[Any]]],
+            Callable[..., Awaitable[Union[Any, list[Any]]]],
+            Runnable[Any, Union[Any, list[Any]]],
         ],
         path_map: Optional[Union[dict[Any, str], list[str]]] = None,
         then: Optional[str] = None,
