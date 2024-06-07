@@ -1685,6 +1685,8 @@ def _prepare_next_tasks(
             tasks.append(PregelTaskDescription(packet.node, packet.arg))
     if for_execution:
         checkpoint["pending_sends"].clear()
+    # Collect channels to consume
+    channels_to_consume = set()
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name, proc in processes.items():
@@ -1698,6 +1700,7 @@ def _prepare_next_tasks(
             )
             and checkpoint["channel_versions"][chan] > seen[chan]
         ]:
+            channels_to_consume.update(triggers)
             try:
                 val = next(_proc_input(step, name, proc, managed, channels))
             except StopIteration:
@@ -1754,6 +1757,10 @@ def _prepare_next_tasks(
                     )
             else:
                 tasks.append(PregelTaskDescription(name, val))
+    # Consume all channels that were read
+    if for_execution:
+        for chan in channels_to_consume:
+            channels[chan].consume()
     return checkpoint, tasks
 
 
@@ -1763,7 +1770,6 @@ def _proc_input(
     proc: PregelNode,
     managed: ManagedValueMapping,
     channels: Mapping[str, BaseChannel],
-    catch: bool = False,
 ) -> Iterator[Any]:
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
@@ -1771,7 +1777,9 @@ def _proc_input(
         try:
             val: dict = {
                 k: read_channel(
-                    channels, chan, catch=catch or chan not in proc.triggers
+                    channels,
+                    chan,
+                    catch=chan not in proc.triggers,
                 )
                 for k, chan in proc.channels.items()
                 if isinstance(chan, str)
