@@ -178,7 +178,7 @@ class Graph:
             Callable[..., Awaitable[Union[str, list[str]]]],
             Runnable[Any, Union[str, list[str]]],
         ],
-        path_map: Optional[Union[dict[str, str], list[str]]] = None,
+        path_map: Optional[Union[dict[Any, str], list[str]]] = None,
         then: Optional[str] = None,
     ) -> None:
         """Add a conditional edge from the starting node to any number of destination nodes.
