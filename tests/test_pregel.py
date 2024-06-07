@@ -6226,6 +6226,52 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
 
     with SqliteSaver.from_conn_string(":memory:") as saver:
         tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_before=["finish"]
+        )
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value prepared slow",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={
+                "my_key": "value prepared slow",
+                "market": "DE",
+            },
+            next=("finish",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+            metadata={
+                "source": "loop",
+                "step": 2,
+                "writes": {"tool_two_slow": {"my_key": " slow"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+
+        # update state
+        tool_two.update_state(thread1, {"my_key": "er"})
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={
+                "my_key": "value prepared slower",
+                "market": "DE",
+            },
+            next=("finish",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+            metadata={
+                "source": "update",
+                "step": 3,
+                "writes": {"tool_two_slow": {"my_key": "er"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        tool_two = tool_two_graph.compile(
             checkpointer=saver, interrupt_after=["prepare"]
         )
 
@@ -6438,6 +6484,41 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(),
+        interrupt_before=["qa"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
+    ] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+    ]
+
+    app_w_interrupt.update_state(config, {"docs": ["doc5"]})
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "query": "analyzed: query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4", "doc5"],
+        },
+        next=("qa",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "update",
+            "step": 4,
+            "writes": {"retriever_one": {"docs": ["doc5"]}},
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4,doc5"}},
     ]
 
 
