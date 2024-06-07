@@ -1934,6 +1934,48 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
     ]
 
 
+def test_conditional_entrypoint_to_multiple_state_graph(
+    snapshot: SnapshotAssertion,
+) -> None:
+    class OverallState(TypedDict):
+        locations: list[str]
+        results: Annotated[list[str], operator.add]
+
+    def get_weather(state: str) -> str:
+        location = state["location"]
+        weather = "sunny" if len(location) > 2 else "cloudy"
+        return {"results": [f"It's {weather} in {location}"]}
+
+    def continue_to_weather(state: OverallState) -> str | list[str]:
+        return [
+            Send("get_weather", {"location": location})
+            for location in state["locations"]
+        ]
+
+    workflow = StateGraph(OverallState)
+
+    workflow.add_node("get_weather", get_weather)
+    workflow.add_edge("get_weather", END)
+    workflow.set_conditional_entry_point(continue_to_weather)
+
+    app = workflow.compile()
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+    assert app.invoke({"locations": ["sf", "nyc"]}, debug=True) == {
+        "locations": ["sf", "nyc"],
+        "results": ["It's cloudy in sf", "It's sunny in nyc"],
+    }
+
+    assert [*app.stream({"locations": ["sf", "nyc"]}, stream_mode="values")][-1] == {
+        "locations": ["sf", "nyc"],
+        "results": ["It's cloudy in sf", "It's sunny in nyc"],
+    }
+
+
 def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
