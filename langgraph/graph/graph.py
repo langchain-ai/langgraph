@@ -287,11 +287,8 @@ class Graph:
                             if node != start and node != branch.then:
                                 all_sources.add(node)
         # validate sources
-        for node in self.nodes:
-            if node not in all_sources:
-                raise ValueError(f"Node '{node}' is a dead-end")
         for source in all_sources:
-            if node not in self.nodes and source != START:
+            if source not in self.nodes and source != START:
                 raise ValueError(f"Found edge starting at unknown node '{source}'")
 
         # assemble targets
