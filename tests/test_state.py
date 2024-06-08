@@ -5,7 +5,7 @@ import pytest
 from pydantic.v1 import BaseModel
 from typing_extensions import Annotated, TypedDict
 
-from langgraph.graph.state import _warn_invalid_state_schema, StateGraph
+from langgraph.graph.state import StateGraph, _warn_invalid_state_schema
 
 
 class State(BaseModel):
