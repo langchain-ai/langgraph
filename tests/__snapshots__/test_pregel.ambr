@@ -114,67 +114,6 @@
   
   '''
 # ---
-# name: test_conditional_entrypoint_to_multiple_state_graph
-  '{"title": "LangGraphInput", "$ref": "#/definitions/OverallState", "definitions": {"OverallState": {"title": "OverallState", "type": "object", "properties": {"locations": {"title": "Locations", "type": "array", "items": {"type": "string"}}, "results": {"title": "Results", "type": "array", "items": {"type": "string"}}}, "required": ["locations", "results"]}}}'
-# ---
-# name: test_conditional_entrypoint_to_multiple_state_graph.1
-  '{"title": "LangGraphOutput", "type": "object", "properties": {"locations": {"title": "Locations", "type": "array", "items": {"type": "string"}}, "results": {"title": "Results", "type": "array", "items": {"type": "string"}}}}'
-# ---
-# name: test_conditional_entrypoint_to_multiple_state_graph.2
-  '''
-  {
-    "nodes": [
-      {
-        "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
-      },
-      {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
-        "id": "get_weather",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "get_weather"
-        }
-      }
-    ],
-    "edges": [
-      {
-        "source": "get_weather",
-        "target": "__end__"
-      },
-      {
-        "source": "__start__",
-        "target": "get_weather",
-        "conditional": true
-      },
-      {
-        "source": "__start__",
-        "target": "__end__",
-        "conditional": true
-      }
-    ]
-  }
-  '''
-# ---
-# name: test_conditional_entrypoint_to_multiple_state_graph.3
-  '''
-  graph TD;
-  	get_weather --> __end__;
-  	__start__ -.-> get_weather;
-  	__start__ -.-> __end__;
-  
-  '''
-# ---
 # name: test_conditional_entrypoint_graph_state
   '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"AgentState": {"title": "AgentState", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "output": {"title": "Output", "type": "string"}, "steps": {"title": "Steps", "type": "array", "items": {"type": "string"}}}}}}'
 # ---
@@ -253,6 +192,67 @@
   	__start__ -. go-left .-> left;
   	__start__ -. go-right .-> right;
   	left -.-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_entrypoint_to_multiple_state_graph
+  '{"title": "LangGraphInput", "$ref": "#/definitions/OverallState", "definitions": {"OverallState": {"title": "OverallState", "type": "object", "properties": {"locations": {"title": "Locations", "type": "array", "items": {"type": "string"}}, "results": {"title": "Results", "type": "array", "items": {"type": "string"}}}, "required": ["locations", "results"]}}}'
+# ---
+# name: test_conditional_entrypoint_to_multiple_state_graph.1
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"locations": {"title": "Locations", "type": "array", "items": {"type": "string"}}, "results": {"title": "Results", "type": "array", "items": {"type": "string"}}}}'
+# ---
+# name: test_conditional_entrypoint_to_multiple_state_graph.2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      },
+      {
+        "id": "get_weather",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "get_weather"
+        }
+      }
+    ],
+    "edges": [
+      {
+        "source": "get_weather",
+        "target": "__end__"
+      },
+      {
+        "source": "__start__",
+        "target": "get_weather",
+        "conditional": true
+      },
+      {
+        "source": "__start__",
+        "target": "__end__",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_entrypoint_to_multiple_state_graph.3
+  '''
+  graph TD;
+  	get_weather --> __end__;
+  	__start__ -.-> get_weather;
+  	__start__ -.-> __end__;
   
   '''
 # ---

@@ -68,11 +68,11 @@ def test_graph_validation() -> None:
     workflow.set_finish_point("agent")
     assert workflow.compile(), "valid graph"
 
+    # Accept a dead-end
     workflow = Graph()
     workflow.add_node("agent", logic)
     workflow.set_entry_point("agent")
-    with pytest.raises(ValueError, match="dead-end"):
-        workflow.compile()
+    workflow.compile()
 
     workflow = Graph()
     workflow.add_node("agent", logic)
@@ -131,7 +131,9 @@ def test_graph_validation() -> None:
     workflow.set_entry_point("agent")
     workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
     workflow.add_edge("tools", "agent")
-    with pytest.raises(ValueError):  # extra is dead-end / not reachable
+    with pytest.raises(
+        ValueError, match="Node `extra` is not reachable"
+    ):  # extra is not reachable
         workflow.compile()
 
     workflow = Graph()
@@ -141,8 +143,8 @@ def test_graph_validation() -> None:
     workflow.set_entry_point("agent")
     workflow.add_conditional_edges("agent", logic)
     workflow.add_edge("tools", "agent")
-    with pytest.raises(ValueError):  # extra is dead-end
-        workflow.compile()
+    # Accept, even though extra is dead-end
+    workflow.compile()
 
     class State(TypedDict):
         hello: str
@@ -158,6 +160,14 @@ def test_graph_validation() -> None:
     graph = builder.compile()
     with pytest.raises(InvalidUpdateError):
         graph.invoke({"hello": "there"})
+
+    graph = StateGraph(State)
+    graph.add_node("start", lambda x: x)
+    graph.add_edge("__start__", "start")
+    graph.add_edge("unknown", "start")
+    graph.add_edge("start", "__end__")
+    with pytest.raises(ValueError, match="Found edge starting at unknown node "):
+        graph.compile()
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -5786,16 +5796,6 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         my_key: Annotated[str, operator.add]
         market: str
 
-    # this graph is invalid because there is no path to END
-    invalid_graph = StateGraph(State)
-    invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": "slow"})
-    invalid_graph.add_node("tool_two_fast", lambda s: {"my_key": "fast"})
-    invalid_graph.set_conditional_entry_point(
-        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast"
-    )
-    with pytest.raises(ValueError):
-        invalid_graph.compile()
-
     tool_two_graph = StateGraph(State)
     tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
     tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
@@ -5938,22 +5938,6 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
-
-    # this graph is invalid because there is no path to "finish"
-    invalid_graph = StateGraph(State)
-    invalid_graph.set_entry_point("prepare")
-    invalid_graph.set_finish_point("finish")
-    invalid_graph.add_conditional_edges(
-        source="prepare",
-        path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
-        path_map=["tool_two_slow", "tool_two_fast"],
-    )
-    invalid_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
-    invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
-    invalid_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
-    invalid_graph.add_node("finish", lambda s: {"my_key": " finished"})
-    with pytest.raises(ValueError):
-        invalid_graph.compile()
 
     tool_two_graph = StateGraph(State)
     tool_two_graph.set_entry_point("prepare")
