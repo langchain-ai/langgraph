@@ -1,10 +1,31 @@
+import collections.abc
 from contextlib import contextmanager
-from typing import Callable, Generator, Generic, Optional, Sequence, Type
+from typing import (
+    Callable,
+    Generator,
+    Generic,
+    NotRequired,
+    Optional,
+    Required,
+    Sequence,
+    Type,
+)
 
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError
+
+
+# Adapted from typing_extensions
+def _strip_extras(t):
+    """Strips Annotated, Required and NotRequired from a given type."""
+    if hasattr(t, "__origin__"):
+        return _strip_extras(t.__origin__)
+    if hasattr(t, "__origin__") and t.__origin__ in (Required, NotRequired):
+        return _strip_extras(t.__args__[0])
+
+    return t
 
 
 class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
@@ -18,8 +39,18 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
     """
 
     def __init__(self, typ: Type[Value], operator: Callable[[Value, Value], Value]):
-        self.typ = typ
         self.operator = operator
+        # keep the type exposed by ValueType/UpdateType as-is
+        self.typ = typ
+        # special forms from typing or collections.abc are not instantiable
+        # so we need to replace them with their concrete counterparts
+        typ = _strip_extras(typ)
+        if typ in (collections.abc.Sequence, collections.abc.MutableSequence):
+            typ = list
+        if typ in (collections.abc.Set, collections.abc.MutableSet):
+            typ = set
+        if typ in (collections.abc.Mapping, collections.abc.MutableMapping):
+            typ = dict
         try:
             self.value = typ()
         except Exception:
