@@ -10,6 +10,7 @@ from typing import (
     Any,
     Dict,
     Generator,
+    List,
     Literal,
     Optional,
     Sequence,
@@ -168,6 +169,70 @@ def test_graph_validation() -> None:
     graph.add_edge("start", "__end__")
     with pytest.raises(ValueError, match="Found edge starting at unknown node "):
         graph.compile()
+
+
+def test_reducer_before_first_node() -> None:
+    from langchain_core.messages import HumanMessage
+
+    class State(TypedDict):
+        hello: str
+        messages: Annotated[list[str], add_messages]
+
+    def node_a(state: State) -> State:
+        assert state == {
+            "hello": "there",
+            "messages": [HumanMessage(content="hello", id=AnyStr())],
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.set_entry_point("a")
+    builder.set_finish_point("a")
+    graph = builder.compile()
+    assert graph.invoke({"hello": "there", "messages": "hello"}) == {
+        "hello": "there",
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+    class State(TypedDict):
+        hello: str
+        messages: Annotated[List[str], add_messages]
+
+    def node_a(state: State) -> State:
+        assert state == {
+            "hello": "there",
+            "messages": [HumanMessage(content="hello", id=AnyStr())],
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.set_entry_point("a")
+    builder.set_finish_point("a")
+    graph = builder.compile()
+    assert graph.invoke({"hello": "there", "messages": "hello"}) == {
+        "hello": "there",
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+    class State(TypedDict):
+        hello: str
+        messages: Annotated[Sequence[str], add_messages]
+
+    def node_a(state: State) -> State:
+        assert state == {
+            "hello": "there",
+            "messages": [HumanMessage(content="hello", id=AnyStr())],
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.set_entry_point("a")
+    builder.set_finish_point("a")
+    graph = builder.compile()
+    assert graph.invoke({"hello": "there", "messages": "hello"}) == {
+        "hello": "there",
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
