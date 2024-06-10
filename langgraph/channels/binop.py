@@ -5,12 +5,11 @@ from typing import (
     Generator,
     Generic,
     Optional,
-    Required,
     Sequence,
     Type,
 )
 
-from typing_extensions import NotRequired, Self
+from typing_extensions import NotRequired, Required, Self
 
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError
