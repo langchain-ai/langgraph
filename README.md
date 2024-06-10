@@ -161,13 +161,13 @@ final_state["messages"][-1].content
 
     There are two main nodes we need for this:
       - The `agent` node: responsible for deciding what (if any) actions to take.
-      - A function to invoke tools (a prebuilt `ToolNode` instance): if the agent decides to take an action, this node will then execute that action.
+      - The `tools` node that invokes tools: if the agent decides to take an action, this node will then execute that action.
    </details>
-3. <details>
+3. <details
     <summary>Define graph edges</summary>
       We define both normal and conditional edges. Conditional edge means that the destination depends on the contents of the graph's State. In our case, the destination is not known until the agent (LLM) decides.
 
-      We define one of each type of edge:
+      Our graph has one of each type of edge:
       - Conditional edge: after the agent is called, we should either:
         - a. Run tools if the agent said to take an action, OR
         - b. Finish (respond to the user) if the agent did not ask to run tools
