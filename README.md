@@ -19,7 +19,6 @@ Cycles are important for agentic behaviors, where you call an LLM in a loop, ask
 
 ### Key Features
 
-- **Stateful Graphs**: Maintain state across nodes for complex, multi-step computations.
 - **Cycles and Branching**: Implement loops and conditionals in your apps.
 - **Persistence**: Automatically save state after each step in the graph. Pause and resume the graph execution at any point to support error recovery, human-in-the-loop workflows, time travel and more.
 - **Human-in-the-Loop**: Interrupt graph execution to approve or edit next action planned by the agent.
