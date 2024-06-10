@@ -4,23 +4,22 @@ You can [compile](https://langchain-ai.github.io/langgraph/reference/graphs/#lan
 
 - Remembering things across multiple interactions
 - Interrupting to wait for user input
-- Resiliance for long-running, error-prone agents
+- Resilience for long-running, error-prone agents
 - Time travel retry and branch from a previous checkpoint
 
 ### Checkpoint
 
 ::: langgraph.checkpoint.Checkpoint
 
-
 ### BaseCheckpointSaver
 
 ::: langgraph.checkpoint.base.BaseCheckpointSaver
-    handler: python
+handler: python
 
 ### SerializerProtocol
 
 ::: langgraph.checkpoint.SerializerProtocol
-    handler: python
+handler: python
 
 ## Implementations
 
@@ -29,15 +28,14 @@ LangGraph also natively provides the following checkpoint implementations.
 ### MemorySaver
 
 ::: langgraph.checkpoint.memory.MemorySaver
-    handler: python
+handler: python
 
 ### AsyncSqliteSaver
 
 ::: langgraph.checkpoint.aiosqlite.AsyncSqliteSaver
-    handler: python
-
+handler: python
 
 ### SqliteSaver
 
 ::: langgraph.checkpoint.sqlite.SqliteSaver
-    handler: python
+handler: python
