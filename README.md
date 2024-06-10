@@ -22,8 +22,8 @@ Cycles are important for agentic behaviors, where you call an LLM in a loop, ask
 - **Stateful Graphs**: Maintain state across nodes for complex, multi-step computations.
 - **Cycles and Branching**: Implement loops and conditionals in your apps.
 - **Persistence**: Automatically save state after each step in the graph. Pause and resume the graph execution at any point to support error recovery, human-in-the-loop workflows, time travel and more.
-- **Human-in-the-loop**: Interrupt graph execution to approve or edit next action planned by the agent.
-- **Streaming support**: Stream outputs as they are produced by each node (including token streaming).
+- **Human-in-the-Loop**: Interrupt graph execution to approve or edit next action planned by the agent.
+- **Streaming Support**: Stream outputs as they are produced by each node (including token streaming).
 - **Integration with LangChain**: LangGraph integrates seamlessly with [LangChain](https://github.com/langchain-ai/langchain/) and [LangSmith](https://docs.smith.langchain.com/).
 
 
@@ -81,7 +81,7 @@ runnable.invoke(HumanMessage("What is 1 + 1?"))
 3.	Set the entry point for graph execution (`oracle`).
 4.	<details>
     <summary>Compile the graph.</summary>
-    When we compile the graph, we are translating it to low-level [pregel operations](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) ensuring that it can be run.
+    When we compile the graph, we are translating it to low-level Pregel operations
     </details>
 5. <details>
    <summary>Execute the graph</summary>
