@@ -4,14 +4,13 @@ from typing import (
     Callable,
     Generator,
     Generic,
-    NotRequired,
     Optional,
     Required,
     Sequence,
     Type,
 )
 
-from typing_extensions import Self
+from typing_extensions import NotRequired, Self
 
 from langgraph.channels.base import BaseChannel, Value
 from langgraph.errors import EmptyChannelError
