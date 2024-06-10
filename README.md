@@ -13,9 +13,18 @@
 [LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs.
 Inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/), LangGraph lets you coordinate and checkpoint multiple chains (or actors) across cyclic computational steps using regular python functions (or [JS](https://github.com/langchain-ai/langgraphjs)). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/).
 
-The main use is for adding **cycles** and **persistence** to your LLM application. If you only need quick Directed Acyclic Graphs (DAGs), you can already accomplish this using [LangChain Expression Language](https://python.langchain.com/docs/expression_language/).
+### Why LangGraph?
 
-Cycles are important for agentic behaviors, where you call an LLM in a loop, asking it what action to take next.
+The main purpose of LangGraph is adding **cycles** and **persistence** to your LLM application. Cycles are important for agentic behaviors, where you call an LLM in a loop, asking it what action to take next.
+
+LangGraph is framework agnostic (each node is a regular python function). It extends the core Runnable API (shared interface for streaming, async, and batch calls) to make it easy to:
+
+* Seamlesssly manage state across multiple turns of conversation or tool usage
+* Flexibly route between nodes based on dynamic criteria
+* Smoothly switch between LLMs and human intervention
+* Add persistence for long-running, multi-session applications
+
+**NOTE**: If you only need simple Directed Acyclic Graphs (DAGs), you can already accomplish this using [LangChain Expression Language](https://python.langchain.com/docs/expression_language/). But for more complex, stateful applications with nonlinear flows, LangGraph is the perfect tool for the job.
 
 ### Key Features
 
