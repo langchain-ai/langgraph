@@ -10,21 +10,9 @@
 
 ## Overview
 
-[LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs.
-Inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/), LangGraph lets you coordinate and checkpoint multiple chains (or actors) across cyclic computational steps using regular python functions (or [JS](https://github.com/langchain-ai/langgraphjs)). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/).
+[LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs, and is used to build agent and multi-agent workflows. Compared to other LLM frameworks it has these core benefits: cycles, controllability and persistence. LangGraph is a very low-level framework - this allows you to have fine-grained control over both the flow and the state of your application, crucial for creating reliable agents. LangGraph comes with built-in persistence, allowing for advanced human-in-the-loop and memory features. 
 
-### Why LangGraph?
-
-The main purpose of LangGraph is adding **cycles** and **persistence** to your LLM application. Cycles are important for agentic behaviors, where you call an LLM in a loop, asking it what action to take next.
-
-LangGraph is framework agnostic (each node is a regular python function). It extends the core Runnable API (shared interface for streaming, async, and batch calls) to make it easy to:
-
-* Seamlesssly manage state across multiple turns of conversation or tool usage
-* Flexibly route between nodes based on dynamic criteria
-* Smoothly switch between LLMs and human intervention
-* Add persistence for long-running, multi-session applications
-
-**NOTE**: If you only need simple Directed Acyclic Graphs (DAGs), you can already accomplish this using [LangChain Expression Language](https://python.langchain.com/docs/expression_language/). But for more complex, stateful applications with nonlinear flows, LangGraph is the perfect tool for the job.
+LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used with LangChain.
 
 ### Key Features
 
@@ -69,7 +57,7 @@ from typing import Annotated, Literal, TypedDict
 from langchain_core.messages import HumanMessage
 from langchain_community.tools.tavily_search import TavilySearchResults
 from langchain_openai import ChatOpenAI
-from langgraph.graph import END, StateGraph
+from langgraph.graph import END, StateGraph, MessagesState
 from langgraph.prebuilt import ToolNode
 
 
@@ -78,18 +66,6 @@ tools = [TavilySearchResults(max_results=1)]
 tool_node = ToolNode(tools)
 
 model = ChatOpenAI(temperature=0).bind_tools(tools)
-
-def add_messages(left: list, right: list):
-    """Add-don't-overwrite."""
-    return left + right
-
-
-# Define graph state
-class AgentState(TypedDict):
-    # The `add_messages` function within the annotation defines
-    # *how* updates should be merged into the state.
-    messages: Annotated[list, add_messages]
-
 
 # Define the function that determines whether to continue or not
 def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
@@ -111,7 +87,7 @@ def call_model(state: AgentState):
 
 
 # Define a new graph
-workflow = StateGraph(AgentState)
+workflow = StateGraph(MessagesState)
 
 # Define the two nodes we will cycle between
 workflow.add_node("agent", call_model)
@@ -191,10 +167,6 @@ final_state["messages"][-1].content
     5. Execution progresses to the special `END` value and outputs the final state.
     And as a result, we get a list of all our chat messages as output.
    </details>
-
-## Advanced usage
-
-For more advanced examples of LangGraph agents with with tool calling, conditional edges and cycles see [How-to Guides](https://langchain-ai.github.io/langgraph/how-tos/)
 
 
 ## Documentation
