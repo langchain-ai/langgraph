@@ -155,7 +155,7 @@ final_state["messages"][-1].content
     - we define the tools we want to use -- a web search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
    </details>
 2. <details>
-    <summary>Initialize graph with state</summary>
+    <summary>Initialize graph with state.</summary>
 
     - we initialize graph (`StateGraph`) by passing state schema (in our case `MessagesState`)
     - `MessagesState` is a prebuilt state schema that has one attribute -- a list of LangChain `Message` objects, as well as logic for merging the updates from each node into the state
@@ -168,7 +168,7 @@ final_state["messages"][-1].content
       - The `tools` node that invokes tools: if the agent decides to take an action, this node will then execute that action.
    </details>
 4. <details>
-    <summary>Define entry point and graph edges</summary>
+    <summary>Define entry point and graph edges.</summary>
 
       First, we need to set the entry point for graph execution - `agent` node.
 
@@ -182,10 +182,12 @@ final_state["messages"][-1].content
 5. <details>
     <summary>Compile the graph.</summary>
 
-    When we compile the graph, we are translating it to low-level [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) operations
+    - When we compile the graph, we turn it into a LangChain [Runnable](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface), which automaticall enables calling `.invoke()`, `.stream()` and `.batch()` with your inputs
+    - We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, human-in-the-loop workflows, time travel and more. In our case we use `MemorySaver` - a simple in-memory checkpointer
+    - Compiling graph translates it to low-level [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) operations
     </details>
 6. <details>
-   <summary>Execute the graph</summary>
+   <summary>Execute the graph.</summary>
 
     1. LangGraph adds the input message to the internal state, then passes the state to the entrypoint node, `"agent"`.
     2. The `"agent"` node executes, invoking the chat model.
