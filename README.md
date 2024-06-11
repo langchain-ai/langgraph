@@ -12,7 +12,7 @@
 
 [LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs, used to create agent and multi-agent workflows. Compared to other LLM frameworks, it offers these core benefits: cycles, controllability, and persistence. LangGraph allows you to define flows that involve cycles, essential for most agentic architectures, differentiating it from DAG-based solutions. As a very low-level framework, it provides fine-grained control over both the flow and state of your application, crucial for creating reliable agents. Additionally, LangGraph includes built-in persistence, enabling advanced human-in-the-loop and memory features.
 
-LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used with LangChain.
+LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used without LangChain.
 
 ### Key Features
 
@@ -69,14 +69,14 @@ tool_node = ToolNode(tools)
 model = ChatOpenAI(temperature=0).bind_tools(tools)
 
 # Define the function that determines whether to continue or not
-def should_continue(state: AgentState) -> Literal["tools", "__end__"]:
+def should_continue(state: AgentState) -> Literal["tools", END]:
     messages = state['messages']
     last_message = messages[-1]
     # If the LLM makes a tool call, then we route to the "tools" node
     if last_message.tool_calls:
         return "tools"
     # Otherwise, we stop (reply to the user)
-    return "__end__"
+    return END
 
 
 # Define the function that calls the model
@@ -182,7 +182,7 @@ final_state["messages"][-1].content
 5. <details>
     <summary>Compile the graph.</summary>
 
-    - When we compile the graph, we turn it into a LangChain [Runnable](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface), which automaticall enables calling `.invoke()`, `.stream()` and `.batch()` with your inputs
+    - When we compile the graph, we turn it into a LangChain [Runnable](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface), which automatically enables calling `.invoke()`, `.stream()` and `.batch()` with your inputs
     - We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, human-in-the-loop workflows, time travel and more. In our case we use `MemorySaver` - a simple in-memory checkpointer
     - Compiling graph translates it to low-level [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) operations
     </details>
