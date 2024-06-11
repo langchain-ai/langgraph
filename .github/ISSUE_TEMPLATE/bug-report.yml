@@ -29,11 +29,13 @@ body:
       options:
         - label: I added a very descriptive title to this issue.
           required: true
-        - label: I searched the LangChain documentation with the integrated search.
+        - label: I searched the [LangGraph](https://langchain-ai.github.io/langgraph/)/LangChain documentation with the integrated search.
           required: true
         - label: I used the GitHub search to find a similar question and didn't find it.
           required: true
-        - label: I am sure that this is a bug in LangChain rather than my code.
+        - label: I am sure that this is a bug in LangGraph/LangChain rather than my code.
+          required: true
+        - label: I am sure this is better as an issue [rather than a GitHub discussion](https://github.com/langchain-ai/langgraph/discussions/new/choose), since this is a LangGraph bug and not a design question.
           required: true
   - type: textarea
     id: reproduction
@@ -48,15 +50,10 @@ body:
         
         **Important!** 
         
-        * Use code tags (e.g., ```python ... ```) to correctly [format your code](https://help.github.com/en/github/writing-on-github/creating-and-highlighting-code-blocks#syntax-highlighting).
-        * INCLUDE the language label (e.g. `python`) after the first three backticks to enable syntax highlighting. (e.g., ```python rather than ```).
         * Reduce your code to the minimum required to reproduce the issue if possible. This makes it much easier for others to help you.
         * Avoid screenshots when possible, as they are hard to read and (more importantly) don't allow others to copy-and-paste your code.
 
       placeholder: |
-        The following code: 
-        
-        ```python
         from langchain_core.runnables import RunnableLambda
 
         def bad_code(inputs) -> int:
@@ -64,7 +61,7 @@ body:
           
           chain = RunnableLambda(bad_code)
           chain.invoke('Hello!')
-        ```
+      render: python
   - type: textarea
     id: error
     validations:
@@ -75,6 +72,7 @@ body:
         If you are reporting an error, please include the full error message and stack trace.
       placeholder: |
         Exception + full stack trace
+      render: shell
   - type: textarea
     id: description
     attributes:
