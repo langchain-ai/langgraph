@@ -184,7 +184,6 @@ final_state["messages"][-1].content
 
     - When we compile the graph, we turn it into a LangChain [Runnable](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface), which automatically enables calling `.invoke()`, `.stream()` and `.batch()` with your inputs
     - We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, human-in-the-loop workflows, time travel and more. In our case we use `MemorySaver` - a simple in-memory checkpointer
-    - Compiling graph translates it to low-level [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) operations
     </details>
 6. <details>
    <summary>Execute the graph.</summary>
