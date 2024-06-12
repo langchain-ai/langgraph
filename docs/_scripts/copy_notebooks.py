@@ -33,6 +33,7 @@ _MANUAL = {
     "tutorials": [
         "introduction.ipynb",
         "customer-support/customer-support.ipynb",
+        "tutorials/tnt-llm/tnt-llm.ipynb",
     ],
 }
 _MANUAL_INVERSE = {v: docs_dir / k for k, vs in _MANUAL.items() for v in vs}
@@ -113,6 +114,9 @@ def copy_notebooks():
                         dst_path = os.path.join(
                             overridden_dir, os.path.relpath(src_path, examples_dir)
                         )
+                        dst_path = dst_path.replace(
+                            "tutorials/tutorials", "tutorials"
+                        ).replace("how-tos/how-tos", "how-tos")
                         print(f"Overriding: {src_path} to {dst_path}")
                         break
 

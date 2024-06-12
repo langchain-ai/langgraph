@@ -129,6 +129,8 @@ nav:
               - Chatbot Eval via Sim:
                   - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
                   - In LangSmith: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
+          - Text Mining:
+              - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
           - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
           - Competitive Programming: tutorials/usaco/usaco.ipynb
 
