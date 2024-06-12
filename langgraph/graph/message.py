@@ -1,5 +1,5 @@
-from itertools import filterfalse
 import uuid
+from itertools import filterfalse
 from typing import Annotated, Literal, TypedDict, Union
 
 from langchain_core.messages import (
@@ -73,7 +73,9 @@ def add_messages(left: Messages, right: Messages) -> Messages:
     if not isinstance(right, list):
         right = [right]
 
-    is_modifier = lambda m: isinstance(m, dict) and m.get("action")
+    def is_modifier(m: Message):
+        return isinstance(m, dict) and m.get("action")
+
     message_modifiers = list(filter(is_modifier, right))
     right = list(filterfalse(is_modifier, right))
     # coerce to message
