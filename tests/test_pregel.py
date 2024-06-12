@@ -6048,7 +6048,6 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
@@ -6072,7 +6071,6 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
@@ -6120,7 +6118,6 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
@@ -6168,7 +6165,6 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
@@ -6216,7 +6212,6 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),

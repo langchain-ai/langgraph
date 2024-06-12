@@ -30,6 +30,7 @@ jupyter = "^1.0.0"
 langchainhub = "^0.1.14"
 langchain-openai = ">=0.1.2"
 langchain-anthropic = ">=0.1.8"
+dataclasses-json = "^0.6.7"
 
 [tool.poetry.group.test]
 optional = true

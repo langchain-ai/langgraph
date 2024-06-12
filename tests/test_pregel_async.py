@@ -4428,7 +4428,6 @@ async def test_branch_then() -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {"thread_id": "10", "thread_ts": AnyStr()},
                     },
                     "values": {"my_key": ""},
@@ -4449,7 +4448,6 @@ async def test_branch_then() -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
@@ -4493,7 +4491,6 @@ async def test_branch_then() -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
@@ -4538,7 +4535,6 @@ async def test_branch_then() -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
@@ -4586,7 +4582,6 @@ async def test_branch_then() -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
