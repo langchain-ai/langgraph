@@ -114,12 +114,13 @@ def copy_notebooks():
                         dst_path = os.path.join(
                             overridden_dir, os.path.relpath(src_path, examples_dir)
                         )
-                        dst_path = dst_path.replace(
-                            "tutorials/tutorials", "tutorials"
-                        ).replace("how-tos/how-tos", "how-tos")
                         print(f"Overriding: {src_path} to {dst_path}")
                         break
 
+                # Avoid double nesting.
+                dst_path = dst_path.replace("tutorials/tutorials", "tutorials").replace(
+                    "how-tos/how-tos", "how-tos"
+                )
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                 print(f"Copying: {src_path} to {dst_path}")
                 shutil.copy(src_path, dst_path)
