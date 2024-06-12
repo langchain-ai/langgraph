@@ -1,5 +1,5 @@
 import uuid
-from typing import Annotated, TypedDict, Union
+from typing import Annotated, Literal, TypedDict, Union
 
 from langchain_core.messages import (
     AnyMessage,
@@ -7,10 +7,19 @@ from langchain_core.messages import (
     convert_to_messages,
     message_chunk_to_message,
 )
+from langchain_core.messages.base import BaseMessage
 
 from langgraph.graph.state import StateGraph
 
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
+
+
+class DeleteMessage(BaseMessage):
+    id: str
+    type: Literal["delete"] = "delete"
+
+    def __init__(self, **kwargs):
+        return super().__init__("delete-message", **kwargs)
 
 
 def add_messages(left: Messages, right: Messages) -> Messages:
@@ -79,8 +88,16 @@ def add_messages(left: Messages, right: Messages) -> Messages:
     merged = left.copy()
     for m in right:
         if (existing_idx := left_idx_by_id.get(m.id)) is not None:
-            merged[existing_idx] = m
+            if isinstance(m, DeleteMessage):
+                del merged[existing_idx]
+            else:
+                merged[existing_idx] = m
         else:
+            if isinstance(m, DeleteMessage):
+                raise ValueError(
+                    f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
+                )
+
             merged.append(m)
     return merged
 
