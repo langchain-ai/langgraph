@@ -6,7 +6,7 @@ Welcome to the LangGraph how-to guides! These guides provide practical, step-by-
 
 The core guides show how to address common needs when building out AI workflows, with special focus placed on [ReAct](https://arxiv.org/abs/2210.03629)-style agents with [tool calling](https://python.langchain.com/docs/modules/model_io/chat/function_calling/).
 
-- [ReAct agent](create-react-agent.ipynb): How to create a simple ReAct agent using LangGraph
+- [ReAct agent](create-react-agent.ipynb): How to create a simple ReAct agent
 - [Persistence](persistence.ipynb): How to give your graph "memory" and resilience by saving and loading state
 - [Time travel](time-travel.ipynb): How to navigate and manipulate graph state history once it's persisted
 - [Async execution](async.ipynb): How to run nodes asynchronously for improved performance
