@@ -155,7 +155,14 @@ class StateGraph(Graph):
     ) -> None:
         if not isinstance(node, str):
             action = node
-            node = getattr(action, "name", action.__name__)
+            if isinstance(action, Runnable):
+                node = action.name
+            else:
+                node = getattr(action, "__name__", action.__class__.__name__)
+            if node is None:
+                raise ValueError(
+                    "Node name must be provided if action is not a function"
+                )
         if node in self.channels:
             raise ValueError(f"'{node}' is already being used as a state key")
         return super().add_node(node, action)

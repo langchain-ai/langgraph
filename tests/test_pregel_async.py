@@ -1,8 +1,9 @@
 import asyncio
 import json
 import operator
+import time
 from collections import Counter
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import aclosing, asynccontextmanager, contextmanager
 from typing import (
     Annotated,
     Any,
@@ -31,6 +32,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
 from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
@@ -133,6 +135,158 @@ async def test_step_timeout_on_stream_hang() -> None:
             await asyncio.sleep(0.6)
 
     assert inner_task_cancelled
+
+
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        AsyncSqliteSaver.from_conn_string(":memory:"),
+        None,
+    ],
+)
+async def test_cancel_graph_astream(
+    checkpointer: Optional[BaseCheckpointSaver],
+) -> None:
+    try:
+
+        class State(TypedDict):
+            value: int
+
+        class AwhileMaker:
+            def __init__(self) -> None:
+                self.reset()
+
+            async def __call__(self, input: State) -> Any:
+                self.started = True
+                try:
+                    await asyncio.sleep(1.5)
+                except asyncio.CancelledError:
+                    self.cancelled = True
+                    raise
+
+            def reset(self):
+                self.started = False
+                self.cancelled = False
+
+        async def alittlewhile(input: State) -> None:
+            await asyncio.sleep(0.6)
+            return {"value": 2}
+
+        awhile = AwhileMaker()
+        builder = StateGraph(State)
+        builder.add_node("awhile", awhile)
+        builder.add_node(alittlewhile)
+        builder.add_edge(START, "alittlewhile")
+        builder.add_edge("alittlewhile", "awhile")
+        graph = builder.compile(checkpointer=checkpointer)
+
+        # test interrupting astream
+        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        async with aclosing(graph.astream({"value": 1}, thread1)) as stream:
+            async for chunk in stream:
+                assert chunk == {"alittlewhile": {"value": 2}}
+                break
+
+        # node "awhile" should never start
+        assert awhile.started is False
+
+        # checkpoint with output of "alittlewhile" should not be saved
+        if checkpointer is not None:
+            state = await graph.aget_state(thread1)
+            assert state is not None
+            assert state.values == {"value": 1}
+            assert state.next == ("alittlewhile",)
+            assert state.metadata == {"source": "loop", "step": 0, "writes": None}
+    finally:
+        if getattr(checkpointer, "__aexit__", None):
+            await checkpointer.__aexit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        AsyncSqliteSaver.from_conn_string(":memory:"),
+        None,
+    ],
+)
+async def test_cancel_graph_astream_events_v2(
+    checkpointer: Optional[BaseCheckpointSaver],
+) -> None:
+    try:
+
+        class State(TypedDict):
+            value: int
+
+        class AwhileMaker:
+            def __init__(self) -> None:
+                self.reset()
+
+            async def __call__(self, input: State) -> Any:
+                self.started = True
+                try:
+                    await asyncio.sleep(1.5)
+                except asyncio.CancelledError:
+                    self.cancelled = True
+                    raise
+
+            def reset(self):
+                self.started = False
+                self.cancelled = False
+
+        async def alittlewhile(input: State) -> None:
+            await asyncio.sleep(0.6)
+            return {"value": 2}
+
+        awhile = AwhileMaker()
+        anotherwhile = AwhileMaker()
+        builder = StateGraph(State)
+        builder.add_node(alittlewhile)
+        builder.add_node("awhile", awhile)
+        builder.add_node("anotherwhile", anotherwhile)
+        builder.add_edge(START, "alittlewhile")
+        builder.add_edge("alittlewhile", "awhile")
+        builder.add_edge("awhile", "anotherwhile")
+        graph = builder.compile(checkpointer=checkpointer)
+
+        # test interrupting astream_events v2
+        got_event = False
+        thread2: RunnableConfig = {"configurable": {"thread_id": 2}}
+        async with aclosing(
+            graph.astream_events({"value": 1}, thread2, version="v2")
+        ) as stream:
+            async for chunk in stream:
+                if chunk["event"] == "on_chain_stream" and not chunk["parent_ids"]:
+                    print(time.perf_counter(), "got event out here", chunk)
+                    got_event = True
+                    assert chunk["data"]["chunk"] == {"alittlewhile": {"value": 2}}
+                    break
+
+        # did break
+        assert got_event
+
+        # node "awhile" starts but is cancelled
+        assert awhile.started is True
+        assert awhile.cancelled is True
+
+        # node "anotherwhile" should never start
+        assert anotherwhile.started is False
+
+        # checkpoint with output of "alittlewhile" should not be saved
+        if checkpointer is not None:
+            state = await graph.aget_state(thread2)
+            assert state is not None
+            assert state.values == {"value": 2}
+            assert state.next == ("awhile",)
+            assert state.metadata == {
+                "source": "loop",
+                "step": 1,
+                "writes": {"alittlewhile": {"value": 2}},
+            }
+    finally:
+        if getattr(checkpointer, "__aexit__", None):
+            await checkpointer.__aexit__(None, None, None)
 
 
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
