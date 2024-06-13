@@ -537,7 +537,8 @@ class Pregel(
         # update channels
         with ChannelsManager(self.channels, checkpoint) as channels:
             # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].get_writers()
+            proc = self.nodes[as_node]
+            writers = proc.get_writers()
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
@@ -563,6 +564,14 @@ class Pregel(
                     },
                 ),
             )
+
+            # replicate the _prepare_next_tasks logic by
+            # updating the versions_seen
+            seen = checkpoint["versions_seen"][as_node]
+            seen.update(
+                {chan: checkpoint["channel_versions"][chan] for chan in proc.triggers}
+            )
+
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
             step = saved.metadata.get("step", -2) + 1 if saved else -1
@@ -623,7 +632,8 @@ class Pregel(
         # update channels, acting as the chosen node
         async with AsyncChannelsManager(self.channels, checkpoint) as channels:
             # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].get_writers()
+            proc = self.nodes[as_node]
+            writers = proc.get_writers()
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
@@ -649,6 +659,14 @@ class Pregel(
                     },
                 ),
             )
+
+            # replicate the _prepare_next_tasks logic by
+            # updating the versions_seen
+            seen = checkpoint["versions_seen"][as_node]
+            seen.update(
+                {chan: checkpoint["channel_versions"][chan] for chan in proc.triggers}
+            )
+
             # apply to checkpoint and save
             _apply_writes(checkpoint, channels, task.writes)
             step = saved.metadata.get("step", -2) + 1 if saved else -1
