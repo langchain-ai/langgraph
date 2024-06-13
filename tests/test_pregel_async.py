@@ -758,7 +758,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
                 pass
             else:
                 errored_once = True
-                raise OSError("I will be retried")
+                raise ConnectionError("I will be retried")
         if input > 10:
             raise ValueError("Input is too large")
         return input

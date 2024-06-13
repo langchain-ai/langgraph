@@ -13,6 +13,8 @@ logger = logging.getLogger(__name__)
 
 
 def default_retry_on(exc: Exception) -> bool:
+    if isinstance(exc, ConnectionError):
+        return True
     if isinstance(
         exc,
         (
@@ -24,6 +26,10 @@ def default_retry_on(exc: Exception) -> bool:
             NameError,
             SyntaxError,
             RuntimeError,
+            ReferenceError,
+            StopIteration,
+            StopAsyncIteration,
+            OSError,
         ),
     ):
         return False
@@ -90,7 +96,7 @@ def run_with_retry(
             )
             # log the retry
             logger.info(
-                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts})"
+                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}"
             )
 
 
@@ -138,5 +144,5 @@ async def arun_with_retry(
             )
             # log the retry
             logger.info(
-                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts})"
+                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}"
             )
