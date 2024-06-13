@@ -3,7 +3,7 @@ import json
 import operator
 import time
 from collections import Counter
-from contextlib import aclosing, asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from typing import (
     Annotated,
     Any,
@@ -25,6 +25,7 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnablePick,
 )
+from langchain_core.utils.aiter import aclosing
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
