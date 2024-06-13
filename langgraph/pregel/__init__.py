@@ -1360,7 +1360,7 @@ class Pregel(
             except NameError:
                 pass
             # wait for all background tasks to finish
-            await asyncio.gather(*bg)
+            await asyncio.shield(asyncio.gather(*bg))
 
     def invoke(
         self,
