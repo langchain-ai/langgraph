@@ -137,6 +137,7 @@ nav:
   - "How-to Guides":
      - 'how-tos/index.md'
      - Core:
+         - "ReAct Agent": how-tos/create-react-agent.ipynb
          - "Persistence": how-tos/persistence.ipynb
          - "Time Travel": how-tos/time-travel.ipynb 
          - "Async Execution": how-tos/async.ipynb
