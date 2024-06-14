@@ -684,7 +684,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
     assert [c async for c in app.astream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
-        {"inbox": [], "output": 4},
+        {"output": 4},
     ]
     assert [
         c async for c in app.astream({"input": 2, "inbox": 12}, stream_mode="debug")
@@ -1301,7 +1301,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
-            assert chunk == {"inbox": [], "output": 4}
+            assert chunk == {"output": 4}
         else:
             assert False, "Expected only two chunks"
     assert setup_sync.call_count == 0

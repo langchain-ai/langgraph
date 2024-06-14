@@ -45,15 +45,16 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
             except AttributeError:
                 pass
 
-    def update(self, values: Sequence[Value]) -> None:
+    def update(self, values: Sequence[Value]) -> bool:
         if len(values) == 0:
             try:
                 del self.value
+                return True
             except AttributeError:
-                pass
-            return
+                return False
 
         self.value = values[-1]
+        return True
 
     def get(self) -> Value:
         try:

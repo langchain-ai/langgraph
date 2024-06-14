@@ -4,6 +4,7 @@ from typing import Any, Generator, Generic, Iterator, Optional, Sequence, Type, 
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
+from langgraph.errors import EmptyChannelError
 
 
 def flatten(values: Sequence[Union[Value, list[Value]]]) -> Iterator[Value]:
@@ -66,6 +67,7 @@ class Topic(
             pass
 
     def update(self, values: Sequence[Union[Value, list[Value]]]) -> None:
+        current = list(self.values)
         if not self.accumulate:
             self.values = list[Value]()
         if flat_values := flatten(values):
@@ -76,6 +78,10 @@ class Topic(
                         self.values.append(value)
             else:
                 self.values.extend(flat_values)
+        return self.values != current
 
     def get(self) -> Sequence[Value]:
-        return list(self.values)
+        if self.values:
+            return list(self.values)
+        else:
+            raise EmptyChannelError

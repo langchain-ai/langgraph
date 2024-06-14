@@ -95,9 +95,10 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
             with self.from_checkpoint() as empty:
                 yield empty
 
-    def update(self, values: Sequence[None]) -> None:
+    def update(self, values: Sequence[None]) -> bool:
         if values:
             raise InvalidUpdateError()
+        return False
 
     def get(self) -> Value:
         try:

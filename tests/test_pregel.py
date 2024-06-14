@@ -619,7 +619,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
     assert [*app.stream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
-        {"inbox": [], "output": 4},
+        {"output": 4},
     ]
     assert [*app.stream({"input": 2, "inbox": 12}, stream_mode="debug")] == [
         {
@@ -1216,7 +1216,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
-            assert chunk == {"inbox": [], "output": 4}
+            assert chunk == {"output": 4}
         else:
             assert False, "Expected only two chunks"
     assert cleanup.call_count == 1, "Expected cleanup to be called once"
