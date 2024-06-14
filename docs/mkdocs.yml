@@ -173,7 +173,7 @@ nav:
         - JS/TS: 'deploy/js_sdk.md'
       - Deployment:
           - Self-Hosted: 'deploy/deployment/self_hosted.md'
-          - Managed: 'deploy/deployment/self_hosted.md'
+          - Managed: 'deploy/deployment/managed.md'
       - How-to Guides:
           - Streaming: ''
   
