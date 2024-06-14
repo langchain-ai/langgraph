@@ -204,4 +204,6 @@ class BaseCheckpointSaver(ABC):
         raise NotImplementedError
 
     def get_next_version(self, current: Optional[V], channel: BaseChannel) -> V:
+        """Get the next version of a channel. Default is to use int versions, incrementing by 1. If you override, you can use str/int/float versions,
+        as long as they are monotonically increasing."""
         return current + 1 if current is not None else 1
