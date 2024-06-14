@@ -63,7 +63,8 @@ class BaseChannel(Generic[Value, Update, C], ABC):
         The order of the updates in the sequence is arbitrary.
         This method is called by Pregel for all channels at the end of each step.
         If there are no updates, it is called with an empty sequence.
-        Raises InvalidUpdateError if the sequence of updates is invalid."""
+        Raises InvalidUpdateError if the sequence of updates is invalid.
+        Returns True if the channel was updated, False otherwise."""
 
     @abstractmethod
     def get(self) -> Value:
@@ -74,7 +75,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
     def consume(self) -> bool:
         """Mark the current value of the channel as consumed. By default, no-op.
         This is called by Pregel before the start of the next step, for all
-        channels that triggered a node.
+        channels that triggered a node. If the channel was updated, return True.
         """
         return False
 
