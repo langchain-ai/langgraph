@@ -22,11 +22,28 @@ def str_output(output: Any) -> str:
 
 
 class ToolNode(RunnableCallable):
-    """
-    A node that runs the tools requested in the last AIMessage. It can be used
+    """A node that runs the tools requested in the last AIMessage. It can be used
     either in StateGraph with a "messages" key or in MessageGraph. If multiple
     tool calls are requested, they will be run in parallel. The output will be
     a list of ToolMessages, one for each tool call.
+
+    The `ToolNode` is roughly analogous to:
+
+    ```python
+    tools_by_name = {tool.name: tool for tool in tools}
+    def tool_node(state: dict):
+        result = []
+        for tool_call in state["messages"][-1].tool_calls:
+            tool = tools_by_name[tool_call["name"]]
+            observation = tool.invoke(tool_call["args"])
+            result.append(ToolMessage(content=observation, tool_call_id=tool_call["id"]))
+        return {"messages": result}
+    ```
+
+    Important:
+        - The state MUST contain a list of messages.
+        - The last message MUST be an `AIMessage`.
+        - The `AIMessage` MUST have `tool_calls` populated.
     """
 
     def __init__(

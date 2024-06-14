@@ -1,3 +1,4 @@
+from collections import defaultdict
 from typing import Any, Iterator, Mapping, Optional, Sequence, TypeVar, Union
 
 from langchain_core.runnables.utils import AddableDict
@@ -102,24 +103,35 @@ def map_output_updates(
         t for t in tasks if not t.config or TAG_HIDDEN not in t.config.get("tags")
     ]
     if isinstance(output_channels, str):
-        if updated := AddableUpdatesDict(
-            {
-                node: value
-                for node, _, _, writes, _, _ in output_tasks
-                for chan, value in writes
-                if chan == output_channels
-            }
-        ):
-            yield updated
+        if updated := [
+            (node, value)
+            for node, _, _, writes, _, _ in output_tasks
+            for chan, value in writes
+            if chan == output_channels
+        ]:
+            grouped = defaultdict(list)
+            for node, value in updated:
+                grouped[node].append(value)
+            for node, value in grouped.items():
+                if len(value) == 1:
+                    grouped[node] = value[0]
+            yield AddableUpdatesDict(grouped)
     else:
-        if updated := AddableUpdatesDict(
-            {
-                node: {chan: value for chan, value in writes if chan in output_channels}
-                for node, _, _, writes, _, _ in output_tasks
-                if any(chan in output_channels for chan, _ in writes)
-            }
-        ):
-            yield updated
+        if updated := [
+            (
+                node,
+                {chan: value for chan, value in writes if chan in output_channels},
+            )
+            for node, _, _, writes, _, _ in output_tasks
+            if any(chan in output_channels for chan, _ in writes)
+        ]:
+            grouped = defaultdict(list)
+            for node, value in updated:
+                grouped[node].append(value)
+            for node, value in grouped.items():
+                if len(value) == 1:
+                    grouped[node] = value[0]
+            yield AddableUpdatesDict(grouped)
 
 
 T = TypeVar("T")

@@ -121,7 +121,12 @@ class PregelNode(RunnableBindingBase):
             and isinstance(writers[-2], ChannelWrite)
         ):
             # we can combine writes if they are consecutive
-            writers[-2].writes += writers[-1].writes
+            # careful to not modify the original writers list or ChannelWrite
+            writers[-2] = ChannelWrite(
+                writes=writers[-2].writes + writers[-1].writes,
+                tags=writers[-2].config["tags"] if writers[-2].config else None,
+                require_at_least_one_of=writers[-2].require_at_least_one_of,
+            )
             writers.pop()
         return writers
 

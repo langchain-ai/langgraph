@@ -4,7 +4,7 @@ from typing import (
     Any,
     Awaitable,
     Callable,
-    Dict,
+    Hashable,
     Literal,
     NamedTuple,
     Optional,
@@ -26,7 +26,8 @@ from langchain_core.runnables.graph import (
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.constants import TAG_HIDDEN
+from langgraph.constants import END, START, TAG_HIDDEN, Send
+from langgraph.errors import InvalidUpdateError
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All
@@ -35,13 +36,10 @@ from langgraph.utils import DrawableGraph, RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
-START = "__start__"
-END = "__end__"
-
 
 class Branch(NamedTuple):
-    path: Runnable[Any, Union[str, list[str]]]
-    ends: Optional[dict[str, str]]
+    path: Runnable[Any, Union[Hashable, list[Hashable]]]
+    ends: Optional[dict[Hashable, str]]
     then: Optional[str] = None
 
     def run(
@@ -68,14 +66,16 @@ class Branch(NamedTuple):
         reader: Optional[Callable[[], Any]],
         writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
-        result = self.path.invoke(reader(config) if reader else input, config)
-        if not isinstance(result, list):
-            result = [result]
-        if self.ends:
-            destinations = [self.ends[r] for r in result]
+        if reader:
+            value = reader(config)
+            # passthrough additional keys from node to branch
+            # only doable when using dict states
+            if isinstance(value, dict) and isinstance(input, dict):
+                value = {**input, **value}
         else:
-            destinations = result
-        return writer(destinations) or input
+            value = input
+        result = self.path.invoke(value, config)
+        return self._finish(writer, input, result)
 
     async def _aroute(
         self,
@@ -85,15 +85,30 @@ class Branch(NamedTuple):
         reader: Optional[Callable[[], Any]],
         writer: Callable[[list[str]], Optional[Runnable]],
     ) -> Runnable:
-        result = await self.path.ainvoke(reader(config) if reader else input, config)
+        if reader:
+            value = reader(config)
+            # passthrough additional keys from node to branch
+            # only doable when using dict states
+            if isinstance(value, dict) and isinstance(input, dict):
+                value = {**input, **value}
+        else:
+            value = input
+        result = await self.path.ainvoke(value, config)
+        return self._finish(writer, input, result)
+
+    def _finish(
+        self, writer: Callable[[list[str]], Optional[Runnable]], input: Any, result: Any
+    ):
         if not isinstance(result, list):
             result = [result]
         if self.ends:
-            destinations = [self.ends[r] for r in result]
+            destinations = [r if isinstance(r, Send) else self.ends[r] for r in result]
         else:
             destinations = result
-        if any(dest is None for dest in destinations):
+        if any(dest is None or dest == START for dest in destinations):
             raise ValueError("Branch did not return a valid destination")
+        if any(p.node == END for p in destinations if isinstance(p, Send)):
+            raise InvalidUpdateError("Cannot send a packet to the END node")
         return writer(destinations) or input
 
 
@@ -159,11 +174,11 @@ class Graph:
         self,
         source: str,
         path: Union[
-            Callable[..., Union[str, list[str]]],
-            Callable[..., Awaitable[Union[str, list[str]]]],
-            Runnable[Any, Union[str, list[str]]],
+            Callable[..., Union[Hashable, list[Hashable]]],
+            Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+            Runnable[Any, Union[Hashable, list[Hashable]]],
         ],
-        path_map: Optional[Union[dict[str, str], list[str]]] = None,
+        path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
         then: Optional[str] = None,
     ) -> None:
         """Add a conditional edge from the starting node to any number of destination nodes.
@@ -174,7 +189,7 @@ class Graph:
             path (Union[Callable, Runnable]): The callable that determines the next
                 node or nodes. If not specifying `path_map` it should return one or
                 more nodes. If it returns END, the graph will stop execution.
-            path_map (Optional[dict[str, str]]): Optional mapping of paths to node
+            path_map (Optional[dict[Hashable, str]]): Optional mapping of paths to node
                 names. If omitted the paths returned by `path` should be node names.
             then (Optional[str]): The name of a node to execute after the nodes
                 selected by `path`.
@@ -189,7 +204,7 @@ class Graph:
             )
         # coerce path_map to a dictionary
         if isinstance(path_map, dict):
-            pass
+            path_map = path_map.copy()
         elif isinstance(path_map, list):
             path_map = {name: name for name in path_map}
         elif rtn_type := get_type_hints(path).get("return"):
@@ -220,9 +235,11 @@ class Graph:
     def set_conditional_entry_point(
         self,
         path: Union[
-            Callable[..., str], Callable[..., Awaitable[str]], Runnable[Any, str]
+            Callable[..., Union[Hashable, list[Hashable]]],
+            Callable[..., Awaitable[Union[Hashable, list[Hashable]]]],
+            Runnable[Any, Union[Hashable, list[Hashable]]],
         ],
-        path_map: Optional[Dict[str, str]] = None,
+        path_map: Optional[Union[dict[Hashable, str], list[str]]] = None,
         then: Optional[str] = None,
     ) -> None:
         """Sets a conditional entry point in the graph.
@@ -270,11 +287,8 @@ class Graph:
                             if node != start and node != branch.then:
                                 all_sources.add(node)
         # validate sources
-        for node in self.nodes:
-            if node not in all_sources:
-                raise ValueError(f"Node '{node}' is a dead-end")
         for source in all_sources:
-            if node not in self.nodes and source != START:
+            if source not in self.nodes and source != START:
                 raise ValueError(f"Found edge starting at unknown node '{source}'")
 
         # assemble targets
@@ -323,10 +337,11 @@ class Graph:
 
         # validate the graph
         self.validate(
-            interrupt=(interrupt_before if interrupt_before != "*" else [])
-            + interrupt_after
-            if interrupt_after != "*"
-            else []
+            interrupt=(
+                (interrupt_before if interrupt_before != "*" else []) + interrupt_after
+                if interrupt_after != "*"
+                else []
+            )
         )
 
         # create empty compiled graph
@@ -384,13 +399,16 @@ class CompiledGraph(Pregel):
             self.nodes[end].channels.append(start)
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(ends: list[str]) -> Optional[ChannelWrite]:
-            channels = [
-                f"branch:{start}:{name}:{end}" if end != END else END for end in ends
+        def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
+            writes = [
+                (
+                    ChannelWriteEntry(f"branch:{start}:{name}:{p}" if p != END else END)
+                    if not isinstance(p, Send)
+                    else p
+                )
+                for p in packets
             ]
-            return ChannelWrite(
-                [ChannelWriteEntry(ch) for ch in channels], tags=[TAG_HIDDEN]
-            )
+            return ChannelWrite(writes, tags=[TAG_HIDDEN])
 
         # add hidden start node
         if start == START and start not in self.nodes:

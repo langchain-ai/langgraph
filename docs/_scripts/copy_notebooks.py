@@ -20,17 +20,20 @@ _MANUAL = {
         "state-model.ipynb",
         "subgraph.ipynb",
         "force-calling-a-tool-first.ipynb",
+        "pass-run-time-values-to-tools.ipynb",
         "dynamic-returning-direct.ipynb",
         "managing-agent-steps.ipynb",
         "respond-in-format.ipynb",
         "branching.ipynb",
         "dynamically-returning-directly.ipynb",
         "configuration.ipynb",
+        "map-reduce.ipynb",
         "extraction/retries.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",
         "customer-support/customer-support.ipynb",
+        "tutorials/tnt-llm/tnt-llm.ipynb",
     ],
 }
 _MANUAL_INVERSE = {v: docs_dir / k for k, vs in _MANUAL.items() for v in vs}
@@ -114,6 +117,10 @@ def copy_notebooks():
                         print(f"Overriding: {src_path} to {dst_path}")
                         break
 
+                # Avoid double nesting.
+                dst_path = dst_path.replace("tutorials/tutorials", "tutorials").replace(
+                    "how-tos/how-tos", "how-tos"
+                )
                 os.makedirs(os.path.dirname(dst_path), exist_ok=True)
                 print(f"Copying: {src_path} to {dst_path}")
                 shutil.copy(src_path, dst_path)

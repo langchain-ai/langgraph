@@ -60,11 +60,6 @@ class DynamicBarrierValue(
             pass
 
     def update(self, values: Sequence[Union[Value, WaitForNames]]) -> None:
-        # switch to "priming" state after reading
-        if self.seen == self.names:
-            self.seen = set()
-            self.names = None
-
         if wait_for_names := [v for v in values if isinstance(v, WaitForNames)]:
             if len(wait_for_names) > 1:
                 raise InvalidUpdateError(
@@ -83,3 +78,8 @@ class DynamicBarrierValue(
         if self.seen != self.names:
             raise EmptyChannelError()
         return None
+
+    def consume(self) -> None:
+        if self.seen == self.names:
+            self.seen = set()
+            self.names = None

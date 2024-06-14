@@ -181,7 +181,7 @@ def create_react_agent(
     """Creates a graph that works with a chat model that utilizes tool calling.
 
     Args:
-        model: The chat model that supports OpenAI tool calling.
+        model: The `LangChain` chat model that supports tool calling.
         tools: A list of tools or a ToolExecutor instance.
         messages_modifier: An optional
             messages modifier. This applies to messages BEFORE they are passed into the LLM.

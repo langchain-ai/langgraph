@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gigagraph"
-version = "0.0.57"
+version = "0.0.68"
 description = "langgraph"
 authors = []
 license = "MIT"
@@ -13,7 +13,6 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
 gigachain-core = ">=0.2,<0.3"
-uuid6 = "^2024.1.12"
 
 
 [tool.poetry.group.test.dependencies]
@@ -34,13 +33,25 @@ jupyter = "^1.0.0"
 langchainhub = "^0.1.14"
 gigachain-openai = ">=0.1.2"
 gigachain-anthropic = ">=0.1.8"
+dataclasses-json = "^0.6.7"
 
 [tool.poetry.group.test]
 optional = true
 
 [tool.ruff]
-select = [ "E", "F", "I" ]
-ignore = [ "E501" ]
+lint.select = [ "E", "F", "I" ]
+lint.ignore = [ "E501" ]
+line-length = 88
+indent-width = 4
+extend-include = ["*.ipynb"]
+
+[tool.ruff.format]
+quote-style = "double"
+indent-style = "space"
+skip-magic-trailing-comma = false
+line-ending = "auto"
+docstring-code-format = false
+docstring-code-line-length = "dynamic"
 
 [tool.mypy]
 ignore_missing_imports = "True"

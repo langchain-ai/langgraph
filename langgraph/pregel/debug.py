@@ -9,6 +9,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
+from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.types import PregelExecutableTask
@@ -29,6 +30,7 @@ class TaskResultPayload(TypedDict):
 
 class CheckpointPayload(TypedDict):
     config: Optional[RunnableConfig]
+    metadata: CheckpointMetadata
     values: dict[str, Any]
 
 
@@ -64,7 +66,7 @@ def map_debug_tasks(
     step: int, tasks: list[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
     ts = datetime.now(timezone.utc).isoformat()
-    for idx, (name, input, _, _, config, triggers) in enumerate(tasks):
+    for name, input, _, _, config, triggers in tasks:
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
@@ -73,7 +75,9 @@ def map_debug_tasks(
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, idx)))),
+                "id": str(
+                    uuid5(TASK_NAMESPACE, json.dumps((name, step, config["metadata"])))
+                ),
                 "name": name,
                 "input": input,
                 "triggers": triggers,
@@ -87,7 +91,7 @@ def map_debug_task_results(
     stream_channels_list: Sequence[str],
 ) -> Iterator[DebugOutputTaskResult]:
     ts = datetime.now(timezone.utc).isoformat()
-    for idx, (name, _, _, writes, config, _) in enumerate(tasks):
+    for name, _, _, writes, config, _ in tasks:
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
@@ -96,7 +100,9 @@ def map_debug_task_results(
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, idx)))),
+                "id": str(
+                    uuid5(TASK_NAMESPACE, json.dumps((name, step, config["metadata"])))
+                ),
                 "name": name,
                 "result": [w for w in writes if w[0] in stream_channels_list],
             },
@@ -108,6 +114,7 @@ def map_debug_checkpoint(
     config: RunnableConfig,
     channels: Mapping[str, BaseChannel],
     stream_channels: Union[str, Sequence[str]],
+    metadata: CheckpointMetadata,
 ) -> Iterator[DebugOutputCheckpoint]:
     ts = datetime.now(timezone.utc).isoformat()
     yield {
@@ -117,6 +124,7 @@ def map_debug_checkpoint(
         "payload": {
             "config": config,
             "values": read_channels(channels, stream_channels),
+            "metadata": metadata,
         },
     }
 

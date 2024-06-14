@@ -10,6 +10,7 @@ from typing import (
     Any,
     Dict,
     Generator,
+    List,
     Literal,
     Optional,
     Sequence,
@@ -34,6 +35,7 @@ from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
@@ -47,10 +49,13 @@ from langgraph.prebuilt.chat_agent_executor import (
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
+from langgraph.serde.base import SerializerProtocol
+from langgraph.serde.jsonplus import JsonPlusSerializer
 from tests.any_str import AnyStr
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
+    NoopSerializer,
 )
 
 
@@ -64,11 +69,11 @@ def test_graph_validation() -> None:
     workflow.set_finish_point("agent")
     assert workflow.compile(), "valid graph"
 
+    # Accept a dead-end
     workflow = Graph()
     workflow.add_node("agent", logic)
     workflow.set_entry_point("agent")
-    with pytest.raises(ValueError, match="dead-end"):
-        workflow.compile()
+    workflow.compile()
 
     workflow = Graph()
     workflow.add_node("agent", logic)
@@ -127,7 +132,9 @@ def test_graph_validation() -> None:
     workflow.set_entry_point("agent")
     workflow.add_conditional_edges("agent", logic, {"continue": "tools", "exit": END})
     workflow.add_edge("tools", "agent")
-    with pytest.raises(ValueError):  # extra is dead-end / not reachable
+    with pytest.raises(
+        ValueError, match="Node `extra` is not reachable"
+    ):  # extra is not reachable
         workflow.compile()
 
     workflow = Graph()
@@ -137,8 +144,95 @@ def test_graph_validation() -> None:
     workflow.set_entry_point("agent")
     workflow.add_conditional_edges("agent", logic)
     workflow.add_edge("tools", "agent")
-    with pytest.raises(ValueError):  # extra is dead-end
-        workflow.compile()
+    # Accept, even though extra is dead-end
+    workflow.compile()
+
+    class State(TypedDict):
+        hello: str
+
+    def node_a(state: State) -> State:
+        # typo
+        return {"hell": "world"}
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.set_entry_point("a")
+    builder.set_finish_point("a")
+    graph = builder.compile()
+    with pytest.raises(InvalidUpdateError):
+        graph.invoke({"hello": "there"})
+
+    graph = StateGraph(State)
+    graph.add_node("start", lambda x: x)
+    graph.add_edge("__start__", "start")
+    graph.add_edge("unknown", "start")
+    graph.add_edge("start", "__end__")
+    with pytest.raises(ValueError, match="Found edge starting at unknown node "):
+        graph.compile()
+
+
+def test_reducer_before_first_node() -> None:
+    from langchain_core.messages import HumanMessage
+
+    class State(TypedDict):
+        hello: str
+        messages: Annotated[list[str], add_messages]
+
+    def node_a(state: State) -> State:
+        assert state == {
+            "hello": "there",
+            "messages": [HumanMessage(content="hello", id=AnyStr())],
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.set_entry_point("a")
+    builder.set_finish_point("a")
+    graph = builder.compile()
+    assert graph.invoke({"hello": "there", "messages": "hello"}) == {
+        "hello": "there",
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+    class State(TypedDict):
+        hello: str
+        messages: Annotated[List[str], add_messages]
+
+    def node_a(state: State) -> State:
+        assert state == {
+            "hello": "there",
+            "messages": [HumanMessage(content="hello", id=AnyStr())],
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.set_entry_point("a")
+    builder.set_finish_point("a")
+    graph = builder.compile()
+    assert graph.invoke({"hello": "there", "messages": "hello"}) == {
+        "hello": "there",
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+    class State(TypedDict):
+        hello: str
+        messages: Annotated[Sequence[str], add_messages]
+
+    def node_a(state: State) -> State:
+        assert state == {
+            "hello": "there",
+            "messages": [HumanMessage(content="hello", id=AnyStr())],
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.set_entry_point("a")
+    builder.set_finish_point("a")
+    graph = builder.compile()
+    assert graph.invoke({"hello": "there", "messages": "hello"}) == {
+        "hello": "there",
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
 
 
 def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -488,6 +582,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     two = (
         Channel.subscribe_to("inbox")
         | RunnableLambda(add_one).batch
+        | RunnablePassthrough(lambda _: time.sleep(0.1))
         | Channel.write_to("output").batch
     )
 
@@ -518,7 +613,8 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
 
     assert [*app.stream({"input": 2, "inbox": 12}, stream_mode="updates")] == [
-        {"one": {"inbox": 3}, "two": {"output": 13}},
+        {"one": {"inbox": 3}},
+        {"two": {"output": 13}},
         {"two": {"output": 4}},
     ]
     assert [*app.stream({"input": 2, "inbox": 12})] == [
@@ -531,7 +627,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "9379da35-ae1c-5a7b-8556-7ce22a1f8fde",
+                "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
                 "name": "one",
                 "input": 2,
                 "triggers": ["input"],
@@ -542,7 +638,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "49ac8f60-4ff2-5cdd-a319-66bbd9837e5a",
+                "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
                 "name": "two",
                 "input": [12],
                 "triggers": ["inbox"],
@@ -553,7 +649,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "9379da35-ae1c-5a7b-8556-7ce22a1f8fde",
+                "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
                 "name": "one",
                 "result": [("inbox", 3)],
             },
@@ -563,23 +659,17 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "49ac8f60-4ff2-5cdd-a319-66bbd9837e5a",
+                "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
                 "name": "two",
                 "result": [("output", 13)],
             },
-        },
-        {
-            "type": "checkpoint",
-            "timestamp": AnyStr(),
-            "step": 0,
-            "payload": {"config": None, "values": {"output": 13, "inbox": [3]}},
         },
         {
             "type": "task",
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "b97f26c1-a34b-51e0-884e-44a41a3a3b47",
+                "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
                 "name": "two",
                 "input": [3],
                 "triggers": ["inbox"],
@@ -590,16 +680,10 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "b97f26c1-a34b-51e0-884e-44a41a3a3b47",
+                "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
                 "name": "two",
                 "result": [("output", 4)],
             },
-        },
-        {
-            "type": "checkpoint",
-            "timestamp": AnyStr(),
-            "step": 1,
-            "payload": {"config": None, "values": {"output": 4, "inbox": []}},
         },
     ]
 
@@ -758,7 +842,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
                 pass
             else:
                 errored_once = True
-                raise OSError("I will be retried")
+                raise ConnectionError("I will be retried")
         if input > 10:
             raise ValueError("Input is too large")
         return input
@@ -1925,6 +2009,48 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
     ]
 
 
+def test_conditional_entrypoint_to_multiple_state_graph(
+    snapshot: SnapshotAssertion,
+) -> None:
+    class OverallState(TypedDict):
+        locations: list[str]
+        results: Annotated[list[str], operator.add]
+
+    def get_weather(state: OverallState) -> OverallState:
+        location = state["location"]
+        weather = "sunny" if len(location) > 2 else "cloudy"
+        return {"results": [f"It's {weather} in {location}"]}
+
+    def continue_to_weather(state: OverallState) -> list[Send]:
+        return [
+            Send("get_weather", {"location": location})
+            for location in state["locations"]
+        ]
+
+    workflow = StateGraph(OverallState)
+
+    workflow.add_node("get_weather", get_weather)
+    workflow.add_edge("get_weather", END)
+    workflow.set_conditional_entry_point(continue_to_weather)
+
+    app = workflow.compile()
+
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+    assert app.invoke({"locations": ["sf", "nyc"]}, debug=True) == {
+        "locations": ["sf", "nyc"],
+        "results": ["It's cloudy in sf", "It's sunny in nyc"],
+    }
+
+    assert [*app.stream({"locations": ["sf", "nyc"]}, stream_mode="values")][-1] == {
+        "locations": ["sf", "nyc"],
+        "results": ["It's cloudy in sf", "It's sunny in nyc"],
+    }
+
+
 def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
@@ -2861,7 +2987,7 @@ Some examples of past conversations:
         metadata = chkpnt_tuple_1.metadata
 
         # not needed in application code, only for testing
-        hiscored = list(saver.search({"score": 1}))
+        hiscored = list(saver.list(None, filter={"score": 1}))
         assert hiscored == []
 
         # mark as "good"
@@ -2869,7 +2995,7 @@ Some examples of past conversations:
         saver.put(config, checkpoint, metadata)
 
         # not needed in application code, only for testing
-        hiscored = list(saver.search({"score": 1}))
+        hiscored = list(saver.list(None, filter={"score": 1}))
         assert len(hiscored) == 1
         assert hiscored[0].checkpoint["channel_values"]["messages"] == first_messages
 
@@ -2912,14 +3038,14 @@ Some examples of past conversations:
         metadata = chkpnt_tuple_2.metadata
 
         # not needed in application code, only for testing
-        hiscored = list(saver.search({"score": 1}))
+        hiscored = list(saver.list(None, filter={"score": 1}))
         assert len(hiscored) == 1
 
         # mark as "good"
         metadata["score"] = 1
         saver.put(config, checkpoint, metadata)
 
-        hiscored = list(saver.search({"score": 1}))
+        hiscored = list(saver.list(None, filter={"score": 1}))
         assert len(hiscored) == 2
 
         assert app.invoke(
@@ -3425,6 +3551,521 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
         },
         {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
     ]
+
+
+@pytest.mark.parametrize("serde", [NoopSerializer(), JsonPlusSerializer()])
+def test_state_graph_packets(serde: SerializerProtocol) -> None:
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
+    from langchain_core.messages import (
+        AIMessage,
+        BaseMessage,
+        HumanMessage,
+        ToolCall,
+        ToolMessage,
+    )
+    from langchain_core.tools import tool
+
+    class AgentState(TypedDict):
+        messages: Annotated[list[BaseMessage], add_messages]
+
+    @tool()
+    def search_api(query: str) -> str:
+        """Searches the API for the query."""
+        return f"result for {query}"
+
+    tools = [search_api]
+    tools_by_name = {t.name: t for t in tools}
+
+    model = FakeMessagesListChatModel(
+        responses=[
+            AIMessage(
+                id="ai1",
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
+            ),
+            AIMessage(
+                id="ai2",
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call234",
+                        "name": "search_api",
+                        "args": {"query": "another", "idx": 0},
+                    },
+                    {
+                        "id": "tool_call567",
+                        "name": "search_api",
+                        "args": {"query": "a third one", "idx": 1},
+                    },
+                ],
+            ),
+            AIMessage(id="ai3", content="answer"),
+        ]
+    )
+
+    def agent(data: AgentState) -> AgentState:
+        return {
+            "messages": model.invoke(data["messages"]),
+            "something_extra": "hi there",
+        }
+
+    # Define decision-making logic
+    def should_continue(data: AgentState) -> str:
+        assert (
+            data["something_extra"] == "hi there"
+        ), "nodes can pass extra data to their cond edges, which isn't saved in state"
+        # Logic to decide whether to continue in the loop or exit
+        if tool_calls := data["messages"][-1].tool_calls:
+            return [Send("tools", tool_call) for tool_call in tool_calls]
+        else:
+            return END
+
+    def tools_node(tool_call: ToolCall, config: RunnableConfig) -> AgentState:
+        time.sleep(tool_call["args"].get("idx", 0) / 10)
+        output = tools_by_name[tool_call["name"]].invoke(tool_call["args"], config)
+        return {
+            "messages": ToolMessage(
+                content=output, name=tool_call["name"], tool_call_id=tool_call["id"]
+            )
+        }
+
+    # Define a new graph
+    workflow = StateGraph(AgentState)
+
+    # Define the two nodes we will cycle between
+    workflow.add_node("agent", agent)
+    workflow.add_node("tools", tools_node)
+
+    # Set the entrypoint as `agent`
+    # This means that this node is the first one called
+    workflow.set_entry_point("agent")
+
+    # We now add a conditional edge
+    workflow.add_conditional_edges("agent", should_continue)
+
+    # We now add a normal edge from `tools` to `agent`.
+    # This means that after `tools` is called, `agent` node is called next.
+    workflow.add_edge("tools", "agent")
+
+    # Finally, we compile it!
+    # This compiles it into a LangChain Runnable,
+    # meaning you can use it as you would any other runnable
+    app = workflow.compile()
+
+    assert app.invoke({"messages": HumanMessage(content="what is weather in sf")}) == {
+        "messages": [
+            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            AIMessage(
+                id="ai1",
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    },
+                ],
+            ),
+            ToolMessage(
+                content="result for query",
+                name="search_api",
+                id=AnyStr(),
+                tool_call_id="tool_call123",
+            ),
+            AIMessage(
+                id="ai2",
+                content="",
+                tool_calls=[
+                    {
+                        "id": "tool_call234",
+                        "name": "search_api",
+                        "args": {"query": "another", "idx": 0},
+                    },
+                    {
+                        "id": "tool_call567",
+                        "name": "search_api",
+                        "args": {"query": "a third one", "idx": 1},
+                    },
+                ],
+            ),
+            ToolMessage(
+                content="result for another",
+                name="search_api",
+                id=AnyStr(),
+                tool_call_id="tool_call234",
+            ),
+            ToolMessage(
+                content="result for a third one",
+                name="search_api",
+                id=AnyStr(),
+                tool_call_id="tool_call567",
+            ),
+            AIMessage(content="answer", id="ai3"),
+        ]
+    }
+
+    assert [
+        c
+        for c in app.stream(
+            {"messages": [HumanMessage(content="what is weather in sf")]}
+        )
+    ] == [
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                )
+            },
+        },
+        {
+            "tools": {
+                "messages": ToolMessage(
+                    content="result for query",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call123",
+                )
+            }
+        },
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another", "idx": 0},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one", "idx": 1},
+                        },
+                    ],
+                )
+            }
+        },
+        {
+            "tools": {
+                "messages": ToolMessage(
+                    content="result for another",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call234",
+                )
+            },
+        },
+        {
+            "tools": {
+                "messages": ToolMessage(
+                    content="result for a third one",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call567",
+                ),
+            },
+        },
+        {"agent": {"messages": AIMessage(content="answer", id="ai3")}},
+    ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(serde=serde),
+        interrupt_after=["agent"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c
+        for c in app_w_interrupt.stream(
+            {"messages": HumanMessage(content="what is weather in sf")}, config
+        )
+    ] == [
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                )
+            }
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id=AnyStr(),
+                ),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        },
+                    ],
+                ),
+            ]
+        },
+        next=("tools",),
+        config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
+        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        metadata={
+            "source": "loop",
+            "step": 1,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
+                        id="ai1",
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "query"},
+                            },
+                        ],
+                    )
+                }
+            },
+        },
+    )
+
+    # modify ai message
+    last_message = (app_w_interrupt.get_state(config)).values["messages"][-1]
+    last_message.tool_calls[0]["args"]["query"] = "a different query"
+    app_w_interrupt.update_state(
+        config, {"messages": last_message, "something_extra": "hi there"}
+    )
+
+    # message was replaced instead of appended
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id=AnyStr(),
+                ),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+            ]
+        },
+        next=("tools",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        metadata={
+            "source": "update",
+            "step": 2,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
+                        id="ai1",
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
+                                "name": "search_api",
+                                "args": {"query": "a different query"},
+                            },
+                        ],
+                    ),
+                    "something_extra": "hi there",
+                }
+            },
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "tools": {
+                "messages": ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call123",
+                )
+            }
+        },
+        {
+            "agent": {
+                "messages": AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another", "idx": 0},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one", "idx": 1},
+                        },
+                    ],
+                )
+            },
+        },
+    ]
+
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id=AnyStr(),
+                ),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(
+                    id="ai2",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call234",
+                            "name": "search_api",
+                            "args": {"query": "another", "idx": 0},
+                        },
+                        {
+                            "id": "tool_call567",
+                            "name": "search_api",
+                            "args": {"query": "a third one", "idx": 1},
+                        },
+                    ],
+                ),
+            ]
+        },
+        next=("tools", "tools"),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        metadata={
+            "source": "loop",
+            "step": 4,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(
+                        id="ai2",
+                        content="",
+                        tool_calls=[
+                            {
+                                "id": "tool_call234",
+                                "name": "search_api",
+                                "args": {"query": "another", "idx": 0},
+                            },
+                            {
+                                "id": "tool_call567",
+                                "name": "search_api",
+                                "args": {"query": "a third one", "idx": 1},
+                            },
+                        ],
+                    )
+                },
+            },
+        },
+    )
+
+    app_w_interrupt.update_state(
+        config,
+        {
+            "messages": AIMessage(content="answer", id="ai2"),
+            "something_extra": "hi there",
+        },
+    )
+
+    # replaces message even if object identity is different, as long as id is the same
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "messages": [
+                HumanMessage(
+                    content="what is weather in sf",
+                    id=AnyStr(),
+                ),
+                AIMessage(
+                    id="ai1",
+                    content="",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        },
+                    ],
+                ),
+                ToolMessage(
+                    content="result for a different query",
+                    name="search_api",
+                    id=AnyStr(),
+                    tool_call_id="tool_call123",
+                ),
+                AIMessage(content="answer", id="ai2"),
+            ]
+        },
+        next=(),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
+        metadata={
+            "source": "update",
+            "step": 5,
+            "writes": {
+                "agent": {
+                    "messages": AIMessage(content="answer", id="ai2"),
+                    "something_extra": "hi there",
+                }
+            },
+        },
+    )
 
 
 def test_message_graph(
@@ -4999,6 +5640,11 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
         return {"query": f'query: {data["query"]}'}
 
     def retriever_one(data: State) -> State:
+        # timer ensures stream output order is stable
+        # also, it confirms that the update order is not dependent on finishing order
+        # instead being defined by the order of the nodes/edges in the graph definition
+        # ie. stable between invocations
+        time.sleep(0.1)
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
@@ -5031,10 +5677,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-            "retriever_one": {"docs": ["doc1", "doc2"]},
-        },
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
@@ -5062,23 +5706,11 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
         (
             "debug",
             {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 0,
-                "payload": {
-                    "config": None,
-                    "values": {"query": "what is weather in sf", "docs": []},
-                },
-            },
-        ),
-        (
-            "debug",
-            {
                 "type": "task",
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "03dadab4-fb41-5308-a8a4-6eeb9ef7b9aa",
+                    "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
                     "name": "rewrite_query",
                     "input": {
                         "query": "what is weather in sf",
@@ -5097,7 +5729,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "03dadab4-fb41-5308-a8a4-6eeb9ef7b9aa",
+                    "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
                     "name": "rewrite_query",
                     "result": [("query", "query: what is weather in sf")],
                 },
@@ -5107,23 +5739,11 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
         (
             "debug",
             {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "config": None,
-                    "values": {"query": "query: what is weather in sf", "docs": []},
-                },
-            },
-        ),
-        (
-            "debug",
-            {
                 "type": "task",
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "96f499e2-e203-5a13-9259-08cb62f4a2e5",
+                    "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
                     "name": "retriever_one",
                     "input": {
                         "query": "query: what is weather in sf",
@@ -5141,7 +5761,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "6b344a90-a061-5f17-8714-51f0cf67cf01",
+                    "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
                     "name": "retriever_two",
                     "input": {
                         "query": "query: what is weather in sf",
@@ -5154,10 +5774,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
         ),
         (
             "updates",
-            {
-                "retriever_one": {"docs": ["doc1", "doc2"]},
-                "retriever_two": {"docs": ["doc3", "doc4"]},
-            },
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
         ),
         (
             "debug",
@@ -5166,22 +5783,26 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "96f499e2-e203-5a13-9259-08cb62f4a2e5",
-                    "name": "retriever_one",
-                    "result": [("docs", ["doc1", "doc2"])],
+                    "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
+                    "name": "retriever_two",
+                    "result": [("docs", ["doc3", "doc4"])],
                 },
             },
         ),
         (
+            "updates",
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        ),
+        (
             "debug",
             {
                 "type": "task_result",
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "6b344a90-a061-5f17-8714-51f0cf67cf01",
-                    "name": "retriever_two",
-                    "result": [("docs", ["doc3", "doc4"])],
+                    "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
+                    "name": "retriever_one",
+                    "result": [("docs", ["doc1", "doc2"])],
                 },
             },
         ),
@@ -5195,26 +5816,11 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
         (
             "debug",
             {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 2,
-                "payload": {
-                    "config": None,
-                    "values": {
-                        "query": "query: what is weather in sf",
-                        "docs": ["doc1", "doc2", "doc3", "doc4"],
-                    },
-                },
-            },
-        ),
-        (
-            "debug",
-            {
                 "type": "task",
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "0dda6269-4ce3-5b98-9cea-d40737a68500",
+                    "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
                     "name": "qa",
                     "input": {
                         "query": "query: what is weather in sf",
@@ -5233,7 +5839,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "0dda6269-4ce3-5b98-9cea-d40737a68500",
+                    "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
                     "name": "qa",
                     "result": [("answer", "doc1,doc2,doc3,doc4")],
                 },
@@ -5247,22 +5853,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "docs": ["doc1", "doc2", "doc3", "doc4"],
             },
         ),
-        (
-            "debug",
-            {
-                "type": "checkpoint",
-                "timestamp": AnyStr(),
-                "step": 3,
-                "payload": {
-                    "config": None,
-                    "values": {
-                        "query": "query: what is weather in sf",
-                        "answer": "doc1,doc2,doc3,doc4",
-                        "docs": ["doc1", "doc2", "doc3", "doc4"],
-                    },
-                },
-            },
-        ),
     ]
 
 
@@ -5270,16 +5860,6 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
-
-    # this graph is invalid because there is no path to END
-    invalid_graph = StateGraph(State)
-    invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": "slow"})
-    invalid_graph.add_node("tool_two_fast", lambda s: {"my_key": "fast"})
-    invalid_graph.set_conditional_entry_point(
-        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast"
-    )
-    with pytest.raises(ValueError):
-        invalid_graph.compile()
 
     tool_two_graph = StateGraph(State)
     tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
@@ -5310,12 +5890,12 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
 
         thread1 = {"configurable": {"thread_id": "1"}}
         # stop when about to enter node
-        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
-            "my_key": "value",
+        assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
+            "my_key": "value ⛰️",
             "market": "DE",
         }
         assert tool_two.get_state(thread1) == StateSnapshot(
-            values={"my_key": "value", "market": "DE"},
+            values={"my_key": "value ⛰️", "market": "DE"},
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -5324,11 +5904,11 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         )
         # resume, for same result as above
         assert tool_two.invoke(None, thread1, debug=1) == {
-            "my_key": "value slow",
+            "my_key": "value ⛰️ slow",
             "market": "DE",
         }
         assert tool_two.get_state(thread1) == StateSnapshot(
-            values={"my_key": "value slow", "market": "DE"},
+            values={"my_key": "value ⛰️ slow", "market": "DE"},
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -5424,22 +6004,6 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         my_key: Annotated[str, operator.add]
         market: str
 
-    # this graph is invalid because there is no path to "finish"
-    invalid_graph = StateGraph(State)
-    invalid_graph.set_entry_point("prepare")
-    invalid_graph.set_finish_point("finish")
-    invalid_graph.add_conditional_edges(
-        source="prepare",
-        path=lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast",
-        path_map=["tool_two_slow", "tool_two_fast"],
-    )
-    invalid_graph.add_node("prepare", lambda s: {"my_key": " prepared"})
-    invalid_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
-    invalid_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
-    invalid_graph.add_node("finish", lambda s: {"my_key": " finished"})
-    with pytest.raises(ValueError):
-        invalid_graph.compile()
-
     tool_two_graph = StateGraph(State)
     tool_two_graph.set_entry_point("prepare")
     tool_two_graph.set_finish_point("finish")
@@ -5477,6 +6041,29 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             {
                 "type": "checkpoint",
                 "timestamp": AnyStr(),
+                "step": -1,
+                "payload": {
+                    "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "10"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "10",
+                            "thread_ts": AnyStr(),
+                        },
+                    },
+                    "values": {"my_key": ""},
+                    "metadata": {
+                        "source": "input",
+                        "step": -1,
+                        "writes": {"my_key": "value", "market": "DE"},
+                    },
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
                 "step": 0,
                 "payload": {
                     "config": {
@@ -5484,13 +6071,20 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
                         },
                     },
-                    "values": {"my_key": "value", "market": "DE"},
+                    "values": {
+                        "my_key": "value",
+                        "market": "DE",
+                    },
+                    "metadata": {
+                        "source": "loop",
+                        "step": 0,
+                        "writes": None,
+                    },
                 },
             },
             {
@@ -5498,7 +6092,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "d6e87693-41fb-58f5-8e0d-ee9ab46890b5",
+                    "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
                     "name": "prepare",
                     "input": {"my_key": "value", "market": "DE"},
                     "triggers": ["start:prepare"],
@@ -5509,7 +6103,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "d6e87693-41fb-58f5-8e0d-ee9ab46890b5",
+                    "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
                     "name": "prepare",
                     "result": [("my_key", " prepared")],
                 },
@@ -5524,13 +6118,20 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
                         },
                     },
-                    "values": {"my_key": "value prepared", "market": "DE"},
+                    "values": {
+                        "my_key": "value prepared",
+                        "market": "DE",
+                    },
+                    "metadata": {
+                        "source": "loop",
+                        "step": 1,
+                        "writes": {"prepare": {"my_key": " prepared"}},
+                    },
                 },
             },
             {
@@ -5538,7 +6139,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "b1826010-0028-5aa7-abd2-ed24984614ea",
+                    "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
                     "name": "tool_two_slow",
                     "input": {"my_key": "value prepared", "market": "DE"},
                     "triggers": ["branch:prepare:condition:tool_two_slow"],
@@ -5549,7 +6150,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "b1826010-0028-5aa7-abd2-ed24984614ea",
+                    "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
                     "name": "tool_two_slow",
                     "result": [("my_key", " slow")],
                 },
@@ -5564,13 +6165,20 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
                         },
                     },
-                    "values": {"my_key": "value prepared slow", "market": "DE"},
+                    "values": {
+                        "my_key": "value prepared slow",
+                        "market": "DE",
+                    },
+                    "metadata": {
+                        "source": "loop",
+                        "step": 2,
+                        "writes": {"tool_two_slow": {"my_key": " slow"}},
+                    },
                 },
             },
             {
@@ -5578,7 +6186,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "a22dbd2d-f136-57f0-a86a-bc2c234ffcb1",
+                    "id": "ceada3c5-5f25-59e4-9ea5-544599ce1d2f",
                     "name": "finish",
                     "input": {"my_key": "value prepared slow", "market": "DE"},
                     "triggers": ["branch:prepare:condition:then"],
@@ -5589,7 +6197,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "a22dbd2d-f136-57f0-a86a-bc2c234ffcb1",
+                    "id": "ceada3c5-5f25-59e4-9ea5-544599ce1d2f",
                     "name": "finish",
                     "result": [("my_key", " finished")],
                 },
@@ -5604,7 +6212,6 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "metadata": {"thread_id": "10"},
                         "callbacks": None,
                         "recursion_limit": 25,
-                        "run_id": None,
                         "configurable": {
                             "thread_id": "10",
                             "thread_ts": AnyStr(),
@@ -5613,6 +6220,11 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                     "values": {
                         "my_key": "value prepared slow finished",
                         "market": "DE",
+                    },
+                    "metadata": {
+                        "source": "loop",
+                        "step": 3,
+                        "writes": {"finish": {"my_key": " finished"}},
                     },
                 },
             },
@@ -5696,6 +6308,52 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
+        )
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        tool_two = tool_two_graph.compile(
+            checkpointer=saver, interrupt_before=["finish"]
+        )
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value", "market": "DE"}, thread1) == {
+            "my_key": "value prepared slow",
+            "market": "DE",
+        }
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={
+                "my_key": "value prepared slow",
+                "market": "DE",
+            },
+            next=("finish",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+            metadata={
+                "source": "loop",
+                "step": 2,
+                "writes": {"tool_two_slow": {"my_key": " slow"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+
+        # update state
+        tool_two.update_state(thread1, {"my_key": "er"})
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={
+                "my_key": "value prepared slower",
+                "market": "DE",
+            },
+            next=("finish",),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+            metadata={
+                "source": "update",
+                "step": 3,
+                "writes": {"tool_two_slow": {"my_key": "er"}},
+            },
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
 
     with SqliteSaver.from_conn_string(":memory:") as saver:
@@ -5859,6 +6517,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)  # to ensure stream order
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -5888,10 +6547,8 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
@@ -5906,15 +6563,48 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
     ]
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(),
+        interrupt_before=["qa"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
+    ] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+    ]
+
+    app_w_interrupt.update_state(config, {"docs": ["doc5"]})
+    assert app_w_interrupt.get_state(config) == StateSnapshot(
+        values={
+            "query": "analyzed: query: what is weather in sf",
+            "docs": ["doc1", "doc2", "doc3", "doc4", "doc5"],
+        },
+        next=("qa",),
+        config=app_w_interrupt.checkpointer.get_tuple(config).config,
+        created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+        metadata={
+            "source": "update",
+            "step": 4,
+            "writes": {"retriever_one": {"docs": ["doc5"]}},
+        },
+    )
+
+    assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4,doc5"}},
     ]
 
 
@@ -5945,6 +6635,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -5980,10 +6671,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
@@ -5998,10 +6687,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
     ]
 
@@ -6029,16 +6716,22 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
 
+    class StateUpdate(BaseModel):
+        query: Optional[str] = None
+        answer: Optional[str] = None
+        docs: Optional[list[str]] = None
+
     def rewrite_query(data: State) -> State:
         return {"query": f"query: {data.query}"}
 
     def analyzer_one(data: State) -> State:
-        return {"query": f"analyzed: {data.query}"}
+        return StateUpdate(query=f"analyzed: {data.query}")
 
     def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6080,10 +6773,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
@@ -6098,10 +6789,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
     ]
 
@@ -6129,12 +6818,14 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
         return {"query": f'query: {data["query"]}'}
 
     def analyzer_one(data: State) -> State:
+        time.sleep(0.1)
         return {"query": f'analyzed: {data["query"]}'}
 
     def retriever_one(data: State) -> State:
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.2)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6169,11 +6860,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-            "qa": {"answer": ""},
-        },
+        {"qa": {"answer": ""}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
@@ -6188,11 +6877,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
         c for c in app_w_interrupt.stream({"query": "what is weather in sf"}, config)
     ] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-            "qa": {"answer": ""},
-        },
+        {"qa": {"answer": ""}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
     ]
 
@@ -6226,6 +6913,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6267,21 +6955,17 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
         {
             "analyzer_one": {
                 "query": "analyzed: query: analyzed: query: what is weather in sf"
-            },
-            "retriever_two": {"docs": ["doc3", "doc4"]},
+            }
         },
-        {
-            "retriever_one": {"docs": ["doc1", "doc2"]},
-        },
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
 
@@ -6314,6 +6998,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
+        time.sleep(0.1)
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
@@ -6354,21 +7039,17 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
 
     assert [*app.stream({"query": "what is weather in sf"})] == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {
-            "analyzer_one": {"query": "analyzed: query: what is weather in sf"},
-            "retriever_two": {"docs": ["doc3", "doc4"]},
-        },
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
         {
             "analyzer_one": {
                 "query": "analyzed: query: analyzed: query: what is weather in sf"
-            },
-            "retriever_two": {"docs": ["doc3", "doc4"]},
+            }
         },
-        {
-            "retriever_one": {"docs": ["doc1", "doc2"]},
-        },
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
 

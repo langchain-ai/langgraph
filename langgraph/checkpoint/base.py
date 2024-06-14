@@ -4,7 +4,9 @@ from datetime import datetime, timezone
 from typing import (
     Any,
     AsyncIterator,
+    Dict,
     Iterator,
+    List,
     Literal,
     NamedTuple,
     Optional,
@@ -12,8 +14,9 @@ from typing import (
 )
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
-from uuid6 import uuid6
 
+from langgraph.checkpoint.id import uuid6
+from langgraph.constants import Send
 from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
 
@@ -72,6 +75,9 @@ class Checkpoint(TypedDict):
     
     Used to determine which nodes to execute next.
     """
+    pending_sends: List[Send]
+    """List of packets sent to nodes but not yet processed.
+    Cleared by the next checkpoint."""
 
 
 def _seen_dict():
@@ -86,6 +92,7 @@ def empty_checkpoint() -> Checkpoint:
         channel_values={},
         channel_versions=defaultdict(int),
         versions_seen=defaultdict(_seen_dict),
+        pending_sends=[],
     )
 
 
@@ -100,6 +107,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
             _seen_dict,
             {k: defaultdict(int, v) for k, v in checkpoint["versions_seen"].items()},
         ),
+        pending_sends=checkpoint.get("pending_sends", []).copy(),
     )
 
 
@@ -152,17 +160,9 @@ class BaseCheckpointSaver(ABC):
 
     def list(
         self,
-        config: RunnableConfig,
+        config: Optional[RunnableConfig],
         *,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> Iterator[CheckpointTuple]:
-        raise NotImplementedError
-
-    def search(
-        self,
-        metadata_filter: CheckpointMetadata,
-        *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
@@ -185,17 +185,7 @@ class BaseCheckpointSaver(ABC):
 
     def alist(
         self,
-        config: RunnableConfig,
-        *,
-        before: Optional[RunnableConfig] = None,
-        limit: Optional[int] = None,
-    ) -> AsyncIterator[CheckpointTuple]:
-        raise NotImplementedError
-        yield
-
-    def asearch(
-        self,
-        metadata_filter: CheckpointMetadata,
+        config: Optional[RunnableConfig],
         *,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,

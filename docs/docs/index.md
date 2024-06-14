@@ -3,7 +3,11 @@ hide_comments: true
 ---
 # 🦜🕸️LangGraph
 
+![Version](https://img.shields.io/pypi/v/langgraph)
 [![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
+[![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
+[![](https://dcbadge.vercel.app/api/server/6adMQxSpJS?compact=true&style=flat)](https://discord.com/channels/1038097195422978059/1170024642245832774)
+
 
 ⚡ Build language agents as graphs ⚡
 
@@ -79,16 +83,14 @@ Now, run the graph:
 # Run the graph
 thread = {"configurable": {"thread_id": "4"}}
 for event in app.stream("what is the weather in sf currently", thread, stream_mode="values"):
-    for v in event.values():
-        print(v)
+    event[-1].pretty_print()
 
 ```
 We configured the graph to **wait** before executing the `action`. The `SqliteSaver` persists the state. Resume at any time.
 
 ```python
 for event in app.stream(None, thread, stream_mode="values"):
-    for v in event.values():
-        print(v)
+    event[-1].pretty_print()
 ```
 
 The graph orchestrates everything:

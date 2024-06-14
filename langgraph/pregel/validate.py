@@ -1,7 +1,7 @@
 from typing import Mapping, Optional, Sequence, Union
 
 from langgraph.channels.base import BaseChannel
-from langgraph.constants import INTERRUPT
+from langgraph.constants import RESERVED
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All
 
@@ -16,13 +16,13 @@ def validate_graph(
     interrupt_before_nodes: Union[All, Sequence[str]],
 ) -> None:
     for chan in channels:
-        if chan == INTERRUPT:
-            raise ValueError(f"Channel name {INTERRUPT} is reserved")
+        if chan in RESERVED:
+            raise ValueError(f"Channel names {RESERVED} are reserved")
 
     subscribed_channels = set[str]()
     for name, node in nodes.items():
-        if name == INTERRUPT:
-            raise ValueError(f"Node name {INTERRUPT} is reserved")
+        if name in RESERVED:
+            raise ValueError(f"Node names {RESERVED} are reserved")
         if isinstance(node, PregelNode):
             subscribed_channels.update(node.triggers)
         else:

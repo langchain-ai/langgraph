@@ -84,6 +84,7 @@ plugins:
   - git-committers:
       repository: langchain-ai/langgraph
       branch: main
+      docs_path: docs/docs/
       token: !ENV ["MKDOCS_GIT_COMMITTERS_APIKEY"]
   # TODO: Add minify plugin once it works alright with code block copying
   # - minify:
@@ -127,6 +128,8 @@ nav:
               - Chatbot Eval via Sim:
                   - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
                   - In LangSmith: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
+          - Text Mining:
+              - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
           - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
           - Competitive Programming: tutorials/usaco/usaco.ipynb
 
@@ -142,8 +145,10 @@ nav:
      - Design Patterns:
          - "Subgraphs": how-tos/subgraph.ipynb
          - "Branching": how-tos/branching.ipynb
+         - "Map-reduce": how-tos/map-reduce.ipynb
          - "Human-in-the-Loop": how-tos/human-in-the-loop.ipynb
          - "Force Calling a Tool First": how-tos/force-calling-a-tool-first.ipynb
+         - "Pass Run-Time Values to Tools": how-tos/pass-run-time-values-to-tools.ipynb
          - "Dynamic Direct Return": how-tos/dynamically-returning-directly.ipynb
          - "Respond in Structured Format": how-tos/respond-in-format.ipynb
          - "Managing Agent Steps": how-tos/managing-agent-steps.ipynb
@@ -219,7 +224,7 @@ extra:
       link: https://twitter.com/LangChainAI
   analytics:
     - provider: google
-    - script: "G-G8X6ELZYE0"
+    - property: G-G8X6ELZYE0
     - feedback:
       title: Was this page helpful?
       ratings:

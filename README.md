@@ -259,6 +259,9 @@ tool_node = ToolNode(tools)
 
 ```python
 from langchain_openai import ChatOpenAI
+from langgraph.checkpoint import MemorySaver
+from langgraph.graph import END, StateGraph, MessagesState
+from langgraph.prebuilt import ToolNode
 
 # Параметр streaming=True включает потоковую передачу токенов
 # Подробнее в разделе Потоковая передача.
@@ -325,8 +328,7 @@ class AgentState(TypedDict):
 
 Определите вершины и функцию, которая будет решать какое из условных ребер выполнять.
 
-```python
-from typing import Literal
+model = ChatOpenAI(temperature=0).bind_tools(tools)
 
 # Задайте функцию, которая определяет нужно продолжать или нет
 def should_continue(state):
@@ -443,29 +445,7 @@ for output in app.stream(inputs):
 ```
 
 ```
-Output from node 'agent':
----
-{'messages': [AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{\n  "query": "weather in San Francisco"\n}', 'name': 'tavily_search_results_json'}})]}
-
----
-
-Output from node 'tools':
----
-{'messages': [FunctionMessage(content="[{'url': 'https://weatherspark.com/h/m/557/2024/1/Historical-Weather-in-January-2024-in-San-Francisco-California-United-States', 'content': 'January 2024 Weather History in San Francisco California, United States  Daily Precipitation in January 2024 in San Francisco Observed Weather in January 2024 in San Francisco  San Francisco Temperature History January 2024 Hourly Temperature in January 2024 in San Francisco  Hours of Daylight and Twilight in January 2024 in San FranciscoThis report shows the past weather for San Francisco, providing a weather history for January 2024. It features all historical weather data series we have available, including the San Francisco temperature history for January 2024. You can drill down from year to month and even day level reports by clicking on the graphs.'}]", name='tavily_search_results_json')]}
-
----
-
-Output from node 'agent':
----
-{'messages': [AIMessage(content="I couldn't find the current weather in San Francisco. However, you can visit [WeatherSpark](https://weatherspark.com/h/m/557/2024/1/Historical-Weather-in-January-2024-in-San-Francisco-California-United-States) to check the historical weather data for January 2024 in San Francisco.")]}
-
----
-
-Output from node '__end__':
----
-{'messages': [HumanMessage(content='what is the weather in sf'), AIMessage(content='', additional_kwargs={'function_call': {'arguments': '{\n  "query": "weather in San Francisco"\n}', 'name': 'tavily_search_results_json'}}), FunctionMessage(content="[{'url': 'https://weatherspark.com/h/m/557/2024/1/Historical-Weather-in-January-2024-in-San-Francisco-California-United-States', 'content': 'January 2024 Weather History in San Francisco California, United States  Daily Precipitation in January 2024 in San Francisco Observed Weather in January 2024 in San Francisco  San Francisco Temperature History January 2024 Hourly Temperature in January 2024 in San Francisco  Hours of Daylight and Twilight in January 2024 in San FranciscoThis report shows the past weather for San Francisco, providing a weather history for January 2024. It features all historical weather data series we have available, including the San Francisco temperature history for January 2024. You can drill down from year to month and even day level reports by clicking on the graphs.'}]", name='tavily_search_results_json'), AIMessage(content="I couldn't find the current weather in San Francisco. However, you can visit [WeatherSpark](https://weatherspark.com/h/m/557/2024/1/Historical-Weather-in-January-2024-in-San-Francisco-California-United-States) to check the historical weather data for January 2024 in San Francisco.")]}
-
----
+'The current weather in San Francisco is as follows:\n- Temperature: 60.1°F (15.6°C)\n- Condition: Partly cloudy\n- Wind: 5.6 mph (9.0 kph) from SSW\n- Humidity: 83%\n- Visibility: 9.0 miles (16.0 km)\n- UV Index: 4.0\n\nFor more details, you can visit [Weather API](https://www.weatherapi.com/).'
 ```
 
 ### Потоковая передача токенов модели
@@ -475,27 +455,15 @@ Output from node '__end__':
 Для работы этой функциональность нужно чтобы модель поддерживала работу в режиме потоковой передачи токенов.
 
 ```python
-inputs = {"messages": [HumanMessage(content="what is the weather in sf")]}
-async for output in app.astream_log(inputs, include_types=["llm"]):
-    # astream_log() yields the requested logs (here LLMs) in JSONPatch format
-    for op in output.ops:
-        if op["path"] == "/streamed_output/-":
-            # this is the output from .stream()
-            ...
-        elif op["path"].startswith("/logs/") and op["path"].endswith(
-            "/streamed_output/-"
-        ):
-            # because we chose to only include LLMs, these are LLM tokens
-            print(op["value"])
+final_state = app.invoke(
+    {"messages": [HumanMessage(content="what about ny")]},
+    config={"configurable": {"thread_id": 42}}
+)
+final_state["messages"][-1].content
 ```
 
 ```
-content='' additional_kwargs={'function_call': {'arguments': '', 'name': 'tavily_search_results_json'}}
-content='' additional_kwargs={'function_call': {'arguments': '{\n', 'name': ''}}}
-content='' additional_kwargs={'function_call': {'arguments': ' ', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': ' "', 'name': ''}}
-content='' additional_kwargs={'function_call': {'arguments': 'query', 'name': ''}}
-...
+'The current weather in New York is as follows:\n- Temperature: 20.3°C (68.5°F)\n- Condition: Overcast\n- Wind: 2.2 mph from the north\n- Humidity: 65%\n- Cloud Cover: 100%\n- UV Index: 5.0\n\nFor more details, you can visit [Weather API](https://www.weatherapi.com/).'
 ```
 
 ## Область применения
@@ -666,9 +634,7 @@ from langgraph.graph import StateGraph
 
 Пример состояния:
 
-The [Conceptual Guides](https://langchain-ai.github.io/langgraph/concepts/) provide in-depth explanations of the key concepts and principles behind LangGraph, such as nodes, edges, state and more.
-
-### Reference
+## Documentation
 
 class AgentState(TypedDict):
    # Входная строка

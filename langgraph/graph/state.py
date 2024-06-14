@@ -27,7 +27,7 @@ from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
-from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph
+from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
 from langgraph.managed.base import ManagedValue, is_managed_value
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All
@@ -155,7 +155,14 @@ class StateGraph(Graph):
     ) -> None:
         if not isinstance(node, str):
             action = node
-            node = getattr(action, "name", action.__name__)
+            if isinstance(action, Runnable):
+                node = action.name
+            else:
+                node = getattr(action, "__name__", action.__class__.__name__)
+            if node is None:
+                raise ValueError(
+                    "Node name must be provided if action is not a function"
+                )
         if node in self.channels:
             raise ValueError(f"'{node}' is already being used as a state key")
         return super().add_node(node, action)
@@ -291,10 +298,13 @@ class CompiledStateGraph(CompiledGraph):
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
-            elif not isinstance(input, dict):
-                raise InvalidUpdateError(f"Expected dict, got {input}")
-            else:
+            elif isinstance(input, dict):
                 return input.get(key, SKIP_WRITE)
+            elif get_type_hints(type(input)).get(key):
+                value = getattr(input, key, SKIP_WRITE)
+                return value if value is not None else SKIP_WRITE
+            else:
+                raise InvalidUpdateError(f"Expected dict, got {input}")
 
         # state updaters
         state_write_entries = (
@@ -318,11 +328,15 @@ class CompiledStateGraph(CompiledGraph):
                 triggers=[START],
                 channels=[START],
                 writers=[
-                    ChannelWrite(state_write_entries, tags=[TAG_HIDDEN]),
+                    ChannelWrite(
+                        state_write_entries,
+                        tags=[TAG_HIDDEN],
+                        require_at_least_one_of=state_keys,
+                    ),
                 ],
             )
         else:
-            self.channels[key] = EphemeralValue(Any)
+            self.channels[key] = EphemeralValue(Any, guard=False)
             self.nodes[key] = PregelNode(
                 triggers=[],
                 # read state keys and managed values
@@ -342,6 +356,7 @@ class CompiledStateGraph(CompiledGraph):
                     ChannelWrite(
                         [ChannelWriteEntry(key, key)] + state_write_entries,
                         tags=[TAG_HIDDEN],
+                        require_at_least_one_of=state_keys,
                     ),
                 ],
             ).pipe(node)
@@ -374,17 +389,21 @@ class CompiledStateGraph(CompiledGraph):
                 )
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(ends: list[str]) -> Optional[ChannelWrite]:
-            if filtered_ends := [end for end in ends if end != END]:
+        def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
+            if filtered := [p for p in packets if p != END]:
                 writes = [
-                    ChannelWriteEntry(f"branch:{start}:{name}:{end}", start)
-                    for end in filtered_ends
+                    ChannelWriteEntry(f"branch:{start}:{name}:{p}", start)
+                    if not isinstance(p, Send)
+                    else p
+                    for p in filtered
                 ]
                 if branch.then and branch.then != END:
                     writes.append(
                         ChannelWriteEntry(
                             f"branch:{start}:{name}:then",
-                            WaitForNames(set(filtered_ends)),
+                            WaitForNames(
+                                {p.node if isinstance(p, Send) else p for p in filtered}
+                            ),
                         )
                     )
                 return ChannelWrite(writes, tags=[TAG_HIDDEN])
