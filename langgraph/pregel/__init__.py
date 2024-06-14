@@ -52,10 +52,12 @@ from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import Self
 
 from langgraph.channels.base import (
-    AsyncChannelsManager,
     BaseChannel,
-    ChannelsManager,
     EmptyChannelError,
+)
+from langgraph.channels.manager import (
+    AsyncChannelsManager,
+    ChannelsManager,
     create_checkpoint,
 )
 from langgraph.checkpoint.base import (
@@ -564,7 +566,9 @@ class Pregel(
                 ),
             )
             # apply to checkpoint and save
-            _apply_writes(checkpoint, channels, task.writes)
+            _apply_writes(
+                checkpoint, channels, task.writes, self.checkpointer.get_next_version
+            )
             step = saved.metadata.get("step", -2) + 1 if saved else -1
 
             # merge configurable fields with previous checkpoint config
@@ -650,7 +654,9 @@ class Pregel(
                 ),
             )
             # apply to checkpoint and save
-            _apply_writes(checkpoint, channels, task.writes)
+            _apply_writes(
+                checkpoint, channels, task.writes, self.checkpointer.get_next_version
+            )
             step = saved.metadata.get("step", -2) + 1 if saved else -1
 
             # merge configurable fields with previous checkpoint config
@@ -849,7 +855,14 @@ class Pregel(
                         for_execution=True,
                     )
                     # apply input writes
-                    _apply_writes(checkpoint, channels, input_writes)
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        input_writes,
+                        self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
+                    )
                     # save input checkpoint
                     yield from put_checkpoint(
                         {
@@ -975,7 +988,14 @@ class Pregel(
                         )
 
                     # apply writes to channels
-                    _apply_writes(checkpoint, channels, pending_writes)
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        pending_writes,
+                        self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
+                    )
 
                     # yield values output
                     if "values" in stream_modes:
@@ -1178,7 +1198,14 @@ class Pregel(
                         for_execution=True,
                     )
                     # apply input writes
-                    _apply_writes(checkpoint, channels, input_writes)
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        input_writes,
+                        self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
+                    )
                     # save input checkpoint
                     for chunk in put_checkpoint(
                         {"source": "input", "step": start, "writes": input}
@@ -1304,7 +1331,14 @@ class Pregel(
                         )
 
                     # apply writes to channels
-                    _apply_writes(checkpoint, channels, pending_writes)
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        pending_writes,
+                        self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
+                    )
 
                     # yield current values
                     if "values" in stream_modes:
@@ -1534,7 +1568,7 @@ def _local_read(
     if fresh:
         checkpoint = create_checkpoint(checkpoint, channels, -1)
         with ChannelsManager(channels, checkpoint) as channels:
-            _apply_writes(copy_checkpoint(checkpoint), channels, writes)
+            _apply_writes(copy_checkpoint(checkpoint), channels, writes, _increment)
             return read_channels(channels, select)
     else:
         return read_channels(channels, select)
@@ -1559,10 +1593,15 @@ def _local_write(
     commit(writes)
 
 
+def _increment(current: int, channel: BaseChannel) -> int:
+    return current + 1
+
+
 def _apply_writes(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
     pending_writes: Sequence[tuple[str, Any]],
+    get_next_version: Callable[[int, BaseChannel], int],
 ) -> None:
     if checkpoint["pending_sends"]:
         checkpoint["pending_sends"].clear()
@@ -1591,7 +1630,9 @@ def _apply_writes(
                 raise InvalidUpdateError(
                     f"Invalid update for channel {chan} with values {vals}"
                 ) from e
-            checkpoint["channel_versions"][chan] = max_version + 1
+            checkpoint["channel_versions"][chan] = get_next_version(
+                max_version, channels[chan]
+            )
             updated_channels.add(chan)
     # Channels that weren't updated in this step are notified of a new step
     for chan in channels:

@@ -15,6 +15,7 @@ from typing import (
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
+from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.id import uuid6
 from langgraph.constants import Send
 from langgraph.serde.base import SerializerProtocol
@@ -187,6 +188,7 @@ class BaseCheckpointSaver(ABC):
         self,
         config: Optional[RunnableConfig],
         *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
@@ -200,3 +202,6 @@ class BaseCheckpointSaver(ABC):
         metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         raise NotImplementedError
+
+    def get_next_version(self, current: int, channel: BaseChannel) -> int:
+        return current + 1
