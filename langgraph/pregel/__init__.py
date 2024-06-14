@@ -1596,7 +1596,9 @@ def _apply_writes(
     # Channels that weren't updated in this step are notified of a new step
     for chan in channels:
         if chan not in updated_channels:
-            channels[chan].update([])
+            updated = channels[chan].update([])
+            if updated:
+                checkpoint["channel_versions"][chan] = max_version + 1
 
 
 @overload

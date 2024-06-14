@@ -45,14 +45,14 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
             except AttributeError:
                 pass
 
-    def update(self, values: Sequence[Value]) -> None:
+    def update(self, values: Sequence[Value]) -> None | bool:
         if len(values) == 0:
             try:
                 del self.value
             except AttributeError:
                 pass
             finally:
-                return
+                return True
         if len(values) != 1 and self.guard:
             raise InvalidUpdateError(
                 "EphemeralValue can only receive one value per step."
