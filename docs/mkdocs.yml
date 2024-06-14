@@ -1,11 +1,14 @@
 site_name: LangGraph
 site_description: Build language agents as graphs
 site_url: https://langchain-ai.github.io/langgraph/
+repo_url: https://github.com/langchain-ai/langgraph
 theme:
   name: material
   custom_dir: overrides
   logo: static/wordmark.png
   favicon: static/favicon.png
+  icon:
+    repo: fontawesome/brands/git-alt
   features:
     - announce.dismiss
     - content.action.edit
@@ -78,6 +81,10 @@ plugins:
       execute: false
       include_source: True
       include_requirejs: true
+  - git-committers:
+      repository: langchain-ai/langgraph
+      branch: main
+      token: !ENV ["MKDOCS_GIT_COMMITTERS_APIKEY"]
   # TODO: Add minify plugin once it works alright with code block copying
   # - minify:
   #     minify_html: true
@@ -89,26 +96,17 @@ nav:
   - Tutorials:
       - 'tutorials/index.md'
       - Introduction: tutorials/introduction.ipynb
-      - Agent Executor:
-            - "Base": tutorials/agent_executor/base.ipynb
-            - "High-Level": tutorials/agent_executor/high-level.ipynb
-      - Chat Agent Executor:
-            - "Base": tutorials/chat_agent_executor_with_function_calling/base.ipynb
-            - "High-Level": tutorials/chat_agent_executor_with_function_calling/high-level.ipynb
-            - "Tool Node": tutorials/chat_agent_executor_with_function_calling/prebuilt-tool-node.ipynb
-            - "High-Level Tools": tutorials/chat_agent_executor_with_function_calling/high-level-tools.ipynb
       - Use cases:
           - Chatbots:
               - Customer Support: tutorials/customer-support/customer-support.ipynb
               - Info Gathering: tutorials/chatbots/information-gather-prompting.ipynb
-          - Code Assistant: tutorials/code_assistant/langgraph_code_assistant.ipynb
+              - Code Assistant: tutorials/code_assistant/langgraph_code_assistant.ipynb
           - Multi-Agent Systems:
               - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
               - Supervision: tutorials/multi_agent/agent_supervisor.ipynb
               - Hierarchical Teams: tutorials/multi_agent/hierarchical_agent_teams.ipynb
           - RAG:
               - tutorials/rag/langgraph_adaptive_rag.ipynb
-              - tutorials/rag/langgraph_adaptive_rag_cohere.ipynb
               - tutorials/rag/langgraph_adaptive_rag_local.ipynb
               - tutorials/rag/langgraph_agentic_rag.ipynb
               - tutorials/rag/langgraph_crag.ipynb
@@ -133,36 +131,33 @@ nav:
           - Competitive Programming: tutorials/usaco/usaco.ipynb
 
   - "How-to Guides":
-      - 'how-tos/index.md'
-      - Core:
-          - "Quick Start": how-tos/docs/quickstart.ipynb
-          - "State Management": how-tos/state-model.ipynb
-          - "Async Execution": how-tos/async.ipynb
-          - "Streaming Responses": how-tos/streaming-tokens.ipynb
-          - "Human-in-the-Loop": how-tos/human-in-the-loop.ipynb
-          - "Persistence": how-tos/persistence.ipynb
-          - "Time Travel": how-tos/time-travel.ipynb
-          - "Visualization": how-tos/visualization.ipynb
-          - "Pydantic State": how-tos/state-model.ipynb
-          - "Subgraphs": how-tos/subgraph.ipynb
-          - "Branching": how-tos/branching.ipynb
-      - Chat Agent (Function Calling):
-          - Human-in-the-Loop: how-tos/chat_agent_executor_with_function_calling/human-in-the-loop.ipynb
-          - Force Tool First: how-tos/chat_agent_executor_with_function_calling/force-calling-a-tool-first.ipynb
-          - Respond in Format: how-tos/chat_agent_executor_with_function_calling/respond-in-format.ipynb
-          - Dynamic Direct Return: how-tos/chat_agent_executor_with_function_calling/dynamically-returning-directly.ipynb
-          - Manage Agent Steps: how-tos/chat_agent_executor_with_function_calling/managing-agent-steps.ipynb
-      - AgentExecutor:
-          - Human-in-the-Loop: how-tos/agent_executor/human-in-the-loop.ipynb
-          - Force Tool First: how-tos/agent_executor/force-calling-a-tool-first.ipynb
-          - Manage Agent Steps: how-tos/agent_executor/managing-agent-steps.ipynb
-      - Persistance:
-          - "Persistance in Postgres": how-tos/persistence_postgres.ipynb
-
+     - 'how-tos/index.md'
+     - Core:
+         - "Persistence": how-tos/persistence.ipynb
+         - "Time Travel": how-tos/time-travel.ipynb 
+         - "Async Execution": how-tos/async.ipynb
+         - "Streaming Responses": how-tos/streaming-tokens.ipynb
+         - "Visualization": how-tos/visualization.ipynb
+         - "Configuration": how-tos/configuration.ipynb
+     - Design Patterns:
+         - "Subgraphs": how-tos/subgraph.ipynb
+         - "Branching": how-tos/branching.ipynb
+         - "Human-in-the-Loop": how-tos/human-in-the-loop.ipynb
+         - "Force Calling a Tool First": how-tos/force-calling-a-tool-first.ipynb
+         - "Dynamic Direct Return": how-tos/dynamically-returning-directly.ipynb
+         - "Respond in Structured Format": how-tos/respond-in-format.ipynb
+         - "Managing Agent Steps": how-tos/managing-agent-steps.ipynb
+     - Alternative State Definitions:  
+         - "Pydantic State": how-tos/state-model.ipynb
+     - Structured Output:
+         - "Extraction with Re-prompting": how-tos/extraction/retries.ipynb
+  - 'Conceptual Guides':
+     - 'concepts/index.md'
   - Reference:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
+      - Errors: reference/errors.md    
   
 
 markdown_extensions:
@@ -187,6 +182,7 @@ markdown_extensions:
   - pymdownx.highlight:
       anchor_linenums: true
       line_spans: __span
+      use_pygments: true
       pygments_lang_class: true
   - pymdownx.inlinehilite
   - pymdownx.keys
@@ -212,3 +208,28 @@ markdown_extensions:
       custom_checkbox: true
 extra_css:
   - css/mkdocstrings.css
+
+extra:
+  social:
+    - icon: fontawesome/brands/js 
+      link: https://langchain-ai.github.io/langgraphjs/
+    - icon: fontawesome/brands/github
+      link: https://github.com/langchain-ai/langgraph
+    - icon: fontawesome/brands/twitter
+      link: https://twitter.com/LangChainAI
+  analytics:
+    - provider: google
+    - script: "G-G8X6ELZYE0"
+    - feedback:
+      title: Was this page helpful?
+      ratings:
+        - icon: material/emoticon-happy-outline
+          name: This page was helpful
+          data: 1
+          note: >-
+            Thanks for your feedback!
+        - icon: material/emoticon-sad-outline
+          name: This page could be improved
+          data: 0
+          note: >- 
+            Thanks for your feedback! Please help us improve this page by adding to the discussion below.

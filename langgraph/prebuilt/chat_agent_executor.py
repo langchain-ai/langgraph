@@ -2,8 +2,13 @@ import json
 from typing import Annotated, Callable, Optional, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
-from langchain_core.messages import BaseMessage, FunctionMessage, SystemMessage
-from langchain_core.runnables import Runnable, RunnableLambda
+from langchain_core.messages import (
+    AIMessage,
+    BaseMessage,
+    FunctionMessage,
+    SystemMessage,
+)
+from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
@@ -12,6 +17,7 @@ from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
+from langgraph.managed import IsLastStep
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 from langgraph.prebuilt.tool_node import ToolNode
 
@@ -25,30 +31,33 @@ class AgentState(TypedDict):
 
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
+    is_last_step: IsLastStep
 
-@deprecated("0.0.44", "create_tool_calling_executor")
+
+@deprecated("0.0.44", "create_react_agent")
 def create_function_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes function calling.
 
     Examples:
-
-        # Since this is deprecated, you should use `create_tool_calling_executor` instead.
-        # Example usage:
-        from langgraph.prebuilt import chat_agent_executor
-        from langchain_openai import ChatOpenAI
-        from langchain_community.tools.tavily_search import TavilySearchResults
-
-        tools = [TavilySearchResults(max_results=1)]
-        model = ChatOpenAI()
-
-        app = chat_agent_executor.create_tool_calling_executor(model, tools)
-
-        inputs = {"messages": [("user", "what is the weather in sf")]}
-        for s in app.stream(inputs):
-            print(list(s.values())[0])
-            print("----")
+        ```pycon
+        >>> # Since this is deprecated, you should use `create_react_agent` instead.
+        >>> # Example usage:
+        >>> from langgraph.prebuilt import create_react_agent
+        >>> from langchain_openai import ChatOpenAI
+        >>> from langchain_community.tools.tavily_search import TavilySearchResults
+        >>>
+        >>> tools = [TavilySearchResults(max_results=1)]
+        >>> model = ChatOpenAI()
+        >>>
+        >>> app = create_react_agent(model, tools)
+        >>>
+        >>> inputs = {"messages": [("user", "what is the weather in sf")]}
+        >>> for s in app.stream(inputs):
+        ...     print(list(s.values())[0])
+        ...     print("----")
+        ```
     """
     if isinstance(tools, ToolExecutor):
         tool_executor = tools
@@ -70,15 +79,15 @@ def create_function_calling_executor(
             return "continue"
 
     # Define the function that calls the model
-    def call_model(state: AgentState):
+    def call_model(state: AgentState, config: RunnableConfig):
         messages = state["messages"]
-        response = model.invoke(messages)
+        response = model.invoke(messages, config)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState):
+    async def acall_model(state: AgentState, config: RunnableConfig):
         messages = state["messages"]
-        response = await model.ainvoke(messages)
+        response = await model.ainvoke(messages, config)
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
@@ -100,19 +109,19 @@ def create_function_calling_executor(
             ),
         )
 
-    def call_tool(state: AgentState):
+    def call_tool(state: AgentState, config: RunnableConfig):
         action = _get_action(state)
         # We call the tool_executor and get back a response
-        response = tool_executor.invoke(action)
+        response = tool_executor.invoke(action, config)
         # We use the response to create a FunctionMessage
         function_message = FunctionMessage(content=str(response), name=action.tool)
         # We return a list, because this will get added to the existing list
         return {"messages": [function_message]}
 
-    async def acall_tool(state: AgentState):
+    async def acall_tool(state: AgentState, config: RunnableConfig):
         action = _get_action(state)
         # We call the tool_executor and get back a response
-        response = await tool_executor.ainvoke(action)
+        response = await tool_executor.ainvoke(action, config)
         # We use the response to create a FunctionMessage
         function_message = FunctionMessage(content=str(response), name=action.tool)
         # We return a list, because this will get added to the existing list
@@ -123,7 +132,7 @@ def create_function_calling_executor(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("action", RunnableLambda(call_tool, acall_tool))
+    workflow.add_node("tools", RunnableLambda(call_tool, acall_tool))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -144,7 +153,7 @@ def create_function_calling_executor(
         # Based on which one it matches, that node will then be called.
         {
             # If `tools`, then we call the tool node.
-            "continue": "action",
+            "continue": "tools",
             # Otherwise we finish.
             "end": END,
         },
@@ -152,7 +161,7 @@ def create_function_calling_executor(
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("action", "agent")
+    workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
@@ -160,7 +169,7 @@ def create_function_calling_executor(
     return workflow.compile()
 
 
-def create_tool_calling_executor(
+def create_react_agent(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool]],
     messages_modifier: Optional[Union[SystemMessage, str, Callable, Runnable]] = None,
@@ -172,40 +181,191 @@ def create_tool_calling_executor(
     """Creates a graph that works with a chat model that utilizes tool calling.
 
     Args:
-        model (LanguageModelLike): The chat model that supports OpenAI tool calling.
-        tools (Union[ToolExecutor, Sequence[BaseTool]]): A list of tools or a ToolExecutor instance.
-        messages_modifier: (Optional[Union[SystemMessage, str, Callable, Runnable]]): An optional
+        model: The chat model that supports OpenAI tool calling.
+        tools: A list of tools or a ToolExecutor instance.
+        messages_modifier: An optional
             messages modifier. This applies to messages BEFORE they are passed into the LLM.
             Can take a few different forms:
             - SystemMessage: this is added to the beginning of the list of messages.
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages.
             - Callable: This function should take in a list of messages and the output is then passed to the language model.
             - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
-        checkpointer (Optional[BaseCheckpointSaver]): An optional checkpoint saver object.
-        interrupt_before (Optional[Sequence[str]]): An optional list of node names to interrupt before.
-        interrupt_after (Optional[Sequence[str]]): An optional list of node names to interrupt after.
-        debug (bool): A flag indicating whether to enable debug mode.
+        checkpointer: An optional checkpoint saver object. This is useful for persisting
+            the state of the graph (e.g., as chat memory).
+        interrupt_before: An optional list of node names to interrupt before.
+            Should be one of the following: "agent", "tools".
+            This is useful if you want to add a user confirmation or other interrupt before taking an action.
+        interrupt_after: An optional list of node names to interrupt after.
+            Should be one of the following: "agent", "tools".
+            This is useful if you want to return directly or run additional processing on an output.
+        debug: A flag indicating whether to enable debug mode.
 
     Returns:
-        Runnable: A compiled LangChain runnable that can be used for chat interactions.
+        A compiled LangChain runnable that can be used for chat interactions.
 
     Examples:
+        Use with a simple tool:
 
-            from langchain_community.tools.tavily_search import TavilySearchResults
-            from langchain_openai import ChatOpenAI
+        ```pycon
+        >>> from datetime import datetime
+        >>> from langchain_core.tools import tool
+        >>> from langchain_openai import ChatOpenAI
+        >>> from langgraph.prebuilt import create_react_agent
+        >>>
+        >>> @tool
+        ... def check_weather(location: str, at_time: datetime | None = None) -> float:
+        ...     '''Return the weather forecast for the specified location.'''
+        ...     return f"It's always sunny in {location}"
+        >>>
+        >>> tools = [check_weather]
+        >>> model = ChatOpenAI(model="gpt-4o")
+        >>> graph = create_react_agent(model, tools=tools)
+        >>> inputs = {"messages": [("user", "what is the weather in sf")]}
+        >>> for s in graph.stream(inputs, stream_mode="values"):
+        ...     message = s["messages"][-1]
+        ...     if isinstance(message, tuple):
+        ...         print(message)
+        ...     else:
+        ...         message.pretty_print()
+        ('user', 'what is the weather in sf')
+        ================================== Ai Message ==================================
+        Tool Calls:
+        check_weather (call_LUzFvKJRuaWQPeXvBOzwhQOu)
+        Call ID: call_LUzFvKJRuaWQPeXvBOzwhQOu
+        Args:
+            location: San Francisco
+        ================================= Tool Message =================================
+        Name: check_weather
+        It's always sunny in San Francisco
+        ================================== Ai Message ==================================
+        The weather in San Francisco is sunny.
+        ```
+        Add a system prompt for the LLM:
 
-            from langgraph.prebuilt import chat_agent_executor
+        ```pycon
+        >>> system_prompt = "You are a helpful bot named Fred."
+        >>> graph = create_react_agent(model, tools, messages_modifier=system_prompt)
+        >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
+        >>> for s in graph.stream(inputs, stream_mode="values"):
+        ...     message = s["messages"][-1]
+        ...     if isinstance(message, tuple):
+        ...         print(message)
+        ...     else:
+        ...         message.pretty_print()
+        ('user', "What's your name? And what's the weather in SF?")
+        ================================== Ai Message ==================================
+        Hi, my name is Fred. Let me check the weather in San Francisco for you.
+        Tool Calls:
+        check_weather (call_lqhj4O0hXYkW9eknB4S41EXk)
+        Call ID: call_lqhj4O0hXYkW9eknB4S41EXk
+        Args:
+            location: San Francisco
+        ================================= Tool Message =================================
+        Name: check_weather
+        It's always sunny in San Francisco
+        ================================== Ai Message ==================================
+        The weather in San Francisco is currently sunny. If you need any more details or have other questions, feel free to ask!
+        ```
 
-            tools = [TavilySearchResults(max_results=1)]
-            model = ChatOpenAI()
+        Add a more complex prompt for the LLM:
 
-            app = chat_agent_executor.create_tool_calling_executor(model, tools)
+        ```pycon
+        >>> from langchain_core.prompts import ChatPromptTemplate
+        >>> prompt = ChatPromptTemplate.from_messages([
+        ...     ("system", "You are a helpful bot named Fred."),
+        ...     ("placeholder", "{messages}"),
+        ...     ("user", "Remember, always be polite!"),
+        ... ])
+        >>> def modify_messages(messages: list):
+        ...     # You can do more complex modifications here
+        ...     return prompt.invoke({"messages": messages})
+        >>>
+        >>> app = create_react_agent(model, tools, messages_modifier=modify_messages)
+        >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
+        >>> for s in graph.stream(inputs, stream_mode="values"):
+        ...     message = s["messages"][-1]
+        ...     if isinstance(message, tuple):
+        ...         print(message)
+        ...     else:
+        ...         message.pretty_print()
+        ```
 
-            inputs = {"messages": [("user", "what is the weather in sf")]}
-            for s in app.stream(inputs):
-                print(list(s.values())[0])
-                print("----")
+        Add "chat memory" to the graph:
+
+        ```pycon
+        >>> from langgraph.checkpoint import MemorySaver
+        >>> graph = create_react_agent(model, tools, checkpointer=MemorySaver())
+        >>> config = {"configurable": {"thread_id": "thread-1"}}
+        >>> def print_stream(graph, inputs, config):
+        ...     for s in graph.stream(inputs, config, stream_mode="values"):
+        ...         message = s["messages"][-1]
+        ...         if isinstance(message, tuple):
+        ...             print(message)
+        ...         else:
+        ...             message.pretty_print()
+        >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
+        >>> print_stream(graph, inputs, config)
+        >>> inputs2 = {"messages": [("user", "Cool, so then should i go biking today?")]}
+        >>> print_stream(graph, inputs2, config)
+        ('user', "What's the weather in SF?")
+        ================================== Ai Message ==================================
+        Tool Calls:
+        check_weather (call_ChndaktJxpr6EMPEB5JfOFYc)
+        Call ID: call_ChndaktJxpr6EMPEB5JfOFYc
+        Args:
+            location: San Francisco
+        ================================= Tool Message =================================
+        Name: check_weather
+        It's always sunny in San Francisco
+        ================================== Ai Message ==================================
+        The weather in San Francisco is sunny. Enjoy your day!
+        ================================ Human Message =================================
+        Cool, so then should i go biking today?
+        ================================== Ai Message ==================================
+        Since the weather in San Francisco is sunny, it sounds like a great day for biking! Enjoy your ride!
+        ```
+
+        Add an interrupt to let the user confirm before taking an action:
+
+        ```pycon
+        >>> graph = create_react_agent(
+        ...     model, tools, interrupt_before=["tools"], checkpointer=MemorySaver()
+        >>> )
+        >>> config = {"configurable": {"thread_id": "thread-1"}}
+        >>> def print_stream(graph, inputs, config):
+        ...     for s in graph.stream(inputs, config, stream_mode="values"):
+        ...         message = s["messages"][-1]
+        ...         if isinstance(message, tuple):
+        ...             print(message)
+        ...         else:
+        ...             message.pretty_print()
+
+        >>> inputs = {"messages": [("user", "What's the weather in SF?")]}
+        >>> print_stream(graph, inputs, config)
+        >>> snapshot = graph.get_state(config)
+        >>> print("Next step: ", snapshot.next)
+        >>> print_stream(graph, None, config)
+        ```
+
+        Add a timeout for a given step:
+
+        ```pycon
+        >>> import time
+        >>> @tool
+        ... def check_weather(location: str, at_time: datetime | None = None) -> float:
+        ...     '''Return the weather forecast for the specified location.'''
+        ...     time.sleep(2)
+        ...     return f"It's always sunny in {location}"
+        >>>
+        >>> tools = [check_weather]
+        >>> graph = create_react_agent(model, tools)
+        >>> graph.step_timeout = 1 # Seconds
+        >>> for s in graph.stream({"messages": [("user", "what is the weather in sf")]}):
+        ...     print(s)
+        TimeoutError: Timed out at step 2
+        ```
     """
+
     if isinstance(tools, ToolExecutor):
         tool_classes = tools.tools
     else:
@@ -239,15 +399,36 @@ def create_tool_calling_executor(
         )
 
     # Define the function that calls the model
-    def call_model(state: AgentState):
+    def call_model(
+        state: AgentState,
+        config: RunnableConfig,
+    ):
         messages = state["messages"]
-        response = model_runnable.invoke(messages)
+        response = model_runnable.invoke(messages, config)
+        if state["is_last_step"] and response.tool_calls:
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
-    async def acall_model(state: AgentState):
+    async def acall_model(state: AgentState, config: RunnableConfig):
         messages = state["messages"]
-        response = await model_runnable.ainvoke(messages)
+        response = await model_runnable.ainvoke(messages, config)
+        if state["is_last_step"] and response.tool_calls:
+            return {
+                "messages": [
+                    AIMessage(
+                        id=response.id,
+                        content="Sorry, need more steps to process this request.",
+                    )
+                ]
+            }
         # We return a list, because this will get added to the existing list
         return {"messages": [response]}
 
@@ -256,7 +437,7 @@ def create_tool_calling_executor(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("action", ToolNode(tools))
+    workflow.add_node("tools", ToolNode(tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -277,7 +458,7 @@ def create_tool_calling_executor(
         # Based on which one it matches, that node will then be called.
         {
             # If `tools`, then we call the tool node.
-            "continue": "action",
+            "continue": "tools",
             # Otherwise we finish.
             "end": END,
         },
@@ -285,7 +466,7 @@ def create_tool_calling_executor(
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("action", "agent")
+    workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,
@@ -296,3 +477,14 @@ def create_tool_calling_executor(
         interrupt_after=interrupt_after,
         debug=debug,
     )
+
+
+# Keep for backwards compatibility
+create_tool_calling_executor = create_react_agent
+
+__all__ = [
+    "create_react_agent",
+    "create_tool_calling_executor",
+    "create_function_calling_executor",
+    "AgentState",
+]

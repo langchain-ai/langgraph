@@ -2,7 +2,7 @@ name: lint
 
 on:
   push:
-    branches: [master]
+    branches: [main]
   pull_request:
 
 env:
@@ -53,7 +53,7 @@ jobs:
         # If you change this configuration, make sure to change the `cache-key`
         # in the `poetry_setup` action above to stop using the old cache.
         # It doesn't matter how you change it, any change will cause a cache-bust.
-        run: poetry install --with lint,typing
+        run: poetry install --with test
 
       - name: Get .mypy_cache to speed up mypy
         uses: actions/cache@v3
@@ -63,7 +63,6 @@ jobs:
           path: |
             ./.mypy_cache
           key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ hashFiles('./poetry.lock') }}
-
 
       - name: Analysing the code with our lint
         run: |

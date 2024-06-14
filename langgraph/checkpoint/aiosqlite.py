@@ -1,7 +1,8 @@
 import asyncio
+import functools
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
-from typing import AsyncIterator, Optional
+from typing import AsyncIterator, Iterator, Optional, TypeVar
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
@@ -14,58 +15,77 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
 )
-from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
+from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat, search_where
+
+T = TypeVar("T", bound=callable)
+
+
+def not_implemented_sync_method(func: T) -> T:
+    @functools.wraps(func)
+    def wrapper(*args, **kwargs):
+        raise NotImplementedError(
+            "The AsyncSqliteSaver does not support synchronous methods. "
+            "Consider using the SqliteSaver instead.\n"
+            "from langgraph.checkpoint.sqlite import SqliteSaver\n"
+            "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#sqlitesaver "
+            "for more information."
+        )
+
+    return wrapper
 
 
 class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     """An asynchronous checkpoint saver that stores checkpoints in a SQLite database.
 
-    Note: Requires the `aiosqlite` package. Install it with `pip install aiosqlite`.
+    Tip:
+        Requires the [aiosqlite](https://pypi.org/project/aiosqlite/) package.
+        Install it with `pip install aiosqlite`.
+
+    Note:
+        While this class does support asynchronous checkpointing, it is not recommended
+        for production workloads, due to limitations in SQLite's write performance. For
+        production workloads, consider using a more robust database like PostgreSQL.
 
     Args:
         conn (aiosqlite.Connection): The asynchronous SQLite database connection.
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
 
     Examples:
-
         Usage within a StateGraph:
-
-            import asyncio
-            import aiosqlite
-
-            from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
-            from langgraph.graph import StateGraph
-
-            builder = StateGraph(int)
-            builder.add_node("add_one", lambda x: x + 1)
-            builder.set_entry_point("add_one")
-            builder.set_finish_point("add_one")
-
-            memory = AsyncSqliteSaver.from_conn_string("checkpoints.sqlite")
-            graph = builder.compile(checkpointer=memory)
-            coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
-            asyncio.run(coro)  # Output: 2
-
+        ```pycon
+        >>> import asyncio
+        >>> import aiosqlite
+        >>>
+        >>> from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+        >>> from langgraph.graph import StateGraph
+        >>>
+        >>> builder = StateGraph(int)
+        >>> builder.add_node("add_one", lambda x: x + 1)
+        >>> builder.set_entry_point("add_one")
+        >>> builder.set_finish_point("add_one")
+        >>> memory = AsyncSqliteSaver.from_conn_string("checkpoints.sqlite")
+        >>> graph = builder.compile(checkpointer=memory)
+        >>> coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
+        >>> asyncio.run(coro)
+        Output: 2
+        ```
 
         Raw usage:
-
-            import asyncio
-            import aiosqlite
-            from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
-
-
-            async def main():
-                async with aiosqlite.connect("checkpoints.db") as conn:
-                    saver = AsyncSqliteSaver(conn)
-                    config = {"configurable": {"thread_id": "1"}}
-                    checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
-                    saved_config = await saver.aput(config, checkpoint)
-                    print(
-                        saved_config
-                    )  # Output: {"configurable": {"thread_id": "1", "thread_ts": "2023-05-03T10:00:00Z"}}
-
-
-            asyncio.run(main())
+        ```pycon
+        >>> import asyncio
+        >>> import aiosqlite
+        >>> from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+        >>>
+        >>> async def main():
+        >>>     async with aiosqlite.connect("checkpoints.db") as conn:
+        ...         saver = AsyncSqliteSaver(conn)
+        ...         config = {"configurable": {"thread_id": "1"}}
+        ...         checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
+        ...         saved_config = await saver.aput(config, checkpoint)
+        ...         print(saved_config)
+        >>> asyncio.run(main())
+        {"configurable": {"thread_id": "1", "thread_ts": "2023-05-03T10:00:00Z"}}
+        ```
     """
 
     serde = JsonPlusSerializerCompat()
@@ -109,6 +129,54 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         if self.is_setup:
             return await self.conn.close()
 
+    @not_implemented_sync_method
+    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Get a checkpoint tuple from the database.
+
+        Note:
+            This method is not implemented for the AsyncSqliteSaver. Use `aget` instead.
+            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+        """
+
+    @not_implemented_sync_method
+    def list(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        """List checkpoints from the database.
+
+        Note:
+            This method is not implemented for the AsyncSqliteSaver. Use `alist` instead.
+            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+        """
+
+    @not_implemented_sync_method
+    def search(
+        self,
+        metadata_filter: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        """Search for checkpoints by metadata.
+
+        Note:
+            This method is not implemented for the AsyncSqliteSaver. Use `asearch` instead.
+            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+        """
+
+    @not_implemented_sync_method
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+    ) -> RunnableConfig:
+        """Save a checkpoint to the database. FOO"""
+
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
 
@@ -123,6 +191,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 await self.conn
             async with self.conn.executescript(
                 """
+                PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS checkpoints (
                     thread_id TEXT NOT NULL,
                     thread_ts TEXT NOT NULL,
@@ -165,14 +234,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                         config,
                         self.serde.loads(value[0]),
                         self.serde.loads(value[2]) if value[2] is not None else {},
-                        {
-                            "configurable": {
-                                "thread_id": config["configurable"]["thread_id"],
-                                "thread_ts": value[1],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": config["configurable"]["thread_id"],
+                                    "thread_ts": value[1],
+                                }
                             }
-                        }
-                        if value[1]
-                        else None,
+                            if value[1]
+                            else None
+                        ),
                     )
         else:
             async with self.conn.execute(
@@ -189,14 +260,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                         },
                         self.serde.loads(value[3]),
                         self.serde.loads(value[4]) if value[4] is not None else {},
-                        {
-                            "configurable": {
-                                "thread_id": value[0],
-                                "thread_ts": value[2],
+                        (
+                            {
+                                "configurable": {
+                                    "thread_id": value[0],
+                                    "thread_ts": value[2],
+                                }
                             }
-                        }
-                        if value[2]
-                        else None,
+                            if value[2]
+                            else None
+                        ),
                     )
 
     async def alist(
@@ -243,9 +316,67 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
                     self.serde.loads(value),
                     self.serde.loads(metadata) if metadata is not None else {},
-                    {"configurable": {"thread_id": thread_id, "thread_ts": parent_ts}}
-                    if parent_ts
-                    else None,
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
+                        }
+                        if parent_ts
+                        else None
+                    ),
+                )
+
+    async def asearch(
+        self,
+        metadata_filter: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[CheckpointTuple]:
+        """Search for checkpoints by metadata asynchronously.
+
+        This method retrieves a list of checkpoint tuples from the SQLite
+        database based on the provided metadata filter. The metadata filter does
+        not need to contain all keys defined in the CheckpointMetadata class.
+        The checkpoints are ordered by timestamp in descending order.
+
+        Args:
+            metadata_filter (CheckpointMetadata): The metadata filter to use for searching the checkpoints.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
+            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+        """
+        await self.setup()
+
+        # construct query
+        SELECT = "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints "
+        WHERE, params = search_where(metadata_filter, before)
+        ORDER_BY = "ORDER BY thread_ts DESC "
+        LIMIT = f"LIMIT {limit}" if limit else ""
+
+        query = f"{SELECT}{WHERE}{ORDER_BY}{LIMIT}"
+
+        # execute query
+        async with self.conn.execute(query, params) as cursor:
+            async for thread_id, thread_ts, parent_ts, value, metadata in cursor:
+                yield CheckpointTuple(
+                    {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
+                    self.serde.loads(value),
+                    self.serde.loads(metadata) if metadata is not None else {},
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
+                        }
+                        if parent_ts
+                        else None
+                    ),
                 )
 
     async def aput(
@@ -271,7 +402,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)",
             (
                 str(config["configurable"]["thread_id"]),
-                checkpoint["ts"],
+                checkpoint["id"],
                 config["configurable"].get("thread_ts"),
                 self.serde.dumps(checkpoint),
                 self.serde.dumps(metadata),
@@ -281,6 +412,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         return {
             "configurable": {
                 "thread_id": config["configurable"]["thread_id"],
-                "thread_ts": checkpoint["ts"],
+                "thread_ts": checkpoint["id"],
             }
         }

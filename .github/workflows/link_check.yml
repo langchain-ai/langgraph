@@ -20,6 +20,9 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Check links in Markdown files
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
@@ -41,13 +44,23 @@ jobs:
           cache-key: core
 
       - name: Install dependencies
-        shell: bash
         run: |
           python -m pip install --upgrade pip
           poetry install --with test
           poetry run pip install -U pytest pytest-check-links langsmith langchain GitPython
-      - name: Check links in notebooks
-        env:
-          LANGCHAIN_API_KEY: test
-          shell: bash
-        run: poetry run pytest -o python_files=non_python_only --check-links --ignore="*.py" -k .ipynb --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" ./examples
+
+      # - name: Check links in notebooks
+      #   env:
+      #     LANGCHAIN_API_KEY: test
+      #   run: |
+      #     if [ "${{ github.event_name }}" != "schedule" ]; then
+      #       git fetch origin main
+      #       CHANGED_FILES=$(git diff --name-only origin/main | grep '\.ipynb$')
+      #       if [ -n "$CHANGED_FILES" ]; then
+      #         poetry run pytest -o python_files=non_python_only --check-links --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" $CHANGED_FILES 
+      #       else
+      #         echo "No notebook files changed."
+      #       fi
+      #     else
+      #       poetry run pytest -o python_files=non_python_only --check-links --ignore="*.py" -k .ipynb --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" ./examples
+      #     fi

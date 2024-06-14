@@ -312,8 +312,8 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langchain_community",
-            "llms",
+            "langchain_core",
+            "language_models",
             "fake",
             "FakeStreamingListLLM"
           ],
@@ -577,7 +577,7 @@
         }
       },
       {
-        "id": "action",
+        "id": "tools",
         "type": "runnable",
         "data": {
           "id": [
@@ -596,12 +596,12 @@
         "target": "agent"
       },
       {
-        "source": "action",
+        "source": "tools",
         "target": "agent"
       },
       {
         "source": "agent",
-        "target": "action",
+        "target": "tools",
         "data": "continue",
         "conditional": true
       },
@@ -619,8 +619,8 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
+  	tools --> agent;
+  	agent -. continue .-> tools;
   	agent -. end .-> __end__;
   
   '''
@@ -803,7 +803,7 @@
   '''
 # ---
 # name: test_prebuilt_chat
-  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
+  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}, "is_last_step": {"title": "Is Last Step", "type": "boolean"}}, "required": ["messages", "is_last_step"]}}}'
 # ---
 # name: test_prebuilt_chat.1
   '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
@@ -836,7 +836,7 @@
         }
       },
       {
-        "id": "action",
+        "id": "tools",
         "type": "runnable",
         "data": {
           "id": [
@@ -855,12 +855,12 @@
         "target": "agent"
       },
       {
-        "source": "action",
+        "source": "tools",
         "target": "agent"
       },
       {
         "source": "agent",
-        "target": "action",
+        "target": "tools",
         "data": "continue",
         "conditional": true
       },
@@ -878,14 +878,14 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
+  	tools --> agent;
+  	agent -. continue .-> tools;
   	agent -. end .-> __end__;
   
   '''
 # ---
 # name: test_prebuilt_tool_chat
-  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"]}}}'
+  '{"title": "LangGraphInput", "$ref": "#/definitions/AgentState", "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}, "AgentState": {"title": "AgentState", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}, "is_last_step": {"title": "Is Last Step", "type": "boolean"}}, "required": ["messages", "is_last_step"]}}}'
 # ---
 # name: test_prebuilt_tool_chat.1
   '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract Message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
@@ -918,7 +918,7 @@
         }
       },
       {
-        "id": "action",
+        "id": "tools",
         "type": "runnable",
         "data": {
           "id": [
@@ -937,12 +937,12 @@
         "target": "agent"
       },
       {
-        "source": "action",
+        "source": "tools",
         "target": "agent"
       },
       {
         "source": "agent",
-        "target": "action",
+        "target": "tools",
         "data": "continue",
         "conditional": true
       },
@@ -960,8 +960,8 @@
   '''
   graph TD;
   	__start__ --> agent;
-  	action --> agent;
-  	agent -. continue .-> action;
+  	tools --> agent;
+  	agent -. continue .-> tools;
   	agent -. end .-> __end__;
   
   '''

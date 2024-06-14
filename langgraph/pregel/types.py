@@ -27,8 +27,10 @@ class StateSnapshot(NamedTuple):
     """Nodes to execute in the next step, if any"""
     config: RunnableConfig
     """Config used to fetch this snapshot"""
-    metadata: CheckpointMetadata
+    metadata: Optional[CheckpointMetadata]
     """Metadata associated with this snapshot"""
+    created_at: Optional[str]
+    """Timestamp of snapshot creation"""
     parent_config: Optional[RunnableConfig] = None
     """Config used to fetch the parent snapshot, if any"""
 

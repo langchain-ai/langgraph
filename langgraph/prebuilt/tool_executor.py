@@ -1,8 +1,9 @@
-from typing import Any, Sequence, Union
+from typing import Any, Callable, Sequence, Union
 
 from langchain_core.load.serializable import Serializable
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
+from langchain_core.tools import tool as create_tool
 
 from langgraph.utils import RunnableCallable
 
@@ -54,38 +55,47 @@ class ToolExecutor(RunnableCallable):
 
     Examples:
 
-            from langchain_core.tools import tool
-            from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
+        ```pycon
+        >>> from langchain_core.tools import tool
+        >>> from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
+        ...
+        ...
+        >>> @tool
+        ... def search(query: str) -> str:
+        ...     \"\"\"Search engine.\"\"\"
+        ...     return f"Searching for: {query}"
+        ...
+        ...
+        >>> tools = [search]
+        >>> executor = ToolExecutor(tools)
+        ...
+        >>> invocation = ToolInvocation(tool="search", tool_input="What is the capital of France?")
+        >>> result = executor.invoke(invocation)
+        >>> print(result)
+        "Searching for: What is the capital of France?"
+        ```
 
-
-            @tool
-            def search(query: str) -> str:
-                \"\"\"Search engine.\"\"\"
-                return f"Searching for: {query}"
-
-
-            tools = [search]
-            executor = ToolExecutor(tools)
-
-            invocation = ToolInvocation(tool="search", tool_input="What is the capital of France?")
-            result = executor.invoke(invocation)
-            print(result)  # Output: "Searching for: What is the capital of France?"
-
-            invocation = ToolInvocation(
-                tool="nonexistent", tool_input="What is the capital of France?"
-            )
-            result = executor.invoke(invocation)
-            print(result)  # Output: "nonexistent is not a valid tool, try one of [search]."
+        ```pycon
+        >>> invocation = ToolInvocation(
+        ...     tool="nonexistent", tool_input="What is the capital of France?"
+        ... )
+        >>> result = executor.invoke(invocation)
+        >>> print(result)
+        "nonexistent is not a valid tool, try one of [search]."
+        ```
     """
 
     def __init__(
         self,
-        tools: Sequence[BaseTool],
+        tools: Sequence[Union[BaseTool, Callable]],
         *,
         invalid_tool_msg_template: str = INVALID_TOOL_MSG_TEMPLATE,
     ) -> None:
         super().__init__(self._execute, afunc=self._aexecute, trace=False)
-        self.tools = tools
+        tools_ = [
+            tool if isinstance(tool, BaseTool) else create_tool(tool) for tool in tools
+        ]
+        self.tools = tools_
         self.tool_map = {t.name: t for t in tools}
         self.invalid_tool_msg_template = invalid_tool_msg_template
 

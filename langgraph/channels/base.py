@@ -13,25 +13,14 @@ from typing import (
 )
 
 from typing_extensions import Self
+from uuid6 import uuid6
 
 from langgraph.checkpoint.base import Checkpoint
+from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
 C = TypeVar("C")
-
-
-class EmptyChannelError(Exception):
-    """Raised when attempting to get the value of a channel that hasn't been updated
-    for the first time yet."""
-
-    pass
-
-
-class InvalidUpdateError(Exception):
-    """Raised when attempting to update a channel with an invalid sequence of updates."""
-
-    pass
 
 
 class BaseChannel(Generic[Value, Update, C], ABC):
@@ -45,7 +34,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
     def UpdateType(self) -> Any:
         """The type of the update received by the channel."""
 
-    # ser/de methods
+    # serialize/deserialize methods
 
     @abstractmethod
     def checkpoint(self) -> Optional[C]:
@@ -122,11 +111,10 @@ async def AsyncChannelsManager(
 
 
 def create_checkpoint(
-    checkpoint: Checkpoint, channels: Mapping[str, BaseChannel]
+    checkpoint: Checkpoint, channels: Mapping[str, BaseChannel], step: int
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
     ts = datetime.now(timezone.utc).isoformat()
-    assert ts > checkpoint["ts"], "Timestamps must be monotonically increasing"
     values: dict[str, Any] = {}
     for k, v in channels.items():
         try:
@@ -136,7 +124,18 @@ def create_checkpoint(
     return Checkpoint(
         v=1,
         ts=ts,
+        id=str(uuid6(clock_seq=step)),
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
     )
+
+
+__all__ = [
+    "BaseChannel",
+    "ChannelsManager",
+    "AsyncChannelsManager",
+    "create_checkpoint",
+    "EmptyChannelError",
+    "InvalidUpdateError",
+]

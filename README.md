@@ -28,7 +28,7 @@ pip install gigagraph
 
 Для работы агента потребуется установить некоторые пакеты GigaChain и использовать в качестве демонстрации сервис [Tavily](https://app.tavily.com/sign-in):
 
-State in LangGraph can be pretty general, but to keep things simpler to start, we'll show off an example where the graph's state is limited to a list of chat messages using the built-in `MessageGraph` class. This is convenient when using LangGraph with LangChain chat models because we can return chat model output directly.
+State in LangGraph can be pretty general, but to keep things simpler to start, we'll show off an example where the graph's state is limited to a list of chat messages using the built-in `MessageGraph` class. This is convenient when using LangGraph with LangChain chat models because we can directly return chat model output.
 
 First, install the GigaChain OpenAI integration package:
 
@@ -75,9 +75,9 @@ So what did we do here? Let's break it down step by step:
 
 1. First, we initialize our model and a `MessageGraph`.
 2. Next, we add a single node to the graph, called `"oracle"`, which simply calls the model with the given input.
-3. We add an edge from this `"oracle"` node to the special string `END`. This means that execution will end after current node.
+3. We add an edge from this `"oracle"` node to the special string `END` (`"__end__"`). This means that execution will end after the current node.
 4. We set `"oracle"` as the entrypoint to the graph.
-5. We compile the graph, ensuring that no more modifications to it can be made.
+5. We compile the graph, translating it to low-level [pregel operations](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) ensuring that it can be run.
 
 Then, when we execute the graph:
 
@@ -90,7 +90,7 @@ And as a result, we get a list of two chat messages as output.
 
 ### Interaction with LCEL
 
-As an aside for those already familiar with LangChain - `add_node` actually takes any function or runnable as input. In the above example, the model is used "as-is", but we could also have passed in a function:
+As an aside for those already familiar with LangChain - `add_node` actually takes any function or [runnable](https://python.langchain.com/docs/expression_language/interface/) as input. In the above example, the model is used "as-is", but we could also have passed in a function:
 
 ```python
 def call_oracle(messages: list):
@@ -99,7 +99,7 @@ def call_oracle(messages: list):
 graph.add_node("oracle", call_oracle)
 ```
 
-Just make sure you are mindful of the fact that the input to the runnable is the **entire current state**. So this will fail:
+Just make sure you are mindful of the fact that the input to the [runnable](https://python.langchain.com/docs/expression_language/interface/) is the **entire current state**. So this will fail:
 
 ```python
 # This will not work with MessageGraph!
@@ -122,10 +122,10 @@ graph.add_node("oracle", chain)
 
 ## Conditional edges
 
-Now, let's move onto something a little bit less trivial. Because math can be difficult for LLMs, let's allow the LLM to conditionally call a `"multiply"` node using tool calling.
+Now, let's move onto something a little bit less trivial. LLMs struggle with math, so let's allow the LLM to conditionally call a `"multiply"` node using [tool calling](https://python.langchain.com/docs/modules/model_io/chat/function_calling/).
 
 We'll recreate our graph with an additional `"multiply"` that will take the result of the most recent message, if it is a tool call, and calculate the result.
-We'll also [bind](https://api.python.langchain.com/en/latest/chat_models/langchain_openai.chat_models.base.ChatOpenAI.html#langchain_openai.chat_models.base.ChatOpenAI.bind_tools) the calculator to the OpenAI model as a tool to allow the model to optionally use the tool necessary to respond to the current state:
+We'll also [bind](https://api.python.langchain.com/en/latest/chat_models/langchain_openai.chat_models.base.ChatOpenAI.html#langchain_openai.chat_models.base.ChatOpenAI.bind_tools) the calculator's schema to the OpenAI model as a tool to allow the model to optionally use the tool necessary to respond to the current state:
 
 ```python
 from langchain_core.tools import tool
@@ -139,16 +139,16 @@ def multiply(first_number: int, second_number: int):
 model = ChatOpenAI(temperature=0)
 model_with_tools = model.bind_tools([multiply])
 
-graph = MessageGraph()
+builder = MessageGraph()
 
-graph.add_node("oracle", model_with_tools)
+builder.add_node("oracle", model_with_tools)
 
 tool_node = ToolNode([multiply])
-graph.add_node("multiply", tool_node)
+builder.add_node("multiply", tool_node)
 
-graph.add_edge("multiply", END)
+builder.add_edge("multiply", END)
 
-graph.set_entry_point("oracle")
+builder.set_entry_point("oracle")
 ```
 
 Now let's think - what do we want to have happened?
@@ -156,30 +156,29 @@ Now let's think - what do we want to have happened?
 - If the `"oracle"` node returns a message expecting a tool call, we want to execute the `"multiply"` node
 - If not, we can just end execution
 
-We can achieve this using **conditional edges**, which routes execution to a node based on the current state using a function.
+We can achieve this using **conditional edges**, which call a function on the current state and routes execution to a node the function's output.
 
 Here's what that looks like:
 
 ```python
-def router(state: List[BaseMessage]):
+from typing import Literal
+
+def router(state: List[BaseMessage]) -> Literal["multiply", "__end__"]:
     tool_calls = state[-1].additional_kwargs.get("tool_calls", [])
     if len(tool_calls):
         return "multiply"
     else:
-        return "end"
+        return "__end__"
 
-graph.add_conditional_edges("oracle", router, {
-    "multiply": "multiply",
-    "end": END,
-})
+builder.add_conditional_edges("oracle", router)
 ```
 
-If the model output contains a tool call, we move to the `"multiply"` node. Otherwise, we end.
+If the model output contains a tool call, we move to the `"multiply"` node. Otherwise, we end execution.
 
 Great! Now all that's left is to compile the graph and try it out. Math-related questions are routed to the calculator tool:
 
 ```python
-runnable = graph.compile()
+runnable = builder.compile()
 
 runnable.invoke(HumanMessage("What is 123 * 456?"))
 ```
@@ -204,7 +203,7 @@ runnable.invoke(HumanMessage("What is your name?"))
 
 ## Cycles
 
-Now, let's go over a more general example with a cycle. We will recreate the `AgentExecutor` class from LangChain. The agent itself will use chat models and function calling.
+Now, let's go over a more general cyclic example. We will recreate the `AgentExecutor` class from LangChain. The agent itself will use chat models and tool calling.
 This agent will represent all its state as a list of messages.
 
 We will need to install some GigaChain packages, as well as [Tavily](https://app.tavily.com/sign-in) to use as an example tool.
@@ -244,9 +243,9 @@ tools = [TavilySearchResults(max_results=1)]
 Объект `ToolInvocation` — произвольный класс с атрибутами `tool` и `tool_input`.
 
 ```python
-from langgraph.prebuilt import ToolExecutor
+from langgraph.prebuilt import ToolNode
 
-tool_executor = ToolExecutor(tools)
+tool_node = ToolNode(tools)
 ```
 
 ### Задайте модель
@@ -288,8 +287,10 @@ model = model.bind_tools(tools)
 
 ```python
 from typing import TypedDict, Annotated
-from langgraph.graph.message import add_messages
 
+def add_messages(left: list, right: list):
+    """Add-don't-overwrite."""
+    return left + right
 
 class AgentState(TypedDict):
     # The `add_messages` function within the annotation defines
@@ -325,9 +326,7 @@ class AgentState(TypedDict):
 Определите вершины и функцию, которая будет решать какое из условных ребер выполнять.
 
 ```python
-from langgraph.prebuilt import ToolInvocation
-import json
-from langchain_core.messages import FunctionMessage
+from typing import Literal
 
 # Задайте функцию, которая определяет нужно продолжать или нет
 def should_continue(state):
@@ -375,7 +374,7 @@ workflow = StateGraph(AgentState)
 
 # Задайте две вершины, которые будут работать в цикле
 workflow.add_node("agent", call_model)
-workflow.add_node("action", call_tool)
+workflow.add_node("tools", tool_node)
 
 # Задайте точку входа `agent`
 # Точка входа указывает вершину, котора будет вызвана в первую очередь
@@ -450,7 +449,7 @@ Output from node 'agent':
 
 ---
 
-Output from node 'action':
+Output from node 'tools':
 ---
 {'messages': [FunctionMessage(content="[{'url': 'https://weatherspark.com/h/m/557/2024/1/Historical-Weather-in-January-2024-in-San-Francisco-California-United-States', 'content': 'January 2024 Weather History in San Francisco California, United States  Daily Precipitation in January 2024 in San Francisco Observed Weather in January 2024 in San Francisco  San Francisco Temperature History January 2024 Hourly Temperature in January 2024 in San Francisco  Hours of Daylight and Twilight in January 2024 in San FranciscoThis report shows the past weather for San Francisco, providing a weather history for January 2024. It features all historical weather data series we have available, including the San Francisco temperature history for January 2024. You can drill down from year to month and even day level reports by clicking on the graphs.'}]", name='tavily_search_results_json')]}
 
@@ -492,7 +491,7 @@ async for output in app.astream_log(inputs, include_types=["llm"]):
 
 ```
 content='' additional_kwargs={'function_call': {'arguments': '', 'name': 'tavily_search_results_json'}}
-content='' additional_kwargs={'function_call': {'arguments': '{\n', 'name': ''}}
+content='' additional_kwargs={'function_call': {'arguments': '{\n', 'name': ''}}}
 content='' additional_kwargs={'function_call': {'arguments': ' ', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': ' "', 'name': ''}}
 content='' additional_kwargs={'function_call': {'arguments': 'query', 'name': ''}}
@@ -667,11 +666,9 @@ from langgraph.graph import StateGraph
 
 Пример состояния:
 
-```python
-from typing import TypedDict, Annotated, Union
-from langchain_core.agents import AgentAction, AgentFinish
-import operator
+The [Conceptual Guides](https://langchain-ai.github.io/langgraph/concepts/) provide in-depth explanations of the key concepts and principles behind LangGraph, such as nodes, edges, state and more.
 
+### Reference
 
 class AgentState(TypedDict):
    # Входная строка

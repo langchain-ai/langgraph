@@ -1,8 +1,15 @@
+---
+hide_comments: true
+---
 # 🦜🕸️LangGraph
 
 [![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
 
 ⚡ Build language agents as graphs ⚡
+
+!!! note "Python version :material-language-python:"
+
+    Looking for the JS version? Click [:fontawesome-brands-square-js: here](https://github.com/langchain-ai/langgraphjs) ([:simple-readme: JS docs](https://langchain-ai.github.io/langgraphjs/)).
 
 ## Overview
 
@@ -101,6 +108,14 @@ Consult the [Tutorials](tutorials/index.md) to learn more about building with La
 ## How-To Guides
 
 Check out the [How-To Guides](how-tos/index.md) for instructions on handling common tasks with LangGraph
+
+## Reference
+
+For documentation on the core APIs, check out the [Reference](reference/graphs.md) docs.
+
+## Conceptual Guides
+
+Once you've learned the basics, if you want to further understand LangGraph's core abstractions, check out the [Conceptual Guides](./concepts/index.md).
 
 ## Why LangGraph?
 

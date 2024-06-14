@@ -4,7 +4,7 @@ import inspect
 import sys
 from contextvars import copy_context
 from functools import partial, wraps
-from typing import Any, Awaitable, Callable, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
 
 from langchain_core.runnables.base import (
     Runnable,
@@ -20,6 +20,7 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.graph import Edge, Graph, Node, is_uuid
 from langchain_core.runnables.utils import accepts_config
+from typing_extensions import TypeGuard
 
 
 # Before Python 3.11 native StrEnum is not available
@@ -72,6 +73,12 @@ class RunnableCallable(Runnable):
         return f"{self.get_name()}({', '.join(f'{k}={v!r}' for k, v in repr_args.items())})"
 
     def invoke(self, input: Any, config: Optional[RunnableConfig] = None) -> Any:
+        if self.func is None:
+            raise TypeError(
+                f'No synchronous function provided to "{self.name}".'
+                "\nEither initialize with a synchronous function or invoke"
+                " via the async API (ainvoke, astream, etc.)"
+            )
         if self.trace:
             ret = self._call_with_config(
                 self.func, input, merge_configs(self.config, config), **self.kwargs
@@ -148,6 +155,28 @@ class DrawableGraph(Graph):
         )
 
 
+def is_async_callable(
+    func: Any,
+) -> TypeGuard[Callable[..., Awaitable]]:
+    """Check if a function is async."""
+    return (
+        asyncio.iscoroutinefunction(func)
+        or hasattr(func, "__call__")
+        and asyncio.iscoroutinefunction(func.__call__)
+    )
+
+
+def is_async_generator(
+    func: Any,
+) -> TypeGuard[Callable[..., AsyncIterator]]:
+    """Check if a function is an async generator."""
+    return (
+        inspect.isasyncgenfunction(func)
+        or hasattr(func, "__call__")
+        and inspect.isasyncgenfunction(func.__call__)
+    )
+
+
 def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnable:
     """Coerce a runnable-like object into a Runnable.
 
@@ -159,10 +188,10 @@ def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnab
     """
     if isinstance(thing, Runnable):
         return thing
-    elif inspect.isasyncgenfunction(thing) or inspect.isgeneratorfunction(thing):
+    elif is_async_generator(thing) or inspect.isgeneratorfunction(thing):
         return RunnableLambda(thing, name=name)
     elif callable(thing):
-        if asyncio.iscoroutinefunction(thing):
+        if is_async_callable(thing):
             return RunnableCallable(None, thing, name=name, trace=trace)
         else:
             return RunnableCallable(

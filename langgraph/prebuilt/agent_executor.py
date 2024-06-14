@@ -43,11 +43,11 @@ def _get_agent_state(input_schema=None):
 
 @deprecated(
     "0.0.44",
-    alternative="create_tool_calling_executor",
+    alternative="create_react_agent",
     example="""
-from langgraph.prebuilt import chat_agent_executor
+from langgraph.prebuilt import create_react_agent 
 
-chat_agent_executor.create_tool_calling_executor(...)
+create_react_agent(...)
 """,
 )
 def create_agent_executor(
@@ -66,16 +66,16 @@ def create_agent_executor(
 
     Examples:
 
-        # Since this is deprecated, you should use `create_tool_calling_executor` instead.
+        # Since this is deprecated, you should use `create_react_agent` instead.
         # Example usage:
-        from langgraph.prebuilt import chat_agent_executor
+        from langgraph.prebuilt import create_react_agent
         from langchain_openai import ChatOpenAI
         from langchain_community.tools.tavily_search import TavilySearchResults
 
         tools = [TavilySearchResults(max_results=1)]
         model = ChatOpenAI()
 
-        app = chat_agent_executor.create_tool_calling_executor(model, tools)
+        app = create_react_agent(model, tools)
 
         inputs = {"messages": [("user", "what is the weather in sf")]}
         for s in app.stream(inputs):
@@ -103,33 +103,35 @@ def create_agent_executor(
         else:
             return "continue"
 
-    def run_agent(data):
-        agent_outcome = agent_runnable.invoke(data)
+    def run_agent(data, config):
+        agent_outcome = agent_runnable.invoke(data, config)
         return {"agent_outcome": agent_outcome}
 
-    async def arun_agent(data):
-        agent_outcome = await agent_runnable.ainvoke(data)
+    async def arun_agent(data, config):
+        agent_outcome = await agent_runnable.ainvoke(data, config)
         return {"agent_outcome": agent_outcome}
 
     # Define the function to execute tools
-    def execute_tools(data):
+    def execute_tools(data, config):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
         if not isinstance(agent_action, list):
             agent_action = [agent_action]
-        output = tool_executor.batch(agent_action, return_exceptions=True)
+        output = tool_executor.batch(agent_action, config, return_exceptions=True)
         return {
             "intermediate_steps": [
                 (action, str(out)) for action, out in zip(agent_action, output)
             ]
         }
 
-    async def aexecute_tools(data):
+    async def aexecute_tools(data, config):
         # Get the most recent agent_outcome - this is the key added in the `agent` above
         agent_action = data["agent_outcome"]
         if not isinstance(agent_action, list):
             agent_action = [agent_action]
-        output = await tool_executor.abatch(agent_action, return_exceptions=True)
+        output = await tool_executor.abatch(
+            agent_action, config, return_exceptions=True
+        )
         return {
             "intermediate_steps": [
                 (action, str(out)) for action, out in zip(agent_action, output)
@@ -141,7 +143,7 @@ def create_agent_executor(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableCallable(run_agent, arun_agent))
-    workflow.add_node("action", RunnableCallable(execute_tools, aexecute_tools))
+    workflow.add_node("tools", RunnableCallable(execute_tools, aexecute_tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -162,7 +164,7 @@ def create_agent_executor(
         # Based on which one it matches, that node will then be called.
         {
             # If `tools`, then we call the tool node.
-            "continue": "action",
+            "continue": "tools",
             # Otherwise we finish.
             "end": END,
         },
@@ -170,7 +172,7 @@ def create_agent_executor(
 
     # We now add a normal edge from `tools` to `agent`.
     # This means that after `tools` is called, `agent` node is called next.
-    workflow.add_edge("action", "agent")
+    workflow.add_edge("tools", "agent")
 
     # Finally, we compile it!
     # This compiles it into a LangChain Runnable,

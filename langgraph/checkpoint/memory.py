@@ -1,5 +1,6 @@
 import asyncio
 from collections import defaultdict
+from functools import partial
 from typing import AsyncIterator, Iterator, Optional
 
 from langchain_core.runnables import RunnableConfig
@@ -18,10 +19,15 @@ class MemorySaver(BaseCheckpointSaver):
 
     This checkpoint saver stores checkpoints in memory using a defaultdict.
 
+    Note:
+        Since checkpoints are saved in memory, they will be lost when the program exits.
+        Only use this saver for debugging or testing purposes.
+
     Args:
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to None.
 
     Examples:
+
             import asyncio
 
             from langgraph.checkpoint.memory import MemorySaver
@@ -107,12 +113,64 @@ class MemorySaver(BaseCheckpointSaver):
                 continue
             if limit is not None and limit <= 0:
                 break
-            limit -= 1
+            elif limit is not None:
+                limit -= 1
             yield CheckpointTuple(
                 config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                 checkpoint=self.serde.loads(checkpoint),
                 metadata=self.serde.loads(metadata),
             )
+
+    def search(
+        self,
+        metadata_filter: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        """Search for checkpoints by metadata.
+
+        This method retrieves a list of checkpoint tuples from the in-memory
+        storage based on the provided metadata filter. The metadata filter does
+        not need to contain all keys defined in the CheckpointMetadata class.
+        The checkpoints are ordered by timestamp in descending order.
+
+        Args:
+            metadata_filter (CheckpointMetadata): The metadata filter to use for searching the checkpoints.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
+            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+        """
+        for thread_id, checkpoints in self.storage.items():
+            for ts, (checkpoint_bytes, metadata_bytes) in checkpoints.items():
+                # filter by thread_ts
+                if before and ts >= before["configurable"]["thread_ts"]:
+                    continue
+
+                # check if all query key/value pairs match the metadata
+                metadata = self.serde.loads(metadata_bytes)
+                all_keys_match = all(
+                    query_value == metadata[query_key]
+                    for query_key, query_value in metadata_filter.items()
+                )
+
+                # if all query key/value pairs match, yield the checkpoint
+                if all_keys_match:
+                    # limit search results
+                    if limit is not None:
+                        if limit <= 0:
+                            break
+                        limit -= 1
+
+                    yield CheckpointTuple(
+                        config={
+                            "configurable": {"thread_id": thread_id, "thread_ts": ts}
+                        },
+                        checkpoint=self.serde.loads(checkpoint_bytes),
+                        metadata=metadata,
+                    )
 
     def put(
         self,
@@ -134,7 +192,7 @@ class MemorySaver(BaseCheckpointSaver):
         """
         self.storage[config["configurable"]["thread_id"]].update(
             {
-                checkpoint["ts"]: (
+                checkpoint["id"]: (
                     self.serde.dumps(checkpoint),
                     self.serde.dumps(metadata),
                 )
@@ -143,7 +201,7 @@ class MemorySaver(BaseCheckpointSaver):
         return {
             "configurable": {
                 "thread_id": config["configurable"]["thread_id"],
-                "thread_ts": checkpoint["ts"],
+                "thread_ts": checkpoint["id"],
             }
         }
 
@@ -163,7 +221,13 @@ class MemorySaver(BaseCheckpointSaver):
             None, self.get_tuple, config
         )
 
-    async def alist(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
+    async def alist(
+        self,
+        config: RunnableConfig,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[CheckpointTuple]:
         """Asynchronous version of list.
 
         This method is an asynchronous wrapper around list that runs the synchronous
@@ -176,12 +240,39 @@ class MemorySaver(BaseCheckpointSaver):
             AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
         """
         loop = asyncio.get_running_loop()
-        iter = loop.run_in_executor(None, self.list, config)
+        iter = await loop.run_in_executor(
+            None, partial(self.list, before=before, limit=limit), config
+        )
         while True:
-            try:
-                yield await loop.run_in_executor(None, next, iter)
-            except StopIteration:
-                return
+            # handling StopIteration exception inside coroutine won't work
+            # as expected, so using next() with default value to break the loop
+            if item := await loop.run_in_executor(None, next, iter, None):
+                yield item
+            else:
+                break
+
+    async def asearch(
+        self,
+        metadata_filter: CheckpointMetadata,
+        *,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> AsyncIterator[CheckpointTuple]:
+        """Asynchronous version of search.
+
+        This method is an asynchronous wrapper around search that runs the synchronous
+        method in a separate thread using asyncio.
+        """
+        loop = asyncio.get_running_loop()
+        iter = await loop.run_in_executor(
+            None, partial(self.search, before=before, limit=limit), metadata_filter
+        )
+
+        while True:
+            if item := await loop.run_in_executor(None, next, iter, None):
+                yield item
+            else:
+                break
 
     async def aput(
         self,
