@@ -62,7 +62,7 @@ class BaseChannel(Generic[Value, Update, C], ABC):
     # state methods
 
     @abstractmethod
-    def update(self, values: Sequence[Update]) -> None | True:
+    def update(self, values: Sequence[Update]) -> None | bool:
         """Update the channel's value with the given sequence of updates.
         The order of the updates in the sequence is arbitrary.
         This method is called by Pregel for all channels at the end of each step.
