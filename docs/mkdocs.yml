@@ -169,8 +169,8 @@ nav:
       - API Concepts: 'deploy/api_concepts.md'
       - CLI: 'deploy/cli.md'
       - SDK:
-        - Python: 'deploy/python_sdk.md'
-        - JS/TS: 'deploy/js_sdk.md'
+        - Python: 'deploy/sdk/python_sdk.md'
+        - JS/TS: 'deploy/sdk/js_sdk.md'
       - Deployment:
           - Self-Hosted: 'deploy/deployment/self_hosted.md'
           - Managed: 'deploy/deployment/managed.md'

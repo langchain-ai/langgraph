@@ -61,7 +61,7 @@ The base command for the LangGraph CLI is `langgraph`.
 
 **Usage**
 ```
-langgraph --help
+langgraph [OPTIONS] COMMAND [ARGS]
 ```
 
 ### `build`
@@ -69,7 +69,7 @@ Build LangGraph Deploy API server Docker image.
 
 **Usage**
 ```
-langgraph build -t my-image
+langgraph build [OPTIONS]
 ```
 
 **Options**
@@ -87,7 +87,7 @@ Stop LangGraph Deploy API server.
 
 **Usage**
 ```
-langgraph down
+langgraph down [OPTIONS]
 ```
 
 **Options**
@@ -106,7 +106,7 @@ Show LangGraph Deploy API server logs.
 
 **Usage**
 ```
-langgraph logs
+langgraph logs [OPTIONS]
 ```
 
 **Options**
@@ -123,7 +123,7 @@ Start LangGraph Deploy API server.
 
 **Usage**
 ```
-langgraph up
+langgraph up [OPTIONS]
 ```
 
 **Options**
