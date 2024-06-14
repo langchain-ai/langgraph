@@ -162,7 +162,20 @@ nav:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
-      - Errors: reference/errors.md    
+      - Errors: reference/errors.md
+  - 'Deploy':
+      - 'deploy/index.md'
+      - Quick Start: 'deploy/quick_start.md'
+      - API Concepts: 'deploy/api_concepts.md'
+      - CLI: 'deploy/cli.md'
+      - SDK:
+        - Python: 'deploy/python_sdk.md'
+        - JS/TS: 'deploy/js_sdk.md'
+      - Deployment:
+          - Self-Hosted: 'deploy/deployment/self_hosted.md'
+          - Managed: 'deploy/deployment/self_hosted.md'
+      - How-to Guides:
+          - Streaming: ''
   
 
 markdown_extensions:
