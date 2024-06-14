@@ -2,7 +2,8 @@ import asyncio
 import functools
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple, TypeVar
+import json
 
 import asyncpg
 from langchain_core.runnables import RunnableConfig
@@ -28,6 +29,81 @@ def not_implemented_sync_method(func: T) -> T:
             "Consider using the AsyncSqliteSaver instead."
         )
     return wrapper
+
+
+def _metadata_predicate(
+    metadata_filter: Dict[str, Any],
+) -> Tuple[Sequence[str], Sequence[Any]]:
+    """Return WHERE clause predicates for given metadata filter.
+
+    Args:
+        metadata_filter (Dict[str, Any]): A dictionary containing metadata filters.
+
+    Returns:
+        Tuple[Sequence[str], Sequence[Any]]: A tuple with WHERE clause predicates and corresponding parameter values.
+    """
+
+    def _where_value(query_value: Any) -> Tuple[str, Any]:
+        """Return tuple of operator and value for WHERE clause predicate."""
+        if query_value is None:
+            return ("IS $1", None)
+        elif isinstance(query_value, (str, int, float)):
+            return ("= $1", query_value)
+        elif isinstance(query_value, bool):
+            return ("= $1", 1 if query_value else 0)
+        elif isinstance(query_value, (dict, list)):
+            return ("= $1", json.dumps(query_value, separators=(",", ":")))
+        else:
+            return ("= $1", str(query_value))
+
+    predicates = []
+    param_values = []
+
+    for query_key, query_value in metadata_filter.items():
+        operator, param_value = _where_value(query_value)
+        predicates.append(
+            f"json_extract_path_text(metadata, '{query_key}') {operator}")
+        param_values.append(param_value)
+
+    return predicates, param_values
+
+
+def search_where(
+    config: Optional[RunnableConfig],
+    filter: Optional[Dict[str, Any]] = None,
+    before: Optional[RunnableConfig] = None,
+) -> Tuple[str, Sequence[Any]]:
+    """Return WHERE clause predicates for given config, filter, and before parameters.
+
+    Args:
+        config (Optional[RunnableConfig]): The config to use for filtering.
+        filter (Optional[Dict[str, Any]]): Additional filtering criteria.
+        before (Optional[RunnableConfig]): A config to limit results before a certain timestamp.
+
+    Returns:
+        Tuple[str, Sequence[Any]]: A tuple containing the WHERE clause and parameter values.
+    """
+    wheres = []
+    param_values = []
+
+    # Add predicate for config
+    if config is not None:
+        wheres.append("thread_id = $1")
+        param_values.append(config["configurable"]["thread_id"])
+
+    # Add predicate for additional filter
+    if filter:
+        metadata_predicates, metadata_values = _metadata_predicate(filter)
+        wheres.extend(metadata_predicates)
+        param_values.extend(metadata_values)
+
+    # Add predicate for limiting results before a certain timestamp
+    if before is not None:
+        wheres.append("thread_ts < $1")
+        param_values.append(before["configurable"]["thread_ts"])
+
+    where_clause = "WHERE " + " AND ".join(wheres) if wheres else ""
+    return where_clause, param_values
 
 
 class PostgresSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
