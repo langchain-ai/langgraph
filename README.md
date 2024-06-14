@@ -1,18 +1,8 @@
-# 🦜🕸️LangGraph
-
-![Version](https://img.shields.io/pypi/v/langgraph)
-[![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
-[![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
-[![](https://dcbadge.vercel.app/api/server/6adMQxSpJS?compact=true&style=flat)](https://discord.com/channels/1038097195422978059/1170024642245832774)
-[![Docs](https://img.shields.io/badge/docs-latest-blue)](https://langchain-ai.github.io/langgraph/)
-
-⚡ Building language agents as graphs ⚡
+# ⚡ Playbook construction ⚡
 
 ## Overview
 
-[LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs, used to create agent and multi-agent workflows. Compared to other LLM frameworks, it offers these core benefits: cycles, controllability, and persistence. LangGraph allows you to define flows that involve cycles, essential for most agentic architectures, differentiating it from DAG-based solutions. As a very low-level framework, it provides fine-grained control over both the flow and state of your application, crucial for creating reliable agents. Additionally, LangGraph includes built-in persistence, enabling advanced human-in-the-loop and memory features.
-
-LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used without LangChain.
+Inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). It can be used without LangChain.
 
 ### Key Features
 
@@ -20,47 +10,18 @@ LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [A
 - **Persistence**: Automatically save state after each step in the graph. Pause and resume the graph execution at any point to support error recovery, human-in-the-loop workflows, time travel and more.
 - **Human-in-the-Loop**: Interrupt graph execution to approve or edit next action planned by the agent.
 - **Streaming Support**: Stream outputs as they are produced by each node (including token streaming).
-- **Integration with LangChain**: LangGraph integrates seamlessly with [LangChain](https://github.com/langchain-ai/langchain/) and [LangSmith](https://docs.smith.langchain.com/) (but does not require them).
+- **Does not LangChain**
 
 
 ## Installation
 
-```shell
-pip install -U langgraph
-```
-
 ## Example
 
-One of the central concepts of LangGraph is state. Each graph execution creates a state that is passed between nodes in the graph as they execute, and each node updates this internal state with its return value after it executes. The way that the graph updates its internal state is defined by either the type of graph chosen or a custom function.
+One of the central concepts is state. Each graph execution creates a state that is passed between nodes in the graph as they execute, and each node updates this internal state with its return value after it executes. The way that the graph updates its internal state is defined by either the type of graph chosen or a custom function.
 
 Let's take a look at a simple example of an agent that can search the web using [Tavily Search API](https://tavily.com/).
 
-```shell
-pip install langchain_openai langchain_community
-```
-
-```shell
-export OPENAI_API_KEY=sk-...
-export TAVILY_API_KEY=tvly-...
-```
-
-Optionally, we can set up [LangSmith](https://docs.smith.langchain.com/) for best-in-class observability.
-
-```shell
-export LANGCHAIN_TRACING_V2="true"
-export LANGCHAIN_API_KEY=ls__...
-```
-
 ```python
-from typing import Annotated, Literal, TypedDict
-
-from langchain_core.messages import HumanMessage
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_openai import ChatOpenAI
-from langgraph.checkpoint import MemorySaver
-from langgraph.graph import END, StateGraph, MessagesState
-from langgraph.prebuilt import ToolNode
-
 
 # Define the tools for the agent to use
 tools = [TavilySearchResults(max_results=1)]
@@ -151,7 +112,7 @@ final_state["messages"][-1].content
 1. <details>
     <summary>Initialize the model and tools.</summary>
 
-    - we use `ChatOpenAI` as our LLM. **NOTE:** we need make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the `.bind_tools()` method.
+    - convert the LangChain tools into the format for OpenAI tool calling using the `.bind_tools()` method.
     - we define the tools we want to use -- a web search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
    </details>
 2. <details>
@@ -198,10 +159,3 @@ final_state["messages"][-1].content
     And as a result, we get a list of all our chat messages as output.
    </details>
 
-
-## Documentation
-
-* [Tutorials](https://langchain-ai.github.io/langgraph/tutorials/): Learn to build with LangGraph through guided examples.
-* [How-to Guides](https://langchain-ai.github.io/langgraph/how-tos/): Accomplish specific things within LangGraph, from streaming, to adding memory & persistence, to common design patterns (branching, subgraphs, etc.), these are the place to go if you want to copy and run a specific code snippet.
-* [Conceptual Guides](https://langchain-ai.github.io/langgraph/concepts/): In-depth explanations of the key concepts and principles behind LangGraph, such as nodes, edges, state and more.
-* [API Reference](https://langchain-ai.github.io/langgraph/reference/graphs/): Review important classes and methods, simple examples of how to use the graph and checkpointing APIs, higher-level prebuilt components and more.
