@@ -17,7 +17,7 @@ from typing import (
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
-from langgraph.channels.base import AsyncChannelsManager, ChannelsManager
+from langgraph.channels.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.managed.base import ConfiguredManagedValue, ManagedValue, V
 from langgraph.pregel import Pregel
 from langgraph.pregel.io import read_channels

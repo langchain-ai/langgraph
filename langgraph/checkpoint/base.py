@@ -11,14 +11,19 @@ from typing import (
     NamedTuple,
     Optional,
     TypedDict,
+    TypeVar,
+    Union,
 )
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
+from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.id import uuid6
 from langgraph.constants import Send
 from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
+
+V = TypeVar("V", int, float, str)
 
 
 # Marked as total=False to allow for future expansion.
@@ -62,13 +67,13 @@ class Checkpoint(TypedDict):
     
     Mapping from channel name to channel snapshot value.
     """
-    channel_versions: defaultdict[str, int]
+    channel_versions: dict[str, Union[str, int, float]]
     """The versions of the channels at the time of the checkpoint.
     
     The keys are channel names and the values are the logical time step
     at which the channel was last updated.
     """
-    versions_seen: defaultdict[str, defaultdict[str, int]]
+    versions_seen: defaultdict[str, dict[str, Union[str, int, float]]]
     """Map from node ID to map from channel name to version seen.
     
     This keeps track of the versions of the channels that each node has seen.
@@ -80,18 +85,14 @@ class Checkpoint(TypedDict):
     Cleared by the next checkpoint."""
 
 
-def _seen_dict():
-    return defaultdict(int)
-
-
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
         v=1,
         id=str(uuid6(clock_seq=-2)),
         ts=datetime.now(timezone.utc).isoformat(),
         channel_values={},
-        channel_versions=defaultdict(int),
-        versions_seen=defaultdict(_seen_dict),
+        channel_versions={},
+        versions_seen=defaultdict(dict),
         pending_sends=[],
     )
 
@@ -102,10 +103,10 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         ts=checkpoint["ts"],
         id=checkpoint["id"],
         channel_values=checkpoint["channel_values"].copy(),
-        channel_versions=defaultdict(int, checkpoint["channel_versions"]),
+        channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen=defaultdict(
-            _seen_dict,
-            {k: defaultdict(int, v) for k, v in checkpoint["versions_seen"].items()},
+            dict,
+            {k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         ),
         pending_sends=checkpoint.get("pending_sends", []).copy(),
     )
@@ -187,6 +188,7 @@ class BaseCheckpointSaver(ABC):
         self,
         config: Optional[RunnableConfig],
         *,
+        filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
@@ -200,3 +202,8 @@ class BaseCheckpointSaver(ABC):
         metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         raise NotImplementedError
+
+    def get_next_version(self, current: Optional[V], channel: BaseChannel) -> V:
+        """Get the next version of a channel. Default is to use int versions, incrementing by 1. If you override, you can use str/int/float versions,
+        as long as they are monotonically increasing."""
+        return current + 1 if current is not None else 1
