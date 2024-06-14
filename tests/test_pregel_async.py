@@ -29,12 +29,15 @@ from langchain_core.utils.aiter import aclosing
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
+from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, CheckpointTuple
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph, StateGraph
@@ -54,6 +57,69 @@ from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
 )
+
+
+async def test_checkpoint_errors() -> None:
+    class FaultyGetCheckpointer(MemorySaver):
+        async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+            raise ValueError("Faulty get_tuple")
+
+    class FaultyPutCheckpointer(MemorySaver):
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+        ) -> RunnableConfig:
+            raise ValueError("Faulty put")
+
+    class FaultyVersionCheckpointer(MemorySaver):
+        def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
+            raise ValueError("Faulty get_next_version")
+
+    def logic(inp: str) -> str:
+        return ""
+
+    builder = Graph()
+    builder.add_node("agent", logic)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile(checkpointer=FaultyGetCheckpointer())
+    with pytest.raises(ValueError, match="Faulty get_tuple"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty get_tuple"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty get_tuple"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+        ):
+            pass
+
+    graph = builder.compile(checkpointer=FaultyPutCheckpointer())
+    with pytest.raises(ValueError, match="Faulty put"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty put"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty put"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+        ):
+            pass
+
+    graph = builder.compile(checkpointer=FaultyVersionCheckpointer())
+    with pytest.raises(ValueError, match="Faulty get_next_version"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty get_next_version"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty get_next_version"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+        ):
+            pass
 
 
 async def test_node_cancellation_on_external_cancel() -> None:
