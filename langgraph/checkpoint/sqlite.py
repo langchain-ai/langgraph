@@ -3,12 +3,14 @@ import pickle
 import sqlite3
 import threading
 from contextlib import AbstractContextManager, contextmanager
+from hashlib import md5
 from types import TracebackType
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
+from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -430,6 +432,15 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             Use put() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
+
+    def get_next_version(self, current: Optional[str], channel: BaseChannel) -> str:
+        if current is None:
+            current_v = 1
+        else:
+            current_v = int(current.split(".")[0])
+        next_v = current_v + 1
+        next_h = md5(self.serde.dumps(channel.checkpoint())).hexdigest()
+        return f"{next_v:032}.{next_h}"
 
 
 def _metadata_predicate(

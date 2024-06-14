@@ -67,13 +67,13 @@ class Checkpoint(TypedDict):
     
     Mapping from channel name to channel snapshot value.
     """
-    channel_versions: defaultdict[str, Union[str, int, float]]
+    channel_versions: dict[str, Union[str, int, float]]
     """The versions of the channels at the time of the checkpoint.
     
     The keys are channel names and the values are the logical time step
     at which the channel was last updated.
     """
-    versions_seen: defaultdict[str, defaultdict[str, Union[str, int, float]]]
+    versions_seen: defaultdict[str, dict[str, Union[str, int, float]]]
     """Map from node ID to map from channel name to version seen.
     
     This keeps track of the versions of the channels that each node has seen.
@@ -85,18 +85,14 @@ class Checkpoint(TypedDict):
     Cleared by the next checkpoint."""
 
 
-def _seen_dict():
-    return defaultdict(int)
-
-
 def empty_checkpoint() -> Checkpoint:
     return Checkpoint(
         v=1,
         id=str(uuid6(clock_seq=-2)),
         ts=datetime.now(timezone.utc).isoformat(),
         channel_values={},
-        channel_versions=defaultdict(int),
-        versions_seen=defaultdict(_seen_dict),
+        channel_versions={},
+        versions_seen=defaultdict(dict),
         pending_sends=[],
     )
 
@@ -107,10 +103,10 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         ts=checkpoint["ts"],
         id=checkpoint["id"],
         channel_values=checkpoint["channel_values"].copy(),
-        channel_versions=defaultdict(int, checkpoint["channel_versions"]),
+        channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen=defaultdict(
-            _seen_dict,
-            {k: defaultdict(int, v) for k, v in checkpoint["versions_seen"].items()},
+            dict,
+            {k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         ),
         pending_sends=checkpoint.get("pending_sends", []).copy(),
     )
