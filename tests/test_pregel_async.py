@@ -61,7 +61,7 @@ from tests.memory_assert import (
 
 async def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(MemorySaver):
-        async def aget_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+        async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
             raise ValueError("Faulty get_tuple")
 
     class FaultyPutCheckpointer(MemorySaver):

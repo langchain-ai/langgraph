@@ -180,7 +180,7 @@ def test_graph_validation() -> None:
 
 def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(MemorySaver):
-        def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+        def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
             raise ValueError("Faulty get_tuple")
 
     class FaultyPutCheckpointer(MemorySaver):
