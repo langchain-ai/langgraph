@@ -11,6 +11,8 @@ from typing import (
     NamedTuple,
     Optional,
     TypedDict,
+    TypeVar,
+    Union,
 )
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
@@ -20,6 +22,8 @@ from langgraph.checkpoint.id import uuid6
 from langgraph.constants import Send
 from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
+
+V = TypeVar("V", int, float, str)
 
 
 # Marked as total=False to allow for future expansion.
@@ -63,13 +67,13 @@ class Checkpoint(TypedDict):
     
     Mapping from channel name to channel snapshot value.
     """
-    channel_versions: defaultdict[str, int]
+    channel_versions: defaultdict[str, Union[str, int, float]]
     """The versions of the channels at the time of the checkpoint.
     
     The keys are channel names and the values are the logical time step
     at which the channel was last updated.
     """
-    versions_seen: defaultdict[str, defaultdict[str, int]]
+    versions_seen: defaultdict[str, defaultdict[str, Union[str, int, float]]]
     """Map from node ID to map from channel name to version seen.
     
     This keeps track of the versions of the channels that each node has seen.
@@ -203,5 +207,5 @@ class BaseCheckpointSaver(ABC):
     ) -> RunnableConfig:
         raise NotImplementedError
 
-    def get_next_version(self, current: int, channel: BaseChannel) -> int:
-        return current + 1
+    def get_next_version(self, current: Optional[V], channel: BaseChannel) -> V:
+        return current + 1 if current is not None else 1

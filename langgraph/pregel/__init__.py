@@ -1593,8 +1593,8 @@ def _local_write(
     commit(writes)
 
 
-def _increment(current: int, channel: BaseChannel) -> int:
-    return current + 1
+def _increment(current: Optional[int], channel: BaseChannel) -> int:
+    return current + 1 if current is not None else 1
 
 
 def _apply_writes(
@@ -1631,7 +1631,7 @@ def _apply_writes(
                     f"Invalid update for channel {chan} with values {vals}"
                 ) from e
             checkpoint["channel_versions"][chan] = get_next_version(
-                max_version, channels[chan]
+                max_version or None, channels[chan]
             )
             updated_channels.add(chan)
     # Channels that weren't updated in this step are notified of a new step
