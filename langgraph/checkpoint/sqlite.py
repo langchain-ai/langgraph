@@ -18,6 +18,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
 )
+from langgraph.errors import EmptyChannelError
 from langgraph.serde.jsonplus import JsonPlusSerializer
 
 
@@ -435,11 +436,14 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
     def get_next_version(self, current: Optional[str], channel: BaseChannel) -> str:
         if current is None:
-            current_v = 1
+            current_v = 0
         else:
             current_v = int(current.split(".")[0])
         next_v = current_v + 1
-        next_h = md5(self.serde.dumps(channel.checkpoint())).hexdigest()
+        try:
+            next_h = md5(self.serde.dumps(channel.checkpoint())).hexdigest()
+        except EmptyChannelError:
+            next_h = ""
         return f"{next_v:032}.{next_h}"
 
 

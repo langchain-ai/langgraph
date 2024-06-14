@@ -853,6 +853,9 @@ class Pregel(
                         config,
                         -1,
                         for_execution=True,
+                        get_next_version=self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
                     )
                     # apply input writes
                     _apply_writes(
@@ -898,6 +901,9 @@ class Pregel(
                         step,
                         for_execution=True,
                         manager=run_manager,
+                        get_next_version=self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
                     )
 
                     # if no more tasks, we're done
@@ -1197,6 +1203,9 @@ class Pregel(
                         config,
                         -1,
                         for_execution=True,
+                        get_next_version=self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
                     )
                     # apply input writes
                     _apply_writes(
@@ -1239,6 +1248,9 @@ class Pregel(
                         step,
                         for_execution=True,
                         manager=run_manager,
+                        get_next_version=self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
                     )
 
                     # if no more tasks, we're done
@@ -1630,12 +1642,12 @@ def _apply_writes(
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
             try:
-                channels[chan].update(vals)
+                updated = channels[chan].update(vals)
             except InvalidUpdateError as e:
                 raise InvalidUpdateError(
                     f"Invalid update for channel {chan} with values {vals}"
                 ) from e
-            if get_next_version is not None:
+            if updated and get_next_version is not None:
                 checkpoint["channel_versions"][chan] = get_next_version(
                     max_version, channels[chan]
                 )
@@ -1643,7 +1655,10 @@ def _apply_writes(
     # Channels that weren't updated in this step are notified of a new step
     for chan in channels:
         if chan not in updated_channels:
-            channels[chan].update([])
+            if channels[chan].update([]) and get_next_version is not None:
+                checkpoint["channel_versions"][chan] = get_next_version(
+                    max_version, channels[chan]
+                )
 
 
 @overload
@@ -1655,6 +1670,7 @@ def _prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[False],
+    get_next_version: Literal[None] = None,
     manager: Literal[None] = None,
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
@@ -1669,7 +1685,8 @@ def _prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[True],
-    manager: Union[ParentRunManager, AsyncParentRunManager],
+    get_next_version: Callable[[int, BaseChannel], int],
+    manager: Union[None, ParentRunManager, AsyncParentRunManager],
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
     ...
 
@@ -1683,6 +1700,7 @@ def _prepare_next_tasks(
     step: int,
     *,
     for_execution: bool,
+    get_next_version: Union[None, Callable[[int, BaseChannel], int]] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
@@ -1810,10 +1828,18 @@ def _prepare_next_tasks(
                     )
             else:
                 tasks.append(PregelTaskDescription(name, val))
+    # Find the highest version of all channels
+    if checkpoint["channel_versions"]:
+        max_version = max(checkpoint["channel_versions"].values())
+    else:
+        max_version = None
     # Consume all channels that were read
     if for_execution:
         for chan in channels_to_consume:
-            channels[chan].consume()
+            if channels[chan].consume():
+                checkpoint["channel_versions"][chan] = get_next_version(
+                    max_version, channels[chan]
+                )
     return checkpoint, tasks
 
 
