@@ -44,13 +44,14 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
             except AttributeError:
                 pass
 
-    def update(self, values: Sequence[Value]) -> None:
+    def update(self, values: Sequence[Value]) -> bool:
         if len(values) == 0:
-            return
+            return False
         if len(values) != 1:
             raise InvalidUpdateError("LastValue can only receive one value per step.")
 
         self.value = values[-1]
+        return True
 
     def get(self) -> Value:
         try:

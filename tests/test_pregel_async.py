@@ -1,6 +1,7 @@
 import asyncio
 import json
 import operator
+import time
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -24,14 +25,19 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnablePick,
 )
+from langchain_core.utils.aiter import aclosing
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
+from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, CheckpointTuple
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph, StateGraph
@@ -51,6 +57,69 @@ from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
 )
+
+
+async def test_checkpoint_errors() -> None:
+    class FaultyGetCheckpointer(MemorySaver):
+        async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+            raise ValueError("Faulty get_tuple")
+
+    class FaultyPutCheckpointer(MemorySaver):
+        async def aput(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+        ) -> RunnableConfig:
+            raise ValueError("Faulty put")
+
+    class FaultyVersionCheckpointer(MemorySaver):
+        def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
+            raise ValueError("Faulty get_next_version")
+
+    def logic(inp: str) -> str:
+        return ""
+
+    builder = Graph()
+    builder.add_node("agent", logic)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile(checkpointer=FaultyGetCheckpointer())
+    with pytest.raises(ValueError, match="Faulty get_tuple"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty get_tuple"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty get_tuple"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+        ):
+            pass
+
+    graph = builder.compile(checkpointer=FaultyPutCheckpointer())
+    with pytest.raises(ValueError, match="Faulty put"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty put"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty put"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+        ):
+            pass
+
+    graph = builder.compile(checkpointer=FaultyVersionCheckpointer())
+    with pytest.raises(ValueError, match="Faulty get_next_version"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty get_next_version"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty get_next_version"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+        ):
+            pass
 
 
 async def test_node_cancellation_on_external_cancel() -> None:
@@ -133,6 +202,158 @@ async def test_step_timeout_on_stream_hang() -> None:
             await asyncio.sleep(0.6)
 
     assert inner_task_cancelled
+
+
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        AsyncSqliteSaver.from_conn_string(":memory:"),
+        None,
+    ],
+)
+async def test_cancel_graph_astream(
+    checkpointer: Optional[BaseCheckpointSaver],
+) -> None:
+    try:
+
+        class State(TypedDict):
+            value: int
+
+        class AwhileMaker:
+            def __init__(self) -> None:
+                self.reset()
+
+            async def __call__(self, input: State) -> Any:
+                self.started = True
+                try:
+                    await asyncio.sleep(1.5)
+                except asyncio.CancelledError:
+                    self.cancelled = True
+                    raise
+
+            def reset(self):
+                self.started = False
+                self.cancelled = False
+
+        async def alittlewhile(input: State) -> None:
+            await asyncio.sleep(0.6)
+            return {"value": 2}
+
+        awhile = AwhileMaker()
+        builder = StateGraph(State)
+        builder.add_node("awhile", awhile)
+        builder.add_node(alittlewhile)
+        builder.add_edge(START, "alittlewhile")
+        builder.add_edge("alittlewhile", "awhile")
+        graph = builder.compile(checkpointer=checkpointer)
+
+        # test interrupting astream
+        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        async with aclosing(graph.astream({"value": 1}, thread1)) as stream:
+            async for chunk in stream:
+                assert chunk == {"alittlewhile": {"value": 2}}
+                break
+
+        # node "awhile" should never start
+        assert awhile.started is False
+
+        # checkpoint with output of "alittlewhile" should not be saved
+        if checkpointer is not None:
+            state = await graph.aget_state(thread1)
+            assert state is not None
+            assert state.values == {"value": 1}
+            assert state.next == ("alittlewhile",)
+            assert state.metadata == {"source": "loop", "step": 0, "writes": None}
+    finally:
+        if getattr(checkpointer, "__aexit__", None):
+            await checkpointer.__aexit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        AsyncSqliteSaver.from_conn_string(":memory:"),
+        None,
+    ],
+)
+async def test_cancel_graph_astream_events_v2(
+    checkpointer: Optional[BaseCheckpointSaver],
+) -> None:
+    try:
+
+        class State(TypedDict):
+            value: int
+
+        class AwhileMaker:
+            def __init__(self) -> None:
+                self.reset()
+
+            async def __call__(self, input: State) -> Any:
+                self.started = True
+                try:
+                    await asyncio.sleep(1.5)
+                except asyncio.CancelledError:
+                    self.cancelled = True
+                    raise
+
+            def reset(self):
+                self.started = False
+                self.cancelled = False
+
+        async def alittlewhile(input: State) -> None:
+            await asyncio.sleep(0.6)
+            return {"value": 2}
+
+        awhile = AwhileMaker()
+        anotherwhile = AwhileMaker()
+        builder = StateGraph(State)
+        builder.add_node(alittlewhile)
+        builder.add_node("awhile", awhile)
+        builder.add_node("anotherwhile", anotherwhile)
+        builder.add_edge(START, "alittlewhile")
+        builder.add_edge("alittlewhile", "awhile")
+        builder.add_edge("awhile", "anotherwhile")
+        graph = builder.compile(checkpointer=checkpointer)
+
+        # test interrupting astream_events v2
+        got_event = False
+        thread2: RunnableConfig = {"configurable": {"thread_id": 2}}
+        async with aclosing(
+            graph.astream_events({"value": 1}, thread2, version="v2")
+        ) as stream:
+            async for chunk in stream:
+                if chunk["event"] == "on_chain_stream" and not chunk["parent_ids"]:
+                    print(time.perf_counter(), "got event out here", chunk)
+                    got_event = True
+                    assert chunk["data"]["chunk"] == {"alittlewhile": {"value": 2}}
+                    break
+
+        # did break
+        assert got_event
+
+        # node "awhile" starts but is cancelled
+        assert awhile.started is True
+        assert awhile.cancelled is True
+
+        # node "anotherwhile" should never start
+        assert anotherwhile.started is False
+
+        # checkpoint with output of "alittlewhile" should not be saved
+        if checkpointer is not None:
+            state = await graph.aget_state(thread2)
+            assert state is not None
+            assert state.values == {"value": 2}
+            assert state.next == ("awhile",)
+            assert state.metadata == {
+                "source": "loop",
+                "step": 1,
+                "writes": {"alittlewhile": {"value": 2}},
+            }
+    finally:
+        if getattr(checkpointer, "__aexit__", None):
+            await checkpointer.__aexit__(None, None, None)
 
 
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
@@ -529,7 +750,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
     assert [c async for c in app.astream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
-        {"inbox": [], "output": 4},
+        {"output": 4},
     ]
     assert [
         c async for c in app.astream({"input": 2, "inbox": 12}, stream_mode="debug")
@@ -1146,7 +1367,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
-            assert chunk == {"inbox": [], "output": 4}
+            assert chunk == {"output": 4}
         else:
             assert False, "Expected only two chunks"
     assert setup_sync.call_count == 0

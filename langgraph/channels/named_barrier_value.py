@@ -41,18 +41,24 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
         finally:
             pass
 
-    def update(self, values: Sequence[Value]) -> None:
+    def update(self, values: Sequence[Value]) -> bool:
+        updated = False
         for value in values:
             if value in self.names:
-                self.seen.add(value)
+                if value not in self.seen:
+                    self.seen.add(value)
+                    updated = True
             else:
                 raise InvalidUpdateError(f"Value {value} not in {self.names}")
+        return updated
 
     def get(self) -> Value:
         if self.seen != self.names:
             raise EmptyChannelError()
         return None
 
-    def consume(self) -> None:
+    def consume(self) -> bool:
         if self.seen == self.names:
             self.seen = set()
+            return True
+        return False

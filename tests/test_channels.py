@@ -56,13 +56,15 @@ def test_topic() -> None:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
-        channel.update(["a", "b"])
+        assert channel.update(["a", "b"])
         assert channel.get() == ["a", "b"]
-        channel.update([["c", "d"], "d"])
+        assert channel.update([["c", "d"], "d"])
         assert channel.get() == ["c", "d", "d"]
-        channel.update([])
-        assert channel.get() == []
-        channel.update(["e"])
+        assert channel.update([])
+        with pytest.raises(EmptyChannelError):
+            channel.get()
+        assert not channel.update([]), "channel already empty"
+        assert channel.update(["e"])
         assert channel.get() == ["e"]
         checkpoint = channel.checkpoint()
     with Topic(str).from_checkpoint(checkpoint) as channel:
@@ -78,13 +80,15 @@ async def test_topic_async() -> None:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
-        channel.update(["a", "b"])
+        assert channel.update(["a", "b"])
         assert channel.get() == ["a", "b"]
-        channel.update(["b", ["c", "d"], "d"])
+        assert channel.update(["b", ["c", "d"], "d"])
         assert channel.get() == ["b", "c", "d", "d"]
-        channel.update([])
-        assert channel.get() == []
-        channel.update(["e"])
+        assert channel.update([])
+        with pytest.raises(EmptyChannelError):
+            channel.get()
+        assert not channel.update([]), "channel already empty"
+        assert channel.update(["e"])
         assert channel.get() == ["e"]
         checkpoint = channel.checkpoint()
     async with Topic(str).afrom_checkpoint(checkpoint) as channel:
@@ -96,18 +100,20 @@ def test_topic_unique() -> None:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
-        channel.update(["a", "b"])
+        assert channel.update(["a", "b"])
         assert channel.get() == ["a", "b"]
-        channel.update(["b", ["c", "d"], "d"])
+        assert channel.update(["b", ["c", "d"], "d"])
         assert channel.get() == ["c", "d"], "de-dupes from current and previous steps"
-        channel.update([])
-        assert channel.get() == []
-        channel.update(["e"])
+        assert channel.update([])
+        with pytest.raises(EmptyChannelError):
+            channel.get()
+        assert not channel.update([]), "channel already empty"
+        assert channel.update(["e"])
         assert channel.get() == ["e"]
         checkpoint = channel.checkpoint()
     with Topic(str, unique=True).from_checkpoint(checkpoint) as channel:
         assert channel.get() == ["e"]
-        channel.update(["d", "f"])
+        assert channel.update(["d", "f"])
         assert channel.get() == ["f"], "de-dupes from checkpoint"
 
 
@@ -116,18 +122,20 @@ async def test_topic_unique_async() -> None:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
-        channel.update(["a", "b"])
+        assert channel.update(["a", "b"])
         assert channel.get() == ["a", "b"]
-        channel.update(["b", ["c", "d"], "d"])
+        assert channel.update(["b", ["c", "d"], "d"])
         assert channel.get() == ["c", "d"], "de-dupes from current and previous steps"
-        channel.update([])
-        assert channel.get() == []
-        channel.update(["e"])
+        assert channel.update([])
+        with pytest.raises(EmptyChannelError):
+            channel.get()
+        assert not channel.update([]), "channel already empty"
+        assert channel.update(["e"])
         assert channel.get() == ["e"]
         checkpoint = channel.checkpoint()
     async with Topic(str, unique=True).afrom_checkpoint(checkpoint) as channel:
         assert channel.get() == ["e"]
-        channel.update(["d", "f"])
+        assert channel.update(["d", "f"])
         assert channel.get() == ["f"], "de-dupes from checkpoint"
 
 
@@ -136,16 +144,16 @@ def test_topic_accumulate() -> None:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
-        channel.update(["a", "b"])
+        assert channel.update(["a", "b"])
         assert channel.get() == ["a", "b"]
-        channel.update(["b", ["c", "d"], "d"])
+        assert channel.update(["b", ["c", "d"], "d"])
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
-        channel.update([])
+        assert not channel.update([])
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
         checkpoint = channel.checkpoint()
     with Topic(str, accumulate=True).from_checkpoint(checkpoint) as channel:
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
-        channel.update(["e"])
+        assert channel.update(["e"])
         assert channel.get() == ["a", "b", "b", "c", "d", "d", "e"]
 
 
@@ -154,16 +162,16 @@ async def test_topic_accumulate_async() -> None:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
-        channel.update(["a", "b"])
+        assert channel.update(["a", "b"])
         assert channel.get() == ["a", "b"]
-        channel.update(["b", ["c", "d"], "d"])
+        assert channel.update(["b", ["c", "d"], "d"])
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
-        channel.update([])
+        assert not channel.update([])
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
         checkpoint = channel.checkpoint()
     async with Topic(str, accumulate=True).afrom_checkpoint(checkpoint) as channel:
         assert channel.get() == ["a", "b", "b", "c", "d", "d"]
-        channel.update(["e"])
+        assert channel.update(["e"])
         assert channel.get() == ["a", "b", "b", "c", "d", "d", "e"]
 
 
@@ -172,18 +180,19 @@ def test_topic_unique_accumulate() -> None:
         assert channel.ValueType is Sequence[str]
         assert channel.UpdateType is Union[str, list[str]]
 
-        channel.update(["a", "b"])
+        assert channel.update(["a", "b"])
         assert channel.get() == ["a", "b"]
-        channel.update(["b", ["c", "d"], "d"])
+        assert channel.update(["b", ["c", "d"], "d"])
         assert channel.get() == ["a", "b", "c", "d"]
-        channel.update([])
+        assert not channel.update(["c"]), "no new values"
+        assert not channel.update([])
         assert channel.get() == ["a", "b", "c", "d"]
         checkpoint = channel.checkpoint()
     with Topic(str, unique=True, accumulate=True).from_checkpoint(
         checkpoint
     ) as channel:
         assert channel.get() == ["a", "b", "c", "d"]
-        channel.update(["d", "e"])
+        assert channel.update(["d", "e"])
         assert channel.get() == ["a", "b", "c", "d", "e"]
 
 

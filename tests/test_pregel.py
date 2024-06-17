@@ -30,10 +30,17 @@ from langsmith import traceable
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
+from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.checkpoint.base import (
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+)
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
@@ -169,6 +176,45 @@ def test_graph_validation() -> None:
     graph.add_edge("start", "__end__")
     with pytest.raises(ValueError, match="Found edge starting at unknown node "):
         graph.compile()
+
+
+def test_checkpoint_errors() -> None:
+    class FaultyGetCheckpointer(MemorySaver):
+        def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+            raise ValueError("Faulty get_tuple")
+
+    class FaultyPutCheckpointer(MemorySaver):
+        def put(
+            self,
+            config: RunnableConfig,
+            checkpoint: Checkpoint,
+            metadata: CheckpointMetadata,
+        ) -> RunnableConfig:
+            raise ValueError("Faulty put")
+
+    class FaultyVersionCheckpointer(MemorySaver):
+        def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
+            raise ValueError("Faulty get_next_version")
+
+    def logic(inp: str) -> str:
+        return ""
+
+    builder = Graph()
+    builder.add_node("agent", logic)
+    builder.set_entry_point("agent")
+    builder.set_finish_point("agent")
+
+    graph = builder.compile(checkpointer=FaultyGetCheckpointer())
+    with pytest.raises(ValueError, match="Faulty get_tuple"):
+        graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
+
+    graph = builder.compile(checkpointer=FaultyPutCheckpointer())
+    with pytest.raises(ValueError, match="Faulty put"):
+        graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
+
+    graph = builder.compile(checkpointer=FaultyVersionCheckpointer())
+    with pytest.raises(ValueError, match="Faulty get_next_version"):
+        graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
 
 
 def test_reducer_before_first_node() -> None:
@@ -619,7 +665,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     ]
     assert [*app.stream({"input": 2, "inbox": 12})] == [
         {"inbox": [3], "output": 13},
-        {"inbox": [], "output": 4},
+        {"output": 4},
     ]
     assert [*app.stream({"input": 2, "inbox": 12}, stream_mode="debug")] == [
         {
@@ -1216,7 +1262,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
-            assert chunk == {"inbox": [], "output": 4}
+            assert chunk == {"output": 4}
         else:
             assert False, "Expected only two chunks"
     assert cleanup.call_count == 1, "Expected cleanup to be called once"
