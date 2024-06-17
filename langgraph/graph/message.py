@@ -1,4 +1,3 @@
-from itertools import filterfalse
 import uuid
 from typing import Annotated, Literal, TypedDict, Union
 
@@ -8,17 +7,19 @@ from langchain_core.messages import (
     convert_to_messages,
     message_chunk_to_message,
 )
+from langchain_core.messages.base import BaseMessage
 
 from langgraph.graph.state import StateGraph
 
-
-class MessageModifier(TypedDict):
-    id: str
-    action: Literal["delete"] = "delete"
-
-
-Message = Union[MessageLikeRepresentation, MessageModifier]
 Messages = Union[list[MessageLikeRepresentation], MessageLikeRepresentation]
+
+
+class DeleteMessage(BaseMessage):
+    id: str
+    type: Literal["delete"] = "delete"
+
+    def __init__(self, **kwargs):
+        return super().__init__("delete-message", **kwargs)
 
 
 def add_messages(left: Messages, right: Messages) -> Messages:
@@ -72,10 +73,6 @@ def add_messages(left: Messages, right: Messages) -> Messages:
         left = [left]
     if not isinstance(right, list):
         right = [right]
-
-    is_modifier = lambda m: isinstance(m, dict) and m.get("action")
-    message_modifiers = list(filter(is_modifier, right))
-    right = list(filterfalse(is_modifier, right))
     # coerce to message
     left = [message_chunk_to_message(m) for m in convert_to_messages(left)]
     right = [message_chunk_to_message(m) for m in convert_to_messages(right)]
@@ -87,26 +84,21 @@ def add_messages(left: Messages, right: Messages) -> Messages:
         if m.id is None:
             m.id = str(uuid.uuid4())
     # merge
-    existing_idx_by_id = {m.id: i for i, m in enumerate(left)}
+    left_idx_by_id = {m.id: i for i, m in enumerate(left)}
     merged = left.copy()
     for m in right:
-        if (existing_idx := existing_idx_by_id.get(m.id)) is not None:
-            merged[existing_idx] = m
+        if (existing_idx := left_idx_by_id.get(m.id)) is not None:
+            if isinstance(m, DeleteMessage):
+                del merged[existing_idx]
+            else:
+                merged[existing_idx] = m
         else:
-            existing_idx_by_id[m.id] = len(merged)
+            if isinstance(m, DeleteMessage):
+                raise ValueError(
+                    f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
+                )
+
             merged.append(m)
-
-    for modifier in message_modifiers:
-        if (existing_idx := existing_idx_by_id.get(modifier["id"])) is None:
-            raise ValueError(
-                f"Attempting to modify a message with an ID that doesn't exist ('{modifier['id']}')"
-            )
-
-        if modifier["action"] == "delete":
-            del merged[existing_idx]
-        else:
-            raise ValueError(f"Unsupported modifier action '{modifier['action']}'")
-
     return merged
 
 
