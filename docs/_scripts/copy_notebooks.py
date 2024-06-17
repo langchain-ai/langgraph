@@ -29,6 +29,7 @@ _MANUAL = {
         "configuration.ipynb",
         "map-reduce.ipynb",
         "extraction/retries.ipynb",
+        "create-react-agent.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",
