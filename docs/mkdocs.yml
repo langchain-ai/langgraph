@@ -132,6 +132,7 @@ nav:
               - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
           - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
           - Competitive Programming: tutorials/usaco/usaco.ipynb
+          - SQL: tutorials/sql-agent.ipynb
 
   - "How-to Guides":
      - 'how-tos/index.md'
