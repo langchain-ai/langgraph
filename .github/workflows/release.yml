@@ -133,7 +133,7 @@ jobs:
             "$PKG_NAME==$VERSION"
 
       - name: Run unit tests
-        run: make tests
+        run: make test
 
   publish:
     needs:
