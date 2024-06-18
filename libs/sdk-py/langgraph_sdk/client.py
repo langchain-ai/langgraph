@@ -19,7 +19,6 @@ from langgraph_sdk.schema import (
     Metadata,
     MultitaskStrategy,
     Run,
-    RunEvent,
     StreamMode,
     Thread,
     ThreadState,
@@ -231,11 +230,13 @@ class AssistantsClient:
         assistant_id: Optional[str] = None,
     ) -> Assistant:
         """Create a new assistant."""
-        payload = {
-            "metadata": metadata,
+        payload: Dict[str, Any] = {
             "graph_id": graph_id,
-            "config": config or {},
         }
+        if config:
+            payload["config"] = config
+        if metadata:
+            payload["metadata"] = metadata
         if assistant_id:
             payload["assistant_id"] = assistant_id
         return await self.http.post("/assistants", json=payload)
@@ -249,9 +250,16 @@ class AssistantsClient:
         metadata: Metadata = None,
     ) -> Assistant:
         """Update an assistant."""
+        payload: Dict[str, Any] = {}
+        if graph_id:
+            payload["graph_id"] = graph_id
+        if config:
+            payload["config"] = config
+        if metadata:
+            payload["metadata"] = metadata
         return await self.http.patch(
             f"/assistants/{assistant_id}",
-            json={"metadata": metadata, "graph_id": graph_id, "config": config},
+            json=payload,
         )
 
     async def delete(
@@ -264,10 +272,16 @@ class AssistantsClient:
     async def search(
         self, *, metadata: Metadata = None, limit: int = 10, offset: int = 0
     ) -> list[Assistant]:
+        payload: Dict[str, Any] = {
+            "limit": limit,
+            "offset": offset,
+        }
+        if metadata:
+            payload["metadata"] = metadata
         """Search for assistants."""
         return await self.http.post(
             "/assistants/search",
-            json={"metadata": metadata, "limit": limit, "offset": offset},
+            json=payload,
         )
 
 
@@ -286,12 +300,14 @@ class ThreadsClient:
         thread_id: Optional[str] = None,
     ) -> Thread:
         """Create a new thread."""
-        payload: Dict[str, Any] = {"metadata": metadata}
+        payload: Dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
+        if metadata:
+            payload["metadata"] = metadata
         return await self.http.post("/threads", json=payload)
 
-    async def update(self, thread_id: str, *, metadata: Metadata = None) -> Thread:
+    async def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:
         """Update a thread."""
         return await self.http.patch(
             f"/threads/{thread_id}", json={"metadata": metadata}
@@ -305,9 +321,15 @@ class ThreadsClient:
         self, *, metadata: Metadata = None, limit: int = 10, offset: int = 0
     ) -> list[Thread]:
         """Search for threads."""
+        payload: Dict[str, Any] = {
+            "limit": limit,
+            "offset": offset,
+        }
+        if metadata:
+            payload["metadata"] = metadata
         return await self.http.post(
             "/threads/search",
-            json={"metadata": metadata, "limit": limit, "offset": offset},
+            json=payload,
         )
 
     async def get_state(
@@ -328,10 +350,14 @@ class ThreadsClient:
         checkpoint_id: Optional[str] = None,
     ) -> None:
         """Update the state of a thread."""
-        return await self.http.post(
-            f"/threads/{thread_id}/state",
-            json={"values": values, "checkpoint_id": checkpoint_id, "as_node": as_node},
-        )
+        payload: Dict[str, Any] = {
+            "values": values,
+        }
+        if checkpoint_id:
+            payload["checkpoint_id"] = checkpoint_id
+        if as_node:
+            payload["as_node"] = as_node
+        return await self.http.post(f"/threads/{thread_id}/state", json=payload)
 
     async def patch_state(
         self,
@@ -356,10 +382,14 @@ class ThreadsClient:
         metadata: Optional[dict] = None,
     ) -> list[ThreadState]:
         """Get the history of a thread."""
-        return await self.http.post(
-            f"/threads/{thread_id}/history",
-            json={"limit": limit, "before": before, "metadata": metadata},
-        )
+        payload: Dict[str, Any] = {
+            "limit": limit,
+        }
+        if before:
+            payload["before"] = before
+        if metadata:
+            payload["metadata"] = metadata
+        return await self.http.post(f"/threads/{thread_id}/history", json=payload)
 
 
 class RunsClient:
@@ -426,16 +456,16 @@ class RunsClient:
             "interrupt_after": interrupt_after,
             "feedback_keys": feedback_keys,
             "checkpoint_id": checkpoint_id,
+            "multitask_strategy": multitask_strategy,
         }
-        if multitask_strategy:
-            payload["multitask_strategy"] = multitask_strategy
-
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
             if thread_id is not None
             else "/runs/stream"
         )
-        return self.http.stream(endpoint, "POST", json=payload)
+        return self.http.stream(
+            endpoint, "POST", json={k: v for k, v in payload.items() if v is not None}
+        )
 
     @overload
     async def create(
@@ -493,9 +523,9 @@ class RunsClient:
             "interrupt_after": interrupt_after,
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
+            "multitask_strategy": multitask_strategy,
         }
-        if multitask_strategy:
-            payload["multitask_strategy"] = multitask_strategy
+        payload = {k: v for k, v in payload.items() if v is not None}
         if thread_id:
             return await self.http.post(f"/threads/{thread_id}/runs", json=payload)
         else:
@@ -553,20 +583,22 @@ class RunsClient:
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "checkpoint_id": checkpoint_id,
+            "multitask_strategy": multitask_strategy,
         }
-        if multitask_strategy:
-            payload["multitask_strategy"] = multitask_strategy
-
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
         )
-        return await self.http.post(endpoint, json=payload)
+        return await self.http.post(
+            endpoint, json={k: v for k, v in payload.items() if v is not None}
+        )
 
     async def list(
         self, thread_id: str, *, limit: int = 10, offset: int = 0
     ) -> List[Run]:
         """List runs."""
-        return await self.http.get(f"/threads/{thread_id}/runs")
+        return await self.http.get(
+            f"/threads/{thread_id}/runs?limit={limit}&offset={offset}"
+        )
 
     async def get(self, thread_id: str, run_id: str) -> Run:
         """Get a run."""
@@ -582,12 +614,6 @@ class RunsClient:
     async def join(self, thread_id: str, run_id: str) -> None:
         """Block until a run is done."""
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
-
-    async def list_events(
-        self, thread_id: str, run_id: str, *, limit: int = 10, offset: int = 0
-    ) -> List[RunEvent]:
-        """List run events."""
-        return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/events")
 
     async def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run."""

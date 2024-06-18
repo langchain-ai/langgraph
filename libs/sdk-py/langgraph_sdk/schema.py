@@ -105,24 +105,3 @@ class Run(TypedDict):
     """The status of the run. One of 'pending', 'running', 'error', 'success'."""
     metadata: Metadata
     """The run metadata."""
-
-
-class RunEvent(TypedDict):
-    event_id: str
-    """The ID of the event."""
-    run_id: str
-    """The ID of the run."""
-    received_at: datetime
-    """The time the event was received."""
-    span_id: str
-    """The ID of the span."""
-    event: str
-    """The event type."""
-    name: str
-    """The event name."""
-    data: dict
-    """The event data."""
-    metadata: dict
-    """The event metadata."""
-    tags: list[str]
-    """The event tags."""

@@ -6,7 +6,6 @@ import {
   GraphSchema,
   Metadata,
   Run,
-  RunEvent,
   Thread,
   ThreadState,
 } from "./schema.js";
@@ -641,38 +640,6 @@ class RunsClient extends BaseClient {
    */
   async join(threadId: string, runId: string): Promise<void> {
     return this.fetch<void>(`/threads/${threadId}/runs/${runId}/join`);
-  }
-
-  /**
-   * List all events for a run.
-   *
-   * @param threadId The ID of the thread.
-   * @param runId The ID of the run.
-   * @param options Filtering and pagination options.
-   * @returns List of events.
-   */
-  async listEvents(
-    threadId: string,
-    runId: string,
-    options?: {
-      /**
-       * Maximum number of events to return.
-       * Defaults to 10
-       */
-      limit?: number;
-      /**
-       * Offset to start from.
-       * Defaults to 0.
-       */
-      offset?: number;
-    },
-  ): Promise<RunEvent[]> {
-    return this.fetch<RunEvent[]>(`/threads/${threadId}/runs/${runId}/events`, {
-      params: {
-        limit: options?.limit ?? 10,
-        offset: options?.offset ?? 0,
-      },
-    });
   }
 
   /**

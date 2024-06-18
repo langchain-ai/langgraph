@@ -8,7 +8,6 @@ export type {
   GraphSchema,
   Metadata,
   Run,
-  RunEvent,
   Thread,
   ThreadState,
 } from "./schema.js";

@@ -94,15 +94,3 @@ export interface Run {
     | "interrupted";
   metadata: Metadata;
 }
-
-export interface RunEvent {
-  event_id: string;
-  run_id: string;
-  received_at: string;
-  span_id: string;
-  event: string;
-  name: string;
-  data: Record<string, unknown>;
-  metadata: Record<string, unknown>;
-  tags: string[];
-}
