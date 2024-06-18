@@ -51,9 +51,9 @@ class RetryPolicy(NamedTuple):
     """Maximum number of attempts to make before giving up, including the first."""
     jitter: bool = True
     """Whether to add random jitter to the interval between retries."""
-    retry_on: Union[tuple[Exception, ...], Callable[[Exception], bool]] = (
-        default_retry_on
-    )
+    retry_on: Union[
+        tuple[Exception, ...], Callable[[Exception], bool]
+    ] = default_retry_on
     """List of exceptions that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 

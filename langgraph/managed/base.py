@@ -63,7 +63,8 @@ class ManagedValue(ABC, Generic[V]):
                 pass
 
     @abstractmethod
-    def __call__(self, step: int, task: PregelTaskDescription) -> V: ...
+    def __call__(self, step: int, task: PregelTaskDescription) -> V:
+        ...
 
 
 class ConfiguredManagedValue(NamedTuple):
