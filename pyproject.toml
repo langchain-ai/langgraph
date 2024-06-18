@@ -2,7 +2,7 @@
 name = "langgraph-monorepo"
 version = "0.0.1"
 description = "LangGraph monorepo"
-authors = ["Your Name <you@example.com>"]
+authors = []
 license = "MIT"
 readme = "README.md"
 
