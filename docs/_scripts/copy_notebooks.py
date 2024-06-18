@@ -95,7 +95,7 @@ def copy_notebooks():
             continue
         if any(path in _HOW_TOS for path in root.split(os.sep)):
             dst_dir = how_tos_dir
-        elif 'cloud_examples' in root.split(os.sep):
+        elif "cloud_examples" in root.split(os.sep):
             dst_dir = cloud_how_tos_dir
         else:
             dst_dir = tutorials_dir
@@ -143,6 +143,7 @@ def copy_notebooks():
     #         src_path = os.path.join(examples_dir, file)
     #         dst_path = os.path.join(docs_dir, "how-tos", file.name)
     #         shutil.copy(src_path, dst_path)
+
 
 if __name__ == "__main__":
     clean_notebooks()
