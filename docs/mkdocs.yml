@@ -163,7 +163,7 @@ nav:
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
       - Errors: reference/errors.md
-  - 'Deploy':
+  - 'Cloud':
       - 'deploy/index.md'
       - Quick Start: 'deploy/quick_start.md'
       - API Concepts: 'deploy/api_concepts.md'
@@ -175,8 +175,16 @@ nav:
           - Self-Hosted: 'deploy/deployment/self_hosted.md'
           - Managed: 'deploy/deployment/managed.md'
       - How-to Guides:
-          - Streaming: ''
-  
+          - Streaming:
+              - Stream Messaages: 'deploy/how_tos/stream_messages.ipynb'
+              - Stream Values: 'deploy/how_tos/stream_values.ipynb'
+              - Stream Updates: 'deploy/how_tos/stream_updates.ipynb'
+          - Double Texting: 'deploy/how_tos/double_texting.ipynb'
+          - Run Agent in Background: 'deploy/how_tos/background_run.ipynb'
+          - Run Multiple Agents in Thread: 'deploy/how_tos/same-thread.ipynb'
+          - Human in the loop: 'deploy/how_tos/human-in-the-loop.ipynb'
+          - Create Agents with Configuration: 'deploy/how_tos/configuration.ipynb''
+
 
 markdown_extensions:
   - abbr
