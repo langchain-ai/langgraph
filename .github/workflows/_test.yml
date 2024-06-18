@@ -1,9 +1,7 @@
 name: test
 
 on:
-  push:
-    branches: [main]
-  pull_request:
+  workflow_call:
 
 env:
   POETRY_VERSION: "1.7.1"
