@@ -35,7 +35,7 @@ jobs:
         with:
           python-version: 3.12
           cache: poetry
-          cache-dependency-path: "poetry.lock"
+          cache-dependency-path: "libs/langgraph/poetry.lock"
 
       - name: Poetry install
         run: |
