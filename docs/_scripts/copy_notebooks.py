@@ -8,6 +8,7 @@ examples_dir = root_dir / "examples"
 docs_dir = root_dir / "docs/docs"
 how_tos_dir = docs_dir / "how-tos"
 tutorials_dir = docs_dir / "tutorials"
+cloud_how_tos_dir = docs_dir / "deploy/how_tos"
 
 _MANUAL = {
     "how-tos": [
@@ -94,6 +95,8 @@ def copy_notebooks():
             continue
         if any(path in _HOW_TOS for path in root.split(os.sep)):
             dst_dir = how_tos_dir
+        elif 'cloud_examples' in root.split(os.sep):
+            dst_dir = cloud_how_tos_dir
         else:
             dst_dir = tutorials_dir
         for file in files:
@@ -116,7 +119,6 @@ def copy_notebooks():
                         )
                         print(f"Overriding: {src_path} to {dst_path}")
                         break
-
                 # Avoid double nesting.
                 dst_path = dst_path.replace("tutorials/tutorials", "tutorials").replace(
                     "how-tos/how-tos", "how-tos"
@@ -141,7 +143,6 @@ def copy_notebooks():
     #         src_path = os.path.join(examples_dir, file)
     #         dst_path = os.path.join(docs_dir, "how-tos", file.name)
     #         shutil.copy(src_path, dst_path)
-
 
 if __name__ == "__main__":
     clean_notebooks()
