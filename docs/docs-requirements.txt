@@ -1,9 +1,0 @@
-mkdocs
-mkdocstrings
-mkdocstrings-python
-mkdocs-jupyter
-mkdocs-redirects
-mkdocs-minify-plugin
-mkdocs-rss-plugin
-mkdocs-git-committers-plugin-2
-mkdocs-material[imaging]
