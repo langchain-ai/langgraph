@@ -176,14 +176,14 @@ nav:
           - Managed: 'deploy/deployment/managed.md'
       - How-to Guides:
           - Streaming:
-              - Stream Messaages: 'deploy/how_tos/stream_messages.ipynb'
-              - Stream Values: 'deploy/how_tos/stream_values.ipynb'
-              - Stream Updates: 'deploy/how_tos/stream_updates.ipynb'
-          - Double Texting: 'deploy/how_tos/double_texting.ipynb'
-          - Run Agent in Background: 'deploy/how_tos/background_run.ipynb'
-          - Run Multiple Agents in Thread: 'deploy/how_tos/same-thread.ipynb'
-          - Human in the loop: 'deploy/how_tos/human-in-the-loop.ipynb'
-          - Create Agents with Configuration: 'deploy/how_tos/configuration.ipynb''
+              - Stream Messaages: 'deploy/how_tos/cloud_examples/stream_messages.ipynb'
+              - Stream Values: 'deploy/how_tos/cloud_examples/stream_values.ipynb'
+              - Stream Updates: 'deploy/how_tos/cloud_examples/stream_updates.ipynb'
+          - Double Texting: 'deploy/how_tos/cloud_examples/double_texting.ipynb'
+          - Run Agent in Background: 'deploy/how_tos/cloud_examples/background_run.ipynb'
+          - Run Multiple Agents in Thread: 'deploy/how_tos/cloud_examples/same-thread.ipynb'
+          - Human in the loop: 'deploy/how_tos/cloud_examples/human-in-the-loop_cloud.ipynb'
+          - Create Agents with Configuration: 'deploy/how_tos/cloud_examples/configuration_cloud.ipynb'
 
 
 markdown_extensions:
