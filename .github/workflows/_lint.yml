@@ -2,6 +2,11 @@ name: lint
 
 on:
   workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+        description: "From which folder this pipeline executes"
 
 env:
   POETRY_VERSION: "1.7.1"
@@ -32,14 +37,17 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: ${{ inputs.working-directory }}
           cache-key: lint-with-extras
 
       - name: Check Poetry File
         shell: bash
+        working-directory: ${{ inputs.working-directory }}
         run: poetry check
 
       - name: Check lock file
         shell: bash
+        working-directory: ${{ inputs.working-directory }}
         run: poetry lock --check
 
       - name: Install dependencies
@@ -51,6 +59,7 @@ jobs:
         # If you change this configuration, make sure to change the `cache-key`
         # in the `poetry_setup` action above to stop using the old cache.
         # It doesn't matter how you change it, any change will cause a cache-bust.
+        working-directory: ${{ inputs.working-directory }}
         run: poetry install --with test
 
       - name: Get .mypy_cache to speed up mypy
@@ -58,11 +67,13 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
         with:
+          working-directory: ${{ inputs.working-directory }}
           path: |
             ./.mypy_cache
           key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ hashFiles('./poetry.lock') }}
 
       - name: Analysing the code with our lint
+        working-directory: ${{ inputs.working-directory }}
         run: |
           make lint_package
 
@@ -75,6 +86,7 @@ jobs:
         # If you change this configuration, make sure to change the `cache-key`
         # in the `poetry_setup` action above to stop using the old cache.
         # It doesn't matter how you change it, any change will cause a cache-bust.
+        working-directory: ${{ inputs.working-directory }}
         run: |
           poetry install --with test
 
@@ -83,9 +95,11 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
         with:
+          working-directory: ${{ inputs.working-directory }}
           path: ./.mypy_cache_test
           key: mypy-test-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ hashFiles('./poetry.lock') }}
 
       - name: Analysing the code with our lint
+        working-directory: ${{ inputs.working-directory }}
         run: |
           make lint_tests

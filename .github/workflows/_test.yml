@@ -2,6 +2,11 @@ name: test
 
 on:
   workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+        description: "From which folder this pipeline executes"
 
 env:
   POETRY_VERSION: "1.7.1"
@@ -25,19 +30,23 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: ${{ inputs.working-directory }}
           cache-key: core
 
       - name: Install dependencies
         shell: bash
+        working-directory: ${{ inputs.working-directory }}
         run: poetry install --with test
 
       - name: Run core tests
         shell: bash
+        working-directory: ${{ inputs.working-directory }}
         run: |
           make test
 
       - name: Ensure the tests did not create any additional files
         shell: bash
+        working-directory: ${{ inputs.working-directory }}
         run: |
           set -eu
 
