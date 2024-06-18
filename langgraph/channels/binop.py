@@ -85,15 +85,15 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
             except AttributeError:
                 pass
 
-    def update(self, values: Sequence[Value]) -> None:
+    def update(self, values: Sequence[Value]) -> bool:
         if not values:
-            return
+            return False
         if not hasattr(self, "value"):
             self.value = values[0]
             values = values[1:]
-
         for value in values:
             self.value = self.operator(self.value, value)
+        return True
 
     def get(self) -> Value:
         try:

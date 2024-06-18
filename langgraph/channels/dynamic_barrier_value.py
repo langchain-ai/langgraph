@@ -59,27 +59,34 @@ class DynamicBarrierValue(
         finally:
             pass
 
-    def update(self, values: Sequence[Union[Value, WaitForNames]]) -> None:
+    def update(self, values: Sequence[Union[Value, WaitForNames]]) -> bool:
         if wait_for_names := [v for v in values if isinstance(v, WaitForNames)]:
             if len(wait_for_names) > 1:
                 raise InvalidUpdateError(
                     "Received multiple WaitForNames updates in the same step."
                 )
             self.names = wait_for_names[0].names
+            return True
         elif self.names is not None:
+            updated = False
             for value in values:
                 assert not isinstance(value, WaitForNames)
                 if value in self.names:
-                    self.seen.add(value)
+                    if value not in self.seen:
+                        self.seen.add(value)
+                        updated = True
                 else:
                     raise InvalidUpdateError(f"Value {value} not in {self.names}")
+            return updated
 
     def get(self) -> Value:
         if self.seen != self.names:
             raise EmptyChannelError()
         return None
 
-    def consume(self) -> None:
+    def consume(self) -> bool:
         if self.seen == self.names:
             self.seen = set()
             self.names = None
+            return True
+        return False

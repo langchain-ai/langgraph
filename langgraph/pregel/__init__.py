@@ -52,10 +52,12 @@ from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import Self
 
 from langgraph.channels.base import (
-    AsyncChannelsManager,
     BaseChannel,
-    ChannelsManager,
     EmptyChannelError,
+)
+from langgraph.channels.manager import (
+    AsyncChannelsManager,
+    ChannelsManager,
     create_checkpoint,
 )
 from langgraph.checkpoint.base import (
@@ -564,7 +566,9 @@ class Pregel(
                 ),
             )
             # apply to checkpoint and save
-            _apply_writes(checkpoint, channels, task.writes)
+            _apply_writes(
+                checkpoint, channels, task.writes, self.checkpointer.get_next_version
+            )
             step = saved.metadata.get("step", -2) + 1 if saved else -1
 
             # merge configurable fields with previous checkpoint config
@@ -650,7 +654,9 @@ class Pregel(
                 ),
             )
             # apply to checkpoint and save
-            _apply_writes(checkpoint, channels, task.writes)
+            _apply_writes(
+                checkpoint, channels, task.writes, self.checkpointer.get_next_version
+            )
             step = saved.metadata.get("step", -2) + 1 if saved else -1
 
             # merge configurable fields with previous checkpoint config
@@ -847,9 +853,19 @@ class Pregel(
                         config,
                         -1,
                         for_execution=True,
+                        get_next_version=self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
                     )
                     # apply input writes
-                    _apply_writes(checkpoint, channels, input_writes)
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        input_writes,
+                        self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
+                    )
                     # save input checkpoint
                     yield from put_checkpoint(
                         {
@@ -865,8 +881,9 @@ class Pregel(
                     # past previous interrupt, if any
                     checkpoint = copy_checkpoint(checkpoint)
                     for k in self.stream_channels_list:
-                        version = checkpoint["channel_versions"][k]
-                        checkpoint["versions_seen"][INTERRUPT][k] = version
+                        if k in checkpoint["channel_versions"]:
+                            version = checkpoint["channel_versions"][k]
+                            checkpoint["versions_seen"][INTERRUPT][k] = version
 
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -884,6 +901,9 @@ class Pregel(
                         step,
                         for_execution=True,
                         manager=run_manager,
+                        get_next_version=self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
                     )
 
                     # if no more tasks, we're done
@@ -975,7 +995,14 @@ class Pregel(
                         )
 
                     # apply writes to channels
-                    _apply_writes(checkpoint, channels, pending_writes)
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        pending_writes,
+                        self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
+                    )
 
                     # yield values output
                     if "values" in stream_modes:
@@ -1176,9 +1203,19 @@ class Pregel(
                         config,
                         -1,
                         for_execution=True,
+                        get_next_version=self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
                     )
                     # apply input writes
-                    _apply_writes(checkpoint, channels, input_writes)
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        input_writes,
+                        self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
+                    )
                     # save input checkpoint
                     for chunk in put_checkpoint(
                         {"source": "input", "step": start, "writes": input}
@@ -1191,8 +1228,9 @@ class Pregel(
                     # past previous interrupt, if any
                     checkpoint = copy_checkpoint(checkpoint)
                     for k in self.stream_channels_list:
-                        version = checkpoint["channel_versions"][k]
-                        checkpoint["versions_seen"][INTERRUPT][k] = version
+                        if k in checkpoint["channel_versions"]:
+                            version = checkpoint["channel_versions"][k]
+                            checkpoint["versions_seen"][INTERRUPT][k] = version
 
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -1210,6 +1248,9 @@ class Pregel(
                         step,
                         for_execution=True,
                         manager=run_manager,
+                        get_next_version=self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
                     )
 
                     # if no more tasks, we're done
@@ -1304,7 +1345,14 @@ class Pregel(
                         )
 
                     # apply writes to channels
-                    _apply_writes(checkpoint, channels, pending_writes)
+                    _apply_writes(
+                        checkpoint,
+                        channels,
+                        pending_writes,
+                        self.checkpointer.get_next_version
+                        if self.checkpointer
+                        else _increment,
+                    )
 
                     # yield current values
                     if "values" in stream_modes:
@@ -1360,7 +1408,7 @@ class Pregel(
             except NameError:
                 pass
             # wait for all background tasks to finish
-            await asyncio.gather(*bg)
+            await asyncio.shield(asyncio.gather(*bg))
 
     def invoke(
         self,
@@ -1503,12 +1551,15 @@ def _should_interrupt(
     snapshot_channels: Sequence[str],
     tasks: list[PregelExecutableTask],
 ) -> bool:
+    version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
+    null_version = version_type()
     # defaultdicts are mutated on access :( so we need to copy
-    seen = checkpoint["versions_seen"].copy()[INTERRUPT].copy()
+    seen = checkpoint["versions_seen"].copy()[INTERRUPT]
     return (
         # interrupt if any of snapshopt_channels has been updated since last interrupt
         any(
-            checkpoint["channel_versions"][chan] > seen[chan]
+            checkpoint["channel_versions"].get(chan, null_version)
+            > seen.get(chan, null_version)
             for chan in snapshot_channels
         )
         # and any triggered node is in interrupt_nodes list
@@ -1534,7 +1585,7 @@ def _local_read(
     if fresh:
         checkpoint = create_checkpoint(checkpoint, channels, -1)
         with ChannelsManager(channels, checkpoint) as channels:
-            _apply_writes(copy_checkpoint(checkpoint), channels, writes)
+            _apply_writes(copy_checkpoint(checkpoint), channels, writes, None)
             return read_channels(channels, select)
     else:
         return read_channels(channels, select)
@@ -1559,10 +1610,15 @@ def _local_write(
     commit(writes)
 
 
+def _increment(current: Optional[int], channel: BaseChannel) -> int:
+    return current + 1 if current is not None else 1
+
+
 def _apply_writes(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
     pending_writes: Sequence[tuple[str, Any]],
+    get_next_version: Optional[Callable[[int, BaseChannel], int]],
 ) -> None:
     if checkpoint["pending_sends"]:
         checkpoint["pending_sends"].clear()
@@ -1579,24 +1635,30 @@ def _apply_writes(
     if checkpoint["channel_versions"]:
         max_version = max(checkpoint["channel_versions"].values())
     else:
-        max_version = 0
+        max_version = None
 
     updated_channels: set[str] = set()
     # Apply writes to channels
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
             try:
-                channels[chan].update(vals)
+                updated = channels[chan].update(vals)
             except InvalidUpdateError as e:
                 raise InvalidUpdateError(
                     f"Invalid update for channel {chan} with values {vals}"
                 ) from e
-            checkpoint["channel_versions"][chan] = max_version + 1
+            if updated and get_next_version is not None:
+                checkpoint["channel_versions"][chan] = get_next_version(
+                    max_version, channels[chan]
+                )
             updated_channels.add(chan)
     # Channels that weren't updated in this step are notified of a new step
     for chan in channels:
         if chan not in updated_channels:
-            channels[chan].update([])
+            if channels[chan].update([]) and get_next_version is not None:
+                checkpoint["channel_versions"][chan] = get_next_version(
+                    max_version, channels[chan]
+                )
 
 
 @overload
@@ -1608,6 +1670,7 @@ def _prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[False],
+    get_next_version: Literal[None] = None,
     manager: Literal[None] = None,
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
@@ -1622,7 +1685,8 @@ def _prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[True],
-    manager: Union[ParentRunManager, AsyncParentRunManager],
+    get_next_version: Callable[[int, BaseChannel], int],
+    manager: Union[None, ParentRunManager, AsyncParentRunManager],
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
     ...
 
@@ -1636,6 +1700,7 @@ def _prepare_next_tasks(
     step: int,
     *,
     for_execution: bool,
+    get_next_version: Union[None, Callable[[int, BaseChannel], int]] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
@@ -1689,6 +1754,10 @@ def _prepare_next_tasks(
     channels_to_consume = set()
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
+    version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
+    null_version = version_type()
+    if null_version is None:
+        return checkpoint, tasks
     for name, proc in processes.items():
         seen = checkpoint["versions_seen"][name]
         # If any of the channels read by this process were updated
@@ -1698,7 +1767,8 @@ def _prepare_next_tasks(
             if not isinstance(
                 read_channel(channels, chan, return_exception=True), EmptyChannelError
             )
-            and checkpoint["channel_versions"][chan] > seen[chan]
+            and checkpoint["channel_versions"].get(chan, null_version)
+            > seen.get(chan, null_version)
         ]:
             channels_to_consume.update(triggers)
             try:
@@ -1712,6 +1782,7 @@ def _prepare_next_tasks(
                     {
                         chan: checkpoint["channel_versions"][chan]
                         for chan in proc.triggers
+                        if chan in checkpoint["channel_versions"]
                     }
                 )
 
@@ -1757,10 +1828,18 @@ def _prepare_next_tasks(
                     )
             else:
                 tasks.append(PregelTaskDescription(name, val))
+    # Find the highest version of all channels
+    if checkpoint["channel_versions"]:
+        max_version = max(checkpoint["channel_versions"].values())
+    else:
+        max_version = None
     # Consume all channels that were read
     if for_execution:
         for chan in channels_to_consume:
-            channels[chan].consume()
+            if channels[chan].consume():
+                checkpoint["channel_versions"][chan] = get_next_version(
+                    max_version, channels[chan]
+                )
     return checkpoint, tasks
 
 
