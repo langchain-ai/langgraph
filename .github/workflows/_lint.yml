@@ -29,6 +29,7 @@ jobs:
         python-version:
           - "3.9"
           - "3.11"
+    name: "lint #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
 
@@ -67,10 +68,9 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
         with:
-          working-directory: ${{ inputs.working-directory }}
           path: |
-            ./.mypy_cache
-          key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ hashFiles('./poetry.lock') }}
+            ${{ inputs.working-directory }}/.mypy_cache
+          key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/poetry.lock', inputs.working-directory)) }}
 
       - name: Analysing package code with our lint
         working-directory: ${{ inputs.working-directory }}
@@ -78,7 +78,7 @@ jobs:
           if make lint_package > /dev/null 2>&1; then
             make lint_package
           else
-            echo "lint_package command not found, skipping step"
+            echo "lint_package command not found, using lint instead"
             make lint
           fi
 
@@ -100,9 +100,9 @@ jobs:
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
         with:
-          working-directory: ${{ inputs.working-directory }}
-          path: ./.mypy_cache_test
-          key: mypy-test-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ hashFiles('./poetry.lock') }}
+          path: |
+            ${{ inputs.working-directory }}/.mypy_cache_test
+          key: mypy-test-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/poetry.lock', inputs.working-directory)) }}
 
       - name: Analysing tests with our lint
         working-directory: ${{ inputs.working-directory }}
