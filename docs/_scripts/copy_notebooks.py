@@ -29,11 +29,13 @@ _MANUAL = {
         "configuration.ipynb",
         "map-reduce.ipynb",
         "extraction/retries.ipynb",
+        "create-react-agent.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",
         "customer-support/customer-support.ipynb",
         "tutorials/tnt-llm/tnt-llm.ipynb",
+        "tutorials/sql-agent.ipynb"
     ],
 }
 _MANUAL_INVERSE = {v: docs_dir / k for k, vs in _MANUAL.items() for v in vs}

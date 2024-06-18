@@ -132,10 +132,12 @@ nav:
               - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
           - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
           - Competitive Programming: tutorials/usaco/usaco.ipynb
+          - SQL: tutorials/sql-agent.ipynb
 
   - "How-to Guides":
      - 'how-tos/index.md'
      - Core:
+         - "ReAct Agent": how-tos/create-react-agent.ipynb
          - "Persistence": how-tos/persistence.ipynb
          - "Time Travel": how-tos/time-travel.ipynb 
          - "Async Execution": how-tos/async.ipynb
