@@ -75,13 +75,10 @@
               cache: "yarn"
               cache-dependency-path: ${{ matrix.working-directory }}/yarn.lock
           - name: Install dependencies
-            working-directory: ${{ matrix.working-directory }}
             run: yarn install
           - name: Run lint
-            working-directory: ${{ matrix.working-directory }}
             run: yarn lint
           - name: Build
-            working-directory: ${{ matrix.working-directory }}
             run: yarn build
 
       ci_success:
