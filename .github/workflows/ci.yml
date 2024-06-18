@@ -57,9 +57,33 @@
           working-directory: ${{ matrix.working-directory }}
         secrets: inherit
 
+      lint-js:
+        runs-on: ubuntu-latest
+        strategy:
+          matrix:
+            working-directory:
+              - "libs/sdk-js"
+        defaults:
+          run:
+            working-directory: ${{ matrix.working-directory }}
+        steps:
+          - uses: actions/checkout@v3
+          - name: Setup Node.js (LTS)
+            uses: actions/setup-node@v3
+            with:
+              node-version: "20"
+              cache: "yarn"
+              cache-dependency-path: ${{ matrix.working-directory }}/yarn.lock
+          - name: Install dependencies
+            run: yarn install
+          - name: Run lint
+            run: yarn lint
+          - name: Build
+            run: yarn build
+
       ci_success:
         name: "CI Success"
-        needs: [build, lint, test]
+        needs: [build, lint, lint-js, test]
         if: |
           always()
         runs-on: ubuntu-latest
