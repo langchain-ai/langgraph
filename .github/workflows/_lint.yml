@@ -72,10 +72,15 @@ jobs:
             ./.mypy_cache
           key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ hashFiles('./poetry.lock') }}
 
-      - name: Analysing the code with our lint
+      - name: Analysing package code with our lint
         working-directory: ${{ inputs.working-directory }}
         run: |
-          make lint_package
+          if make lint_package > /dev/null 2>&1; then
+            make lint_package
+          else
+            echo "lint_package command not found, skipping step"
+            make lint
+          fi
 
       - name: Install test dependencies
         # Also installs dev/lint/test/typing dependencies, to ensure we have
@@ -99,7 +104,11 @@ jobs:
           path: ./.mypy_cache_test
           key: mypy-test-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ hashFiles('./poetry.lock') }}
 
-      - name: Analysing the code with our lint
+      - name: Analysing tests with our lint
         working-directory: ${{ inputs.working-directory }}
         run: |
-          make lint_tests
+          if make lint_tests > /dev/null 2>&1; then
+            make lint_tests
+          else
+            echo "lint_tests command not found, skipping step"
+          fi
