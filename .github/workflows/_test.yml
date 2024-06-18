@@ -36,7 +36,7 @@ jobs:
       - name: Install dependencies
         shell: bash
         working-directory: ${{ inputs.working-directory }}
-        run: poetry install --with test
+        run: poetry install --with dev
 
       - name: Run core tests
         shell: bash

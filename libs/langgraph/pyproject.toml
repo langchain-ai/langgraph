@@ -12,7 +12,7 @@ python = ">=3.9.0,<4.0"
 langchain-core = ">=0.2,<0.3"
 
 
-[tool.poetry.group.test.dependencies]
+[tool.poetry.group.dev.dependencies]
 pytest = "^7.3.0"
 pytest-cov = "^4.0.0"
 pytest-dotenv = "^0.5.2"

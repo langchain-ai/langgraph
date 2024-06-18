@@ -60,7 +60,7 @@ jobs:
         # in the `poetry_setup` action above to stop using the old cache.
         # It doesn't matter how you change it, any change will cause a cache-bust.
         working-directory: ${{ inputs.working-directory }}
-        run: poetry install --with test
+        run: poetry install --with dev
 
       - name: Get .mypy_cache to speed up mypy
         uses: actions/cache@v3
