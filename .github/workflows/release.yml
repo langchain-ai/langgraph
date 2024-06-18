@@ -119,7 +119,7 @@ jobs:
           poetry run python -c "import $IMPORT_NAME; print(dir($IMPORT_NAME))"
 
       - name: Import test dependencies
-        run: poetry install --with test
+        run: poetry install --with dev
 
       # Overwrite the local version of the package with the test PyPI version.
       - name: Import published package (again)
