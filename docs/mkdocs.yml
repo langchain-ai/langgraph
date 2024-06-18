@@ -183,7 +183,7 @@ nav:
           - Run Agent in Background: 'deploy/how_tos/background_run.ipynb'
           - Run Multiple Agents in Thread: 'deploy/how_tos/same-thread.ipynb'
           - Human in the loop: 'deploy/how_tos/human-in-the-loop.ipynb'
-          - Create Agents with Configuration: 'deploy/how_tos/configuration.ipynb''
+          - Create Agents with Configuration: 'deploy/how_tos/configuration.ipynb'
 
 
 markdown_extensions:
