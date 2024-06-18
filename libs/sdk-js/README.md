@@ -32,7 +32,7 @@ const agent = assistants[0];
 const thread = await client.threads.create();
 
 // Start a streaming run
-const messages = [{ role: "human", content: "whats the weather in la" }];
+const messages = [{ role: "human", content: "what's the weather in la" }];
 
 const streamResponse = client.runs.stream(
   thread["thread_id"],
