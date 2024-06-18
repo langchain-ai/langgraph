@@ -1,0 +1,26 @@
+[tool.poetry]
+name = "langgraph-monorepo"
+version = "0.0.1"
+description = "LangGraph monorepo"
+authors = ["Your Name <you@example.com>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.10"
+
+[tool.poetry.group.docs.dependencies]
+langgraph = { path = "libs/langgraph/", develop = true }
+mkdocs = "^1.6.0"
+mkdocstrings = "^0.25.1"
+mkdocstrings-python = "^1.10.4"
+mkdocs-jupyter = "^0.24.7"
+mkdocs-redirects = "^1.2.1"
+mkdocs-minify-plugin = "^0.8.0"
+mkdocs-rss-plugin = "^1.13.1"
+mkdocs-git-committers-plugin-2 = "^2.3.0"
+mkdocs-material = {extras = ["imaging"], version = "^9.5.27"}
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

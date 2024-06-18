@@ -9,6 +9,9 @@ on:
       - main
   workflow_dispatch:
 
+env:
+  POETRY_VERSION: "1.7.1"
+
 permissions:
   contents: read
   pages: write
@@ -26,22 +29,17 @@ jobs:
         with:
           fetch-depth: 0
 
+      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: "3.12"
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: docs
+
       - name: Install dependencies
         run: |
-          pip install poetry poethepoet
+          poetry install --with docs
 
-      - name: Set up Python
-        uses: actions/setup-python@v4
-        with:
-          python-version: 3.12
-          cache: poetry
-          cache-dependency-path: "libs/langgraph/poetry.lock"
-
-      - name: Poetry install
-        run: |
-          poetry install
-          poetry run pip install -r docs/docs-requirements.txt
-      
       - name: Build site
         run: make build-docs
         env:
