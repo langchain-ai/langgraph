@@ -1,10 +1,15 @@
 name: release
-run-name: Release by @${{ github.actor }}
+run-name: Release ${{ inputs.working-directory }} by @${{ github.actor }}
 on:
-  workflow_dispatch
+  workflow_dispatch:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+        default: 'libs/langgraph'
 
 env:
-  PYTHON_VERSION: "3.10"
+  PYTHON_VERSION: "3.11"
   POETRY_VERSION: "1.7.1"
 
 jobs:
@@ -24,6 +29,7 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: ${{ inputs.working-directory }}
           cache-key: release
 
       # We want to keep this build stage *separate* from the release stage,
@@ -39,16 +45,18 @@ jobs:
       # https://github.com/pypa/gh-action-pypi-publish#non-goals
       - name: Build project for distribution
         run: poetry build
+        working-directory: ${{ inputs.working-directory }}
 
       - name: Upload build
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: dist
-          path: ./dist/
+          path: ${{ inputs.working-directory }}/dist/
 
       - name: Check Version
         id: check-version
         shell: bash
+        working-directory: ${{ inputs.working-directory }}
         run: |
           echo pkg-name="$(poetry version | cut -d ' ' -f 1)" >> $GITHUB_OUTPUT
           echo version="$(poetry version --short)" >> $GITHUB_OUTPUT
@@ -58,6 +66,8 @@ jobs:
       - build
     uses:
       ./.github/workflows/_test_release.yml
+    with:
+      working-directory: ${{ inputs.working-directory }}
     secrets: inherit
 
   pre-release-checks:
@@ -86,14 +96,16 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: ${{ inputs.working-directory }}
 
       - name: Import published package
         shell: bash
+        working-directory: ${{ inputs.working-directory }}
         env:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
         # Here we use:
-        # - The default regular PyPI index as the *primary* index, meaning 
+        # - The default regular PyPI index as the *primary* index, meaning
         #   that it takes priority (https://pypi.org/simple)
         # - The test PyPI index as an extra index, so that any dependencies that
         #   are not found on test PyPI can be resolved and installed anyway.
@@ -120,9 +132,11 @@ jobs:
 
       - name: Import test dependencies
         run: poetry install --with dev
+        working-directory: ${{ inputs.working-directory }}
 
       # Overwrite the local version of the package with the test PyPI version.
       - name: Import published package (again)
+        working-directory: ${{ inputs.working-directory }}
         shell: bash
         env:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
@@ -134,6 +148,7 @@ jobs:
 
       - name: Run unit tests
         run: make test
+        working-directory: ${{ inputs.working-directory }}
 
   publish:
     needs:
@@ -149,6 +164,10 @@ jobs:
       # https://docs.pypi.org/trusted-publishers/adding-a-publisher/
       id-token: write
 
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -157,17 +176,18 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: ${{ inputs.working-directory }}
           cache-key: release
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: dist
-          path: ./dist/
+          path: ${{ inputs.working-directory }}/dist/
 
       - name: Publish package distributions to PyPI
         uses: pypa/gh-action-pypi-publish@release/v1
         with:
-          packages-dir: ./dist/
+          packages-dir: ${{ inputs.working-directory }}/dist/
           verbose: true
           print-hash: true
 
@@ -183,6 +203,10 @@ jobs:
       # create the GitHub release.
       contents: write
 
+    defaults:
+      run:
+        working-directory: ${{ inputs.working-directory }}
+
     steps:
       - uses: actions/checkout@v4
 
@@ -191,19 +215,19 @@ jobs:
         with:
           python-version: ${{ env.PYTHON_VERSION }}
           poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: ${{ inputs.working-directory }}
           cache-key: release
 
-      - uses: actions/download-artifact@v3
+      - uses: actions/download-artifact@v4
         with:
           name: dist
-          path: ./dist/
+          path: ${{ inputs.working-directory }}/dist/
 
-      - name: Create Release
+      - name: Create Tag
         uses: ncipollo/release-action@v1
         with:
           artifacts: "dist/*"
           token: ${{ secrets.GITHUB_TOKEN }}
-          draft: false
-          generateReleaseNotes: true
-          tag: v${{ needs.build.outputs.version }}
-          commit: master
+          generateReleaseNotes: false
+          tag: ${{needs.build.outputs.pkg-name}}==${{ needs.build.outputs.version }}
+          commit: ${{ github.sha }}
