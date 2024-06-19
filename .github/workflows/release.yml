@@ -213,12 +213,7 @@ jobs:
             "$PKG_NAME==$VERSION"
 
       - name: Run unit tests
-        run: |
-          if make test > /dev/null 2>&1; then
-            make test
-          else
-            echo "test command not found, skipping step"
-          fi
+        run: make test
         working-directory: ${{ inputs.working-directory }}
 
   publish:
