@@ -14,7 +14,7 @@ env:
 
 jobs:
   build:
-    if: github.ref == 'refs/heads/master'
+    if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
     outputs:
@@ -69,16 +69,16 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
-          repository: langchain-ai/langchain
-          path: langchain
+          repository: langchain-ai/langgraph
+          path: langgraph
           sparse-checkout: | # this only grabs files for relevant dir
             ${{ inputs.working-directory }}
-          ref: master # this scopes to just master branch
+          ref: main # this scopes to just master branch
           fetch-depth: 0 # this fetches entire commit history
       - name: Check Tags
         id: check-tags
         shell: bash
-        working-directory: langchain/${{ inputs.working-directory }}
+        working-directory: langgraph/${{ inputs.working-directory }}
         env:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
@@ -95,7 +95,7 @@ jobs:
           echo prev-tag="$PREV_TAG" >> $GITHUB_OUTPUT
       - name: Generate release body
         id: generate-release-body
-        working-directory: langchain
+        working-directory: langgraph
         env:
           WORKING_DIR: ${{ inputs.working-directory }}
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
