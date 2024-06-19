@@ -45,7 +45,7 @@ jobs:
         run: |
           langgraph up --wait --verbose
       - name: Stop service B
-        working-directory: ./examples/graphs
+        working-directory: libs/cli/examples/graphs
         run: |
           langgraph down
           sudo rm -rf .langgraph-data

@@ -1,13 +1,32 @@
-from langchain_openai import ChatOpenAI
+import asyncio
+import json
+from typing import Annotated, List, Optional
+
+from langchain_community.retrievers import WikipediaRetriever
+from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_community.vectorstores import SKLearnVectorStore
+from langchain_core.documents import Document
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    HumanMessage,
+    ToolMessage,
+)
+from langchain_core.output_parsers import StrOutputParser
+from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
+from langchain_core.pydantic_v1 import BaseModel, Field
+from langchain_core.runnables import RunnableConfig, RunnableLambda
+from langchain_core.runnables import chain as as_runnable
+from langchain_core.tools import tool
+from langchain_openai import ChatOpenAI, OpenAIEmbeddings
+from langgraph.graph import END, StateGraph
+from typing_extensions import TypedDict
 
 fast_llm = ChatOpenAI(model="gpt-3.5-turbo")
 # Uncomment for a Fireworks model
 # fast_llm = ChatFireworks(model="accounts/fireworks/models/firefunction-v1", max_tokens=32_000)
 long_context_llm = ChatOpenAI(model="gpt-4-turbo-preview")
 
-from langchain_core.pydantic_v1 import BaseModel, Field
-from typing import List, Optional
-from langchain_core.prompts import ChatPromptTemplate
 
 direct_gen_outline_prompt = ChatPromptTemplate.from_messages(
     [
@@ -128,8 +147,6 @@ gen_perspectives_chain = gen_perspectives_prompt | ChatOpenAI(
     model="gpt-3.5-turbo"
 ).with_structured_output(Perspectives)
 
-from langchain_community.retrievers import WikipediaRetriever
-from langchain_core.runnables import RunnableLambda, chain as as_runnable
 
 wikipedia_retriever = WikipediaRetriever(load_all_available_meta=True, top_k_results=1)
 
@@ -160,12 +177,6 @@ async def survey_subjects(topic: str):
     return await gen_perspectives_chain.ainvoke({"examples": formatted, "topic": topic})
 
 
-from langgraph.graph import StateGraph, END
-from typing_extensions import TypedDict
-from langchain_core.messages import AnyMessage
-from typing import Annotated, Sequence
-
-
 def add_messages(left, right):
     if not isinstance(left, list):
         left = [left]
@@ -192,10 +203,6 @@ class InterviewState(TypedDict):
     messages: Annotated[List[AnyMessage], add_messages]
     references: Annotated[Optional[dict], update_references]
     editor: Annotated[Optional[Editor], update_editor]
-
-
-from langchain_core.prompts import MessagesPlaceholder
-from langchain_core.messages import AIMessage, BaseMessage, HumanMessage, ToolMessage
 
 
 gen_qn_prompt = ChatPromptTemplate.from_messages(
@@ -301,11 +308,6 @@ gen_answer_chain = gen_answer_prompt | fast_llm.with_structured_output(
 ).with_config(run_name="GenerateAnswer")
 
 
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_community.utilities.duckduckgo_search import DuckDuckGoSearchAPIWrapper
-from langchain_core.tools import tool
-
-
 # Tavily is typically a better search engine, but your free queries are limited
 tavily_search = TavilySearchResults(max_results=4)
 
@@ -315,10 +317,6 @@ async def search_engine(query: str):
     """Search engine to the internet."""
     results = tavily_search.invoke(query)
     return [{"content": r["content"], "url": r["url"]} for r in results]
-
-
-from langchain_core.runnables import RunnableConfig
-import json
 
 
 async def gen_answer(
@@ -405,10 +403,6 @@ refine_outline_chain = refine_outline_prompt | long_context_llm.with_structured_
     Outline
 )
 
-from langchain_core.documents import Document
-
-from langchain_community.vectorstores import SKLearnVectorStore
-from langchain_openai import OpenAIEmbeddings
 
 embeddings = OpenAIEmbeddings(model="text-embedding-3-small")
 # reference_docs = [
@@ -491,8 +485,6 @@ section_writer = (
 )
 
 
-from langchain_core.output_parsers import StrOutputParser
-
 writer_prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -519,9 +511,6 @@ class ResearchState(TypedDict):
     # The final sections output
     sections: List[WikiSection]
     article: str
-
-
-import asyncio
 
 
 async def initialize_research(state: ResearchState):

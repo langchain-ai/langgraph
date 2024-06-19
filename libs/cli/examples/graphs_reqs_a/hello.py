@@ -1,1 +1,1 @@
-from graphs_reqs_a.graphs_submod.agent import graph
+from graphs_reqs_a.graphs_submod.agent import graph  # noqa

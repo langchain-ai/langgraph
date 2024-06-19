@@ -1,11 +1,11 @@
-from typing import TypedDict, Annotated, Sequence, Literal
+from typing import Annotated, Literal, Sequence, TypedDict
 
-from langchain_core.messages import BaseMessage
 from langchain_anthropic import ChatAnthropic
-from langchain_openai import ChatOpenAI
 from langchain_community.tools.tavily_search import TavilySearchResults
+from langchain_core.messages import BaseMessage
+from langchain_openai import ChatOpenAI
+from langgraph.graph import END, StateGraph, add_messages
 from langgraph.prebuilt import ToolNode
-from langgraph.graph import StateGraph, END, add_messages
 
 tools = [TavilySearchResults(max_results=1)]
 
