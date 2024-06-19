@@ -1,7 +1,7 @@
 .PHONY: run_w_override
 
 run:
-	poetry run langgraph up --watch --no-pull --langgraph-api-path ../api/langgraph_api/
+	poetry run langgraph up --watch --no-pull
 
 run_faux:
 	cd graphs && poetry run langgraph up --no-pull
