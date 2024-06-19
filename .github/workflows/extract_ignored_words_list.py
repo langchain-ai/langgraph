@@ -1,6 +1,6 @@
 import toml
 
-pyproject_toml = toml.load("pyproject.toml")
+pyproject_toml = toml.load("libs/langgraph/pyproject.toml")
 
 # Extract the ignore words list (adjust the key as per your TOML structure)
 ignore_words_list = (
