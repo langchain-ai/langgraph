@@ -3,8 +3,7 @@ import pathlib
 from langgraph_cli.cli import prepare_args_and_stdin
 from langgraph_cli.config import Config, validate_config
 from langgraph_cli.docker import DEFAULT_POSTGRES_URI, DockerCapabilities, Version
-
-from .helpers import clean_empty_lines
+from langgraph_cli.util import clean_empty_lines
 
 DEFAULT_DOCKER_CAPABILITIES = DockerCapabilities(
     version_docker=Version(26, 1, 1),
@@ -81,6 +80,7 @@ services:
         environment:
             POSTGRES_URI: {DEFAULT_POSTGRES_URI}
         healthcheck:
+            test: python /api/healthcheck.py
             interval: 60s
             start_interval: 1s
             start_period: 10s

@@ -5,8 +5,7 @@ import click
 import pytest
 
 from langgraph_cli.config import config_to_compose, config_to_docker, validate_config
-
-from .helpers import clean_empty_lines
+from langgraph_cli.util import clean_empty_lines
 
 PATH_TO_CONFIG = pathlib.Path("tests/unit_tests/test_config.json")
 

@@ -67,6 +67,7 @@ class LangGraphClient:
         self.assistants = AssistantsClient(self.http)
         self.threads = ThreadsClient(self.http)
         self.runs = RunsClient(self.http)
+        self.crons = CronClient(self.http)
 
 
 class HttpClient:
@@ -618,6 +619,74 @@ class RunsClient:
     async def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run."""
         await self.http.delete(f"/threads/{thread_id}/runs/{run_id}")
+
+
+class CronClient:
+    def __init__(self, http_client: HttpClient) -> None:
+        self.http = http_client
+
+    async def create_for_thread(
+        self,
+        thread_id: str,
+        assistant_id: str,
+        *,
+        schedule: str,
+        input: Optional[dict] = None,
+        metadata: Optional[dict] = None,
+        config: Optional[Config] = None,
+        interrupt_before: Optional[list[str]] = None,
+        interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
+        multitask_strategy: Optional[str] = None,
+    ) -> Run:
+        """Create a background run."""
+        payload = {
+            "schedule": schedule,
+            "input": input,
+            "config": config,
+            "metadata": metadata,
+            "assistant_id": assistant_id,
+            "interrupt_before": interrupt_before,
+            "interrupt_after": interrupt_after,
+            "webhook": webhook,
+        }
+        if multitask_strategy:
+            payload["multitask_strategy"] = multitask_strategy
+        payload = {k: v for k, v in payload.items() if v is not None}
+        return await self.http.post(f"/threads/{thread_id}/runs/crons", json=payload)
+
+    async def create(
+        self,
+        assistant_id: str,
+        *,
+        schedule: str,
+        input: Optional[dict] = None,
+        metadata: Optional[dict] = None,
+        config: Optional[Config] = None,
+        interrupt_before: Optional[list[str]] = None,
+        interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
+        multitask_strategy: Optional[str] = None,
+    ) -> Run:
+        """Create a background run."""
+        payload = {
+            "schedule": schedule,
+            "input": input,
+            "config": config,
+            "metadata": metadata,
+            "assistant_id": assistant_id,
+            "interrupt_before": interrupt_before,
+            "interrupt_after": interrupt_after,
+            "webhook": webhook,
+        }
+        if multitask_strategy:
+            payload["multitask_strategy"] = multitask_strategy
+        payload = {k: v for k, v in payload.items() if v is not None}
+        return await self.http.post("/runs/crons", json=payload)
+
+    async def delete(self, cron_id: str) -> None:
+        """Delete a cron."""
+        await self.http.delete(f"/runs/crons/{cron_id}")
 
 
 def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:

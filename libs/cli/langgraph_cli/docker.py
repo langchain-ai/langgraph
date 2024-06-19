@@ -77,11 +77,17 @@ def _parse_version(version: str) -> Version:
 
 def check_capabilities(runner) -> DockerCapabilities:
     # check docker available
+    if shutil.which("docker") is None:
+        raise click.UsageError("Docker not installed") from None
+
     try:
         stdout, _ = runner.run(subp_exec("docker", "info", "-f", "json", collect=True))
         info = json.loads(stdout)
     except (click.exceptions.Exit, json.JSONDecodeError):
         raise click.UsageError("Docker not installed or not running") from None
+
+    if not info["ServerVersion"]:
+        raise click.UsageError("Docker not running") from None
 
     compose_type: DockerComposeType
     try:
@@ -146,15 +152,19 @@ def compose(
     langgraph-api:
         restart: on-failure
         ports:
-            - "{port}:8000"
+            - "{port}:8000\""""
+    if include_db:
+        compose_str += """
         depends_on:
             langgraph-postgres:
-                condition: service_healthy
+                condition: service_healthy"""
+    compose_str += f"""
         environment:
             POSTGRES_URI: {postgres_uri}
 """
     if capabilities.healthcheck_start_interval:
         compose_str += """        healthcheck:
+            test: python /api/healthcheck.py
             interval: 60s
             start_interval: 1s
             start_period: 10s"""

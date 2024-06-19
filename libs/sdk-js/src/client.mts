@@ -97,7 +97,7 @@ class BaseClient {
     const response = await this.asyncCaller.fetch(
       ...this.prepareFetchOptions(path, options),
     );
-    if (response.status == 202) {
+    if (response.status === 202 || response.status === 204) {
       return undefined as T;
     }
     return response.json() as T;

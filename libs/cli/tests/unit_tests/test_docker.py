@@ -4,7 +4,7 @@ from langgraph_cli.docker import (
     Version,
     compose,
 )
-from tests.unit_tests.helpers import clean_empty_lines
+from langgraph_cli.util import clean_empty_lines
 
 DEFAULT_DOCKER_CAPABILITIES = DockerCapabilities(
     version_docker=Version(26, 1, 1),
@@ -24,9 +24,6 @@ def test_compose_with_no_debugger_and_custom_db():
         restart: on-failure
         ports:
             - "{port}:8000"
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
         environment:
             POSTGRES_URI: {custom_postgres_uri}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str
@@ -45,12 +42,10 @@ def test_compose_with_no_debugger_and_custom_db_with_healthcheck():
         restart: on-failure
         ports:
             - "{port}:8000"
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
         environment:
             POSTGRES_URI: {custom_postgres_uri}
         healthcheck:
+            test: python /api/healthcheck.py
             interval: 60s
             start_interval: 1s
             start_period: 10s"""
@@ -70,9 +65,6 @@ def test_compose_with_debugger_and_custom_db():
         restart: on-failure
         ports:
             - "{port}:8000"
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
         environment:
             POSTGRES_URI: {custom_postgres_uri}"""
     assert clean_empty_lines(actual_compose_str) == expected_compose_str

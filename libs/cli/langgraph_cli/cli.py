@@ -13,8 +13,9 @@ from langgraph_cli.config import Config
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
+from langgraph_cli.util import clean_empty_lines
 
-OPT_O = click.option(
+OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
     "-d",
     help="Advanced: Path to docker-compose.yml file with additional services to launch",
@@ -26,7 +27,7 @@ OPT_O = click.option(
         path_type=pathlib.Path,
     ),
 )
-OPT_C = click.option(
+OPT_CONFIG = click.option(
     "--config",
     "-c",
     help="""Path to configuration file declaring dependencies, graphs and environment variables.
@@ -127,10 +128,20 @@ OPT_VERBOSE = click.option(
     default=False,
     help="Show more output from the server logs",
 )
+OPT_WATCH = click.option("--watch", is_flag=True, help="Restart on file changes")
+OPT_LANGGRAPH_API_PATH = click.option(
+    "--langgraph-api-path",
+    type=click.Path(exists=True, file_okay=False, dir_okay=True, resolve_path=True),
+    hidden=True,
+)
 OPT_DEBUGGER_PORT = click.option(
     "--debugger-port",
     type=int,
     help="Pull the debugger image locally and serve the UI on specified port",
+)
+OPT_POSTGRES_URI = click.option(
+    "--postgres-uri",
+    help="Postgres URI to use for the database. Defaults to launching a local database",
 )
 
 
@@ -142,16 +153,13 @@ def cli():
 @OPT_RECREATE
 @OPT_PULL
 @OPT_PORT
-@OPT_O
-@OPT_C
+@OPT_DOCKER_COMPOSE
+@OPT_CONFIG
 @OPT_VERBOSE
 @OPT_DEBUGGER_PORT
-@click.option("--watch", is_flag=True, help="Restart on file changes")
-@click.option(
-    "--langgraph-api-path",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, resolve_path=True),
-    hidden=True,
-)
+@OPT_WATCH
+@OPT_LANGGRAPH_API_PATH
+@OPT_POSTGRES_URI
 @click.option(
     "--wait",
     is_flag=True,
@@ -169,6 +177,7 @@ def up(
     wait: bool,
     verbose: bool,
     debugger_port: Optional[int],
+    postgres_uri: Optional[str],
 ):
     with Runner() as runner, Progress(message="Pulling...") as set:
         capabilities = langgraph_cli.docker.check_capabilities(runner)
@@ -183,6 +192,7 @@ def up(
             langgraph_api_path=langgraph_api_path,
             verbose=verbose,
             debugger_port=debugger_port,
+            postgres_uri=postgres_uri,
         )
         # add up + options
         args.extend(["up", "--remove-orphans"])
@@ -207,7 +217,7 @@ def up(
                 debugger_origin = (
                     f"http://localhost:{debugger_port}"
                     if debugger_port
-                    else "https://dev.smith.langchain.com"
+                    else "https://smith.langchain.com"
                 )
                 set("")
                 sys.stdout.write(
@@ -237,8 +247,8 @@ def up(
 
 
 @OPT_PORT
-@OPT_O
-@OPT_C
+@OPT_DOCKER_COMPOSE
+@OPT_CONFIG
 @OPT_VERBOSE
 @OPT_DEBUGGER_PORT
 @cli.command(help="Stop langgraph API server")
@@ -274,8 +284,8 @@ def down(
         runner.run(subp_exec(*compose_cmd, *args, input=stdin, verbose=verbose))
 
 
-@OPT_O
-@OPT_C
+@OPT_DOCKER_COMPOSE
+@OPT_CONFIG
 @click.option("--follow", "-f", is_flag=True, help="Follow logs")
 @cli.command(help="Show langgraph API server logs")
 def logs(
@@ -309,7 +319,7 @@ def logs(
         runner.run(subp_exec(*compose_cmd, *args, input=stdin, verbose=True))
 
 
-@OPT_C
+@OPT_CONFIG
 @OPT_PULL
 @click.option(
     "--tag",
@@ -374,33 +384,101 @@ def build(
         )
 
 
+@cli.group(help="Export langgraph compose files")
+def export():
+    pass
+
+
+@click.option(
+    "--output",
+    "-o",
+    help="Output path to write the docker compose file to",
+    type=click.Path(
+        exists=False,
+        file_okay=True,
+        dir_okay=False,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+    required=True,
+)
+@OPT_CONFIG
 @OPT_PORT
-@OPT_O
-@OPT_C
-@cli.command(help="Build a helm chart to deploy to a Kubernetes cluster", hidden=True)
-def helm(
+@OPT_WATCH
+@OPT_LANGGRAPH_API_PATH
+@export.command(name="compose", help="Export docker compose file")
+def export_compose(
+    output: pathlib.Path,
+    config: pathlib.Path,
+    port: int,
+    watch: bool,
+    langgraph_api_path: Optional[pathlib.Path],
+):
+    with Runner() as runner:
+        capabilities = langgraph_cli.docker.check_capabilities(runner)
+        _, stdin = prepare(
+            runner,
+            capabilities=capabilities,
+            config_path=config,
+            docker_compose=None,
+            pull=False,
+            watch=watch,
+            langgraph_api_path=langgraph_api_path,
+            port=port,
+            verbose=False,
+        )
+
+    with open(output, "w") as f:
+        f.write(clean_empty_lines(stdin))
+
+
+@click.option(
+    "--output",
+    "-o",
+    help="Output path (directory) to write the helm chart to",
+    type=click.Path(
+        exists=False,
+        file_okay=False,
+        dir_okay=True,
+        resolve_path=True,
+        path_type=pathlib.Path,
+    ),
+    required=True,
+)
+@OPT_PORT
+@OPT_DOCKER_COMPOSE
+@OPT_CONFIG
+@export.command(
+    name="helm",
+    help="Build and export a helm chart to deploy to a Kubernetes cluster",
+    hidden=True,
+)
+def export_helm(
+    output: pathlib.Path,
     config: pathlib.Path,
     docker_compose: Optional[pathlib.Path],
     port: int,
 ):
     with open(config) as f:
         config_json = langgraph_cli.config.validate_config(json.load(f))
+
     with Runner() as runner:
         # check docker available
         capabilities = langgraph_cli.docker.check_capabilities(runner)
         # prepare args
         stdin = langgraph_cli.docker.compose(capabilities, port=port)
         args = [
+            "convert",
             "--chart",
-            "-o=./helm",
+            "-o",
+            str(output),
             "-v",
-            "-f",
-            "-",  # stdin
         ]
         # apply options
         if docker_compose:
             args.extend(["-f", str(docker_compose)])
-        args.append("convert")
+
+        args.extend(["-f", "-"])  # stdin
         # apply config
         stdin += langgraph_cli.config.config_to_compose(config, config_json)
         # run kompose convert
@@ -417,10 +495,14 @@ def prepare_args_and_stdin(
     watch: bool,
     langgraph_api_path: Optional[pathlib.Path],
     debugger_port: Optional[int] = None,
+    postgres_uri: Optional[str] = None,
 ):
     # prepare args
     stdin = langgraph_cli.docker.compose(
-        capabilities, port=port, debugger_port=debugger_port
+        capabilities,
+        port=port,
+        debugger_port=debugger_port,
+        postgres_uri=postgres_uri,
     )
     args = [
         "--project-directory",
@@ -449,6 +531,7 @@ def prepare(
     langgraph_api_path: Optional[pathlib.Path],
     verbose: bool,
     debugger_port: Optional[int] = None,
+    postgres_uri: Optional[str] = None,
 ):
     with open(config_path) as f:
         config = langgraph_cli.config.validate_config(json.load(f))
@@ -472,5 +555,6 @@ def prepare(
         watch=watch,
         langgraph_api_path=langgraph_api_path,
         debugger_port=debugger_port,
+        postgres_uri=postgres_uri,
     )
     return args, stdin

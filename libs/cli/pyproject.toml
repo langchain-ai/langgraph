@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-cli"
-version = "0.1.35"
+version = "0.1.37"
 description = "CLI for interacting with LangGraph API"
 authors = ["Nuno Campos <nuno@langchain.dev>"]
 readme = "README.md"
