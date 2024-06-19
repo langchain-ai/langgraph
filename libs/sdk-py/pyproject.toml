@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "langgraph-sdk"
 version = "0.1.22"
-description = "CLI for interacting with LangGraph API"
+description = "SDK for interacting with LangGraph API"
 authors = []
 license = "MIT"
 readme = "README.md"
