@@ -57,6 +57,12 @@
           working-directory: ${{ matrix.working-directory }}
         secrets: inherit
 
+      integration-test:
+        name: CLI integration test
+        needs: [ build ]
+        uses: ./.github/workflows/_integration_test.yml
+        secrets: inherit
+
       lint-js:
         runs-on: ubuntu-latest
         strategy:
