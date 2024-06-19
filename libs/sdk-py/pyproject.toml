@@ -1,9 +1,11 @@
 [tool.poetry]
 name = "langgraph-sdk"
-version = "0.1.21"
-description = ""
-authors = ["Nuno Campos <nuno@langchain.dev>"]
+version = "0.1.22"
+description = "SDK for interacting with LangGraph API"
+authors = []
+license = "MIT"
 readme = "README.md"
+repository = "https://www.github.com/langchain-ai/langgraph"
 packages = [{ include = "langgraph_sdk" }]
 
 [tool.poetry.dependencies]
