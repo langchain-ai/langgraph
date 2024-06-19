@@ -1,5 +1,8 @@
 .PHONY: lint format
 
+test:
+	echo "No tests to run"
+
 ######################
 # LINTING AND FORMATTING
 ######################
