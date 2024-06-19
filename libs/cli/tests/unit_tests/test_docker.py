@@ -21,7 +21,6 @@ def test_compose_with_no_debugger_and_custom_db():
     )
     expected_compose_str = f"""services:
     langgraph-api:
-        restart: on-failure
         ports:
             - "{port}:8000"
         environment:
@@ -39,7 +38,6 @@ def test_compose_with_no_debugger_and_custom_db_with_healthcheck():
     )
     expected_compose_str = f"""services:
     langgraph-api:
-        restart: on-failure
         ports:
             - "{port}:8000"
         environment:
@@ -62,7 +60,6 @@ def test_compose_with_debugger_and_custom_db():
     )
     expected_compose_str = f"""services:
     langgraph-api:
-        restart: on-failure
         ports:
             - "{port}:8000"
         environment:
@@ -79,7 +76,6 @@ def test_compose_with_debugger_and_default_db():
 services:
     langgraph-postgres:
         image: postgres:16
-        restart: on-failure
         ports:
             - "5433:5432"
         environment:
@@ -95,7 +91,6 @@ services:
             retries: 5
             interval: 5s
     langgraph-api:
-        restart: on-failure
         ports:
             - "{port}:8000"
         depends_on:

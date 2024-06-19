@@ -46,7 +46,6 @@ def test_prepare_args_and_stdin():
 services:
     langgraph-postgres:
         image: postgres:16
-        restart: on-failure
         ports:
             - "5433:5432"
         environment:
@@ -71,7 +70,6 @@ services:
             langgraph-postgres:
                 condition: service_healthy
     langgraph-api:
-        restart: on-failure
         ports:
             - "8000:8000"
         depends_on:

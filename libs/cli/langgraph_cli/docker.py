@@ -16,7 +16,6 @@ DEFAULT_POSTGRES_URI = (
 DB = """
     langgraph-postgres:
         image: postgres:16
-        restart: on-failure
         ports:
             - "5433:5432"
         environment:
@@ -150,7 +149,6 @@ def compose(
 {db}
 {DEBUGGER.format(debugger_port=debugger_port) if debugger_port else ""}
     langgraph-api:
-        restart: on-failure
         ports:
             - "{port}:8000\""""
     if include_db:

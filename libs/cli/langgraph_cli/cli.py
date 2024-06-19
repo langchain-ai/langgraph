@@ -207,6 +207,8 @@ def up(
             args.append("--watch")
         if wait:
             args.append("--wait")
+        else:
+            args.append("--abort-on-container-exit")
         # run docker compose
         set("Building...")
 
