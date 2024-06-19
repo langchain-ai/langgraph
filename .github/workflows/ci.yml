@@ -65,6 +65,7 @@
 
       lint-js:
         runs-on: ubuntu-latest
+        needs: [ build ]
         strategy:
           matrix:
             working-directory:
@@ -89,7 +90,7 @@
 
       ci_success:
         name: "CI Success"
-        needs: [build, lint, lint-js, test]
+        needs: [build, lint, lint-js, test, integration-test]
         if: |
           always()
         runs-on: ubuntu-latest
