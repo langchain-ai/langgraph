@@ -1,9 +1,11 @@
 [tool.poetry]
 name = "langgraph-cli"
-version = "0.1.37"
+version = "0.1.38"
 description = "CLI for interacting with LangGraph API"
-authors = ["Nuno Campos <nuno@langchain.dev>"]
+authors = []
+license = "MIT"
 readme = "README.md"
+repository = "https://www.github.com/langchain-ai/langgraph"
 packages = [{include = "langgraph_cli"}]
 
 [tool.poetry.scripts]
