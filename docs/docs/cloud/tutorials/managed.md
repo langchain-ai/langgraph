@@ -93,7 +93,7 @@ LANGCHAIN_API_KEY= ...
 LANGCHAIN_TRACING_V2=true
 ```
 
-- The `requirements.txt` file lists python package dependencies for your project (along with the associated versions if neccesary). In our example the file looks like this:
+- The `requirements.txt` file lists python package dependencies for your project (along with the associated versions if necessary). In our example the file looks like this:
     
     ```
     langgraph
