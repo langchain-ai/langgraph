@@ -34,7 +34,7 @@ class AgentState(TypedDict):
     is_last_step: IsLastStep
 
 
-@deprecated("0.0.44", "create_react_agent")
+@deprecated("0.0.44", "create_react_agent", removal="0.2.0")
 def create_function_calling_executor(
     model: LanguageModelLike, tools: Union[ToolExecutor, Sequence[BaseTool]]
 ) -> CompiledGraph:
