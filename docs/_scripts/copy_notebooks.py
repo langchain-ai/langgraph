@@ -8,7 +8,8 @@ examples_dir = root_dir / "examples"
 docs_dir = root_dir / "docs/docs"
 how_tos_dir = docs_dir / "how-tos"
 tutorials_dir = docs_dir / "tutorials"
-cloud_how_tos_dir = docs_dir / "deploy/how_tos"
+cloud_how_tos_dir = docs_dir / "deploy/how-tos"
+cloud_sdk_dir = docs_dir / "deploy"
 
 _MANUAL = {
     "how-tos": [
@@ -95,6 +96,8 @@ def copy_notebooks():
             continue
         if any(path in _HOW_TOS for path in root.split(os.sep)):
             dst_dir = how_tos_dir
+        elif 'sdk' in root.split(os.sep):
+            dst_dir = cloud_sdk_dir
         elif 'cloud_examples' in root.split(os.sep):
             dst_dir = cloud_how_tos_dir
         else:
@@ -135,6 +138,7 @@ def copy_notebooks():
                     with open(dst_path, "w") as f:
                         f.write(content)
                 dst_dir = dst_dir_
+                
     # Top level notebooks are "how-to's"
     # for file in examples_dir.iterdir():
     #     if file.suffix.endswith(".ipynb") and not os.path.isdir(
