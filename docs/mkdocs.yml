@@ -168,13 +168,13 @@ nav:
   - 'Cloud (alpha)':
       - 'cloud/index.md'
       - Tutorials:
-          - Quick Start: 'cloud/quick_start.md'
+          - Quick Start: 'cloud/tutorials/quick_start.md'
           - SDK:
-              - Python: 'cloud/sdk/python_sdk.ipynb'
-              - JS/TS: 'cloud/sdk/js_sdk.ipynb'
+              - Python: 'cloud/tutorials/sdk/python_sdk.ipynb'
+              - JS/TS: 'cloud/tutorials/sdk/js_sdk.ipynb'
           - Deployment:
-              - Self-Hosted: 'cloud/deployment/self_hosted.md'
-              - Managed: 'cloud/deployment/managed.md'
+              - Self-Hosted: 'cloud/tutorials/deployment/self_hosted.md'
+              - Managed: 'cloud/tutorials/deployment/managed.md'
       - How-to Guides:
           - Streaming:
               - Stream Messages: 'cloud/how-tos/cloud_examples/stream_messages.ipynb'
@@ -190,7 +190,7 @@ nav:
           - Human in the loop: 'cloud/how-tos/cloud_examples/human-in-the-loop_cloud.ipynb'
           - Create Agents with Configuration: 'cloud/how-tos/cloud_examples/configuration_cloud.ipynb'
       - Conceptual Guides:
-          - API Concepts: 'cloud/api_concepts.md'
+          - API Concepts: 'cloud/conceptual_guides/api_concepts.md'
       - Reference:
           - API: 'cloud/reference/api_ref.md'
           - SDK:
