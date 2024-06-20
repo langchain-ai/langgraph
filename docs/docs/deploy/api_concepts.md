@@ -1,5 +1,5 @@
 # API Concepts
-This page discusses high-level concepts of the LangGraph Deploy API. The complete API specification is available locally at [`http://localhost:8123/docs`](http://localhost:8123/docs) or [here]().
+This page discusses high-level concepts of the LangGraph Cloud.
 
 ## Assistant
 An assistant is a configured instance of a [`CompiledGraph`](../../reference/graphs/#compiledgraph). It abstracts the cognitive architecture of the graph and contains instance specific configuration and metadata. Multiple assistants can reference the same graph but can contain different configuration and metadata, which may differentiate the behavior of the assistants.
@@ -22,5 +22,3 @@ There are many occasions where the graph cannot run completely autonomously. For
 
 ## Multi-Tasking
 Many times users might interact with your graph in unintended ways. For instance, a user interacting with a graph that has chat output could send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), Langgraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how_tos/cloud_examples/interrupt_concurrent/).
-
-## Webhooks

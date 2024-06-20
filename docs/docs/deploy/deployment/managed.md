@@ -1,15 +1,6 @@
-# Deploy custom LangGraph code with Hosted LangGraph API (Python)
+# Deploy custom LangGraph code with LangGraph Cloud (Python)
 
 ## Set up your application code
-
-### Install required tools
-
-```bash
-pip install -U langgraph langchain_openai
-
-: 'these instructions are for mac, but use an equivalent for linux/pc'
-brew install gh
-```
 
 ### Create a new application
 
@@ -104,13 +95,13 @@ LANGCHAIN_TRACING_V2=true
 
 Create a git repo in the `<my-app>` directory, and verify it’s existence. You can use the Github CLI if you like, or just create a repo manually.
 
-## Host your code on Hosted LangGraph
+## Host your code on LangGraph Cloud
 
-### Deploy from GitHub with Hosted LangGraph
+### Deploy from GitHub with LangGraph Cloud
 
-Head to LangSmith and click on the 🚀 emoji on the left navbar to create a new deployment. Click the `+ New Deployment` button. 
+Head to LangSmith and click on the 🚀 icon on the left navbar to create a new deployment. Click the `+ New Deployment` button. 
 
-***If you have not deployed to Hosted LangGraph before:*** there will be a button that shows up saying Import from GitHub. You’ll need to follow that flow to connect hosted LangGraph to GitHub.
+***If you have not deployed to LangGraph Cloud before:*** there will be a button that shows up saying Import from GitHub. You’ll need to follow that flow to connect LangGraph Cloud to GitHub.
 
 ***Once you have set up your GitHub connection:*** the new deployment page will look as follows
 
@@ -163,4 +154,4 @@ On this page you can test out your graph by passing in starting states and click
 
 ## Deploy new code
 
-To deploy new code that you push to GIthub, simply navigate to the deployments page, and hit `+ New Revision` . Hosted LangGraph releases what it calls a new “revision” every time you deploy code. Therefore, your first deployment automatically showed revisions. A Revision always corresponds to a new piece of code being deployed. A modal will pop up to enter new revision info. This can be thought of as a partial update on the last revision, so you do not need to enter any fields that didn’t change (*note: environment variables are not saved between revisions, you must re-enter them for each new revision)*.
+To deploy new code that you push to GIthub, simply navigate to the deployments page, and hit `+ New Revision`. LangGraph Cloud releases what it calls a new “revision” every time you deploy code. Therefore, your first deployment automatically showed revisions. A Revision always corresponds to a new piece of code being deployed. A modal will pop up to enter new revision info. This can be thought of as a partial update on the last revision, so you do not need to enter any fields that didn’t change (*note: environment variables are not saved between revisions, you must re-enter them for each new revision)*.
