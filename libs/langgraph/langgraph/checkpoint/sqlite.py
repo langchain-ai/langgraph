@@ -399,7 +399,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use get_tuple() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+            Use get_tuple() instead, or consider using [AsyncSqliteSaver](https://langchain-ai.github.io/langgraph/reference/checkpoints/#asyncsqlitesaver).
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
@@ -415,7 +415,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use list() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+            Use list() instead, or consider using [AsyncSqliteSaver](https://langchain-ai.github.io/langgraph/reference/checkpoints/#asyncsqlitesaver).
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
         yield
@@ -430,7 +430,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use put() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+            Use put() instead, or consider using [AsyncSqliteSaver](https://langchain-ai.github.io/langgraph/reference/checkpoints/#asyncsqlitesaver).
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
