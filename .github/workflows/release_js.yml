@@ -9,9 +9,14 @@ jobs:
     if: github.ref == 'refs/heads/main'
     runs-on: ubuntu-latest
 
+    strategy:
+      matrix:
+        working-directory:
+          - "libs/sdk-js"
+
     defaults:
       run:
-        working-directory: "libs/sdk-js"
+        working-directory: ${{ matrix.working-directory }}
 
     steps:
       - uses: actions/checkout@v4
