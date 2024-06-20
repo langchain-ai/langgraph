@@ -135,7 +135,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         Note:
             This method is not implemented for the AsyncSqliteSaver. Use `aget` instead.
-            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+            Or consider using the [SqliteSaver](https://langchain-ai.github.io/langgraph/reference/checkpoints/#sqlitesaver) checkpointer.
         """
 
     @not_implemented_sync_method
@@ -151,7 +151,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         Note:
             This method is not implemented for the AsyncSqliteSaver. Use `alist` instead.
-            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+            Or consider using the [SqliteSaver](https://langchain-ai.github.io/langgraph/reference/checkpoints/#sqlitesaver) checkpointer.
         """
 
     @not_implemented_sync_method
