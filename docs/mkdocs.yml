@@ -175,7 +175,7 @@ nav:
             - Managed: 'cloud/tutorials/managed.md'
       - How-to Guides:
           - Streaming:
-              - Stream Messaages: 'cloud/how-tos/cloud_examples/stream_messages.ipynb'
+              - Stream Messages: 'cloud/how-tos/cloud_examples/stream_messages.ipynb'
               - Stream Values: 'cloud/how-tos/cloud_examples/stream_values.ipynb'
               - Stream Updates: 'cloud/how-tos/cloud_examples/stream_updates.ipynb'
           - Double Texting: 
