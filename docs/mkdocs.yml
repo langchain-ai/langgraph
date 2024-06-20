@@ -107,7 +107,7 @@ nav:
           - Corrective RAG (CRAG): tutorials/rag/langgraph_crag.ipynb
           - Corrective RAG (CRAG) using local LLMs: tutorials/rag/langgraph_crag_local.ipynb
           - Self-RAG: tutorials/rag/langgraph_self_rag.ipynb
-          - Self-RAG usig local LLMs: tutorials/rag/langgraph_self_rag_local.ipynb
+          - Self-RAG using local LLMs: tutorials/rag/langgraph_self_rag_local.ipynb
       - Agent Architectures:
         - Multi-Agent Systems:
             - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
