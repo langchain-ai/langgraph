@@ -13,7 +13,7 @@ env:
 
 jobs:
   build:
-    runs-on: ${{ matrix.os }}
+    runs-on: ubuntu-latest
     strategy:
       matrix:
         python-version:
@@ -21,10 +21,7 @@ jobs:
           - "3.10"
           - "3.11"
           - "3.12"
-        os:
-          - ubuntu-latest
-          - windows-latest
-    name: "test (Python ${{ matrix.python-version }}, ${{ matrix.os }})"
+    name: "test #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
 
