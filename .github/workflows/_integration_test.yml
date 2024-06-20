@@ -8,12 +8,15 @@ env:
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ${{ matrix.os }}
     strategy:
       matrix:
         python-version:
           - "3.11"
-    name: "CLI integration test"
+        os:
+          - ubuntu-latest
+          - windows-latest
+    name: "test (${{ matrix.os }})"
     defaults:
       run:
         working-directory: libs/cli
@@ -29,6 +32,7 @@ jobs:
           cache-key: integration-test-cli
 
       - name: Setup env
+        shell: bash
         working-directory: libs/cli/examples
         run: cat .env.example > .env
       - name: Install cli globally
