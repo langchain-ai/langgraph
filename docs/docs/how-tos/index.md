@@ -31,10 +31,7 @@ The following examples are useful especially if you are used to LangChain's `Age
 - [How to have agent respond in structured format](respond-in-format.ipynb)
 - [How to manage agent steps](managing-agent-steps.ipynb)
 
-### Alternative ways to define state
+### Advanced
 
-- [Pydantic state](state-model.ipynb): Use a Pydantic model as your state
-
-### Structured output
-
-- [Extraction with re-prompting](./extraction/retries.ipynb): How to generate complex nested schemas using JSONPatch retries, for when function calling is insufficient, and regular reprompting still fails to generate valid results
+- [Use a Pydantic model as your state](state-model.ipynb)
+- [Extract structured output with re-prompting](./extraction/retries.ipynb)
