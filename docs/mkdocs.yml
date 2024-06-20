@@ -177,7 +177,7 @@ nav:
             - Managed: 'deploy/deployment/managed.md'
       - How-to Guides:
           - Streaming:
-              - Stream Messaages: 'deploy/how-tos/cloud_examples/stream_messages.ipynb'
+              - Stream Messages: 'deploy/how-tos/cloud_examples/stream_messages.ipynb'
               - Stream Values: 'deploy/how-tos/cloud_examples/stream_values.ipynb'
               - Stream Updates: 'deploy/how-tos/cloud_examples/stream_updates.ipynb'
           - Double Texting: 
