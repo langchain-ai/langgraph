@@ -64,6 +64,7 @@ async def subp_exec(
 
             def handle_windows_signal(signum, frame):
                 signal_handler()
+                original_sigint_handler(signum, frame)
 
             signal.signal(signal.SIGINT, handle_windows_signal)
             # NOTE: we're not adding a handler for SIGTERM since it's ignored on Windows
