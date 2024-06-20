@@ -1,6 +1,6 @@
 ### Run your server locally
 
-First, make sure that docker is up and running. Test that your server works by running:
+First, make sure that Docker is up and running. Test that your server works by running:
 
 ```python
 langgraph up -c langgraph.json

@@ -93,7 +93,7 @@ LANGCHAIN_TRACING_V2=true
 
 ### Push your code to GitHub
 
-Create a git repo in the `<my-app>` directory, and verify it’s existence. You can use the Github CLI if you like, or just create a repo manually.
+Create a git repo in the `<my-app>` directory, and verify it’s existence. You can use the GitHub CLI if you like, or just create a repo manually.
 
 ## Host your code on LangGraph Cloud
 
@@ -109,7 +109,7 @@ Head to LangSmith and click on the 🚀 icon on the left navbar to create a new
 
 To deploy your application, you should do the following:
 
-1. Select your github username or organization from the selector
+1. Select your GitHub username or organization from the selector
 2. Search for your repo to deploy in the search bar and select it
 3. Choose any name
 4. In the `LangGraph API config file` field, enter the path to your `langgraph.json` file (if left blank langsmith will automatically search for it on deployment)
@@ -146,12 +146,12 @@ You won’t actually be able to test any of the API endpoints without authorizin
 
 ### Access Studio
 
-If you click on your deployment you should see a blue button in the top right that says `LangGraph Studio` . Clicking on this button will take you to a page that looks like this:
+If you click on your deployment you should see a blue button in the top right that says `LangGraph Studio`. Clicking on this button will take you to a page that looks like this:
 
 ![Screenshot 2024-06-11 at 2.51.51 PM.png](./img/graph_visualiztion)
 
-On this page you can test out your graph by passing in starting states and clicking `Start Run`  (this should behave identically to calling `.invoke` ). You will then be able to look into the execution thread for each run and explore the steps your graph is taking to produce its output.
+On this page you can test out your graph by passing in starting states and clicking `Start Run` (this should behave identically to calling `.invoke`). You will then be able to look into the execution thread for each run and explore the steps your graph is taking to produce its output.
 
 ## Deploy new code
 
-To deploy new code that you push to GIthub, simply navigate to the deployments page, and hit `+ New Revision`. LangGraph Cloud releases what it calls a new “revision” every time you deploy code. Therefore, your first deployment automatically showed revisions. A Revision always corresponds to a new piece of code being deployed. A modal will pop up to enter new revision info. This can be thought of as a partial update on the last revision, so you do not need to enter any fields that didn’t change (*note: environment variables are not saved between revisions, you must re-enter them for each new revision)*.
+To deploy new code that you push to GitHub, simply navigate to the deployments page, and hit `+ New Revision`. LangGraph Cloud releases what it calls a new “revision” every time you deploy code. Therefore, your first deployment automatically showed revisions. A Revision always corresponds to a new piece of code being deployed. A modal will pop up to enter new revision info. This can be thought of as a partial update on the last revision, so you do not need to enter any fields that didn’t change (*note: environment variables are not saved between revisions, you must re-enter them for each new revision)*.
