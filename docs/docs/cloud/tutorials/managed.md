@@ -5,7 +5,7 @@
 ### Install required tools
 
 ```bash
-pip install -U langgraph langchain_openai
+pip install -U langgraph langchain_openai langgraph_cli
 
 : 'these instructions are for mac, but use an equivalent for linux/pc'
 brew install gh
@@ -77,7 +77,7 @@ Putting it all together, our `langgraph.json` file should look like this:
 {
   "dependencies": ["."],
   "graphs": {
-    "agent": "./agent.py:agent"
+    "agent": "./agent.py:graph"
   },
   "env": ".env"
 }
@@ -103,6 +103,9 @@ LANGCHAIN_TRACING_V2=true
 ### Push your code to GitHub
 
 Create a git repo in the `<my-app>` directory, and verify it’s existence. You can use the Github CLI if you like, or just create a repo manually.
+
+!!! danger "Important!"
+    Make sure to add a .gitignore file and hid your environment file (.env) from github. Otherwise, your API keys will be exposed and compromised.
 
 ## Host your code on Hosted LangGraph
 
