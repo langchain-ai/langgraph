@@ -44,6 +44,7 @@ def _get_agent_state(input_schema=None):
 @deprecated(
     "0.0.44",
     alternative="create_react_agent",
+    removal="0.2.0",
     example="""
 from langgraph.prebuilt import create_react_agent 
 
