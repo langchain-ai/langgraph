@@ -1,7 +1,7 @@
 # LangGraph Cloud (alpha)
 
 !!! danger "Important"
-    LangGraph Cloud is a closed source, paid product in closed alpha stage. Self-hosting LangGraph Cloud applications is only permitted with explicit approval from LangChain.
+    LangGraph Cloud is a closed source, paid product in an invite-only stage. We are currently focused on providing high bandwidth support to make our select early customers successful. If you are interested in applying for access, please fill out this form.
 
 !!! warning "Under Construction"
     LangGraph Cloud documentation is under construction. Contents may change until general availability.
