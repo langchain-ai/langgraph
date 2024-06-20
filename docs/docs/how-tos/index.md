@@ -33,5 +33,5 @@ The following examples are useful especially if you are used to LangChain's `Age
 
 ### Advanced
 
-- [Use a Pydantic model as your state](state-model.ipynb)
-- [Extract structured output with re-prompting](./extraction/retries.ipynb)
+- [How to use a Pydantic model as your state](state-model.ipynb)
+- [How to extract structured output with re-prompting](./extraction/retries.ipynb)
