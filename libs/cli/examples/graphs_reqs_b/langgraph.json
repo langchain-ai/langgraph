@@ -1,0 +1,9 @@
+{
+  "dependencies": [
+    "."
+  ],
+  "env": "../.env",
+  "graphs": {
+    "graph": "./hello.py:graph"
+  }
+}
