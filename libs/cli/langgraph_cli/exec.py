@@ -59,6 +59,7 @@ async def subp_exec(
             if proc.returncode is None:
                 proc.terminate()
 
+        original_sigint_handler = signal.getsignal(signal.SIGINT)
         if sys.platform == "win32":
 
             def handle_windows_signal(signum, frame):
@@ -111,7 +112,9 @@ async def subp_exec(
                 except (ProcessLookupError, KeyboardInterrupt):
                     pass
 
-            if sys.platform != "win32":
+            if sys.platform == "win32":
+                signal.signal(signal.SIGINT, original_sigint_handler)
+            else:
                 loop.remove_signal_handler(signal.SIGINT)
                 loop.remove_signal_handler(signal.SIGTERM)
         except UnboundLocalError:
