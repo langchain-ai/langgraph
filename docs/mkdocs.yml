@@ -137,23 +137,23 @@ nav:
   - "How-to Guides":
      - 'how-tos/index.md'
      - Core:
-         - "ReAct Agent": how-tos/create-react-agent.ipynb
-         - "Persistence": how-tos/persistence.ipynb
-         - "Time Travel": how-tos/time-travel.ipynb 
-         - "Async Execution": how-tos/async.ipynb
-         - "Streaming Responses": how-tos/streaming-tokens.ipynb
-         - "Visualization": how-tos/visualization.ipynb
-         - "Configuration": how-tos/configuration.ipynb
+         - "Create a ReAct agent": how-tos/create-react-agent.ipynb
+         - "Add persistence (\"memory\")": how-tos/persistence.ipynb
+         - "View and update graph state": how-tos/time-travel.ipynb
+         - "Run graph asynchronously": how-tos/async.ipynb
+         - "Stream graph responses": how-tos/streaming-tokens.ipynb
+         - "Visualize your graph": how-tos/visualization.ipynb
+         - "Add runtime configuration": how-tos/configuration.ipynb
      - Design Patterns:
-         - "Subgraphs": how-tos/subgraph.ipynb
-         - "Branching": how-tos/branching.ipynb
-         - "Map-reduce": how-tos/map-reduce.ipynb
-         - "Human-in-the-Loop": how-tos/human-in-the-loop.ipynb
-         - "Force Calling a Tool First": how-tos/force-calling-a-tool-first.ipynb
-         - "Pass Run-Time Values to Tools": how-tos/pass-run-time-values-to-tools.ipynb
-         - "Dynamic Direct Return": how-tos/dynamically-returning-directly.ipynb
-         - "Respond in Structured Format": how-tos/respond-in-format.ipynb
-         - "Managing Agent Steps": how-tos/managing-agent-steps.ipynb
+         - "Create subgraphs": how-tos/subgraph.ipynb
+         - "Create branches for parallel execution": how-tos/branching.ipynb
+         - "Create map-reduce branches for parallel execution": how-tos/map-reduce.ipynb
+         - "Add human-in-the-loop": how-tos/human-in-the-loop.ipynb
+         - "Force an agent to call a tool": how-tos/force-calling-a-tool-first.ipynb
+         - "Pass runtime values to tools": how-tos/pass-run-time-values-to-tools.ipynb
+         - "Let agent return tool results directly": how-tos/dynamically-returning-directly.ipynb
+         - "Have agent respond in structured format": how-tos/respond-in-format.ipynb
+         - "Manage agent steps": how-tos/managing-agent-steps.ipynb
      - Alternative State Definitions:  
          - "Pydantic State": how-tos/state-model.ipynb
      - Structured Output:
