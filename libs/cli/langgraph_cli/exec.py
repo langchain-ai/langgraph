@@ -60,6 +60,7 @@ async def subp_exec(
                 proc.terminate()
 
         if sys.platform == "win32":
+
             def handle_windows_signal(signum, frame):
                 signal_handler()
 
