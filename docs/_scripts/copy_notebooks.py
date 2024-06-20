@@ -8,8 +8,8 @@ examples_dir = root_dir / "examples"
 docs_dir = root_dir / "docs/docs"
 how_tos_dir = docs_dir / "how-tos"
 tutorials_dir = docs_dir / "tutorials"
-cloud_how_tos_dir = docs_dir / "deploy/how-tos"
-cloud_sdk_dir = docs_dir / "deploy"
+cloud_how_tos_dir = docs_dir / "cloud/how-tos"
+cloud_sdk_dir = docs_dir / "cloud"
 
 _MANUAL = {
     "how-tos": [
