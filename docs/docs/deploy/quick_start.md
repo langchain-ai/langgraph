@@ -1,5 +1,5 @@
 # Quick Start
-This quick start guide will cover how to develop a LangGraph Deploy API, run it locally in Docker, and call the APIs to invoke a graph.
+This quick start guide will cover how to develop an application for LangGraph Cloud, run it locally in Docker, and call the APIs to invoke a graph.
 
 Alternatively, clone or fork the [`langgraph/example`](https://github.com/langchain-ai/langgraph-example) GitHub repository and follow the instructions in the `README`.
 
@@ -65,22 +65,6 @@ Alternatively, clone or fork the [`langgraph/example`](https://github.com/langch
 
 3. The API server is now running at `http://localhost:8123`. Navigate to [`http://localhost:8123/docs`](http://localhost:8123/docs) to view the API docs.
 
-## Call APIs
+## Deploy to Cloud
 
-1. Create an assistant.
-
-    ```python
-    pass
-    ```
-
-2. Create a thread.
-
-    ```python
-    pass
-    ```
-
-3. Execute a run.
-
-    ```python
-    pass
-    ```
+Follow [these instructions](./deployment/managed.md#deploy-from-github-with-hosted-langgraph) to deploy to LangGraph Cloud.

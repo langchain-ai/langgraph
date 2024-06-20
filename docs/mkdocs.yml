@@ -190,7 +190,11 @@ nav:
       - Conceptual Guides:
         - API Concepts: 'deploy/api_concepts.md'
       - Reference:
-        - CLI: 'deploy/cli.md'
+        - API: 'deploy/reference/api_ref.md'
+        - SDK:
+            - Python: 'deploy/reference/sdk/python_sdk_ref.md'
+            - JS/TS: 'deploy/reference/sdk/js_ts_sdk_ref.md'
+        - CLI: 'deploy/reference/cli.md'
 
 
 markdown_extensions:
