@@ -1,3 +1,8 @@
+---
+hide:
+  - toc
+---
+
 # How-to guides
 
 Welcome to the LangGraph how-to guides! These guides provide practical, step-by-step instructions for accomplishing key tasks in LangGraph.

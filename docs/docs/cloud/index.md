@@ -1,3 +1,8 @@
+---
+hide:
+  - toc
+---
+
 # LangGraph Cloud (alpha)
 
 !!! danger "Important"
