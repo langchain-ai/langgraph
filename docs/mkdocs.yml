@@ -108,6 +108,7 @@ nav:
           - Corrective RAG (CRAG) using local LLMs: tutorials/rag/langgraph_crag_local.ipynb
           - Self-RAG: tutorials/rag/langgraph_self_rag.ipynb
           - Self-RAG using local LLMs: tutorials/rag/langgraph_self_rag_local.ipynb
+          - SQL Agent: tutorials/sql-agent.ipynb
       - Agent Architectures:
         - Multi-Agent Systems:
             - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
@@ -126,7 +127,6 @@ nav:
           - Chatbot Evaluation via Simulation:
               - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
               - In LangSmith: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
-      - SQL: tutorials/sql-agent.ipynb
       - Experimental:
         - Web Research (STORM): tutorials/storm/storm.ipynb
         - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb

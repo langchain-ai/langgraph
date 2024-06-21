@@ -33,6 +33,7 @@ Learn from example implementations of graphs designed for specific scenarios and
     - [Corrective RAG using local LLMs](rag/langgraph_crag_local.ipynb)
 - [Self-RAG](rag/langgraph_self_rag.ipynb)
     - [Self-RAG using local LLMs](rag/langgraph_self_rag_local.ipynb)
+- [SQL Agent](sql-agent.ipynb)
 
 #### Planning Agents
 
@@ -51,10 +52,6 @@ Learn from example implementations of graphs designed for specific scenarios and
 
 - [Agent-based](chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb): Evaluate chatbots via simulated user interactions
 - [In LangSmith](chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb): Evaluate chatbots in LangSmith over a dialog dataset
-
-#### Databases
-
-- [SQL Agent](sql-agent.ipynb): Build an agent for interacting with a SQL database
 
 #### Experimental
 
