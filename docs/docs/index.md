@@ -1,5 +1,7 @@
 ---
 hide_comments: true
+hide:
+  - toc
 ---
 # 🦜🕸️LangGraph
 
