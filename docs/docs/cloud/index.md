@@ -1,7 +1,7 @@
 # LangGraph Cloud (alpha)
 
 !!! danger "Important"
-    LangGraph Cloud is a closed source, paid product in an invite-only stage. We are currently focused on providing high bandwidth support to make our select early customers successful. If you are interested in applying for access, please fill out this form.
+    LangGraph Cloud is a closed source, paid product in an invite-only stage. We are currently focused on providing high bandwidth support to make our select early customers successful. If you are interested in applying for access, please fill out [this form](https://airtable.com/app5PiMJxXukqPLq3/pagveJsW7XOjDspqw/form).
 
 !!! warning "Under Construction"
     LangGraph Cloud documentation is under construction. Contents may change until general availability.
