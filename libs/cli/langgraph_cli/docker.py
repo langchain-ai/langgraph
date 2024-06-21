@@ -93,16 +93,20 @@ def check_capabilities(runner) -> DockerCapabilities:
         compose = next(
             p for p in info["ClientInfo"]["Plugins"] if p["Name"] == "compose"
         )
+        compose_version_str = compose["Version"]
         compose_type = "plugin"
     except (KeyError, StopIteration):
         if shutil.which("docker-compose") is None:
             raise click.UsageError("Docker Compose not installed") from None
 
+        compose_version_str, _ = runner.run(
+            subp_exec("docker-compose", "--version", "--short", collect=True)
+        )
         compose_type = "standalone"
 
     # parse versions
     docker_version = _parse_version(info["ServerVersion"])
-    compose_version = _parse_version(compose["Version"])
+    compose_version = _parse_version(compose_version_str)
 
     # check capabilities
     return DockerCapabilities(
