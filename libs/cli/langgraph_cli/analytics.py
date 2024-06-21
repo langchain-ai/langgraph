@@ -65,7 +65,6 @@ def log_command(func):
                 headers=headers,
             )
         except httpx.HTTPStatusError:
-            print("Failed to log")
             pass
 
         return func(*args, **kwargs)
