@@ -46,7 +46,7 @@ Alternatively, clone or fork the [`langgraph/example`](https://github.com/langch
     }
     ```
 
-    Learn more about the LangGraph CLI configuration file [here](./reference/cli.md#configuration-file).
+    Learn more about the LangGraph CLI configuration file [here](../reference/cli.md#configuration-file).
 
 5. The `.env` file should contain the environment variables:
 
@@ -57,7 +57,7 @@ Alternatively, clone or fork the [`langgraph/example`](https://github.com/langch
         When testing locally, set `LANGGRAPH_AUTH_TYPE` to `noop` to disable authentication.
 
 ## Run Locally
-1. Install the [LangGraph CLI](./reference/cli.md#installation).
+1. Install the [LangGraph CLI](../reference/cli.md#installation).
 
 2. Run the following command to start the API server in Docker:
 
