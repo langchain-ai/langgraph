@@ -26,7 +26,6 @@ theme:
     - navigation.instant.prefetch
     - navigation.instant.progress
     - navigation.prune
-    - navigation.sections
     - navigation.tabs
     - navigation.top
     - navigation.tracking
@@ -97,67 +96,66 @@ nav:
   - Tutorials:
       - 'tutorials/index.md'
       - Introduction: tutorials/introduction.ipynb
-      - Use cases:
-          - Chatbots:
-              - Customer Support: tutorials/customer-support/customer-support.ipynb
-              - Info Gathering: tutorials/chatbots/information-gather-prompting.ipynb
-              - Code Assistant: tutorials/code_assistant/langgraph_code_assistant.ipynb
-          - Multi-Agent Systems:
-              - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
-              - Supervision: tutorials/multi_agent/agent_supervisor.ipynb
-              - Hierarchical Teams: tutorials/multi_agent/hierarchical_agent_teams.ipynb
-          - RAG:
-              - tutorials/rag/langgraph_adaptive_rag.ipynb
-              - tutorials/rag/langgraph_adaptive_rag_local.ipynb
-              - tutorials/rag/langgraph_agentic_rag.ipynb
-              - tutorials/rag/langgraph_crag.ipynb
-              - tutorials/rag/langgraph_crag_local.ipynb
-              - tutorials/rag/langgraph_self_rag.ipynb
-              - tutorials/rag/langgraph_self_rag_local.ipynb
-          - Web Research (STORM): tutorials/storm/storm.ipynb
-          - Planning Agents:
-              - Plan-and-Execute: tutorials/plan-and-execute/plan-and-execute.ipynb
-              - Reasoning w/o Observation: tutorials/rewoo/rewoo.ipynb
-              - LLMCompiler: tutorials/llm-compiler/LLMCompiler.ipynb
-          - Reflection & Critique:
-              - Basic Reflection: tutorials/reflection/reflection.ipynb
-              - Reflexion: tutorials/reflexion/reflexion.ipynb
-              - Language Agent Tree Search: tutorials/lats/lats.ipynb
-              - Self-Discovering Agent: tutorials/self-discover/self-discover.ipynb
-          - Evaluation & Analysis:
-              - Chatbot Eval via Sim:
-                  - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
-                  - In LangSmith: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
-          - Text Mining:
-              - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
-          - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
-          - Competitive Programming: tutorials/usaco/usaco.ipynb
-          - SQL: tutorials/sql-agent.ipynb
+      - Chatbots:
+          - Customer Support: tutorials/customer-support/customer-support.ipynb
+          - Prompt Generation from User Requirements: tutorials/chatbots/information-gather-prompting.ipynb
+          - Code Assistant: tutorials/code_assistant/langgraph_code_assistant.ipynb
+      - RAG:
+          - Adaptive RAG: tutorials/rag/langgraph_adaptive_rag.ipynb
+          - Adaptive RAG using local LLMs: tutorials/rag/langgraph_adaptive_rag_local.ipynb
+          - Agentic RAG: tutorials/rag/langgraph_agentic_rag.ipynb
+          - Corrective RAG (CRAG): tutorials/rag/langgraph_crag.ipynb
+          - Corrective RAG (CRAG) using local LLMs: tutorials/rag/langgraph_crag_local.ipynb
+          - Self-RAG: tutorials/rag/langgraph_self_rag.ipynb
+          - Self-RAG using local LLMs: tutorials/rag/langgraph_self_rag_local.ipynb
+          - SQL Agent: tutorials/sql-agent.ipynb
+      - Agent Architectures:
+        - Multi-Agent Systems:
+            - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
+            - Supervision: tutorials/multi_agent/agent_supervisor.ipynb
+            - Hierarchical Teams: tutorials/multi_agent/hierarchical_agent_teams.ipynb
+        - Planning Agents:
+            - Plan-and-Execute: tutorials/plan-and-execute/plan-and-execute.ipynb
+            - Reasoning without Observation: tutorials/rewoo/rewoo.ipynb
+            - LLMCompiler: tutorials/llm-compiler/LLMCompiler.ipynb
+        - Reflection & Critique:
+            - Basic Reflection: tutorials/reflection/reflection.ipynb
+            - Reflexion: tutorials/reflexion/reflexion.ipynb
+            - Language Agent Tree Search: tutorials/lats/lats.ipynb
+            - Self-Discover Agent: tutorials/self-discover/self-discover.ipynb
+      - Evaluation & Analysis:
+          - Chatbot Evaluation via Simulation:
+              - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
+              - In LangSmith: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
+      - Experimental:
+        - Web Research (STORM): tutorials/storm/storm.ipynb
+        - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
+        - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
+        - Competitive Programming: tutorials/usaco/usaco.ipynb
 
   - "How-to Guides":
      - 'how-tos/index.md'
      - Core:
-         - "ReAct Agent": how-tos/create-react-agent.ipynb
-         - "Persistence": how-tos/persistence.ipynb
-         - "Time Travel": how-tos/time-travel.ipynb 
-         - "Async Execution": how-tos/async.ipynb
-         - "Streaming Responses": how-tos/streaming-tokens.ipynb
-         - "Visualization": how-tos/visualization.ipynb
-         - "Configuration": how-tos/configuration.ipynb
+         - Create a ReAct agent: how-tos/create-react-agent.ipynb
+         - Add persistence ("memory"): how-tos/persistence.ipynb
+         - View and update graph state: how-tos/time-travel.ipynb
+         - Run graph asynchronously: how-tos/async.ipynb
+         - Stream graph responses: how-tos/streaming-tokens.ipynb
+         - Visualize your graph: how-tos/visualization.ipynb
+         - Add runtime configuration: how-tos/configuration.ipynb
      - Design Patterns:
-         - "Subgraphs": how-tos/subgraph.ipynb
-         - "Branching": how-tos/branching.ipynb
-         - "Map-reduce": how-tos/map-reduce.ipynb
-         - "Human-in-the-Loop": how-tos/human-in-the-loop.ipynb
-         - "Force Calling a Tool First": how-tos/force-calling-a-tool-first.ipynb
-         - "Pass Run-Time Values to Tools": how-tos/pass-run-time-values-to-tools.ipynb
-         - "Dynamic Direct Return": how-tos/dynamically-returning-directly.ipynb
-         - "Respond in Structured Format": how-tos/respond-in-format.ipynb
-         - "Managing Agent Steps": how-tos/managing-agent-steps.ipynb
-     - Alternative State Definitions:  
-         - "Pydantic State": how-tos/state-model.ipynb
-     - Structured Output:
-         - "Extraction with Re-prompting": how-tos/extraction/retries.ipynb
+         - Create subgraphs: how-tos/subgraph.ipynb
+         - Create branches for parallel execution: how-tos/branching.ipynb
+         - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
+         - Add human-in-the-loop: how-tos/human-in-the-loop.ipynb
+         - Force an agent to call a tool: how-tos/force-calling-a-tool-first.ipynb
+         - Pass runtime values to tools: how-tos/pass-run-time-values-to-tools.ipynb
+         - Let agent return tool results directly: how-tos/dynamically-returning-directly.ipynb
+         - Have agent respond in structured format: how-tos/respond-in-format.ipynb
+         - Manage agent steps: how-tos/managing-agent-steps.ipynb
+     - Advanced:
+         - Use Pydantic model as state: how-tos/state-model.ipynb
+         - Extract structured output with re-prompting: how-tos/extraction/retries.ipynb
   - 'Conceptual Guides':
      - 'concepts/index.md'
   - Reference:
