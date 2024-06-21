@@ -7,7 +7,7 @@ hide:
 
 Welcome to the LangGraph how-to guides! These guides provide practical, step-by-step instructions for accomplishing key tasks in LangGraph.
 
-## Core
+## Basics
 
 The core guides show how to address common needs when building out AI workflows, with special focus placed on [ReAct](https://arxiv.org/abs/2210.03629)-style agents with [tool calling](https://python.langchain.com/docs/modules/model_io/chat/function_calling/) (agents that <strong>Re</strong>ason and **Act** to accomplish tasks).
 

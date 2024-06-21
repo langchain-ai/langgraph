@@ -8,6 +8,9 @@
 
 ⚡ Building language agents as graphs ⚡
 
+> [!NOTE]
+> Looking for the JS version? Click [here](https://github.com/langchain-ai/langgraphjs) ([JS docs](https://langchain-ai.github.io/langgraphjs/)).
+
 ## Overview
 
 [LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs, used to create agent and multi-agent workflows. Compared to other LLM frameworks, it offers these core benefits: cycles, controllability, and persistence. LangGraph allows you to define flows that involve cycles, essential for most agentic architectures, differentiating it from DAG-based solutions. As a very low-level framework, it provides fine-grained control over both the flow and state of your application, crucial for creating reliable agents. Additionally, LangGraph includes built-in persistence, enabling advanced human-in-the-loop and memory features.
@@ -146,27 +149,31 @@ final_state["messages"][-1].content
 'The current weather in New York is as follows:\n- Temperature: 20.3°C (68.5°F)\n- Condition: Overcast\n- Wind: 2.2 mph from the north\n- Humidity: 65%\n- Cloud Cover: 100%\n- UV Index: 5.0\n\nFor more details, you can visit [Weather API](https://www.weatherapi.com/).'
 ```
 
-### Step-by-step Breakdown:
+### Step-by-step Breakdown
 
 1. <details>
     <summary>Initialize the model and tools.</summary>
 
     - we use `ChatOpenAI` as our LLM. **NOTE:** we need make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the `.bind_tools()` method.
-    - we define the tools we want to use -- a web search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
+    - we define the tools we want to use - a web search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
    </details>
+
 2. <details>
     <summary>Initialize graph with state.</summary>
 
     - we initialize graph (`StateGraph`) by passing state schema (in our case `MessagesState`)
     - `MessagesState` is a prebuilt state schema that has one attribute -- a list of LangChain `Message` objects, as well as logic for merging the updates from each node into the state
    </details>
+
 3. <details>
     <summary>Define graph nodes.</summary>
 
     There are two main nodes we need:
+
       - The `agent` node: responsible for deciding what (if any) actions to take.
       - The `tools` node that invokes tools: if the agent decides to take an action, this node will then execute that action.
    </details>
+
 4. <details>
     <summary>Define entry point and graph edges.</summary>
 
@@ -179,12 +186,14 @@ final_state["messages"][-1].content
         - b. Finish (respond to the user) if the agent did not ask to run tools
       - Normal edge: after the tools are invoked, the graph should always return to the agent to decide what to do next
    </details>
+
 5. <details>
     <summary>Compile the graph.</summary>
 
     - When we compile the graph, we turn it into a LangChain [Runnable](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface), which automatically enables calling `.invoke()`, `.stream()` and `.batch()` with your inputs
     - We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, human-in-the-loop workflows, time travel and more. In our case we use `MemorySaver` - a simple in-memory checkpointer
     </details>
+
 6. <details>
    <summary>Execute the graph.</summary>
 
@@ -192,8 +201,10 @@ final_state["messages"][-1].content
     2. The `"agent"` node executes, invoking the chat model.
     3. The chat model returns an `AIMessage`. LangGraph adds this to the state.
     4. Graph cycles the following steps until there are no more `tool_calls` on `AIMessage`:
-      - If `AIMessage` has `tool_calls`, `"tools"` node executes
-      - The `"agent"` node executes again and returns `AIMessage`
+
+        - If `AIMessage` has `tool_calls`, `"tools"` node executes
+        - The `"agent"` node executes again and returns `AIMessage`
+
     5. Execution progresses to the special `END` value and outputs the final state.
     And as a result, we get a list of all our chat messages as output.
    </details>
