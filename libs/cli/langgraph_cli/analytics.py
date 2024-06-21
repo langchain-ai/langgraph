@@ -2,29 +2,43 @@ import functools
 import os
 import pathlib
 import platform
-from typing import Any
+import threading
+from typing import Any, TypedDict
 
 import httpx
-from dotenv import load_dotenv
 
-from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
+from langgraph_cli.constants import (
+    DEFAULT_CONFIG,
+    DEFAULT_PORT,
+    SUPABASE_PUBLIC_API_KEY,
+    SUPABASE_URL,
+)
 from langgraph_cli.version import __version__
 
-load_dotenv()
+
+class LogData(TypedDict):
+    os: str
+    os_version: str
+    python_version: str
+    cli_version: str
+    cli_command: str
+    params: dict[str, Any]
 
 
-def get_anonymized_params(kwargs: dict[str, Any]):
+def get_anonymized_params(kwargs: dict[str, Any]) -> dict[str, bool]:
     params = {}
 
     # anonymize params with values
-    if "config" in kwargs:
-        params["config"] = kwargs["config"] != pathlib.Path(DEFAULT_CONFIG).resolve()
+    if config := kwargs.get("config"):
+        if config != pathlib.Path(DEFAULT_CONFIG).resolve():
+            params["config"] = config
+
+    if port := kwargs.get("port"):
+        if port != DEFAULT_PORT:
+            params["port"] = port
 
     if kwargs.get("docker_compose"):
         params["docker_compose"] = True
-
-    if "port" in kwargs:
-        params["port"] = kwargs["port"] != DEFAULT_PORT
 
     if kwargs.get("debugger_port"):
         params["debugger_port"] = True
@@ -38,6 +52,19 @@ def get_anonymized_params(kwargs: dict[str, Any]):
             params[boolean_param] = kwargs[boolean_param]
 
     return params
+
+
+def log_data(data: LogData) -> None:
+    headers = {"apikey": SUPABASE_PUBLIC_API_KEY}
+    supabase_url = SUPABASE_URL
+    try:
+        httpx.post(
+            f"{supabase_url}/rest/v1/logs",
+            json=data,
+            headers=headers,
+        )
+    except httpx.HTTPStatusError:
+        pass
 
 
 def log_command(func):
@@ -55,18 +82,8 @@ def log_command(func):
             "params": get_anonymized_params(kwargs),
         }
 
-        # TODO: update w/ LangChain supabase key
-        headers = {"apikey": os.environ["SUPABASE_PUBLIC_API_KEY"]}
-        supabase_url = os.environ["SUPABASE_URL"]
-        try:
-            httpx.post(
-                f"{supabase_url}/rest/v1/logs",
-                json=data,
-                headers=headers,
-            )
-        except httpx.HTTPStatusError:
-            pass
-
+        background_thread = threading.Thread(target=log_data, args=(data,))
+        background_thread.start()
         return func(*args, **kwargs)
 
     return decorator
