@@ -1,3 +1,8 @@
+---
+hide:
+  - toc
+---
+
 # Tutorials
 
 Welcome to the LangGraph Tutorials! These notebooks introduce LangGraph through building various language agents and applications.

@@ -857,8 +857,8 @@ tenacity = ">=8.1.0,<9.0.0"
 
 [[package]]
 name = "langgraph"
-version = "0.0.69"
-description = "langgraph"
+version = "0.1.0"
+description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
 files = []
@@ -901,6 +901,37 @@ files = [
 [package.extras]
 docs = ["mdx-gh-links (>=0.2)", "mkdocs (>=1.5)", "mkdocs-gen-files", "mkdocs-literate-nav", "mkdocs-nature (>=0.6)", "mkdocs-section-index", "mkdocstrings[python]"]
 testing = ["coverage", "pyyaml"]
+
+[[package]]
+name = "markdown-callouts"
+version = "0.4.0"
+description = "Markdown extension: a classier syntax for admonitions"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "markdown_callouts-0.4.0-py3-none-any.whl", hash = "sha256:ed0da38f29158d93116a0d0c6ecaf9df90b37e0d989b5337d678ee6e6d6550b7"},
+    {file = "markdown_callouts-0.4.0.tar.gz", hash = "sha256:7ed2c90486967058a73a547781121983839522d67041ae52c4979616f1b2b746"},
+]
+
+[package.dependencies]
+markdown = ">=3.3.3"
+
+[[package]]
+name = "markdown-include"
+version = "0.8.1"
+description = "A Python-Markdown extension which provides an 'include' function"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "markdown-include-0.8.1.tar.gz", hash = "sha256:1d0623e0fc2757c38d35df53752768356162284259d259c486b4ab6285cdbbe3"},
+    {file = "markdown_include-0.8.1-py3-none-any.whl", hash = "sha256:32f0635b9cfef46997b307e2430022852529f7a5b87c0075c504283e7cc7db53"},
+]
+
+[package.dependencies]
+markdown = ">=3.0"
+
+[package.extras]
+tests = ["pytest"]
 
 [[package]]
 name = "markdown-it-py"
@@ -2520,4 +2551,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "ce6ddcd0789cddc6c5e87f399754e6d8fc776df9b1b5419fe6a3a20faa5ea4a4"
+content-hash = "5369acbf95b74ea9627f263672e460e3227383108ff0cb08d99e7af1c18f95a9"

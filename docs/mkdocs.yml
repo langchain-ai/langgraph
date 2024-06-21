@@ -91,8 +91,6 @@ plugins:
 nav:
   - Home: 
       - 'index.md'
-      - Quick Start: how-tos/docs/quickstart.ipynb
-      - Intro to LangGraph: tutorials/introduction.ipynb
   - Tutorials:
       - 'tutorials/index.md'
       - Introduction: tutorials/introduction.ipynb
@@ -243,6 +241,9 @@ markdown_extensions:
       combine_header_slug: true
   - pymdownx.tasklist:
       custom_checkbox: true
+  - markdown_include.include:
+      base_path: ./
+  - github-callouts
 extra_css:
   - css/mkdocstrings.css
 

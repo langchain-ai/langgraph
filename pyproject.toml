@@ -20,6 +20,8 @@ mkdocs-minify-plugin = "^0.8.0"
 mkdocs-rss-plugin = "^1.13.1"
 mkdocs-git-committers-plugin-2 = "^2.3.0"
 mkdocs-material = {extras = ["imaging"], version = "^9.5.27"}
+markdown-include = "^0.8.1"
+markdown-callouts = "^0.4.0"
 
 [build-system]
 requires = ["poetry-core"]
