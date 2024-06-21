@@ -1,0 +1,2 @@
+DEFAULT_CONFIG = "langgraph.json"
+DEFAULT_PORT = 8123
