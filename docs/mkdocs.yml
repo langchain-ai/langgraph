@@ -85,7 +85,7 @@ plugins:
       repository: langchain-ai/langgraph
       branch: main
       docs_path: docs/docs/
-      token: !!python/object/apply:os.getenv ["MKDOCS_GIT_COMMITTERS_APIKEY"]
+      token: !ENV ["GH_TOKEN"]
   # TODO: Add minify plugin once it works alright with code block copying
   # - minify:
   #     minify_html: true
