@@ -67,4 +67,4 @@ Alternatively, clone or fork the [`langgraph/example`](https://github.com/langch
 
 ## Deploy to Cloud
 
-Follow [these instructions](./deployment/managed.md#deploy-from-github-with-hosted-langgraph) to deploy to LangGraph Cloud.
+Follow [these instructions](./deployment/managed.md) to deploy to LangGraph Cloud.
