@@ -133,7 +133,7 @@ nav:
 
   - "How-to Guides":
      - 'how-tos/index.md'
-     - Core:
+     - Basics:
          - Create a ReAct agent: how-tos/create-react-agent.ipynb
          - Add persistence ("memory"): how-tos/persistence.ipynb
          - View and update graph state: how-tos/time-travel.ipynb
