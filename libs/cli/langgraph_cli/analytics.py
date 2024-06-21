@@ -44,7 +44,7 @@ def log_command(func):
     @functools.wraps(func)
     def decorator(*args, **kwargs):
         if os.getenv("LANGGRAPH_CLI_NO_ANALYTICS") == "1":
-            return
+            return func(*args, **kwargs)
 
         data = {
             "os": platform.system(),
