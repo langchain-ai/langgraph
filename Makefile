@@ -1,4 +1,4 @@
-.PHONY: build-docs serve-docs serve-clean-docs clean-docs
+.PHONY: build-docs serve-docs serve-clean-docs clean-docs codespell
 
 build-docs:
 	poetry run python docs/_scripts/copy_notebooks.py
@@ -15,3 +15,6 @@ serve-docs:
 clean-docs:
 	find ./docs/docs -name "*.ipynb" -type f -delete
 	rm -rf docs/site
+
+codespell:
+	./docs/codespell_notebooks.sh .

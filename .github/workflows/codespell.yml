@@ -36,5 +36,4 @@
               ignore_words_list: ${{ steps.extract_ignore_words.outputs.ignore_words_list }}
           # We do this to avoid spellchecking cell outputs
           - name: Codespell Notebooks
-            run: |
-              find . -name "*.ipynb" | head -n 1 | xargs cat $1 | jupytext --from ipynb --to py:percent | codespell -
+            run: make codespell
