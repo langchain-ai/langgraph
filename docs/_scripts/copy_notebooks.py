@@ -32,6 +32,9 @@ _MANUAL = {
         "map-reduce.ipynb",
         "extraction/retries.ipynb",
         "create-react-agent.ipynb",
+        "create-react-agent-system-prompt.ipynb",
+        "create-react-agent-memory.ipynb",
+        "create-react-agent-hitl.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",

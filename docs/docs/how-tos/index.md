@@ -11,7 +11,6 @@ Welcome to the LangGraph how-to guides! These guides provide practical, step-by-
 
 These guides show how to address common needs when building out AI workflows, with special focus placed on [ReAct](https://arxiv.org/abs/2210.03629)-style agents with [tool calling](https://python.langchain.com/docs/modules/model_io/chat/function_calling/) (agents that <strong>Re</strong>ason and **Act** to accomplish tasks).
 
-- [How to create a ReAct agent](create-react-agent.ipynb)
 - [How to add persistence ("memory") to your graph](persistence.ipynb)
 - [How to view and update graph state](time-travel.ipynb)
 - [How to run graph asynchronously](async.ipynb)
@@ -19,7 +18,17 @@ These guides show how to address common needs when building out AI workflows, wi
 - [How to visualize your graph](visualization.ipynb)
 - [How to add runtime configuration to your graph](configuration.ipynb)
 
-### Design patterns
+## Prebuilt ReAct Agent
+
+These guides show how to use the prebuilt ReAct agent.
+Please note that here will we use a **prebuilt agent**. One of the big benefits of LangGraph is that you can easily create your own agent architectures. So while it's fine to start here to build an agent quickly, we would strongly recommend learning how to build your own agent so that you can take full advantage of LangGraph.
+
+- [How to create a ReAct agent](create-react-agent.ipynb)
+- [How to add memory to a ReAct agent](create-react-agent-memory.ipynb)
+- [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
+- [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
+
+## Design patterns
 
 Recipes showing how to apply common design patterns in your workflows:
 
@@ -36,7 +45,7 @@ The following examples are useful especially if you are used to LangChain's `Age
 - [How to have agent respond in structured format](respond-in-format.ipynb)
 - [How to manage agent steps](managing-agent-steps.ipynb)
 
-### Advanced
+## Advanced
 
 - [How to use a Pydantic model as your state](state-model.ipynb)
 - [How to extract structured output with re-prompting](./extraction/retries.ipynb)

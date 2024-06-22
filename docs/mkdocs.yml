@@ -156,6 +156,9 @@ nav:
          - Extract structured output with re-prompting: how-tos/extraction/retries.ipynb
   - 'Conceptual Guides':
      - 'concepts/index.md'
+     - LangGraph for Agentic Applications: concepts/high_level.md
+     - Low Level LangGraph Concepts: concepts/high_level.md
+     - Common Agentic Patterns: concepts/high_level.md
   - Reference:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
