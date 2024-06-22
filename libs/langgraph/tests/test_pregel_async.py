@@ -27,6 +27,7 @@ from langchain_core.runnables import (
     RunnablePick,
 )
 from langchain_core.utils.aiter import aclosing
+from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
@@ -2209,11 +2210,29 @@ async def test_conditional_graph_state() -> None:
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
 
+    class MyPydanticContextModel(BaseModel):
+        class Config:
+            arbitrary_types_allowed = True
+
+        session: httpx.AsyncClient
+        something_else: str
+
+    @asynccontextmanager
+    async def make_context(
+        config: RunnableConfig,
+    ) -> AsyncIterator[MyPydanticContextModel]:
+        assert isinstance(config, dict)
+        session = httpx.AsyncClient()
+        try:
+            yield MyPydanticContextModel(session=session, something_else="hello")
+        finally:
+            await session.aclose()
+
     class AgentState(TypedDict):
         input: str
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
-        session: Annotated[httpx.AsyncClient, Context(httpx.AsyncClient)]
+        context: Annotated[MyPydanticContextModel, Context(make_context)]
 
     # Assemble the tools
     @tool()
@@ -2255,7 +2274,7 @@ async def test_conditional_graph_state() -> None:
     # Define tool execution logic
     def execute_tools(data: AgentState) -> dict:
         # check we have httpx session in AgentState
-        assert isinstance(data["session"], httpx.AsyncClient)
+        assert isinstance(data["context"], MyPydanticContextModel)
         # execute the tool
         agent_action: AgentAction = data.pop("agent_outcome")
         observation = {t.name: t for t in tools}[agent_action.tool].invoke(
@@ -2266,7 +2285,7 @@ async def test_conditional_graph_state() -> None:
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
         # check we have httpx session in AgentState
-        assert isinstance(data["session"], httpx.AsyncClient)
+        assert isinstance(data["context"], MyPydanticContextModel)
         # Logic to decide whether to continue in the loop or exit
         if isinstance(data["agent_outcome"], AgentFinish):
             return "exit"

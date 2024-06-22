@@ -1,5 +1,5 @@
 from contextlib import asynccontextmanager, contextmanager
-from inspect import isclass, signature
+from inspect import signature
 from typing import (
     Any,
     AsyncContextManager,
@@ -44,9 +44,6 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
     ) -> None:
         if ctx is None and actx is None:
             raise ValueError("Must provide either sync or async context manager.")
-        if isclass(ctx) and issubclass(ctx, AsyncContextManager) and actx is None:
-            actx = ctx
-            ctx = None
         self.ctx = ctx
         self.actx = actx
 
@@ -84,23 +81,31 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
     async def afrom_checkpoint(
         self, checkpoint: None, config: RunnableConfig
     ) -> AsyncGenerator[Self, None]:
+        empty = self.__class__(ctx=self.ctx, actx=self.actx)
         if self.actx is not None:
-            empty = self.__class__(ctx=self.ctx, actx=self.actx)
             ctx = (
                 self.actx(config)
                 if signature(self.actx).parameters.get("config")
                 else self.actx()
             )
+        else:
+            ctx = (
+                self.ctx(config)
+                if signature(self.ctx).parameters.get("config")
+                else self.ctx()
+            )
+        if hasattr(ctx, "__aenter__"):
             async with ctx as value:
                 empty.value = value
                 yield empty
         else:
-            with self.from_checkpoint(checkpoint, config) as empty:
+            with ctx as value:
+                empty.value = value
                 yield empty
 
     def update(self, values: Sequence[None]) -> bool:
         if values:
-            raise InvalidUpdateError()
+            raise InvalidUpdateError("Context channel does not accept writes.")
         return False
 
     def get(self) -> Value:
