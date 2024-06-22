@@ -5,7 +5,7 @@ import platform
 import threading
 from typing import Any, TypedDict
 
-import httpx
+import requests
 
 from langgraph_cli.constants import (
     DEFAULT_CONFIG,
@@ -58,12 +58,12 @@ def log_data(data: LogData) -> None:
     headers = {"apikey": SUPABASE_PUBLIC_API_KEY}
     supabase_url = SUPABASE_URL
     try:
-        httpx.post(
+        requests.post(
             f"{supabase_url}/rest/v1/logs",
             json=data,
             headers=headers,
         )
-    except httpx.HTTPStatusError:
+    except requests.RequestException:
         pass
 
 
