@@ -15,6 +15,7 @@ _MANUAL = {
     "how-tos": [
         "async.ipynb",
         "streaming-tokens.ipynb",
+        "streaming-content.ipynb",
         "human-in-the-loop.ipynb",
         "persistence.ipynb",
         "time-travel.ipynb",
@@ -30,7 +31,6 @@ _MANUAL = {
         "dynamically-returning-directly.ipynb",
         "configuration.ipynb",
         "map-reduce.ipynb",
-        "extraction/retries.ipynb",
         "create-react-agent.ipynb",
         "create-react-agent-system-prompt.ipynb",
         "create-react-agent-memory.ipynb",
