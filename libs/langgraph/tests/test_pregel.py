@@ -18,6 +18,7 @@ from typing import (
     Union,
 )
 
+import httpx
 import pytest
 from langchain_core.runnables import (
     RunnableConfig,
@@ -1245,7 +1246,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         nodes={"one": one, "two": two},
         channels={
             "inbox": Topic(int),
-            "ctx": Context(an_int, typ=int),
+            "ctx": Context(an_int),
             "output": LastValue(int),
             "input": LastValue(int),
         },
@@ -2107,6 +2108,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         input: str
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+        session: Annotated[httpx.Client, Context(httpx.Client)]
 
     # Assemble the tools
     @tool()
@@ -2147,6 +2149,9 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     # Define tool execution logic
     def execute_tools(data: AgentState) -> dict:
+        # check session in data
+        assert isinstance(data["session"], httpx.Client)
+        # execute the tool
         agent_action: AgentAction = data.pop("agent_outcome")
         observation = {t.name: t for t in tools}[agent_action.tool].invoke(
             agent_action.tool_input
@@ -2155,6 +2160,8 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
+        # check session in data
+        assert isinstance(data["session"], httpx.Client)
         # Logic to decide whether to continue in the loop or exit
         if isinstance(data["agent_outcome"], AgentFinish):
             return "exit"

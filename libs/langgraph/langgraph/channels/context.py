@@ -1,17 +1,19 @@
 from contextlib import asynccontextmanager, contextmanager
+from inspect import signature
 from typing import (
     Any,
     AsyncContextManager,
     AsyncGenerator,
-    Callable,
     ContextManager,
     Generator,
     Generic,
     Optional,
     Sequence,
     Type,
+    Union,
 )
 
+from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -35,69 +37,75 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
 
     def __init__(
         self,
-        ctx: Optional[Callable[[], ContextManager[Value]]] = None,
-        actx: Optional[Callable[[], AsyncContextManager[Value]]] = None,
-        typ: Optional[Type[Value]] = None,
+        ctx: Union[
+            None, Type[ContextManager[Value]], Type[AsyncContextManager[Value]]
+        ] = None,
+        actx: Optional[Type[AsyncContextManager[Value]]] = None,
     ) -> None:
         if ctx is None and actx is None:
             raise ValueError("Must provide either sync or async context manager.")
-
-        self.typ = typ
         self.ctx = ctx
         self.actx = actx
 
     @property
     def ValueType(self) -> Any:
         """The type of the value stored in the channel."""
-        return (
-            self.typ
-            or (self.ctx if hasattr(self.ctx, "__enter__") else None)
-            or (self.actx if hasattr(self.actx, "__aenter__") else None)
-            or None
-        )
+        return None
 
     @property
     def UpdateType(self) -> Type[None]:
         """The type of the update received by the channel."""
-        raise InvalidUpdateError()
+        return None
 
     def checkpoint(self) -> None:
         raise EmptyChannelError()
 
     @contextmanager
-    def from_checkpoint(self, checkpoint: None = None) -> Generator[Self, None, None]:
+    def from_checkpoint(
+        self, checkpoint: None, config: RunnableConfig
+    ) -> Generator[Self, None, None]:
         if self.ctx is None:
             raise ValueError("Cannot enter sync context manager.")
 
-        empty = self.__class__(ctx=self.ctx, actx=self.actx, typ=self.typ)
-        # ContextManager doesn't have a checkpoint
-        ctx = self.ctx()
-        empty.value = ctx.__enter__()
-        try:
+        empty = self.__class__(ctx=self.ctx, actx=self.actx)
+        ctx = (
+            self.ctx(config)
+            if signature(self.ctx).parameters.get("config")
+            else self.ctx()
+        )
+        with ctx as value:
+            empty.value = value
             yield empty
-        finally:
-            ctx.__exit__(None, None, None)
 
     @asynccontextmanager
     async def afrom_checkpoint(
-        self, checkpoint: Optional[str] = None
+        self, checkpoint: None, config: RunnableConfig
     ) -> AsyncGenerator[Self, None]:
+        empty = self.__class__(ctx=self.ctx, actx=self.actx)
         if self.actx is not None:
-            empty = self.__class__(ctx=self.ctx, actx=self.actx, typ=self.typ)
-            # ContextManager doesn't have a checkpoint
-            actx = self.actx()
-            empty.value = await actx.__aenter__()
-            try:
-                yield empty
-            finally:
-                await actx.__aexit__(None, None, None)
+            ctx = (
+                self.actx(config)
+                if signature(self.actx).parameters.get("config")
+                else self.actx()
+            )
         else:
-            with self.from_checkpoint() as empty:
+            ctx = (
+                self.ctx(config)
+                if signature(self.ctx).parameters.get("config")
+                else self.ctx()
+            )
+        if hasattr(ctx, "__aenter__"):
+            async with ctx as value:
+                empty.value = value
+                yield empty
+        else:
+            with ctx as value:
+                empty.value = value
                 yield empty
 
     def update(self, values: Sequence[None]) -> bool:
         if values:
-            raise InvalidUpdateError()
+            raise InvalidUpdateError("Context channel does not accept writes.")
         return False
 
     def get(self) -> Value:

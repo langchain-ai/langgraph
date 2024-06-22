@@ -1,6 +1,8 @@
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from datetime import datetime, timezone
 from typing import Any, AsyncGenerator, Generator, Mapping
+
+from langchain_core.runnables import RunnableConfig
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint
@@ -12,35 +14,32 @@ from langgraph.errors import EmptyChannelError
 def ChannelsManager(
     channels: Mapping[str, BaseChannel],
     checkpoint: Checkpoint,
+    config: RunnableConfig,
 ) -> Generator[Mapping[str, BaseChannel], None, None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
-    # TODO use https://docs.python.org/3/library/contextlib.html#contextlib.ExitStack
-    empty = {
-        k: v.from_checkpoint(checkpoint["channel_values"].get(k))
-        for k, v in channels.items()
-    }
-    try:
-        yield {k: v.__enter__() for k, v in empty.items()}
-    finally:
-        for v in empty.values():
-            v.__exit__(None, None, None)
+    with ExitStack() as stack:
+        yield {
+            k: stack.enter_context(
+                v.from_checkpoint(checkpoint["channel_values"].get(k), config)
+            )
+            for k, v in channels.items()
+        }
 
 
 @asynccontextmanager
 async def AsyncChannelsManager(
     channels: Mapping[str, BaseChannel],
     checkpoint: Checkpoint,
+    config: RunnableConfig,
 ) -> AsyncGenerator[Mapping[str, BaseChannel], None]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
-    empty = {
-        k: v.afrom_checkpoint(checkpoint["channel_values"].get(k))
-        for k, v in channels.items()
-    }
-    try:
-        yield {k: await v.__aenter__() for k, v in empty.items()}
-    finally:
-        for v in empty.values():
-            await v.__aexit__(None, None, None)
+    async with AsyncExitStack() as stack:
+        yield {
+            k: await stack.enter_async_context(
+                v.afrom_checkpoint(checkpoint["channel_values"].get(k), config)
+            )
+            for k, v in channels.items()
+        }
 
 
 def create_checkpoint(
