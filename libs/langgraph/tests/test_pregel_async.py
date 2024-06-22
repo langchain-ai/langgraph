@@ -18,6 +18,7 @@ from typing import (
 )
 from uuid import UUID
 
+import httpx
 import pytest
 from langchain_core.runnables import (
     RunnableConfig,
@@ -1342,7 +1343,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
             "input": LastValue(int),
             "output": LastValue(int),
             "inbox": Topic(int),
-            "ctx": Context(an_int, an_int_async, typ=int),
+            "ctx": Context(an_int, an_int_async),
         },
         input_channels="input",
         output_channels=["inbox", "output"],
@@ -2212,6 +2213,7 @@ async def test_conditional_graph_state() -> None:
         input: str
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+        session: Annotated[httpx.AsyncClient, Context(httpx.AsyncClient)]
 
     # Assemble the tools
     @tool()
@@ -2252,6 +2254,9 @@ async def test_conditional_graph_state() -> None:
 
     # Define tool execution logic
     def execute_tools(data: AgentState) -> dict:
+        # check we have httpx session in AgentState
+        assert isinstance(data["session"], httpx.AsyncClient)
+        # execute the tool
         agent_action: AgentAction = data.pop("agent_outcome")
         observation = {t.name: t for t in tools}[agent_action.tool].invoke(
             agent_action.tool_input
@@ -2260,6 +2265,8 @@ async def test_conditional_graph_state() -> None:
 
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
+        # check we have httpx session in AgentState
+        assert isinstance(data["session"], httpx.AsyncClient)
         # Logic to decide whether to continue in the loop or exit
         if isinstance(data["agent_outcome"], AgentFinish):
             return "exit"

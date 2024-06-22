@@ -55,6 +55,7 @@ from langgraph.channels.base import (
     BaseChannel,
     EmptyChannelError,
 )
+from langgraph.channels.context import Context
 from langgraph.channels.manager import (
     AsyncChannelsManager,
     ChannelsManager,
@@ -335,7 +336,9 @@ class Pregel(
 
     @property
     def stream_channels_asis(self) -> Union[str, Sequence[str]]:
-        return self.stream_channels or [k for k in self.channels]
+        return self.stream_channels or [
+            k for k in self.channels if not isinstance(self.channels[k], Context)
+        ]
 
     @property
     def managed_values_dict(self) -> dict[str, ManagedValueSpec]:
@@ -356,7 +359,7 @@ class Pregel(
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
         config = saved.config if saved else config
         with ChannelsManager(
-            self.channels, checkpoint
+            self.channels, checkpoint, config
         ) as channels, ManagedValuesManager(
             self.managed_values_dict, ensure_config(config), self
         ) as managed:
@@ -388,7 +391,7 @@ class Pregel(
 
         config = saved.config if saved else config
         async with AsyncChannelsManager(
-            self.channels, checkpoint
+            self.channels, checkpoint, config
         ) as channels, AsyncManagedValuesManager(
             self.managed_values_dict, ensure_config(config), self
         ) as managed:
@@ -430,7 +433,7 @@ class Pregel(
             config, before=before, limit=limit, filter=filter
         ):
             with ChannelsManager(
-                self.channels, checkpoint
+                self.channels, checkpoint, config
             ) as channels, ManagedValuesManager(
                 self.managed_values_dict, ensure_config(config), self
             ) as managed:
@@ -475,7 +478,7 @@ class Pregel(
             parent_config,
         ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             async with AsyncChannelsManager(
-                self.channels, checkpoint
+                self.channels, checkpoint, config
             ) as channels, AsyncManagedValuesManager(
                 self.managed_values_dict, ensure_config(config), self
             ) as managed:
@@ -537,7 +540,7 @@ class Pregel(
         if as_node is None:
             raise InvalidUpdateError("Ambiguous update, specify as_node")
         # update channels
-        with ChannelsManager(self.channels, checkpoint) as channels:
+        with ChannelsManager(self.channels, checkpoint, config) as channels:
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
             if not writers:
@@ -560,7 +563,7 @@ class Pregel(
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: task.writes.extend,
                         CONFIG_KEY_READ: partial(
-                            _local_read, checkpoint, channels, task.writes
+                            _local_read, checkpoint, channels, task.writes, config
                         ),
                     },
                 ),
@@ -625,7 +628,7 @@ class Pregel(
         if as_node is None:
             raise InvalidUpdateError("Ambiguous update, specify as_node")
         # update channels, acting as the chosen node
-        async with AsyncChannelsManager(self.channels, checkpoint) as channels:
+        async with AsyncChannelsManager(self.channels, checkpoint, config) as channels:
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
             if not writers:
@@ -648,7 +651,7 @@ class Pregel(
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: task.writes.extend,
                         CONFIG_KEY_READ: partial(
-                            _local_read, checkpoint, channels, task.writes
+                            _local_read, checkpoint, channels, task.writes, config
                         ),
                     },
                 ),
@@ -790,7 +793,7 @@ class Pregel(
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
             with ChannelsManager(
-                self.channels, checkpoint
+                self.channels, checkpoint, config
             ) as channels, get_executor_for_config(
                 config
             ) as executor, ManagedValuesManager(
@@ -957,7 +960,7 @@ class Pregel(
                             task = futures.pop(fut)
                             if fut.exception() is not None:
                                 # we got an exception, break out of while loop
-                                # exception will be handle in panic_or_proceed
+                                # exception will be handled in panic_or_proceed
                                 futures.clear()
                             else:
                                 # yield updates output for the finished task
@@ -1143,7 +1146,7 @@ class Pregel(
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
             async with AsyncChannelsManager(
-                self.channels, checkpoint
+                self.channels, checkpoint, config
             ) as channels, AsyncManagedValuesManager(
                 self.managed_values_dict, config, self
             ) as managed:
@@ -1579,14 +1582,21 @@ def _local_read(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
     writes: Sequence[tuple[str, Any]],
+    config: RunnableConfig,
     select: Union[list[str], str],
     fresh: bool = False,
 ) -> Union[dict[str, Any], Any]:
     if fresh:
         checkpoint = create_checkpoint(checkpoint, channels, -1)
-        with ChannelsManager(channels, checkpoint) as channels:
-            _apply_writes(copy_checkpoint(checkpoint), channels, writes, None)
-            return read_channels(channels, select)
+        context_channels = {k: v for k, v in channels.items() if isinstance(v, Context)}
+        with ChannelsManager(
+            {k: v for k, v in channels.items() if k not in context_channels},
+            checkpoint,
+            config,
+        ) as channels:
+            all_channels = {**channels, **context_channels}
+            _apply_writes(copy_checkpoint(checkpoint), all_channels, writes, None)
+            return read_channels(all_channels, select)
     else:
         return read_channels(channels, select)
 
@@ -1739,7 +1749,7 @@ def _prepare_next_tasks(
                                     _local_write, writes.extend, processes, channels
                                 ),
                                 CONFIG_KEY_READ: partial(
-                                    _local_read, checkpoint, channels, tasks
+                                    _local_read, checkpoint, channels, tasks, config
                                 ),
                             },
                         ),
@@ -1819,7 +1829,11 @@ def _prepare_next_tasks(
                                         _local_write, writes.extend, processes, channels
                                     ),
                                     CONFIG_KEY_READ: partial(
-                                        _local_read, checkpoint, channels, writes
+                                        _local_read,
+                                        checkpoint,
+                                        channels,
+                                        writes,
+                                        config,
                                     ),
                                 },
                             ),

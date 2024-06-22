@@ -20,6 +20,7 @@ from langchain_core.runnables.base import RunnableLike
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
+from langgraph.channels.context import Context
 from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
@@ -240,7 +241,16 @@ class StateGraph(Graph):
 
         # prepare output channels
         state_keys = list(self.channels)
-        output_channels = state_keys[0] if state_keys == ["__root__"] else state_keys
+        output_channels = (
+            state_keys[0]
+            if state_keys == ["__root__"]
+            else [
+                key
+                for key in state_keys
+                if not isinstance(self.channels[key], Context)
+                and not is_managed_value(self.channels[key])
+            ]
+        )
 
         compiled = CompiledStateGraph(
             builder=self,
@@ -281,16 +291,7 @@ class CompiledStateGraph(CompiledGraph):
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> type[BaseModel]:
-        if isinstance(self.builder.schema, BaseModel):
-            return self.builder.schema
-
-        return super().get_input_schema(config)
-
-    def get_output_schema(self, config: Optional[RunnableConfig] = None) -> BaseModel:
-        if isinstance(self.builder.schema, BaseModel):
-            return self.builder.schema
-
-        return super().get_output_schema(config)
+        return self.get_output_schema(config)
 
     def attach_node(self, key: str, node: Optional[Runnable]) -> None:
         state_keys = list(self.builder.channels)
@@ -477,9 +478,19 @@ def _get_channel(
             return manager
         else:
             raise ValueError(f"This {annotation} not allowed in this position")
+    elif channel := _is_field_channel(annotation):
+        return channel
     elif channel := _is_field_binop(annotation):
         return channel
     return LastValue(annotation)
+
+
+def _is_field_channel(typ: Type[Any]) -> Optional[BaseChannel]:
+    if hasattr(typ, "__metadata__"):
+        meta = typ.__metadata__
+        if len(meta) >= 1 and isinstance(meta[-1], BaseChannel):
+            return meta[-1]
+    return None
 
 
 def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
@@ -502,8 +513,8 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
 def _is_field_managed_value(typ: Type[Any]) -> Optional[Type[ManagedValue]]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
-        if len(meta) == 1:
-            decoration = get_origin(meta[0]) or meta[0]
+        if len(meta) >= 1:
+            decoration = get_origin(meta[-1]) or meta[-1]
             if is_managed_value(decoration):
                 return decoration
 
