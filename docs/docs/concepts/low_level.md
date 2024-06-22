@@ -254,7 +254,7 @@ Threads are used to checkpoint multiple different runs. This can be used to enab
 
 `thread_id` is simply the ID of a thread. This is always required
 
-`thread_ts` can optionally be passed. This identifier refers to a specific checkpoint withing a thread. This can be used to kick of a run of a graph from some point halfway through a thread.
+`thread_ts` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to kick of a run of a graph from some point halfway through a thread.
 
 You must pass these when invoking the graph as part of the configurable part of the config.
 
