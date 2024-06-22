@@ -24,6 +24,7 @@ Low Level Concepts
   - Entry Point
   - Conditional Entry Point
   - Send
+- State Management
 - Checkpointer
 - Configuration
 - Visualization
@@ -76,111 +77,68 @@ LangGraph is extremely low level. This gives you a high degree of control over w
 
 **Human-in-the-Loop**
 
-LangGraph comes with a built-in persistence layer as a first-class concept. This enables several different human-in-the-loop interaction patterns. We believe that human-agent interaction patterns will be the new "Human-Computer Inter"
+LangGraph comes with a built-in persistence layer as a first-class concept. This enables several different human-in-the-loop interaction patterns. We believe that "Human-Agent Interaction" patterns will be the new "Human-Computer Interaction", and have built LangGraph with built in persistence to enable this.
 
-Core primitives
+**Streaming First**
 
-# LangGraph concepts
+LangGraph comes with first class support for streaming. Agentic applications often take a while to run, and so giving the user some idea of what is happening is important, and streaming is a great way to do that. LangGraph supports streaming of both events (like a tool call being taken) as well as of tokens that an LLM may emit.
 
 ## Graphs
-### State Graph
-### Message Graph
 
-## State
-### Pydantic State
-### Message State
-
-## Nodes
-### Tool Executor Node
-
-## Edges
-### Normal Edges
-### Conditional Edges
-### Entry point
-### Conditional entry point
-
-## Checkpointer
-
-## Configuration
-
-## Visualization
-
-## Map-Reduce
-
-## Streaming
-
-## High Level Entrypoints
-
-
-
-### Create react agent
-
-
-# Agent concepts
-
-## Tool Calling
-
-## Memory
-
-## Human in the loop
-
-### Approval
-### Wait for input
-### Time travel
-
-## Multi-agent
-
-
-First off, why graphs?
-
-## Background: Agents & AI Workflows as Graphs
-
-While everyone has a slightly different definition of what constitutes an "AI Agent", we will take "agent" to mean any system that tasks a language model with controlling a looping workflow and takes actions. The prototypical LLM agent uses a ~["reasoning and action" (ReAct)](https://arxiv.org/abs/2210.03629)-style design, applying an LLM to power a basic loop with the following steps:
-
-- reason and plan actions to take
-- take actions using tools (regular software functions)
-- observe the effects of the tools and re-plan or react as appropriate
-
-While LLM agents are surprisingly effective at this, the naive agent loop doesn't deliver the [reliability users expect at scale](https://en.wikipedia.org/wiki/High_availability). They're beautifully stochastic. Well-designed systems take advantage of that randomness and apply it sensibly within a well-designed composite system and make that system **tolerant** to mistakes in the LLM's outputs, because mistakes **will** occur.
-
-We think agents are exciting and new, but AI design patterns should apply applicable good engineering practices from Software 2.0. Some similarities include:
-
-- AI applications must balance autonomous operations with user control.
-- Agent applications resemble distributed systems in their need for error tolerance and correction.
-- Multi-agent systems resemble multi-player web apps in their need for parallelism + conflict resolution.
-- Everyone loves an undo button and version control.
-
-LangGraph's primary [StateGraph](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph) abstraction is designed to support these and other needs, providing an API that is lower level than other agent frameworks such as LangChain's [AgentExecutor](https://python.langchain.com/v0.1/docs/modules/agents/) to give you full control of where and how to apply "AI."
-
-It extends Google's [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) graph processing framework to provide fault tolerance and recovery when running long or error-prone workloads. When developing, you can focus on a local action or task-specific agent, and the system composes these actions to form a more capable and scalable application.
-
-Its parallelism and `State` reduction functionality let you control what happens if, for example, multiple agents return conflicting information.
-
-And finally, its persistent, versioned checkpointing system lets you roll back the agent's state, explore other paths, and maintain full control of what is going on.
-
-The following sections go into greater detail about how and why all of this works.
-
-## Core Design
-
-At its core, LangGraph models agent workflows as state machines. You define the behavior of your agents using three key components:
+At its core, LangGraph models agent workflows as graphs. You define the behavior of your agents using three key components:
 
 1. `State`: A shared data structure that represents the current snapshot of your application. It can be any Python type, but is typically a `TypedDict` or Pydantic `BaseModel`.
 
 2. `Nodes`: Python functions that encode the logic of your agents. They receive the current `State` as input, perform some computation or side-effect, and return an updated `State`.
 
-3. `Edges`: Control flow rules that determine which `Node` to execute next based on the current `State`. They can be conditional branches or fixed transitions.
+3. `Edges`: Python functions that determine which `Node` to execute next based on the current `State`. They can be conditional branches or fixed transitions.
 
-By composing `Nodes` and `Edges`, you can create complex, looping workflows that evolve the `State` over time. The real power, though, comes from how LangGraph manages that `State`.
+By composing `Nodes` and `Edges`, you can create complex, looping workflows that evolve the `State` over time. The real power, though, comes from how LangGraph manages that `State`. To emphasize: `Nodes` and `Edges` are nothing more than Python functions - they can contain an LLM or just good ol' Python code.
 
-Or in short: _nodes do the work. edges tell what to do next_.
+In short: _nodes do the work. edges tell what to do next_.
 
 LangGraph's underlying graph algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a general program. When a `Node` completes, it sends a message along one or more edges to other node(s). These nodes run their functions, pass the resulting messages to the next set of nodes, and on and on it goes. Inspired by [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/), the program proceeds in discrete "super-steps" that are all executed conceptually in parallel. Whenever the graph is run, all the nodes start in an `inactive` state. Whenever an incoming edge (or "channel") receives a new message (state), the node becomes `active`, runs the function, and responds with updates. At the end of each superstep, each node votes to `halt` by marking itself as `inactive` if it has no more incoming messages. The graph terminates when all nodes are `inactive` and when no messages are in transit.
 
-We will go through a full execution of a StateGraph later, but first, lets explore these concepts in more detail.
+### StateGraph
+
+The `StateGraph` class is the main graph class to uses. This is parameterized by a user defined `State` object.
+
+### MessageGraph
+
+The `MessageGraph` class is a special type of graph. The `State` of a `MessageGraph` is ONLY a list of messages. This class is rarely used except for chatbots, as most applications require the `State` to be more complex than a list of messages.
+
+## State
+
+The first thing you do when you define a graph is define the `State` of the graph. The `State` consists of the schema of graph as well as `reducer` functions which specify how to apply updates to the state. The schema of the `State` will be the input schema to all `Nodes` and `Edges` in the graph, and can be either a `TypedDict` or a `Pydantic` model. All `Nodes` will emit updates to the `State` which are then applied using the specified `reducer` function.
+
+### Reducers
+
+Reducers are key to understanding how updates from nodes are applied to the `State`. Each key in the `State` has its own independent reducer function. If no reducer function is explictly specified then it is assumed that all updates to that key should override it. Let's take a look at a few examples to understand them better.
+
+**Example A:**
+
+```python
+from typing import TypedDict
+
+class State(TypedDict):
+    foo: int
+    bar: list[str]
+```
+
+In this example, no reducer functions are specified for any key. Let's assume the input to the graph is `{"foo": 1, "bar": ["hi"]}`. Let's then assume the first `Node` returns `{"foo": 2}`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{"foo": 2, "bar": ["hi"]}`
+
+
+
+
+There are two main ways to define the state of a Graph:
+- TypedDict
+- Pydantic
+
+There is one built
 
 ## Nodes
 
-In StateGraph, nodes are typically python functions (sync or `async`) where the **first** positional argument is the [state](#state-management), and (optionally), the **second** positional argument is a "config", containing optional [configurable parameters](#configuration) (such as a `thread_id`).
+In LangGraph, nodes are typically python functions (sync or `async`) where the **first** positional argument is the [state](#state), and (optionally), the **second** positional argument is a "config", containing optional [configurable parameters](#configuration) (such as a `thread_id`).
 
 Similar to `NetworkX`, you add these nodes to a graph using the [add_node](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.MessageGraph) method:
 
@@ -289,7 +247,7 @@ graph.invoke({"value": 5})
 If you guesed "1" and "6", then you're correct!
 
 In the first case (`StateA`), the result is "1", since the default **reducer** for your state is a direct overwrite.
-In the second case (`StateB`), the result is "6" since we have have created the `add` function as the **reducer**. This function takes the existing state (for that field) and the state update (if provided) and returns the updated value for that state.
+In the second case (`StateB`), the result is "6" since we have created the `add` function as the **reducer**. This function takes the existing state (for that field) and the state update (if provided) and returns the updated value for that state.
 
 In general, **reducers** provided as annotations tell the graph **how to process updates for this field**.
 
