@@ -46,7 +46,7 @@ The main documented way to specify the schema of a graph is by using `TypedDict`
 
 ### Reducers
 
-Reducers are key to understanding how updates from nodes are applied to the `State`. Each key in the `State` has its own independent reducer function. If no reducer function is explictly specified then it is assumed that all updates to that key should override it. Let's take a look at a few examples to understand them better.
+Reducers are key to understanding how updates from nodes are applied to the `State`. Each key in the `State` has its own independent reducer function. If no reducer function is explicitly specified then it is assumed that all updates to that key should override it. Let's take a look at a few examples to understand them better.
 
 **Example A:**
 
@@ -228,7 +228,7 @@ graph.set_conditional_entry_point(routing_function, {True: "node_b", False: "nod
 
 [`Send`](https://langchain-ai.github.io/langgraph/reference/graphs/#send) is a special type of edge.
 
-By default, `Nodes` and `Edges` are defined ahead of time and operate on the same shared state. However, there can be cases where the exact edges are not known ahead of time and/or you may want different versions of `State` to exist at the same time. A common of example of this is with `map-reduce` design patters. In this design pattern, a first node may generate a list of objects, and you may want to apply some other node to all those objects. The number of objects may be unknown ahead of time (meaning the number of edges may not be known) and the input `State` to the downstream `Node` should be different (one for each generated object).
+By default, `Nodes` and `Edges` are defined ahead of time and operate on the same shared state. However, there can be cases where the exact edges are not known ahead of time and/or you may want different versions of `State` to exist at the same time. A common of example of this is with `map-reduce` design patterns. In this design pattern, a first node may generate a list of objects, and you may want to apply some other node to all those objects. The number of objects may be unknown ahead of time (meaning the number of edges may not be known) and the input `State` to the downstream `Node` should be different (one for each generated object).
 
 To support this design pattern, LangGraph supports returning [`Send`](https://langchain-ai.github.io/langgraph/reference/graphs/#send) objects from conditional edges. `Send` takes two arguments: first is the name of the node, and second is the state to pass to that node.
 
@@ -252,7 +252,7 @@ Second, it allows for "memory" between interactions. You can use checkpointers t
 ## Checkpointer state
 
 When you use a checkpointer with a graph, you can interact with the state of that graph.
-This usually done when enabling different human-in-the-loop interaction patters.
+This usually done when enabling different human-in-the-loop interaction patterns.
 
 ### Get state
 
