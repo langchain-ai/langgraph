@@ -9,7 +9,7 @@ Welcome to the LangGraph how-to guides! These guides provide practical, step-by-
 
 ## Basics
 
-The core guides show how to address common needs when building out AI workflows, with special focus placed on [ReAct](https://arxiv.org/abs/2210.03629)-style agents with [tool calling](https://python.langchain.com/docs/modules/model_io/chat/function_calling/) (agents that <strong>Re</strong>ason and **Act** to accomplish tasks).
+These guides show how to address common needs when building out AI workflows, with special focus placed on [ReAct](https://arxiv.org/abs/2210.03629)-style agents with [tool calling](https://python.langchain.com/docs/modules/model_io/chat/function_calling/) (agents that <strong>Re</strong>ason and **Act** to accomplish tasks).
 
 - [How to create a ReAct agent](create-react-agent.ipynb)
 - [How to add persistence ("memory") to your graph](persistence.ipynb)
