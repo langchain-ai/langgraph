@@ -189,6 +189,7 @@ nav:
           - Create Agents with Configuration: 'cloud/how-tos/cloud_examples/configuration_cloud.ipynb'
       - Conceptual Guides:
           - API Concepts: 'cloud/concepts/api_concepts.md'
+          - LangGraph to LangGraph API: cloud/how-tos/cloud_examples/langgraph_to_langgraph_api.ipynb
       - Reference:
           - API: 'cloud/reference/api_ref.md'
           - SDK:
