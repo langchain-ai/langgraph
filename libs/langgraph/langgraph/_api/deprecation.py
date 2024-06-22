@@ -11,14 +11,15 @@ F = TypeVar("F", bound=Callable[..., Any])
 
 
 def deprecated(
-    version: str, alternative: str, *, example: str = ""
+    version: str, alternative: str, *, removal: str = "", example: str = ""
 ) -> Callable[[F], F]:
     def decorator(func: F) -> F:
         @functools.wraps(func)
         def wrapper(*args: Any, **kwargs: Any) -> Any:
+            removal_str = removal if removal else "a future version"
             message = (
                 f"{func.__name__} is deprecated as of version {version} and will be"
-                f" removed in a future version. Use {alternative} instead.{example}"
+                f" removed in {removal_str}. Use {alternative} instead.{example}"
             )
             warnings.warn(message, LangGraphDeprecationWarning, stacklevel=2)
             return func(*args, **kwargs)

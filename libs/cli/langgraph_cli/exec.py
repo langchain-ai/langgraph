@@ -1,5 +1,4 @@
 import asyncio
-import os
 import signal
 import sys
 from contextlib import contextmanager
@@ -60,9 +59,19 @@ async def subp_exec(
             if proc.returncode is None:
                 proc.terminate()
 
-        loop = asyncio.get_event_loop()
-        loop.add_signal_handler(signal.SIGINT, signal_handler)
-        loop.add_signal_handler(signal.SIGTERM, signal_handler)
+        original_sigint_handler = signal.getsignal(signal.SIGINT)
+        if sys.platform == "win32":
+
+            def handle_windows_signal(signum, frame):
+                signal_handler()
+                original_sigint_handler(signum, frame)
+
+            signal.signal(signal.SIGINT, handle_windows_signal)
+            # NOTE: we're not adding a handler for SIGTERM since it's ignored on Windows
+        else:
+            loop = asyncio.get_event_loop()
+            loop.add_signal_handler(signal.SIGINT, signal_handler)
+            loop.add_signal_handler(signal.SIGTERM, signal_handler)
 
         empty_fut: asyncio.Future = asyncio.Future()
         empty_fut.set_result(None)
@@ -100,12 +109,15 @@ async def subp_exec(
         try:
             if proc.returncode is None:
                 try:
-                    os.killpg(os.getpgid(proc.pid), signal.SIGINT)
+                    proc.terminate()
                 except (ProcessLookupError, KeyboardInterrupt):
                     pass
 
-            loop.remove_signal_handler(signal.SIGINT)
-            loop.remove_signal_handler(signal.SIGTERM)
+            if sys.platform == "win32":
+                signal.signal(signal.SIGINT, original_sigint_handler)
+            else:
+                loop.remove_signal_handler(signal.SIGINT)
+                loop.remove_signal_handler(signal.SIGTERM)
         except UnboundLocalError:
             pass
 

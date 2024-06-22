@@ -164,8 +164,40 @@ nav:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
-      - Errors: reference/errors.md    
-  
+      - Errors: reference/errors.md
+  - 'Cloud (alpha)':
+      - 'cloud/index.md'
+      - Tutorials:
+          - Quick Start: 'cloud/quick_start.md'
+          - SDK:
+              - Python: 'cloud/sdk/python_sdk.ipynb'
+              - JS/TS: 'cloud/sdk/js_sdk.ipynb'
+          - Deployment:
+              - Self-Hosted: 'cloud/deployment/self_hosted.md'
+              - Managed: 'cloud/deployment/managed.md'
+      - How-to Guides:
+          - Streaming:
+              - Stream Messages: 'cloud/how-tos/cloud_examples/stream_messages.ipynb'
+              - Stream Values: 'cloud/how-tos/cloud_examples/stream_values.ipynb'
+              - Stream Updates: 'cloud/how-tos/cloud_examples/stream_updates.ipynb'
+          - Double Texting: 
+              - Interrupt: 'cloud/how-tos/cloud_examples/interrupt_concurrent.ipynb'
+              - Rollback: 'cloud/how-tos/cloud_examples/rollback_concurrent.ipynb'
+              - Reject: 'cloud/how-tos/cloud_examples/reject_concurrent.ipynb'
+              - Enqueue: 'cloud/how-tos/cloud_examples/enqueue_concurrent.ipynb'
+          - Run Agent in Background: 'cloud/how-tos/cloud_examples/background_run.ipynb'
+          - Run Multiple Agents in Thread: 'cloud/how-tos/cloud_examples/same-thread.ipynb'
+          - Human in the loop: 'cloud/how-tos/cloud_examples/human-in-the-loop_cloud.ipynb'
+          - Create Agents with Configuration: 'cloud/how-tos/cloud_examples/configuration_cloud.ipynb'
+      - Conceptual Guides:
+          - API Concepts: 'cloud/api_concepts.md'
+      - Reference:
+          - API: 'cloud/reference/api_ref.md'
+          - SDK:
+              - Python: 'cloud/reference/sdk/python_sdk_ref.md'
+              - JS/TS: 'cloud/reference/sdk/js_ts_sdk_ref.md'
+          - CLI: 'cloud/reference/cli.md'
+
 
 markdown_extensions:
   - abbr
