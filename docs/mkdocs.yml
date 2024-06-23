@@ -158,8 +158,8 @@ nav:
   - 'Conceptual Guides':
      - 'concepts/index.md'
      - LangGraph for Agentic Applications: concepts/high_level.md
-     - Low Level LangGraph Concepts: concepts/high_level.md
-     - Common Agentic Patterns: concepts/high_level.md
+     - Low Level LangGraph Concepts: concepts/low_level.md
+     - Common Agentic Patterns: concepts/agentic_concepts.md
   - Reference:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md

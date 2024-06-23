@@ -1,8 +1,8 @@
 # API Concepts
 This page describes the high-level concepts of the LangGraph Cloud API. The conceptual guide of LangGraph (Python library) is [here](../../concepts/index.md).
 
-## Models
-The LangGraph Cloud API consists of 3 core models: [Assistants](#assistants), [Threads](#threads), and [Runs](#runs).
+## Data Models
+The LangGraph Cloud API consists of a few core data models: [Assistants](#assistants), [Threads](#threads), [Runs](#runs), and [Cron Jobs](#cron-jobs).
 
 ### Assistants
 An assistant is a configured instance of a [`CompiledGraph`](../../../reference/graphs/#compiledgraph). It abstracts the cognitive architecture of the graph and contains instance specific configuration and metadata. Multiple assistants can reference the same graph but can contain different configuration and metadata, which may differentiate the behavior of the assistants. An assistant (i.e. the graph) is invoked as part of a run.
@@ -18,6 +18,17 @@ The LangGraph Cloud API provides several endpoints for creating and managing thr
 A run is an invocation of an assistant. Each run may have its own input, configuration, and metadata, which may affect execution and output of the underlying graph. A run can optionally be executed on a thread.
 
 The LangGraph Cloud API provides several endpoints for creating and managing runs. See the [API reference](../reference/api_ref.md) for more details.
+
+### Cron Jobs
+
+It's often useful to run graphs on some schedule. LangGraph Cloud supports cron jobs, which run on a user defined schedule. The user specifies a schedule, an assistant, and some input. After than, on the specified schedule LangGraph cloud will:
+
+- Create a new thread with the specified assistant
+- Send the specified input to that thread
+
+Note that this sends the same input to the thread every time.
+
+The LangGraph Cloud API provides several endpoints for creating and managing cron jobs. See the [API reference](../reference/api_ref.md) for more details.
 
 ## Features
 The LangGraph Cloud API offers several features to support complex agent architectures.
@@ -36,5 +47,28 @@ See the [API Reference](../reference/api_ref.md) for how to create streaming run
 ### Human-in-the-Loop
 There are many occasions where the graph cannot run completely autonomously. For instance, the user might need to input some additional arguments to a function call, or select the next edge for the graph to continue on. In these instances, we need to insert some human in the loop interaction, which you can learn about in [this how-to](../how_tos/cloud_examples/human-in-the-loop_cloud).
 
-### Multi-Tasking
-Many times users might interact with your graph in unintended ways. For instance, a user interacting with a graph that has chat output could send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), Langgraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how_tos/cloud_examples/interrupt_concurrent/).
+### Double Texting
+Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), Langgraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how_tos/cloud_examples/interrupt_concurrent/). These options are:
+
+- `reject`: This is the simplest option, this just rejects any follow up runs and does not allow double texting.
+- `enqueue`: This is a relatively simple option which continues the first run until it completes the whole run, then sends the new input as a separate run.
+- `interrupt`: This option interrupts the current execution but saves all the work done up until that point. It then inserts the user input and continues from there. If you enable this option, your graph should be able to handle weird edge cases that may arise.
+- `rollback`: This option rolls back all work done up until that point. It then sends the user input in, basically as if it just followed the original run input.
+
+
+### Stateless runs
+
+All runs use the built-in checkpointer to store checkpoints for runs. However, it can often be useful to just kick off a run without worrying about explicitly creating a thread and without wanting to keep those checkpointers around. Stateless runs allow you to do this by exposing an endpoint that:
+
+- Takes in user input
+- Under the hood, creates a thread
+- Runs the agent but skips all checkpointing steps
+- Cleans up the thread afterwards
+
+Stateless runs are still retried as regular retries are per node, while everything still in memory, so doesn't use checkpoints.
+
+The only difference is in stateless background runs, if the task worker dies halfway (not because the run itself failed, for some external reason) then the whole run will be retried like any background run, but
+- whereas a stateful background run would retry from the last successful checkpoint
+- a stateless background run would retry from the beginning
+
+
