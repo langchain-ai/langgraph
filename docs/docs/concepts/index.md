@@ -31,6 +31,7 @@ Low Level Concepts
   - [Conditional Entry Point](low_level#conditional-entry-point)
 - [Send](low_level#send)
 - [Checkpointer](low_level#checkpointer)
+- [Threads](low_level#threads)
 - [Checkpointer states](low_level#checkpointer-state)
   - [Get state](low_level#get-state)
   - [Get state history](low_level#get-state-history)
