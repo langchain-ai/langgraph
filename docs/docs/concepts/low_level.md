@@ -226,8 +226,6 @@ graph.set_conditional_entry_point(routing_function, {True: "node_b", False: "nod
 
 ## `Send`
 
-[`Send`](https://langchain-ai.github.io/langgraph/reference/graphs/#send) is a special type of edge.
-
 By default, `Nodes` and `Edges` are defined ahead of time and operate on the same shared state. However, there can be cases where the exact edges are not known ahead of time and/or you may want different versions of `State` to exist at the same time. A common of example of this is with `map-reduce` design patterns. In this design pattern, a first node may generate a list of objects, and you may want to apply some other node to all those objects. The number of objects may be unknown ahead of time (meaning the number of edges may not be known) and the input `State` to the downstream `Node` should be different (one for each generated object).
 
 To support this design pattern, LangGraph supports returning [`Send`](https://langchain-ai.github.io/langgraph/reference/graphs/#send) objects from conditional edges. `Send` takes two arguments: first is the name of the node, and second is the state to pass to that node.
@@ -249,18 +247,35 @@ First, it allows for human-in-the-loop workflows, as it allows humans to inspect
 
 Second, it allows for "memory" between interactions. You can use checkpointers to create threads and save the state of a thread after a graph executes. In the case of repeated human interactions (like conversations) any follow up messages can be sent to that checkpoint, which will retain its memory of previous ones.
 
+## Threads
+
+When using a checkpointer, you must specify a `thread_id` or `thread_ts` when running the graph.
+Threads are used to checkpoint multiple different runs. This can be used to enable a multi-tenant chat applications.
+
+`thread_id` is simply the ID of a thread. This is always required
+
+`thread_ts` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to kick of a run of a graph from some point halfway through a thread.
+
+You must pass these when invoking the graph as part of the configurable part of the config.
+
+```python
+config = {"configurable": {"thread_id": "a"}}
+graph.invoke(inputs, config=config)
+```
+
 ## Checkpointer state
 
 When you use a checkpointer with a graph, you can interact with the state of that graph.
 This usually done when enabling different human-in-the-loop interaction patterns.
+When interacting with the checkpointer state, you must specify [thread identifiers](#threads)
 
 ### Get state
 
-You can get the state of a checkpointer by calling `graph.get_state(config)`. The config commonly contains things like the `thread_id` of a particular thread to get the state for.
+You can get the state of a checkpointer by calling `graph.get_state(config)`. The config should contain `thread_id`, and the state will be fetched for that thread.
 
 ### Get state history
 
-You can also call `graph.get_state_history(config)` to get a list of the history of the graph. The config commonly contains things like the `thread_id` of a particular thread to get the state for.
+You can also call `graph.get_state_history(config)` to get a list of the history of the graph. The config should contain `thread_id`, and the state history will be fetched for that thread. 
 
 ### Update state
 
@@ -273,7 +288,7 @@ You can also interact with the state directly and update it. This takes three di
 
 **config**
 
-The config commonly contains things like `thread_id` specifying which thread to update.
+The config should contain `thread_id` specifying which thread to update.
 
 **values**
 
