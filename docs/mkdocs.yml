@@ -130,32 +130,36 @@ nav:
         - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
         - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
         - Competitive Programming: tutorials/usaco/usaco.ipynb
+        - Extract structured output: tutorials/extraction/retries.ipynb
 
   - "How-to Guides":
      - 'how-tos/index.md'
-     - Basics:
-         - Create a ReAct agent: how-tos/create-react-agent.ipynb
-         - Add persistence ("memory"): how-tos/persistence.ipynb
-         - View and update graph state: how-tos/time-travel.ipynb
-         - Run graph asynchronously: how-tos/async.ipynb
-         - Stream graph responses: how-tos/streaming-tokens.ipynb
-         - Visualize your graph: how-tos/visualization.ipynb
-         - Add runtime configuration: how-tos/configuration.ipynb
-     - Design Patterns:
+     - Controllability:
          - Create subgraphs: how-tos/subgraph.ipynb
          - Create branches for parallel execution: how-tos/branching.ipynb
          - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
+     - Human-in-the-loop:
+         - Add persistence ("memory"): how-tos/persistence.ipynb
+         - View and update graph state: how-tos/time-travel.ipynb
          - Add human-in-the-loop: how-tos/human-in-the-loop.ipynb
-         - Force an agent to call a tool: how-tos/force-calling-a-tool-first.ipynb
-         - Pass runtime values to tools: how-tos/pass-run-time-values-to-tools.ipynb
-         - Let agent return tool results directly: how-tos/dynamically-returning-directly.ipynb
-         - Have agent respond in structured format: how-tos/respond-in-format.ipynb
-         - Manage agent steps: how-tos/managing-agent-steps.ipynb
-     - Advanced:
+     - Streaming:
+         - Stream LLM tokens: how-tos/streaming-tokens.ipynb
+         - Stream Arbitrarily Nested Content: how-tos/streaming-content.ipynb
+     - Other:
+         - Run graph asynchronously: how-tos/async.ipynb
+         - Visualize your graph: how-tos/visualization.ipynb
+         - Add runtime configuration: how-tos/configuration.ipynb
          - Use Pydantic model as state: how-tos/state-model.ipynb
-         - Extract structured output with re-prompting: how-tos/extraction/retries.ipynb
+     - Prebuilt ReAct Agent:
+         - Create a ReAct agent: how-tos/create-react-agent.ipynb
+         - Add Memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
+         - Add a System Prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
+         - Add Human-in-the-Loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
   - 'Conceptual Guides':
      - 'concepts/index.md'
+     - LangGraph for Agentic Applications: concepts/high_level.md
+     - Low Level LangGraph Concepts: concepts/low_level.md
+     - Common Agentic Patterns: concepts/agentic_concepts.md
   - Reference:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
