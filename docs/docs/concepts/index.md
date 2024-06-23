@@ -9,6 +9,7 @@ LangGraph for Agentic Applications
 
 - [What does it mean to be agentic?](high_level#what-does-it-mean-to-be-agentic)
 - [Why LangGraph](high_level#why-langgraph)
+- [Deployment](high_level#deployment)
 
 Low Level Concepts
 
