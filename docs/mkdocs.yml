@@ -191,8 +191,9 @@ nav:
           - Run Multiple Agents in Thread: 'cloud/how-tos/cloud_examples/same-thread.ipynb'
           - Human in the loop: 'cloud/how-tos/cloud_examples/human-in-the-loop_cloud.ipynb'
           - Create Agents with Configuration: 'cloud/how-tos/cloud_examples/configuration_cloud.ipynb'
+          - Convert LangGraph calls to LangGraph Cloud calls: 'cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb'
       - Conceptual Guides:
-          - API Concepts: 'cloud/concepts/api_concepts.md'
+          'cloud/concepts/index.md'
       - Reference:
           - API: 'cloud/reference/api_ref.md'
           - SDK:
