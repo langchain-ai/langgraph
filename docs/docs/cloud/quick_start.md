@@ -126,7 +126,7 @@ If you are hosting multiple graphs, you should see all of them in this response.
         ]
     }'
 
-Make sure to edit the `input` and `assistant_id` fields to match what assistant you want to test. If you receive a 200 response then congratulations your graph has run succesfully and you are ready to move on to hosting on Langgraph Cloud!
+Make sure to edit the `input` and `assistant_id` fields to match what assistant you want to test. If you receive a 200 response then congratulations your graph has run successfully and you are ready to move on to hosting on Langgraph Cloud!
 
 ## Deploy to Cloud
 
@@ -136,7 +136,7 @@ Create a git repo in the `<my-app>` directory, and verify it’s existence. You 
 
 ### Deploy from GitHub with LangGraph Cloud
 
-Once you have created your github repository with a Python file containing your compiled graph as well as a `langgraph.json` file contianing the configuration for hosting your graph, you can head over to LangSmith and click on the 🚀 icon on the left navbar to create a new deployment. Click the `+ New Deployment` button. 
+Once you have created your github repository with a Python file containing your compiled graph as well as a `langgraph.json` file containing the configuration for hosting your graph, you can head over to LangSmith and click on the 🚀 icon on the left navbar to create a new deployment. Click the `+ New Deployment` button. 
 
 ***If you have not deployed to LangGraph Cloud before:*** there will be a button that shows up saying Import from GitHub. You’ll need to follow that flow to connect LangGraph Cloud to GitHub.
 
