@@ -22,12 +22,10 @@ handler: python
 ## CompiledGraph
 
 ::: langgraph.graph.graph.CompiledGraph
-handler: python
 
 ## StreamMode
 
 ::: langgraph.pregel.StreamMode
-handler: python
 
 ## Constants
 
@@ -68,4 +66,3 @@ builder.add_conditional_edges("my_node", my_condition)
 ## Send
 
 ::: langgraph.constants.Send
-handler: python
