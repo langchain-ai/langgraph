@@ -192,6 +192,8 @@ nav:
           - Human in the loop: 'cloud/how-tos/cloud_examples/human-in-the-loop_cloud.ipynb'
           - Create Agents with Configuration: 'cloud/how-tos/cloud_examples/configuration_cloud.ipynb'
           - Convert LangGraph calls to LangGraph Cloud calls: 'cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb'
+          - Create Scheduled Runs: 'cloud/how-tos/cloud_examples/cron_jobs.ipynb'
+          - Create Stateless Runs: 'cloud/how-tos/cloud_examples/stateless_runs.ipynb'
           - SDK:
               - Python: 'cloud/sdk/python_sdk.ipynb'
               - JS/TS: 'cloud/sdk/js_sdk.ipynb'
