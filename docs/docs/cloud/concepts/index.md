@@ -47,10 +47,10 @@ You can also specify multiple streaming modes at the same time. See the [How-to 
 See the [API Reference](../reference/api_ref.md) for how to create streaming runs.
 
 ### Human-in-the-Loop
-There are many occasions where the graph cannot run completely autonomously. For instance, the user might need to input some additional arguments to a function call, or select the next edge for the graph to continue on. In these instances, we need to insert some human in the loop interaction, which you can learn about in [this how-to](../how_tos/cloud_examples/human-in-the-loop_cloud).
+There are many occasions where the graph cannot run completely autonomously. For instance, the user might need to input some additional arguments to a function call, or select the next edge for the graph to continue on. In these instances, we need to insert some human in the loop interaction, which you can learn about in the [human in the loop how-tos](../how-tos/cloud_examples/human_in_the_loop_breakpoint).
 
 ### Double Texting
-Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), Langgraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how_tos/cloud_examples/interrupt_concurrent/). These options are:
+Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), Langgraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how-tos/cloud_examples/interrupt_concurrent/). These options are:
 
 - `reject`: This is the simplest option, this just rejects any follow up runs and does not allow double texting.
 - `enqueue`: This is a relatively simple option which continues the first run until it completes the whole run, then sends the new input as a separate run.
