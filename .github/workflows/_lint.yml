@@ -32,7 +32,13 @@ jobs:
     name: "lint #${{ matrix.python-version }}"
     steps:
       - uses: actions/checkout@v4
-
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+      - name: Check changed files
+        if: steps.changed-files.outputs.any_changed == 'false'
+        # exit early if no changed files
+        run: exit 0
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
         uses: "./.github/actions/poetry_setup"
         with:
