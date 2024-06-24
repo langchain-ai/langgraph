@@ -1,11 +1,12 @@
 import functools
+import json
 import os
 import pathlib
 import platform
 import threading
+import urllib.error
+import urllib.request
 from typing import Any, TypedDict
-
-import httpx
 
 from langgraph_cli.constants import (
     DEFAULT_CONFIG,
@@ -55,15 +56,23 @@ def get_anonymized_params(kwargs: dict[str, Any]) -> dict[str, bool]:
 
 
 def log_data(data: LogData) -> None:
-    headers = {"apikey": SUPABASE_PUBLIC_API_KEY}
+    headers = {
+        "Content-Type": "application/json",
+        "apikey": SUPABASE_PUBLIC_API_KEY,
+        "User-Agent": "Mozilla/5.0",
+    }
     supabase_url = SUPABASE_URL
+
+    req = urllib.request.Request(
+        f"{supabase_url}/rest/v1/logs",
+        data=json.dumps(data).encode("utf-8"),
+        headers=headers,
+        method="POST",
+    )
+
     try:
-        httpx.post(
-            f"{supabase_url}/rest/v1/logs",
-            json=data,
-            headers=headers,
-        )
-    except httpx.RequestError:
+        urllib.request.urlopen(req)
+    except urllib.error.URLError:
         pass
 
 
