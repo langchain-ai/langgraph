@@ -280,3 +280,6 @@ extra:
           data: 0
           note: >- 
             Thanks for your feedback! Please help us improve this page by adding to the discussion below.
+
+watch:
+  - ../langgraph/
