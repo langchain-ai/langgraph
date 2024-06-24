@@ -103,8 +103,9 @@ class MessageGraph(StateGraph):
         >>> builder.set_finish_point("chatbot")
         >>> builder.compile().invoke([("user", "Hi there.")])
         [HumanMessage(content="Hi there.", id='...'), AIMessage(content="Hello!", id='...')]
+        ```
 
-
+        ```pycon
         >>> from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
         >>> from langgraph.graph.message import MessageGraph
         ...

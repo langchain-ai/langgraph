@@ -9,6 +9,7 @@ from typing import (
     Type,
 )
 
+from langchain_core.runnables import RunnableConfig
 from typing_extensions import NotRequired, Required, Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -72,7 +73,7 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
 
     @contextmanager
     def from_checkpoint(
-        self, checkpoint: Optional[Value] = None
+        self, checkpoint: Optional[Value], config: RunnableConfig
     ) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ, self.operator)
         if checkpoint is not None:

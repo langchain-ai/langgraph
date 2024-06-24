@@ -10,6 +10,7 @@ from typing import (
     TypeVar,
 )
 
+from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -41,18 +42,18 @@ class BaseChannel(Generic[Value, Update, C], ABC):
     @contextmanager
     @abstractmethod
     def from_checkpoint(
-        self, checkpoint: Optional[C] = None
+        self, checkpoint: Optional[C], config: RunnableConfig
     ) -> Generator[Self, None, None]:
         """Return a new identical channel, optionally initialized from a checkpoint.
         If the checkpoint contains complex data structures, they should be copied."""
 
     @asynccontextmanager
     async def afrom_checkpoint(
-        self, checkpoint: Optional[C] = None
+        self, checkpoint: Optional[C], config: RunnableConfig
     ) -> AsyncGenerator[Self, None]:
         """Return a new identical channel, optionally initialized from a checkpoint.
         If the checkpoint contains complex data structures, they should be copied."""
-        with self.from_checkpoint(checkpoint) as value:
+        with self.from_checkpoint(checkpoint, config) as value:
             yield value
 
     # state methods

@@ -46,3 +46,19 @@ for await (const chunk of streamResponse) {
   console.log(chunk);
 }
 ```
+
+## Documentation
+
+To generate documentation, run the following commands:
+
+1. Generate docs.
+
+        yarn typedoc
+
+1. Consolidate doc files into one markdown file.
+
+        npx concat-md --decrease-title-levels --ignore=js_ts_sdk_ref.md --start-title-level-at 2 docs > docs/js_ts_sdk_ref.md
+
+1. Copy `js_ts_sdk_ref.md` to MkDocs directory.
+
+        cp docs/js_ts_sdk_ref.md ../../docs/docs/cloud/reference/sdk/js_ts_sdk_ref.md

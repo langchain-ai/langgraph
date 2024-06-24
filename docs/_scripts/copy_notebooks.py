@@ -15,9 +15,8 @@ _MANUAL = {
     "how-tos": [
         "async.ipynb",
         "streaming-tokens.ipynb",
-        "human-in-the-loop.ipynb",
+        "streaming-content.ipynb",
         "persistence.ipynb",
-        "time-travel.ipynb",
         "visualization.ipynb",
         "state-model.ipynb",
         "subgraph.ipynb",
@@ -30,14 +29,20 @@ _MANUAL = {
         "dynamically-returning-directly.ipynb",
         "configuration.ipynb",
         "map-reduce.ipynb",
-        "extraction/retries.ipynb",
         "create-react-agent.ipynb",
+        "create-react-agent-system-prompt.ipynb",
+        "create-react-agent-memory.ipynb",
+        "create-react-agent-hitl.ipynb",
+        "human_in_the_loop/breakpoints.ipynb",
+        "human_in_the_loop/time-travel.ipynb",
+        "human_in_the_loop/edit-graph-state.ipynb",
+        "human_in_the_loop/wait-user-input.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",
         "customer-support/customer-support.ipynb",
         "tutorials/tnt-llm/tnt-llm.ipynb",
-        "tutorials/sql-agent.ipynb"
+        "tutorials/sql-agent.ipynb",
     ],
 }
 _MANUAL_INVERSE = {v: docs_dir / k for k, vs in _MANUAL.items() for v in vs}
@@ -98,9 +103,9 @@ def copy_notebooks():
             continue
         if any(path in _HOW_TOS for path in root.split(os.sep)):
             dst_dir = how_tos_dir
-        elif 'sdk' in root.split(os.sep):
+        elif "sdk" in root.split(os.sep):
             dst_dir = cloud_sdk_dir
-        elif 'cloud_examples' in root.split(os.sep):
+        elif "cloud_examples" in root.split(os.sep):
             dst_dir = cloud_how_tos_dir
         else:
             dst_dir = tutorials_dir
@@ -140,7 +145,7 @@ def copy_notebooks():
                     with open(dst_path, "w") as f:
                         f.write(content)
                 dst_dir = dst_dir_
-                
+
     # Top level notebooks are "how-to's"
     # for file in examples_dir.iterdir():
     #     if file.suffix.endswith(".ipynb") and not os.path.isdir(
@@ -149,6 +154,7 @@ def copy_notebooks():
     #         src_path = os.path.join(examples_dir, file)
     #         dst_path = os.path.join(docs_dir, "how-tos", file.name)
     #         shutil.copy(src_path, dst_path)
+
 
 if __name__ == "__main__":
     clean_notebooks()

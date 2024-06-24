@@ -91,8 +91,6 @@ plugins:
 nav:
   - Home: 
       - 'index.md'
-      - Quick Start: how-tos/docs/quickstart.ipynb
-      - Intro to LangGraph: tutorials/introduction.ipynb
   - Tutorials:
       - 'tutorials/index.md'
       - Introduction: tutorials/introduction.ipynb
@@ -132,32 +130,38 @@ nav:
         - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
         - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
         - Competitive Programming: tutorials/usaco/usaco.ipynb
+        - Extract structured output: tutorials/extraction/retries.ipynb
 
   - "How-to Guides":
      - 'how-tos/index.md'
-     - Core:
-         - Create a ReAct agent: how-tos/create-react-agent.ipynb
-         - Add persistence ("memory"): how-tos/persistence.ipynb
-         - View and update graph state: how-tos/time-travel.ipynb
-         - Run graph asynchronously: how-tos/async.ipynb
-         - Stream graph responses: how-tos/streaming-tokens.ipynb
-         - Visualize your graph: how-tos/visualization.ipynb
-         - Add runtime configuration: how-tos/configuration.ipynb
-     - Design Patterns:
+     - Controllability:
          - Create subgraphs: how-tos/subgraph.ipynb
          - Create branches for parallel execution: how-tos/branching.ipynb
          - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
-         - Add human-in-the-loop: how-tos/human-in-the-loop.ipynb
-         - Force an agent to call a tool: how-tos/force-calling-a-tool-first.ipynb
-         - Pass runtime values to tools: how-tos/pass-run-time-values-to-tools.ipynb
-         - Let agent return tool results directly: how-tos/dynamically-returning-directly.ipynb
-         - Have agent respond in structured format: how-tos/respond-in-format.ipynb
-         - Manage agent steps: how-tos/managing-agent-steps.ipynb
-     - Advanced:
+     - Human-in-the-loop:
+         - Add persistence ("memory"): how-tos/persistence.ipynb
+         - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
+         - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
+         - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
+         - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
+     - Streaming:
+         - Stream LLM tokens: how-tos/streaming-tokens.ipynb
+         - Stream Arbitrarily Nested Content: how-tos/streaming-content.ipynb
+     - Other:
+         - Run graph asynchronously: how-tos/async.ipynb
+         - Visualize your graph: how-tos/visualization.ipynb
+         - Add runtime configuration: how-tos/configuration.ipynb
          - Use Pydantic model as state: how-tos/state-model.ipynb
-         - Extract structured output with re-prompting: how-tos/extraction/retries.ipynb
+     - Prebuilt ReAct Agent:
+         - Create a ReAct agent: how-tos/create-react-agent.ipynb
+         - Add Memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
+         - Add a System Prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
+         - Add Human-in-the-Loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
   - 'Conceptual Guides':
      - 'concepts/index.md'
+     - LangGraph for Agentic Applications: concepts/high_level.md
+     - Low Level LangGraph Concepts: concepts/low_level.md
+     - Common Agentic Patterns: concepts/agentic_concepts.md
   - Reference:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
@@ -167,17 +171,16 @@ nav:
       - 'cloud/index.md'
       - Tutorials:
           - Quick Start: 'cloud/quick_start.md'
-          - SDK:
-              - Python: 'cloud/sdk/python_sdk.ipynb'
-              - JS/TS: 'cloud/sdk/js_sdk.ipynb'
           - Deployment:
               - Self-Hosted: 'cloud/deployment/self_hosted.md'
               - Managed: 'cloud/deployment/managed.md'
       - How-to Guides:
           - Streaming:
-              - Stream Messages: 'cloud/how-tos/cloud_examples/stream_messages.ipynb'
               - Stream Values: 'cloud/how-tos/cloud_examples/stream_values.ipynb'
               - Stream Updates: 'cloud/how-tos/cloud_examples/stream_updates.ipynb'
+              - Stream Messages: 'cloud/how-tos/cloud_examples/stream_messages.ipynb'
+              - Stream Events: 'cloud/how-tos/cloud_examples/stream_events.ipynb'
+              - Stream Debug: 'cloud/how-tos/cloud_examples/stream_debug.ipynb'
           - Double Texting: 
               - Interrupt: 'cloud/how-tos/cloud_examples/interrupt_concurrent.ipynb'
               - Rollback: 'cloud/how-tos/cloud_examples/rollback_concurrent.ipynb'
@@ -187,8 +190,12 @@ nav:
           - Run Multiple Agents in Thread: 'cloud/how-tos/cloud_examples/same-thread.ipynb'
           - Human in the loop: 'cloud/how-tos/cloud_examples/human-in-the-loop_cloud.ipynb'
           - Create Agents with Configuration: 'cloud/how-tos/cloud_examples/configuration_cloud.ipynb'
+          - Convert LangGraph calls to LangGraph Cloud calls: 'cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb'
+          - SDK:
+              - Python: 'cloud/sdk/python_sdk.ipynb'
+              - JS/TS: 'cloud/sdk/js_sdk.ipynb'
       - Conceptual Guides:
-          - API Concepts: 'cloud/api_concepts.md'
+          'cloud/concepts/index.md'
       - Reference:
           - API: 'cloud/reference/api_ref.md'
           - SDK:
@@ -243,6 +250,9 @@ markdown_extensions:
       combine_header_slug: true
   - pymdownx.tasklist:
       custom_checkbox: true
+  - markdown_include.include:
+      base_path: ./
+  - github-callouts
 extra_css:
   - css/mkdocstrings.css
 
