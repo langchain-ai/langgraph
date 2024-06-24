@@ -181,6 +181,7 @@ nav:
               - Stream Messages: 'cloud/how-tos/cloud_examples/stream_messages.ipynb'
               - Stream Events: 'cloud/how-tos/cloud_examples/stream_events.ipynb'
               - Stream Debug: 'cloud/how-tos/cloud_examples/stream_debug.ipynb'
+              - Multiple Modes: 'cloud/how-tos/cloud_examples/stream_multiple.ipynb'
           - Double Texting: 
               - Interrupt: 'cloud/how-tos/cloud_examples/interrupt_concurrent.ipynb'
               - Rollback: 'cloud/how-tos/cloud_examples/rollback_concurrent.ipynb'
