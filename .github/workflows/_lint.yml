@@ -38,7 +38,7 @@ jobs:
         with:
           files: ${{ inputs.working-directory }}
       - name: Show changed files
-        run: echo ${{ steps.changed-files.outputs }}
+        run: echo ${{ steps.changed-files.outputs.all_changed_files }}
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
         if: steps.changed-files.outputs.any_changed == 'true'
         uses: "./.github/actions/poetry_setup"
