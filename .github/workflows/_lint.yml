@@ -35,8 +35,6 @@ jobs:
       - name: Get changed files
         id: changed-files
         uses: Ana06/get-changed-files@v2.2.0
-        with:
-          filter: ${{ inputs.working-directory }}
       - name: Show changed files
         run: echo "Changed files ${{ steps.changed-files.outputs.all }}"
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
