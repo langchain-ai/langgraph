@@ -31,6 +31,13 @@ export interface AsyncCallerParams {
   maxRetries?: number;
 
   onFailedResponseHook?: ResponseCallback;
+
+  /**
+   * Specify a custom fetch implementation.
+   *
+   * By default we expect the `fetch` is available in the global scope.
+   */
+  fetch?: typeof fetch;
 }
 
 export interface AsyncCallerCallOptions {
@@ -104,6 +111,8 @@ export class AsyncCaller {
 
   private onFailedResponseHook?: ResponseCallback;
 
+  private customFetch?: typeof fetch;
+
   constructor(params: AsyncCallerParams) {
     this.maxConcurrency = params.maxConcurrency ?? Infinity;
     this.maxRetries = params.maxRetries ?? 4;
@@ -118,6 +127,7 @@ export class AsyncCaller {
       this.queue = new (PQueueMod as any)({ concurrency: this.maxConcurrency });
     }
     this.onFailedResponseHook = params?.onFailedResponseHook;
+    this.customFetch = params.fetch;
   }
 
   // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -199,8 +209,9 @@ export class AsyncCaller {
   }
 
   fetch(...args: Parameters<typeof fetch>): ReturnType<typeof fetch> {
+    const fetchFn = this.customFetch ?? fetch;
     return this.call(() =>
-      fetch(...args).then((res) => (res.ok ? res : Promise.reject(res))),
+      fetchFn(...args).then((res) => (res.ok ? res : Promise.reject(res))),
     );
   }
 }

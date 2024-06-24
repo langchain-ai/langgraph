@@ -69,7 +69,9 @@ class FewShotExamples(ManagedValue[Sequence[V]], Generic[V]):
         for example in self.graph.checkpointer.list(
             None, filter={"score": score, **self.metadata_filter_dict}, limit=self.k
         ):
-            with ChannelsManager(self.graph.channels, example.checkpoint) as channels:
+            with ChannelsManager(
+                self.graph.channels, example.checkpoint, self.config
+            ) as channels:
                 yield read_channels(channels, self.graph.output_channels)
 
     async def aiter(self, score: int = 1) -> AsyncIterator[V]:
@@ -77,7 +79,7 @@ class FewShotExamples(ManagedValue[Sequence[V]], Generic[V]):
             None, filter={"score": score, **self.metadata_filter_dict}, limit=self.k
         ):
             async with AsyncChannelsManager(
-                self.graph.channels, example.checkpoint
+                self.graph.channels, example.checkpoint, self.config
             ) as channels:
                 yield read_channels(channels, self.graph.output_channels)
 

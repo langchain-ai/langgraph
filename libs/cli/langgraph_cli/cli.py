@@ -18,7 +18,7 @@ from langgraph_cli.util import clean_empty_lines
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
     "-d",
-    help="Advanced: Path to docker-compose.yml file with additional services to launch",
+    help="Advanced: Path to docker-compose.yml file with additional services to launch.",
     type=click.Path(
         exists=True,
         file_okay=True,

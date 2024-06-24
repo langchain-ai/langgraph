@@ -98,7 +98,7 @@ class MemorySaver(BaseCheckpointSaver):
         """List checkpoints from the in-memory storage.
 
         This method retrieves a list of checkpoint tuples from the in-memory storage based
-        on the provided config. The checkpoints are ordered by timestamp in descending order.
+        on the provided config. The checkpoints are ordered by timestamp in insertion order.
 
         Args:
             config (RunnableConfig): The config to use for listing the checkpoints.
