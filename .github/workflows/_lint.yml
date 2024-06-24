@@ -34,11 +34,11 @@ jobs:
       - uses: actions/checkout@v4
       - name: Get changed files
         id: changed-files
-        uses: tj-actions/changed-files@v44
+        uses: Ana06/get-changed-files@v2.2.0
         with:
-          files: ${{ inputs.working-directory }}
+          filter: ${{ inputs.working-directory }}
       - name: Show changed files
-        run: echo "Changed files ${{ steps.changed-files.outputs.all_changed_files }}"
+        run: echo "Changed files ${{ steps.changed-files.outputs.all }}"
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
         if: steps.changed-files.outputs.any_changed == 'true'
         uses: "./.github/actions/poetry_setup"
