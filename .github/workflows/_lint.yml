@@ -35,6 +35,8 @@ jobs:
       - name: Get changed files
         id: changed-files
         uses: tj-actions/changed-files@v44
+        with:
+          files: ${{ inputs.working-directory }}
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
         if: steps.changed-files.outputs.any_changed == 'true'
         uses: "./.github/actions/poetry_setup"
