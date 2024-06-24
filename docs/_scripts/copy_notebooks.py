@@ -42,7 +42,7 @@ _MANUAL = {
         "introduction.ipynb",
         "customer-support/customer-support.ipynb",
         "tutorials/tnt-llm/tnt-llm.ipynb",
-        "tutorials/sql-agent.ipynb"
+        "tutorials/sql-agent.ipynb",
     ],
 }
 _MANUAL_INVERSE = {v: docs_dir / k for k, vs in _MANUAL.items() for v in vs}
@@ -103,9 +103,9 @@ def copy_notebooks():
             continue
         if any(path in _HOW_TOS for path in root.split(os.sep)):
             dst_dir = how_tos_dir
-        elif 'sdk' in root.split(os.sep):
+        elif "sdk" in root.split(os.sep):
             dst_dir = cloud_sdk_dir
-        elif 'cloud_examples' in root.split(os.sep):
+        elif "cloud_examples" in root.split(os.sep):
             dst_dir = cloud_how_tos_dir
         else:
             dst_dir = tutorials_dir
@@ -145,7 +145,7 @@ def copy_notebooks():
                     with open(dst_path, "w") as f:
                         f.write(content)
                 dst_dir = dst_dir_
-                
+
     # Top level notebooks are "how-to's"
     # for file in examples_dir.iterdir():
     #     if file.suffix.endswith(".ipynb") and not os.path.isdir(
@@ -154,6 +154,7 @@ def copy_notebooks():
     #         src_path = os.path.join(examples_dir, file)
     #         dst_path = os.path.join(docs_dir, "how-tos", file.name)
     #         shutil.copy(src_path, dst_path)
+
 
 if __name__ == "__main__":
     clean_notebooks()
