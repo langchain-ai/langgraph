@@ -474,6 +474,36 @@ files = [
 ]
 
 [[package]]
+name = "essentials"
+version = "1.1.5"
+description = "General purpose classes and functions, reusable in any kind of Python application"
+optional = false
+python-versions = "*"
+files = [
+    {file = "essentials-1.1.5-py3-none-any.whl", hash = "sha256:905fa4a69fcd2b2cf41ecc6cc65827e30c87ef91f3f5c71540bcc5e984fa8360"},
+    {file = "essentials-1.1.5.tar.gz", hash = "sha256:8736f738bb2c51d5069b2de2cf9146f7d402f25f9f95636781e59a422c908c46"},
+]
+
+[[package]]
+name = "essentials-openapi"
+version = "1.0.9"
+description = "Classes to generate OpenAPI Documentation v3 and v2, in JSON and YAML."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "essentials_openapi-1.0.9-py3-none-any.whl", hash = "sha256:1431e98ef0a442f1919fd9833385bf44d832c355fd05919dc06d43d4da0f8ef4"},
+    {file = "essentials_openapi-1.0.9.tar.gz", hash = "sha256:ebc46aac41c0b917a658f77caaa0ca93a6e4a4519de8a272f82c1538ccd5619f"},
+]
+
+[package.dependencies]
+essentials = ">=1.1.5"
+markupsafe = ">=2.1.2,<2.2.0"
+pyyaml = ">=6"
+
+[package.extras]
+full = ["click (>=8.1.3,<8.2.0)", "httpx (<1)", "jinja2 (>=3.1.2,<3.2.0)", "rich (>=12.6.0,<12.7.0)"]
+
+[[package]]
 name = "exceptiongroup"
 version = "1.2.1"
 description = "Backport of PEP 654 (exception groups)"
@@ -1517,6 +1547,25 @@ docs = ["myst-parser", "pydata-sphinx-theme", "sphinx", "sphinxcontrib-github-al
 test = ["pep440", "pre-commit", "pytest", "testpath"]
 
 [[package]]
+name = "neoteroi-mkdocs"
+version = "1.0.5"
+description = "Plugins for MkDocs and Python Markdown"
+optional = false
+python-versions = ">=3.7"
+files = [
+    {file = "neoteroi_mkdocs-1.0.5-py3-none-any.whl", hash = "sha256:1f3b372dee79269157361733c0f45b3a89189077078e0e3224d829a144ef3579"},
+    {file = "neoteroi_mkdocs-1.0.5.tar.gz", hash = "sha256:29875ef444b08aec5619a384142e16f1b4e851465cab4e380fb2b8ae730fe046"},
+]
+
+[package.dependencies]
+click = "*"
+essentials-openapi = "*"
+httpx = "*"
+jinja2 = "*"
+mkdocs = "*"
+rich = "*"
+
+[[package]]
 name = "nest-asyncio"
 version = "1.6.0"
 description = "Patch asyncio to allow nested event loops"
@@ -2312,6 +2361,24 @@ socks = ["PySocks (>=1.5.6,!=1.5.7)"]
 use-chardet-on-py3 = ["chardet (>=3.0.2,<6)"]
 
 [[package]]
+name = "rich"
+version = "13.7.1"
+description = "Render rich text, tables, progress bars, syntax highlighting, markdown and more to the terminal"
+optional = false
+python-versions = ">=3.7.0"
+files = [
+    {file = "rich-13.7.1-py3-none-any.whl", hash = "sha256:4edbae314f59eb482f54e9e30bf00d33350aaa94f4bfcd4e9e3110e64d0d7222"},
+    {file = "rich-13.7.1.tar.gz", hash = "sha256:9be308cb1fe2f1f57d67ce99e95af38a1e2bc71ad9813b0e247cf7ffbcc3a432"},
+]
+
+[package.dependencies]
+markdown-it-py = ">=2.2.0"
+pygments = ">=2.13.0,<3.0.0"
+
+[package.extras]
+jupyter = ["ipywidgets (>=7.5.1,<9)"]
+
+[[package]]
 name = "rpds-py"
 version = "0.18.1"
 description = "Python bindings to Rust's persistent data structures (rpds)"
@@ -2669,4 +2736,4 @@ files = [
 [metadata]
 lock-version = "2.0"
 python-versions = "^3.10"
-content-hash = "70e41571a1230938107dc420734b8dfdae4e71cdc3dca8281366c45441e8d73d"
+content-hash = "3acccc8f9c326351a1a2fb15127760e372982c039b97a68ceb28520b7531d8bb"

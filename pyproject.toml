@@ -23,6 +23,7 @@ mkdocs-git-committers-plugin-2 = "^2.3.0"
 mkdocs-material = {extras = ["imaging"], version = "^9.5.27"}
 markdown-include = "^0.8.1"
 markdown-callouts = "^0.4.0"
+neoteroi-mkdocs = "^1.0.5"
 
 [build-system]
 requires = ["poetry-core"]
