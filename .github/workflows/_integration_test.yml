@@ -19,50 +19,64 @@ jobs:
         working-directory: libs/cli
     steps:
       - uses: actions/checkout@v4
-
+      - name: Get changed files
+        id: changed-files
+        uses: Ana06/get-changed-files@v2.2.0
+        with:
+          filter: "libs/cli/**"
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
+        if: steps.changed-files.outputs.all
         uses: "./.github/actions/poetry_setup"
         with:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ env.POETRY_VERSION }}
           working-directory: libs/cli
           cache-key: integration-test-cli
-
       - name: Setup env
+        if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples
         run: cat .env.example > .env
       - name: Install cli globally
+        if: steps.changed-files.outputs.all
         run: pip install -e .
       - name: Start service A
+        if: steps.changed-files.outputs.all
         run: |
           langgraph up -c examples/langgraph.json --wait --verbose
       - name: Stop service A
+        if: steps.changed-files.outputs.all
         run: |
           langgraph down -c examples/langgraph.json
           sudo rm -rf .langgraph-data
       - name: Start service B
+        if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs
         run: |
           langgraph up --wait --verbose
       - name: Stop service B
+        if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs
         run: |
           langgraph down
           sudo rm -rf .langgraph-data
       - name: Start service C
+        if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_a
         run: |
           langgraph up --wait -d compose.yml --verbose
       - name: Stop service C
+        if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_a
         run: |
           langgraph down
           sudo rm -rf .langgraph-data
       - name: Start service D
+        if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_b
         run: |
           langgraph up --wait -d compose.yml --verbose
       - name: Stop service D
+        if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_b
         run: |
           langgraph down
