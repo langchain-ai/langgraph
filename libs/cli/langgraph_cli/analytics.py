@@ -31,11 +31,11 @@ def get_anonymized_params(kwargs: dict[str, Any]) -> dict[str, bool]:
     # anonymize params with values
     if config := kwargs.get("config"):
         if config != pathlib.Path(DEFAULT_CONFIG).resolve():
-            params["config"] = config
+            params["config"] = True
 
     if port := kwargs.get("port"):
         if port != DEFAULT_PORT:
-            params["port"] = port
+            params["port"] = True
 
     if kwargs.get("docker_compose"):
         params["docker_compose"] = True
@@ -63,7 +63,7 @@ def log_data(data: LogData) -> None:
             json=data,
             headers=headers,
         )
-    except httpx.HTTPStatusError:
+    except httpx.RequestError:
         pass
 
 
