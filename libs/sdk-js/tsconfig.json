@@ -23,7 +23,6 @@
   "typedocOptions": {
     "entryPoints": [
       "src/client.mts",
-      "src/index.mts",
       "src/schema.ts",
       "src/types.mts"
     ],
