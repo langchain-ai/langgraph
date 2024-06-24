@@ -269,6 +269,11 @@ When you use a checkpointer with a graph, you can interact with the state of tha
 This usually done when enabling different human-in-the-loop interaction patterns.
 When interacting with the checkpointer state, you must specify [thread identifiers](#threads)
 
+Each checkpoint has two properties:
+
+-**values**: This is the value of the state at this point in time.
+-**next**: This is a tuple of the nodes to execute next in the graph.
+
 ### Get state
 
 You can get the state of a checkpointer by calling `graph.get_state(config)`. The config should contain `thread_id`, and the state will be fetched for that thread.
