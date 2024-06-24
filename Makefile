@@ -16,5 +16,10 @@ clean-docs:
 	find ./docs/docs -name "*.ipynb" -type f -delete
 	rm -rf docs/site
 
+format format_diff:
+	poetry run ruff format libs/ examples/
+	poetry run ruff --select I --fix  libs/ examples/
+	poetry run black libs/ examples/
+
 codespell:
 	./docs/codespell_notebooks.sh .

@@ -29,7 +29,7 @@
               python-version: '3.10'
 
       lint:
-        name: cd ${{ matrix.working-directory }}
+        name: lint cd ${{ matrix.working-directory }}
         needs: [ build ]
         strategy:
           matrix:
@@ -41,6 +41,14 @@
         uses: ./.github/workflows/_lint.yml
         with:
           working-directory: ${{ matrix.working-directory }}
+        secrets: inherit
+      
+      format:
+        name: format cd ${{ matrix.working-directory }}
+        needs: [ build ]
+        uses: ./.github/workflows/_format.yml
+        with:
+          working-directory: ./
         secrets: inherit
 
       test:
