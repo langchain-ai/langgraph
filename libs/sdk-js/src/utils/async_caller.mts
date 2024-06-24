@@ -71,19 +71,19 @@ class HTTPError extends Error {
 
   static async fromResponse(
     response: Response,
-    options?: { includeResponse?: boolean }
+    options?: { includeResponse?: boolean },
   ): Promise<HTTPError> {
     try {
       return new HTTPError(
         response.status,
         await response.text(),
-        options?.includeResponse ? response : undefined
+        options?.includeResponse ? response : undefined,
       );
     } catch {
       return new HTTPError(
         response.status,
         response.statusText,
-        options?.includeResponse ? response : undefined
+        options?.includeResponse ? response : undefined,
       );
     }
   }
@@ -181,9 +181,9 @@ export class AsyncCaller {
             // but they're quite sensible.
             retries: this.maxRetries,
             randomize: true,
-          }
+          },
         ),
-      { throwOnTimeout: true }
+      { throwOnTimeout: true },
     );
   }
 
@@ -211,7 +211,7 @@ export class AsyncCaller {
   fetch(...args: Parameters<typeof fetch>): ReturnType<typeof fetch> {
     const fetchFn = this.customFetch ?? fetch;
     return this.call(() =>
-      fetchFn(...args).then((res) => (res.ok ? res : Promise.reject(res)))
+      fetchFn(...args).then((res) => (res.ok ? res : Promise.reject(res))),
     );
   }
 }
