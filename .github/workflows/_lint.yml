@@ -40,7 +40,7 @@ jobs:
       - name: Show changed files
         run: echo "Changed files ${{ steps.changed-files.outputs.all }}"
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.all
         uses: "./.github/actions/poetry_setup"
         with:
           python-version: ${{ matrix.python-version }}
@@ -49,19 +49,19 @@ jobs:
           cache-key: lint-with-extras
 
       - name: Check Poetry File
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.all
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: poetry check
 
       - name: Check lock file
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.all
         shell: bash
         working-directory: ${{ inputs.working-directory }}
         run: poetry lock --check
 
       - name: Install dependencies
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.all
         # Also installs dev/lint/test/typing dependencies, to ensure we have
         # type hints for as many of our libraries as possible.
         # This helps catch errors that require dependencies to be spotted, for example:
@@ -74,7 +74,7 @@ jobs:
         run: poetry install --with dev
 
       - name: Get .mypy_cache to speed up mypy
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.all
         uses: actions/cache@v3
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
@@ -84,7 +84,7 @@ jobs:
           key: mypy-lint-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/poetry.lock', inputs.working-directory)) }}
 
       - name: Analysing package code with our lint
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.all
         working-directory: ${{ inputs.working-directory }}
         run: |
           if make lint_package > /dev/null 2>&1; then
@@ -95,7 +95,7 @@ jobs:
           fi
 
       - name: Install test dependencies
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.all
         # Also installs dev/lint/test/typing dependencies, to ensure we have
         # type hints for as many of our libraries as possible.
         # This helps catch errors that require dependencies to be spotted, for example:
@@ -109,7 +109,7 @@ jobs:
           poetry install --with dev
 
       - name: Get .mypy_cache_test to speed up mypy
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.all
         uses: actions/cache@v3
         env:
           SEGMENT_DOWNLOAD_TIMEOUT_MIN: "2"
@@ -119,7 +119,7 @@ jobs:
           key: mypy-test-${{ runner.os }}-${{ runner.arch }}-py${{ matrix.python-version }}-${{ inputs.working-directory }}-${{ hashFiles(format('{0}/poetry.lock', inputs.working-directory)) }}
 
       - name: Analysing tests with our lint
-        if: steps.changed-files.outputs.any_changed == 'true'
+        if: steps.changed-files.outputs.all
         working-directory: ${{ inputs.working-directory }}
         run: |
           if make lint_tests > /dev/null 2>&1; then
