@@ -21,6 +21,16 @@
   "exclude": ["node_modules", "dist", "coverage"],
   "includeVersion": true,
   "typedocOptions": {
-    "entryPoints": ["src/client.ts"]
+    "entryPoints": [
+      "src/client.mts",
+      "src/index.mts",
+      "src/schema.ts",
+      "src/types.mts"
+    ],
+    "readme": "none",
+    "out": "docs",
+    "plugin": [
+      "typedoc-plugin-markdown"
+    ]
   }
 }
