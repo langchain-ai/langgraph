@@ -28,7 +28,7 @@ jobs:
         id: changed-files
         uses: Ana06/get-changed-files@v2.2.0
         with:
-          filter: "${{ inputs.working-directory }}/*"
+          filter: "${{ inputs.working-directory }}/**"
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
         if: steps.changed-files.outputs.all
         uses: "./.github/actions/poetry_setup"
