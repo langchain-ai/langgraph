@@ -689,15 +689,16 @@ class CronClient:
         await self.http.delete(f"/runs/crons/{cron_id}")
     
     async def list(
-        self, assistant_id: Optional[str], thread_id: Optional[str] = None
+        self, 
+        assistant_id: str,
+        *,
+        thread_id: Optional[str] = None
     ) -> ThreadState:
         """Get a list of all the cron jobs."""
         if thread_id:
             return await self.http.get(f"/threads/{thread_id}/runs/crons")
-        elif assistant_id:
-            return await self.http.get(f"/assistants/{assistant_id}/runs/crons")
         else:
-            return await self.http.get(f"runs/crons")
+            return await self.http.get(f"/assistants/{assistant_id}/runs/crons")
 
 
 def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
