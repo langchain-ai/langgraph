@@ -171,10 +171,11 @@ nav:
       - 'cloud/index.md'
       - Tutorials:
           - Quick Start: 'cloud/quick_start.md'
-          - Deployment:
-              - Self-Hosted: 'cloud/deployment/self_hosted.md'
-              - Managed: 'cloud/deployment/managed.md'
       - How-to Guides:
+          - Deployment:
+              - Setup App: 'cloud/deployment/setup.md'
+              - Deploy to Cloud: 'cloud/deployment/cloud.md'
+              - Self-Host: 'cloud/deployment/self_hosted.md'
           - Streaming:
               - Stream Values: 'cloud/how-tos/cloud_examples/stream_values.ipynb'
               - Stream Updates: 'cloud/how-tos/cloud_examples/stream_updates.ipynb'
