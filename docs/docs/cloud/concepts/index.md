@@ -52,10 +52,10 @@ There are many occasions where the graph cannot run completely autonomously. For
 ### Double Texting
 Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), Langgraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how-tos/cloud_examples/interrupt_concurrent/). These options are:
 
-- `reject`: This is the simplest option, this just rejects any follow up runs and does not allow double texting.
-- `enqueue`: This is a relatively simple option which continues the first run until it completes the whole run, then sends the new input as a separate run.
-- `interrupt`: This option interrupts the current execution but saves all the work done up until that point. It then inserts the user input and continues from there. If you enable this option, your graph should be able to handle weird edge cases that may arise.
-- `rollback`: This option rolls back all work done up until that point. It then sends the user input in, basically as if it just followed the original run input.
+- `reject`: This is the simplest option, this just rejects any follow up runs and does not allow double texting. See the [How-to Guide](../how-tos/cloud_examples/reject_concurrent/) for configuring the reject double text option.
+- `enqueue`: This is a relatively simple option which continues the first run until it completes the whole run, then sends the new input as a separate run. See the [How-to Guide](../how-tos/cloud_examples/enqueue_concurrent/) for configuring the enqueue double text option.
+- `interrupt`: This option interrupts the current execution but saves all the work done up until that point. It then inserts the user input and continues from there. If you enable this option, your graph should be able to handle weird edge cases that may arise. See the [How-to Guide](../how-tos/cloud_examples/interrupt_concurrent/) for configuring the interrupt double text option.
+- `rollback`: This option rolls back all work done up until that point. It then sends the user input in, basically as if it just followed the original run input. See the [How-to Guide](../how-tos/cloud_examples/rollback_concurrent/) for configuring the rollback double text option.
 
 ### Stateless Runs
 
