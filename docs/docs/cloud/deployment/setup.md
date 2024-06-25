@@ -57,6 +57,9 @@ graph_workflow.set_entry_point("agent")
 agent = graph_workflow.compile()
 ```
 
+!!! warning "Assign `CompiledGraph` to Variable"
+    The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module.
+
 Example file directory:
 ```
 my-app/
