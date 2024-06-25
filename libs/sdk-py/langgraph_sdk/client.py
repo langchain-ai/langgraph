@@ -690,15 +690,17 @@ class CronClient:
     
     async def list(
         self, 
-        assistant_id: str,
         *,
+        assistant_id: Optional[str] = None,
         thread_id: Optional[str] = None
     ) -> ThreadState:
         """Get a list of all the cron jobs."""
-        if thread_id:
-            return await self.http.get(f"/threads/{thread_id}/runs/crons")
-        else:
-            return await self.http.get(f"/assistants/{assistant_id}/runs/crons")
+        payload = {
+            "assistant_id" : assistant_id,
+            "thread_id": thread_id,
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+        return await self.http.post(f"/runs/crons/search", json=payload)
 
 
 def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
