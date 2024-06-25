@@ -84,6 +84,8 @@ Example `langgraph.json` file:
 }
 ```
 
+Note that the variable name of the `CompiledGraph` appears at the end of the value of each subkey in the top-level `graphs` key (i.e. `:<variable_name>`).
+
 Example file directory:
 ```
 my-app/
