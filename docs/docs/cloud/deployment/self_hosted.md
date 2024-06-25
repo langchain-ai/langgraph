@@ -5,7 +5,7 @@
 
 LangGraph Cloud APIs can be self-hosted with a valid LangGraph Cloud license key. Self-hosted deployments are built with Docker and deployed with Helm (on Kubernetes) or with Docker Compose. Ensure that the [Docker CLI](https://docs.docker.com/engine/reference/commandline/cli/) is installed.
 
-## Build Image
+## Build Docker Image
 
 1. Follow the [How-to Guide](setup.md) for setting up a LangGraph application for deployment.
 1. Install the [LangGraph CLI](../reference/cli.md#installation).
@@ -18,7 +18,8 @@ LangGraph Cloud APIs can be self-hosted with a valid LangGraph Cloud license key
 The public Helm chart for LangGraph Cloud is available [here](https://github.com/langchain-ai/helm/tree/main/charts/langgraph-cloud).
 
 1. Ensure that the [Helm client](https://github.com/helm/helm?tab=readme-ov-file#install) is installed.
-2. Follow [these instructions](https://github.com/langchain-ai/helm/tree/main/charts/langgraph-cloud#readme) to configure your Helm chart and deploy to Kubernetes.
+1. Publish the built Docker image to a respository that can be accessed by the target Kubernetes cluster.
+1. Follow [these instructions](https://github.com/langchain-ai/helm/tree/main/charts/langgraph-cloud#readme) to configure the Helm chart and deploy to Kubernetes.
 
 ## Self-Host with Docker
 
