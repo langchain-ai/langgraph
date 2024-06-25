@@ -10,7 +10,7 @@
 
 LangGraph Cloud is a managed service for deploying and hosting LangGraph applications. Deploying applications with LangGraph Cloud shortens the time-to-market for developers. With one click, deploy a production-ready API with built-in persistence for your LangGraph application. LangGraph Cloud APIs are horizatonally scalable and deployed with durable storage.
 
-The LangGraph Cloud API exposes functionality of your LangGraph application through [Assistants](./concepts/index.md#assistants). An assistant abstracts the cognitive architecture of your graph. Invoke an assistant by calling the pre-built [API endpoints](./reference/api_ref.md).
+The LangGraph Cloud API exposes functionality of your LangGraph application through [Assistants](./concepts/index.md#assistants). An assistant abstracts the cognitive architecture of your graph. Invoke an assistant by calling the pre-built [API endpoints](./reference/api/api_ref.md).
 
 LangGraph Cloud is seamlessly integrated with [LangSmith](https://www.langchain.com/langsmith) and is accessible from within the LangSmith UI.
 
@@ -30,4 +30,4 @@ The LangGraph Cloud API supports key LangGraph features in addition to new funct
 - [Tutorials](./quick_start.md): Learn to build and deploy applications for LangGraph Cloud.
 - [How-to Guides](./how-tos/cloud_examples/stream_values/): Implement specific features of the LangGraph Cloud API such as streaming tokens, configuring double texting, and creating cron jobs. Go here if you want to copy and run a specific code snippet.
 - [Conceptual Guides](./concepts/): In-depth explanations of the core data models (e.g. assistants) and key features (e.g. double texting) of the LangGraph Cloud API.
-- [Reference](./reference/api_ref.md): References for the LangGraph Cloud API, the corresponding Python and JS/TS SDKs, and the LangGraph CLI.
+- [Reference](./reference/api/api_ref.md): References for the LangGraph Cloud API, the corresponding Python and JS/TS SDKs, and the LangGraph CLI.

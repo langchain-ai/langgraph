@@ -7,17 +7,17 @@ The LangGraph Cloud API consists of a few core data models: [Assistants](#assist
 ### Assistants
 An assistant is a configured instance of a [`CompiledGraph`](../../../reference/graphs/#compiledgraph). It abstracts the cognitive architecture of the graph and contains instance specific configuration and metadata. Multiple assistants can reference the same graph but can contain different configuration and metadata, which may differentiate the behavior of the assistants. An assistant (i.e. the graph) is invoked as part of a run.
 
-The LangGraph Cloud API provides several endpoints for creating and managing assistants. See the [API reference](../reference/api_ref.md) for more details.
+The LangGraph Cloud API provides several endpoints for creating and managing assistants. See the <a href="../reference/api/api_ref.html#tag/assistantscreate" target="_blank">API reference</a> for more details.
 
 ### Threads
 A thread contains the accumulated state of a group of runs. If a run is executed on a thread, then the [state](../../../concepts/#persistence) of the underlying graph of the assistant will be persisted to the thread. A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run.
 
-The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the [API reference](../reference/api_ref.md) for more details.
+The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the <a href="../reference/api/api_ref.html#tag/threadscreate" target="_blank">API reference</a> for more details.
 
 ### Runs
 A run is an invocation of an assistant. Each run may have its own input, configuration, and metadata, which may affect execution and output of the underlying graph. A run can optionally be executed on a thread.
 
-The LangGraph Cloud API provides several endpoints for creating and managing runs. See the [API reference](../reference/api_ref.md) for more details.
+The LangGraph Cloud API provides several endpoints for creating and managing runs. See the <a href="../reference/api/api_ref.html#tag/runscreate" target="_blank">API reference</a> for more details.
 
 ### Cron Jobs
 
@@ -28,7 +28,7 @@ It's often useful to run graphs on some schedule. LangGraph Cloud supports cron 
 
 Note that this sends the same input to the thread every time. See the [How-to Guide](../how-tos/cloud_examples/cron_jobs/) for creating cron jobs.
 
-The LangGraph Cloud API provides several endpoints for creating and managing cron jobs. See the [API reference](../reference/api_ref.md) for more details.
+The LangGraph Cloud API provides several endpoints for creating and managing cron jobs. See the <a href="../reference/api/api_ref.html#tag/runscreate/POST/threads/{thread_id}/runs/crons" target="_blank">API reference</a> for more details.
 
 ## Features
 The LangGraph Cloud API offers several features to support complex agent architectures.
@@ -44,7 +44,7 @@ Streaming is critical for making LLM applications feel responsive to end users. 
 
 You can also specify multiple streaming modes at the same time. See the [How-to Guide](../how-tos/cloud_examples/stream_multiple/) for configuring multiple streaming modes at the same time.
 
-See the [API Reference](../reference/api_ref.md) for how to create streaming runs.
+See the <a href="../reference/api/api_ref.html#tag/runscreate/POST/threads/{thread_id}/runs/stream" target="_blank">API reference</a> for how to create streaming runs.
 
 ### Human-in-the-Loop
 There are many occasions where the graph cannot run completely autonomously. For instance, the user might need to input some additional arguments to a function call, or select the next edge for the graph to continue on. In these instances, we need to insert some human in the loop interaction, which you can learn about in the [human in the loop how-tos](../how-tos/cloud_examples/human_in_the_loop_breakpoint).
