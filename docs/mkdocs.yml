@@ -204,7 +204,7 @@ nav:
       - Conceptual Guides:
           'cloud/concepts/index.md'
       - Reference:
-          - API: 'cloud/reference/api_ref.md'
+          - API: 'cloud/reference/api/api_ref.md'
           - SDK:
               - Python: 'cloud/reference/sdk/python_sdk_ref.md'
               - JS/TS: 'cloud/reference/sdk/js_ts_sdk_ref.md'
