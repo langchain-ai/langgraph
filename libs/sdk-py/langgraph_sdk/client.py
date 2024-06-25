@@ -688,7 +688,7 @@ class CronClient:
         """Delete a cron."""
         await self.http.delete(f"/runs/crons/{cron_id}")
     
-    async def list(
+    async def search(
         self, 
         *,
         assistant_id: Optional[str] = None,
