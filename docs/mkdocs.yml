@@ -145,8 +145,11 @@ nav:
          - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
          - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
      - Streaming:
+         - Stream full state: how-tos/stream-values.ipynb
+         - Stream state updates: how-tos/stream-updates.ipynb
          - Stream LLM tokens: how-tos/streaming-tokens.ipynb
-         - Stream Arbitrarily Nested Content: how-tos/streaming-content.ipynb
+         - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
+         - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
      - Other:
          - Run graph asynchronously: how-tos/async.ipynb
          - Visualize your graph: how-tos/visualization.ipynb
@@ -154,9 +157,9 @@ nav:
          - Use Pydantic model as state: how-tos/state-model.ipynb
      - Prebuilt ReAct Agent:
          - Create a ReAct agent: how-tos/create-react-agent.ipynb
-         - Add Memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
-         - Add a System Prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
-         - Add Human-in-the-Loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
+         - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
+         - Add a system prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
+         - Add human-in-the-Loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
   - 'Conceptual Guides':
      - 'concepts/index.md'
      - LangGraph for Agentic Applications: concepts/high_level.md
