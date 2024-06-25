@@ -73,3 +73,11 @@ The only difference is in stateless background runs, if the task worker dies hal
 - a stateless background run would retry from the beginning
 
 See the [How-to Guide](../how-tos/cloud_examples/stateless_runs/) for creating stateless runs.
+
+## Deployment
+
+The LangGraph Cloud offers several features to support secure and robost deployments.
+
+### Authentication
+
+LangGraph applications deployed to LangGraph Cloud are automatically configured with LangSmith authentication. In order to call the API, a valid <a href="https://docs.smith.langchain.com/how_to_guides/setup/create_account_api_key#api-keys" target="_blank">LangSmith API key</a> is required.
