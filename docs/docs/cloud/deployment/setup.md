@@ -22,7 +22,7 @@ my-app/
 
 ## Specify Environment Variables
 
-Environment variables can optionally be specified in a file (e.g. `.env`).
+Environment variables can optionally be specified in a file (e.g. `.env`). See the [Environment Variables reference](../reference/env_var.md) to configure additional variables for a deployment.
 
 Example `.env` file:
 ```

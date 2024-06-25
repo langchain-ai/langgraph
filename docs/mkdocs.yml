@@ -211,6 +211,7 @@ nav:
               - Python: 'cloud/reference/sdk/python_sdk_ref.md'
               - JS/TS: 'cloud/reference/sdk/js_ts_sdk_ref.md'
           - CLI: 'cloud/reference/cli.md'
+          - Environment Variables: 'cloud/reference/env_var.md'
 
 
 markdown_extensions:
