@@ -16,7 +16,7 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
     1. `Deployment details`
         1. Select `Import from GitHub` and follow the GitHub OAuth workflow to install and authorize LangChain's `hosted-langserve` GitHub app to  access the selected repositories. After installation is complete, return to the `Create New Deployment` panel and select the GitHub repository to deploy from the dropdown menu.
         1. Specify a name for the deployment.
-        1. Specify the full path to the [LangGraph API config file](../reference/cli.md#configuration-file) including the file name. For example, if the file `langgraph.json` is in the root of the respository, simply specify `langgraph.json`.
+        1. Specify the full path to the [LangGraph API config file](../reference/cli.md#configuration-file) including the file name. For example, if the file `langgraph.json` is in the root of the repository, simply specify `langgraph.json`.
         1. Specify the desired `git` reference (e.g. branch name). For example, different branches of the repository can be deployed.
     1. Select the desired `Deployment Type`.
         1. `Development` deployments are meant for non-production use cases and are provisioned with minimal resources.
@@ -37,7 +37,7 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
 1. Select an existing deployment to create a new revision for.
 1. In the `Deployment` view, in the top-right corner, select `+ New Revision`.
 1. In the `New Revision` modal, fill out the required fields.
-    1. Specify the full path to the [LangGraph API config file](../reference/cli.md#configuration-file) including the file name. For example, if the file `langgraph.json` is in the root of the respository, simply specify `langgraph.json`.
+    1. Specify the full path to the [LangGraph API config file](../reference/cli.md#configuration-file) including the file name. For example, if the file `langgraph.json` is in the root of the repository, simply specify `langgraph.json`.
     1. Specify the desired `git` reference (e.g. branch name). For example, different branches of the repository can be deployed.
     1. Specify `Environment Variables` and secrets. Existing secrets and environment variables are prepopulated.
         1. Add new secrets or environment variables.
