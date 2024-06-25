@@ -26,7 +26,7 @@ It's often useful to run graphs on some schedule. LangGraph Cloud supports cron 
 - Create a new thread with the specified assistant
 - Send the specified input to that thread
 
-Note that this sends the same input to the thread every time.
+Note that this sends the same input to the thread every time. See the [How-to Guide](../how-tos/cloud_examples/cron_jobs/) for creating cron jobs.
 
 The LangGraph Cloud API provides several endpoints for creating and managing cron jobs. See the [API reference](../reference/api_ref.md) for more details.
 
@@ -57,8 +57,7 @@ Many times users might interact with your graph in unintended ways. For instance
 - `interrupt`: This option interrupts the current execution but saves all the work done up until that point. It then inserts the user input and continues from there. If you enable this option, your graph should be able to handle weird edge cases that may arise.
 - `rollback`: This option rolls back all work done up until that point. It then sends the user input in, basically as if it just followed the original run input.
 
-
-### Stateless runs
+### Stateless Runs
 
 All runs use the built-in checkpointer to store checkpoints for runs. However, it can often be useful to just kick off a run without worrying about explicitly creating a thread and without wanting to keep those checkpointers around. Stateless runs allow you to do this by exposing an endpoint that:
 
@@ -73,4 +72,4 @@ The only difference is in stateless background runs, if the task worker dies hal
 - whereas a stateful background run would retry from the last successful checkpoint
 - a stateless background run would retry from the beginning
 
-
+See the [How-to Guide](../how-tos/cloud_examples/stateless_runs/) for creating stateless runs.
