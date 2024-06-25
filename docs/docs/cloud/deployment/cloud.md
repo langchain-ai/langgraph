@@ -21,7 +21,7 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
     1. Select the desired `Deployment Type`.
         1. `Development` deployments are meant for non-production use cases and are provisioned with minimal resources.
         1. `Production` deployments can serve up to 500 requests/second and are provisioned with highly available storage with automatic backups.
-    1. Specify `Environment Variables` and secrets.
+    1. Specify `Environment Variables` and secrets. See the [Environment Variables reference](../reference/env_var.md) to configure additional variables for the deployment.
         1. Sensitive values such as API keys (e.g. `OPENAI_API_KEY`) should be specified as secrets.
         1. Additional non-secret environment variables can be specified as well.
     1. A new LangSmith `Tracing Project` is automatically created with the same name as the deployment.
@@ -39,7 +39,7 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
 1. In the `New Revision` modal, fill out the required fields.
     1. Specify the full path to the [LangGraph API config file](../reference/cli.md#configuration-file) including the file name. For example, if the file `langgraph.json` is in the root of the repository, simply specify `langgraph.json`.
     1. Specify the desired `git` reference (e.g. branch name). For example, different branches of the repository can be deployed.
-    1. Specify `Environment Variables` and secrets. Existing secrets and environment variables are prepopulated.
+    1. Specify `Environment Variables` and secrets. Existing secrets and environment variables are prepopulated. See the [Environment Variables reference](../reference/env_var.md) to configure additional variables for the revision.
         1. Add new secrets or environment variables.
         1. Remove existing secrets or environment variables.
         1. Update the value of existing secrets or environment variables.

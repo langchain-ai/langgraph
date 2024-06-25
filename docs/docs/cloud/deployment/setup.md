@@ -22,7 +22,7 @@ my-app/
 
 ## Specify Environment Variables
 
-Environment variables can optionally be specified in a file (e.g. `.env`).
+Environment variables can optionally be specified in a file (e.g. `.env`). See the [Environment Variables reference](../reference/env_var.md) to configure additional variables for a deployment.
 
 Example `.env` file:
 ```
@@ -57,6 +57,9 @@ graph_workflow.set_entry_point("agent")
 agent = graph_workflow.compile()
 ```
 
+!!! warning "Assign `CompiledGraph` to Variable"
+    The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module.
+
 Example file directory:
 ```
 my-app/
@@ -83,6 +86,8 @@ Example `langgraph.json` file:
     "env": ".env"
 }
 ```
+
+Note that the variable name of the `CompiledGraph` appears at the end of the value of each subkey in the top-level `graphs` key (i.e. `:<variable_name>`).
 
 Example file directory:
 ```
