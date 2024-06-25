@@ -379,7 +379,6 @@ class ThreadsClient:
         self,
         thread_id: str,
         limit: int = 10,
-        *,
         before: Optional[str] = None,
         metadata: Optional[dict] = None,
     ) -> list[ThreadState]:
