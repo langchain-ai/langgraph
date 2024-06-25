@@ -14,6 +14,9 @@ cloud_sdk_dir = docs_dir / "cloud"
 _MANUAL = {
     "how-tos": [
         "async.ipynb",
+        "stream-values.ipynb",
+        "stream-updates.ipynb",
+        "stream-multiple.ipynb",
         "streaming-tokens.ipynb",
         "streaming-content.ipynb",
         "persistence.ipynb",
