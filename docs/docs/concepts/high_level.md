@@ -7,6 +7,7 @@ Other people may talk about a system being an "agent" - we prefer to talk about 
 When we talk about systems being "agentic", we are talking about systems that use an LLM to decide the control flow of an application. There are different levels that an LLM can be used to decide the control flow, and this spectrum of "agentic" makes more sense to us than defining an arbitrary cutoff for what is or isn't an agent.
 
 Examples of using an LLM to decide the control of an application:
+
 - Using an LLM to route between two potential paths
 - Using an LLM to decide which of many tools to call
 - Using an LLM to decide whether the generated answer is sufficient or more work is need
@@ -15,6 +16,7 @@ The more times these types of decisions are made inside an application, the more
 If these decisions are being made in a loop, then its even more agentic!
 
 There are other concepts often associated with being agentic, but we would argue these are a by-product of the above definition:
+
 - Tool calling: this is often how LLMs make decisions
 - Action taking: often times, the LLMs' outputs are used as the input to an action
 - Memory: reliable systems need to have knowledge of things that occurred
@@ -23,6 +25,7 @@ There are other concepts often associated with being agentic, but we would argue
 ## Why LangGraph?
 
 LangGraph has several core principles that we believe make it the most suitable framework for building agentic applications:
+
 - Controllability
 - Human-in-the-Loop
 - Streaming First
@@ -45,8 +48,8 @@ So you've built your LangGraph object - now what?
 
 Now you need to deploy it. 
 There are many ways to deploy LangGraph objects, and the right solution depends on your needs and use case.
-We'll highlight two ways here: using [LangGraph Cloud](../cloud) or rolling your own solution.
+We'll highlight two ways here: using [LangGraph Cloud](/langgraph/cloud) or rolling your own solution.
 
-[LangGraph Cloud](../cloud) is an opinionated way to deploy LangGraph objects from the LangChain team. Please see the [LangGraph Cloud documentation](../cloud) for all the details about what it involves, to see if it is a good fit for you.
+[LangGraph Cloud](/langgraph/cloud) is an opinionated way to deploy LangGraph objects from the LangChain team. Please see the [LangGraph Cloud documentation](/langgraph/cloud) for all the details about what it involves, to see if it is a good fit for you.
 
 If it is not a good fit, you may want to roll your own deployment. In this case, we would recommend using [FastAPI](https://fastapi.tiangolo.com/) to stand up a server. You can then call this graph from inside the FastAPI server as you see fit.
