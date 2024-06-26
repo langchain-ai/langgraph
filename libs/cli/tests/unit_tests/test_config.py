@@ -66,7 +66,9 @@ def test_validate_config():
 def test_config_to_docker_simple():
     graphs = {"agent": "./agent.py:graph"}
     actual_docker_stdin = config_to_docker(
-        PATH_TO_CONFIG, validate_config({"dependencies": ["."], "graphs": graphs})
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
     )
     expected_docker_stdin = """\
 FROM langchain/langgraph-api:3.11
@@ -96,6 +98,7 @@ def test_config_to_docker_pipconfig():
                 "pip_config_file": "pipconfig.txt",
             }
         ),
+        "langchain/langgraph-api",
     )
     expected_docker_stdin = """\
 FROM langchain/langgraph-api:3.11
