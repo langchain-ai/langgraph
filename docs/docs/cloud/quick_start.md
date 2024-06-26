@@ -80,7 +80,7 @@ First, let's test that the assistant we are hosting is indeed retrievable by the
         "metadata": {},
         "limit": 10,
         "offset": 0
-    }
+    }'
 
 If the hosting is working as expected, you should receive a 200 response which looks something like this example response:
 
