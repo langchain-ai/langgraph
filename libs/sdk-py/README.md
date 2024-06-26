@@ -1,6 +1,6 @@
 # LangGraph Python SDK
 
-This repository contains the Python SDK for interacting with the LangGraph REST API.
+This repository contains the Python SDK for interacting with the LangGraph Cloud REST API.
 
 ## Quick Start
 

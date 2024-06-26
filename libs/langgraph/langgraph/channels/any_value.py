@@ -1,6 +1,7 @@
 from contextlib import contextmanager
 from typing import Generator, Generic, Optional, Sequence, Type
 
+from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel, Value
@@ -32,7 +33,7 @@ class AnyValue(Generic[Value], BaseChannel[Value, Value, Value]):
 
     @contextmanager
     def from_checkpoint(
-        self, checkpoint: Optional[Value] = None
+        self, checkpoint: Optional[Value], config: RunnableConfig
     ) -> Generator[Self, None, None]:
         empty = self.__class__(self.typ)
         if checkpoint is not None:
