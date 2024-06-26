@@ -17,18 +17,18 @@ If these decisions are being made in a loop, then its even more agentic!
 
 There are other concepts often associated with being agentic, but we would argue these are a by-product of the above definition:
 
-- Tool calling: this is often how LLMs make decisions
+- [Tool calling](/langgraph/concepts/agentic_concepts/#tool-calling): this is often how LLMs make decisions
 - Action taking: often times, the LLMs' outputs are used as the input to an action
-- Memory: reliable systems need to have knowledge of things that occurred
-- Planning: planning steps (either explicit or implicit) are useful for ensuring that the LLM, when making decisions, makes them in the highest fidelity way.
+- [Memory](/langgraph/concepts/agentic_concepts/#memory): reliable systems need to have knowledge of things that occurred
+- [Planning](/langgraph/concepts/agentic_concepts/#planning): planning steps (either explicit or implicit) are useful for ensuring that the LLM, when making decisions, makes them in the highest fidelity way.
 
 ## Why LangGraph?
 
 LangGraph has several core principles that we believe make it the most suitable framework for building agentic applications:
 
-- Controllability
-- Human-in-the-Loop
-- Streaming First
+- [Controllability](/langgraph/how-tos/#controllability)
+- [Human-in-the-Loop](/langgraph/how-tos/#human-in-the-loop)
+- [Streaming First](/langgraph/how-tos/#streaming)
 
 **Controllability**
 
@@ -40,7 +40,7 @@ LangGraph comes with a built-in persistence layer as a first-class concept. This
 
 **Streaming First**
 
-LangGraph comes with first class support for streaming. Agentic applications often take a while to run, and so giving the user some idea of what is happening is important, and streaming is a great way to do that. LangGraph supports streaming of both events (like a tool call being taken) as well as of tokens that an LLM may emit.
+LangGraph comes with first class support for streaming. Agentic applications often take a while to run, and so giving the user some idea of what is happening is important, and streaming is a great way to do that. LangGraph supports streaming of both events ([like a tool call being taken](/langgraph/how-tos/stream-updates/)) as well as of [tokens that an LLM may emit](/langgraph/how-tos/streaming-tokens/).
 
 ## Deployment
 
