@@ -1,14 +1,13 @@
 """Implementation of a langgraph checkpoint saver using Postgres."""
-import abc
-import pickle
 from contextlib import asynccontextmanager, contextmanager
-from typing import Any, AsyncGenerator, AsyncIterator, Generator, Optional, Union, Tuple
+from typing import Any, AsyncGenerator, AsyncIterator, Generator, Optional, Union, Tuple, List
 
 import psycopg
-from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
+from psycopg.types.json import Jsonb
+from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.serde.jsonplus import JsonPlusSerializer
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, CheckpointThreadTs, CheckpointTuple
+from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, CheckpointTuple
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 
 
@@ -168,6 +167,18 @@ class PostgresSaver(BaseCheckpointSaver):
     and remember to close the connection when done.
     """
 
+    def __init__(
+        self,
+        sync_connection: Optional[Union[psycopg.Connection, ConnectionPool]] = None,
+        async_connection: Optional[
+            Union[psycopg.AsyncConnection, AsyncConnectionPool]
+        ] = None
+        
+    ):
+        super().__init__(serde=JsonPlusSerializer())
+        self.sync_connection = sync_connection
+        self.async_connection = async_connection
+
     @contextmanager
     def _get_sync_connection(self) -> Generator[psycopg.Connection, None, None]:
         """Get the connection to the Postgres database."""
@@ -193,8 +204,8 @@ class PostgresSaver(BaseCheckpointSaver):
                         thread_id TEXT NOT NULL,
                         thread_ts TIMESTAMPTZ NOT NULL,
                         parent_ts TIMESTAMPTZ,
-                        checkpoint jsonb NOT NULL,
-                        metadata jsonb NOT NULL default '{}',
+                        checkpoint BYTEA NOT NULL,
+                        metadata BYTEA NOT NULL,
                         PRIMARY KEY (thread_id, thread_ts)
                     );
                     """
@@ -213,8 +224,8 @@ class PostgresSaver(BaseCheckpointSaver):
                         thread_id TEXT NOT NULL,
                         thread_ts TIMESTAMPTZ NOT NULL,
                         parent_ts TIMESTAMPTZ,
-                        checkpoint jsonb NOT NULL,
-                        metadata jsonb NOT NULL default '{}',
+                        checkpoint BYTEA NOT NULL,
+                        metadata BYTEA NOT NULL,
                         PRIMARY KEY (thread_id, thread_ts)
                     );
                     """
@@ -246,26 +257,33 @@ class PostgresSaver(BaseCheckpointSaver):
         """
         thread_id = config["configurable"]["thread_id"]
         parent_ts = config["configurable"].get("thread_ts")
-
+        print((
+                        thread_id,
+                        checkpoint["ts"],
+                        config["configurable"].get("thread_ts"),
+                        self.serde.dumps(checkpoint),
+                        self.serde.dumps(metadata),
+                    )
+        )
         with self._get_sync_connection() as conn:
             with conn.cursor() as cur:
                 cur.execute(
-                    """
+                     """
                     INSERT INTO checkpoints 
-                        (thread_id, thread_ts, parent_ts, checkpoint)
+                        (thread_id, thread_ts, parent_ts, checkpoint, metadata)
                     VALUES 
-                        (%(thread_id)s, %(thread_ts)s, %(parent_ts)s, %(checkpoint)s)
-                    ON CONFLICT (thread_id, thread_ts) 
+                        (%s, %s, %s, %s, %s)
+                    ON CONFLICT (thread_id, thread_ts)
                     DO UPDATE SET checkpoint = EXCLUDED.checkpoint,
                                   metadata = EXCLUDED.metadata;
                     """,
-                    {
-                        "thread_id": thread_id,
-                        "thread_ts": checkpoint["ts"],
-                        "parent_ts": parent_ts if parent_ts else None,
-                        "checkpoint": self.serializer.dumps(checkpoint),
-                        "metadata": self.serializer.dumps(metadata),
-                    },
+                    (
+                        thread_id,
+                        checkpoint["ts"],
+                        parent_ts if parent_ts else None,
+                        self.serde.dumps(checkpoint),
+                        self.serde.dumps(metadata),
+                    ),
                 )
 
         return {
@@ -295,20 +313,21 @@ class PostgresSaver(BaseCheckpointSaver):
             async with conn.cursor() as cur:
                 await cur.execute(
                     """
-                    INSERT INTO 
-                        checkpoints (thread_id, thread_ts, parent_ts, checkpoint)
+                    INSERT INTO checkpoints 
+                        (thread_id, thread_ts, parent_ts, checkpoint, metadata)
                     VALUES 
-                        (%(thread_id)s, %(thread_ts)s, %(parent_ts)s, %(checkpoint)s)
+                        (%s, %s, %s, %s, %s)
                     ON CONFLICT (thread_id, thread_ts) 
                     DO UPDATE SET checkpoint = EXCLUDED.checkpoint,
                                   metadata = EXCLUDED.metadata;
                     """,
-                    {
-                        "thread_id": thread_id,
-                        "thread_ts": checkpoint["ts"],
-                        "parent_ts": parent_ts if parent_ts else None,
-                        "checkpoint": self.serializer.dumps(checkpoint),
-                    },
+                    (
+                        thread_id,
+                        checkpoint["ts"],
+                        parent_ts if parent_ts else None,
+                        checkpoint,
+                        metadata,
+                    ),
                 )
 
         return {
@@ -355,7 +374,7 @@ class PostgresSaver(BaseCheckpointSaver):
                                 "thread_ts": value[1].isoformat(),
                             }
                         },
-                        self.serializer.loads(value[0]),
+                        self.serde.loads(value[0]),
                         {
                             "configurable": {
                                 "thread_id": thread_id,
@@ -395,7 +414,7 @@ class PostgresSaver(BaseCheckpointSaver):
                                 "thread_ts": value[1].isoformat(),
                             }
                         },
-                        self.serializer.loads(value[0]),
+                        self.serde.loads(value[0]),
                         {
                             "configurable": {
                                 "thread_id": thread_id,
@@ -424,7 +443,7 @@ class PostgresSaver(BaseCheckpointSaver):
             with conn.cursor() as cur:
                 if thread_ts:
                     cur.execute(
-                        "SELECT checkpoint, parent_ts "
+                        "SELECT checkpoint, metadata, thread_ts, parent_ts "
                         "FROM checkpoints "
                         "WHERE thread_id = %(thread_id)s AND thread_ts = %(thread_ts)s",
                         {
@@ -434,21 +453,23 @@ class PostgresSaver(BaseCheckpointSaver):
                     )
                     value = cur.fetchone()
                     if value:
-                        return CheckpointTuple(
-                            config,
-                            self.serializer.loads(value[0]),
-                            {
+                        checkpoint, metadata, thread_ts, parent_ts = value
+                    return CheckpointTuple(
+                            config=config,
+                            checkpoint=self.serde.loads(checkpoint),
+                            metadata=self.serde.loads(metadata),
+                            parent_config={
                                 "configurable": {
                                     "thread_id": thread_id,
-                                    "thread_ts": value[1].isoformat(),
+                                    "thread_ts": thread_ts.isoformat(),
                                 }
                             }
-                            if value[1]
+                            if thread_ts
                             else None,
                         )
                 else:
                     cur.execute(
-                        "SELECT checkpoint, thread_ts, parent_ts "
+                        "SELECT checkpoint, metadata, thread_ts, parent_ts "
                         "FROM checkpoints "
                         "WHERE thread_id = %(thread_id)s "
                         "ORDER BY thread_ts DESC LIMIT 1",
@@ -458,21 +479,23 @@ class PostgresSaver(BaseCheckpointSaver):
                     )
                     value = cur.fetchone()
                     if value:
+                        checkpoint, metadata, thread_ts, parent_ts = value
                         return CheckpointTuple(
                             config={
                                 "configurable": {
                                     "thread_id": thread_id,
-                                    "thread_ts": value[1].isoformat(),
+                                    "thread_ts": thread_ts.isoformat(),
                                 }
                             },
-                            checkpoint=self.serializer.loads(value[0]),
+                            checkpoint=self.serde.loads(checkpoint),
+                            metadata=self.serde.loads(metadata),
                             parent_config={
                                 "configurable": {
                                     "thread_id": thread_id,
-                                    "thread_ts": value[2].isoformat(),
+                                    "thread_ts": parent_ts.isoformat(),
                                 }
                             }
-                            if value[2]
+                            if parent_ts
                             else None,
                         )
         return None
@@ -507,7 +530,7 @@ class PostgresSaver(BaseCheckpointSaver):
                     if value:
                         return CheckpointTuple(
                             config,
-                            self.serializer.loads(value[0]),
+                            self.serde.loads(value[0]),
                             {
                                 "configurable": {
                                     "thread_id": thread_id,
@@ -536,7 +559,7 @@ class PostgresSaver(BaseCheckpointSaver):
                                     "thread_ts": value[1].isoformat(),
                                 }
                             },
-                            checkpoint=self.serializer.loads(value[0]),
+                            checkpoint=self.serde.loads(value[0]),
                             parent_config={
                                 "configurable": {
                                     "thread_id": thread_id,
