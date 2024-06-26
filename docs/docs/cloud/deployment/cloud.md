@@ -29,7 +29,7 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
 
 ## Create New Revision
 
-When [creating a new deployment](#create-a-new-deployment), a new revision is created by default. Subsequent revisions can be created to deploy new code changes.
+When [creating a new deployment](#create-new-deployment), a new revision is created by default. Subsequent revisions can be created to deploy new code changes.
 
 Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
 

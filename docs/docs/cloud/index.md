@@ -1,10 +1,10 @@
 # LangGraph Cloud (alpha)
 
 !!! danger "Important"
-    LangGraph Cloud is a closed source, paid product in an invite-only stage. We are currently focused on providing high bandwidth support to make our select early customers successful. If you are interested in applying for access, please fill out [this form](https://airtable.com/app5PiMJxXukqPLq3/pagveJsW7XOjDspqw/form).
+LangGraph Cloud is a closed source, paid product in an invite-only stage. We are currently focused on providing high bandwidth support to make our select early customers successful. If you are interested in applying for access, please fill out [this form](https://airtable.com/app5PiMJxXukqPLq3/pagveJsW7XOjDspqw/form).
 
 !!! warning "Under Construction"
-    LangGraph Cloud documentation is under construction. Contents may change until general availability.
+LangGraph Cloud documentation is under construction. Contents may change until general availability.
 
 ## Overview
 
@@ -28,6 +28,6 @@ The LangGraph Cloud API supports key LangGraph features in addition to new funct
 ## Documentation
 
 - [Tutorials](./quick_start.md): Learn to build and deploy applications for LangGraph Cloud.
-- [How-to Guides](./deployment/setup/): Learn how to set up a LangGraph application for deployment and implement features of the LangGraph Cloud API such as streaming tokens, configuring double texting, and creating cron jobs. Go here if you want to copy and run a specific code snippet.
-- [Conceptual Guides](./concepts/): In-depth explanations of the core data models (e.g. assistants) and key features (e.g. double texting) of the LangGraph Cloud API.
+- [How-to Guides](./deployment/setup.md): Learn how to set up a LangGraph application for deployment and implement features of the LangGraph Cloud API such as streaming tokens, configuring double texting, and creating cron jobs. Go here if you want to copy and run a specific code snippet.
+- [Conceptual Guides](./concepts/index.md): In-depth explanations of the core data models (e.g. assistants) and key features (e.g. double texting) of the LangGraph Cloud API.
 - [Reference](./reference/api/api_ref.md): References for the LangGraph Cloud API, the corresponding Python and JS/TS SDKs, the LangGraph CLI, and deployment environment variables.
