@@ -22,7 +22,7 @@ This section is for self-hosting LangGraph Cloud API on Kubernetes via Helm. A K
 
 1. Publish the built Docker image to a repository that can be accessed by the target Kubernetes cluster.
 1. Ensure that the [Helm client](https://github.com/helm/helm?tab=readme-ov-file#install) is installed.
-1. Make note of all environment variables that are needed for the application to run (e.g. `OPENAI_API_KEY`). These values will need to be set in the Helm `values` YAML configuration.
+1. Make note of all environment variables that are needed for the application. These values will need to be set in the Helm `values` YAML configuration.
 1. Follow [these instructions](https://github.com/langchain-ai/helm/tree/main/charts/langgraph-cloud#readme) to configure the Helm chart and deploy to Kubernetes.
 
 ## Self-Host with Docker
