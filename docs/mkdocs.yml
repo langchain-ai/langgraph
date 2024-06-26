@@ -194,7 +194,11 @@ nav:
               - Wait for User Input: "cloud/how-tos/cloud_examples/human_in_the_loop_user_input.ipynb"
               - Edit Graph State: "cloud/how-tos/cloud_examples/human_in_the_loop_edit_state.ipynb"
               - Replay and Branch from Prior States: "cloud/how-tos/cloud_examples/human_in_the_loop_time_travel.ipynb"
-          - Test with LangGraph Studio: "cloud/deployment/studio.md"
+          - Test with LangGraph Studio: 
+              - "cloud/how-tos/studio_index/index.md"
+              - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
+              - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
+              - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
           - Run Agent in Background: "cloud/how-tos/cloud_examples/background_run.ipynb"
           - Run Multiple Agents in Thread: "cloud/how-tos/cloud_examples/same-thread.ipynb"
           - Create Agents with Configuration: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"

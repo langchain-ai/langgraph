@@ -6,6 +6,8 @@
 !!! warning "Under Construction"
     LangGraph Cloud documentation is under construction. Contents may change until general availability.
 
+![GIF](./how-tos/img/studio_input.gif)
+
 ## Overview
 
 LangGraph Cloud is a managed service for deploying and hosting LangGraph applications. Deploying applications with LangGraph Cloud shortens the time-to-market for developers. With one click, deploy a production-ready API with built-in persistence for your LangGraph application. LangGraph Cloud APIs are horizontally scalable and deployed with durable storage.
