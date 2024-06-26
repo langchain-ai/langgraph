@@ -83,7 +83,7 @@ langgraph build [OPTIONS]
 | `--help` | | Display command documentation. |
 
 ### `test`
-Test your LangGraph in the cloud.
+Test your LangGraph in the cloud. The only function you can call from the SDK after testing your graph is `client.runs.stream(thread_id=None, ...)`
 
 **Usage**
 ```

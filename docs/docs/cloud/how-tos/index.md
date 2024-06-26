@@ -44,6 +44,12 @@ When creating complex graphs, leaving every decision up to the LLM can be danger
 - [How to edit graph state](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/human_in_the_loop_edit_state/)
 - [How to replay and branch from prior states](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/human_in_the_loop_time_travel/)
 
+## LangGraph Studio
+
+- [Test Cloud Deployment](https://langchain-ai.github.io/langgraph/cloud/how-tos/test_deployment/)
+- [Invoke graph in LangGraph Studio](https://langchain-ai.github.io/langgraph/cloud/how-tos/invoke_studio/)
+- [Interact with threads in LangGraph Studio](https://langchain-ai.github.io/langgraph/cloud/how-tos/threads_studio/)
+
 ## And more!
 
 The four sections above don't cover everything that is possible with LangGraph cloud - make sure to check out our other how-to guides to learn even more!
