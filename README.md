@@ -72,7 +72,7 @@ tool_node = ToolNode(tools)
 model = ChatOpenAI(temperature=0).bind_tools(tools)
 
 # Define the function that determines whether to continue or not
-def should_continue(state: AgentState) -> Literal["tools", END]:
+def should_continue(state: MessagesState) -> Literal["tools", END]:
     messages = state['messages']
     last_message = messages[-1]
     # If the LLM makes a tool call, then we route to the "tools" node
@@ -83,7 +83,7 @@ def should_continue(state: AgentState) -> Literal["tools", END]:
 
 
 # Define the function that calls the model
-def call_model(state: AgentState):
+def call_model(state: MessagesState):
     messages = state['messages']
     response = model.invoke(messages)
     # We return a list, because this will get added to the existing list
