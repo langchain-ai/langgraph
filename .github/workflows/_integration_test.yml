@@ -30,7 +30,6 @@ jobs:
         with:
           python-version: ${{ matrix.python-version }}
           poetry-version: ${{ env.POETRY_VERSION }}
-          working-directory: libs/cli
           cache-key: integration-test-cli
       - name: Setup env
         if: steps.changed-files.outputs.all
@@ -42,19 +41,19 @@ jobs:
       - name: Start service A
         if: steps.changed-files.outputs.all
         run: |
-          timeout 30 langgraph test -c examples/langgraph.json --verbose || (exit "$(($? == 124 ? 0 : $?))")
+          timeout 60 langgraph test -c examples/langgraph.json --verbose || (exit "$(($? == 124 ? 0 : $?))")
       - name: Start service B
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs
         run: |
-          timeout 30 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
+          timeout 60 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
       - name: Start service C
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_a
         run: |
-          timeout 30 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
+          timeout 60 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
       - name: Start service D
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_b
         run: |
-          timeout 30 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
+          timeout 60 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
