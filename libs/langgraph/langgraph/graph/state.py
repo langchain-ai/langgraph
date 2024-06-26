@@ -154,6 +154,45 @@ class StateGraph(Graph):
     def add_node(
         self, node: Union[str, RunnableLike], action: Optional[RunnableLike] = None
     ) -> None:
+        """Adds a new node to the state graph.
+
+        Will take the name of the function/runnable as the node name.
+
+        Args:
+            node (Union[str, RunnableLike)]: The function or runnable this node will run.
+            action (Optional[RunnableLike]): The action associated with the node. (default: None)
+        Raises:
+            ValueError: If the key is already being used as a state key.
+
+
+        Examples:
+            ```pycon
+            >>> from langgraph.graph import START, StateGraph
+            ...
+            >>> def my_node(state, config):
+            ...    return {"x": state["x"] + 1}
+            ...
+            >>> builder = StateGraph(dict)
+            >>> builder.add_node(my_node)  # node name will be 'my_node'
+            >>> builder.add_edge(START, "my_node")
+            >>> graph = builder.compile()
+            >>> graph.invoke({"x": 1})
+            {'x': 2}
+            ```
+            Customize the name:
+
+            ```pycon
+            >>> builder = StateGraph(dict)
+            >>> builder.add_node("my_fair_node", my_node)
+            >>> builder.add_edge(START, "my_fair_node")
+            >>> graph = builder.compile()
+            >>> graph.invoke({"x": 1})
+            {'x': 2}
+            ```
+
+        Returns:
+            None
+        """
         if not isinstance(node, str):
             action = node
             if isinstance(action, Runnable):
@@ -393,9 +432,11 @@ class CompiledStateGraph(CompiledGraph):
         def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
             if filtered := [p for p in packets if p != END]:
                 writes = [
-                    ChannelWriteEntry(f"branch:{start}:{name}:{p}", start)
-                    if not isinstance(p, Send)
-                    else p
+                    (
+                        ChannelWriteEntry(f"branch:{start}:{name}:{p}", start)
+                        if not isinstance(p, Send)
+                        else p
+                    )
                     for p in filtered
                 ]
                 if branch.then and branch.then != END:

@@ -191,14 +191,6 @@ def copy_notebooks():
                     update_notebook_links(dst_path)
                 dst_dir = dst_dir_
 
-    # Top level notebooks are "how-to's"
-    # for file in examples_dir.iterdir():
-    #     if file.suffix.endswith(".ipynb") and not os.path.isdir(
-    #         os.path.join(examples_dir, file)
-    #     ):
-    #         src_path = os.path.join(examples_dir, file)
-    #         dst_path = os.path.join(docs_dir, "how-tos", file.name)
-    #         shutil.copy(src_path, dst_path)
 
 
 if __name__ == "__main__":
