@@ -17,6 +17,7 @@ import {
   RunsStreamPayload,
   RunsWaitPayload,
   StreamEvent,
+  CronsCreatePayload,
 } from "./types.mjs";
 
 interface ClientConfig {
@@ -102,6 +103,26 @@ class BaseClient {
     }
     return response.json() as T;
   }
+}
+
+class CronsClient extends BaseClient {
+  async create_for_thread(
+    threadId: string,
+    assistantId: string,
+    payload?: CronsCreatePayload,
+  ): Promise<Run> {
+    {
+      "schedule": payload?.schedule,
+      "input": payload?.input,
+      "config": payload?.config,
+      "metadata": payload?.metadata,
+      "assistant_id": assistantId,
+      "interrupt_before": payload?.interrupt_before,
+      "interrupt_after": payload?.interrupt_after,
+      "webhook": payload?.webhook,
+  }
+  }
+
 }
 
 class AssistantsClient extends BaseClient {
@@ -671,6 +692,11 @@ export class Client {
    * The client for interacting with runs.
    */
   public runs: RunsClient;
+
+  /**
+   * The client for interacting with cron runs.
+   */
+  public crons: CronsClient;
 
   constructor(config?: ClientConfig) {
     this.assistants = new AssistantsClient(config);

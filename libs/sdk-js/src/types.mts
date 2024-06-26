@@ -13,6 +13,8 @@ export type StreamEvent =
   | "messages/complete"
   | (string & {});
 
+
+
 interface RunsInvokePayload {
   /**
    * Input to the run. Pass `null` to resume from the current state of the thread.
@@ -81,6 +83,13 @@ export interface RunsCreatePayload extends RunsInvokePayload {
    * Webhook to call when the run is complete.
    */
   webhook?: string;
+}
+
+export interface CronsCreatePayload extends RunsCreatePayload {
+  /**
+   * Schedule for running the Cron Job
+   */
+  schedule: string;
 }
 
 export type RunsWaitPayload = RunsStreamPayload;
