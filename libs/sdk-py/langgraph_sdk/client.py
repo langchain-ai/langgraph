@@ -700,7 +700,7 @@ class CronClient:
             "thread_id": thread_id,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
-        return await self.http.post(f"/runs/crons/search", json=payload)
+        return await self.http.post("/runs/crons/search", json=payload)
 
 
 def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
