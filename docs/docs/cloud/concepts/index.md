@@ -16,6 +16,10 @@ The LangGraph Cloud API provides several endpoints for creating and managing ass
 
 A thread contains the accumulated state of a group of runs. If a run is executed on a thread, then the [state][state] of the underlying graph of the assistant will be persisted to the thread. A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run.
 
+The state of a thread at a particular point in time is called a checkpoint.
+
+For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#checkpointer).
+
 The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the <a href="../reference/api/api_ref.html#tag/threadscreate" target="_blank">API reference</a> for more details.
 
 ### Runs
