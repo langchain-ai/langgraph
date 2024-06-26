@@ -17,18 +17,18 @@ If these decisions are being made in a loop, then its even more agentic!
 
 There are other concepts often associated with being agentic, but we would argue these are a by-product of the above definition:
 
-- [Tool calling](/langgraph/concepts/agentic_concepts/#tool-calling): this is often how LLMs make decisions
+- [Tool calling](agentic_concepts.md#tool-calling): this is often how LLMs make decisions
 - Action taking: often times, the LLMs' outputs are used as the input to an action
-- [Memory](/langgraph/concepts/agentic_concepts/#memory): reliable systems need to have knowledge of things that occurred
-- [Planning](/langgraph/concepts/agentic_concepts/#planning): planning steps (either explicit or implicit) are useful for ensuring that the LLM, when making decisions, makes them in the highest fidelity way.
+- [Memory](agentic_concepts.md#memory): reliable systems need to have knowledge of things that occurred
+- [Planning](agentic_concepts.md#planning): planning steps (either explicit or implicit) are useful for ensuring that the LLM, when making decisions, makes them in the highest fidelity way.
 
 ## Why LangGraph?
 
 LangGraph has several core principles that we believe make it the most suitable framework for building agentic applications:
 
-- [Controllability](/langgraph/how-tos/#controllability)
-- [Human-in-the-Loop](/langgraph/how-tos/#human-in-the-loop)
-- [Streaming First](/langgraph/how-tos/#streaming)
+- [Controllability](../how-tos/index.md#controllability)
+- [Human-in-the-Loop](../how-tos/index.md#human-in-the-loop)
+- [Streaming First](../how-tos/index.md#streaming)
 
 **Controllability**
 
@@ -40,7 +40,7 @@ LangGraph comes with a built-in persistence layer as a first-class concept. This
 
 **Streaming First**
 
-LangGraph comes with first class support for streaming. Agentic applications often take a while to run, and so giving the user some idea of what is happening is important, and streaming is a great way to do that. LangGraph supports streaming of both events ([like a tool call being taken](/langgraph/how-tos/stream-updates/)) as well as of [tokens that an LLM may emit](/langgraph/how-tos/streaming-tokens/).
+LangGraph comes with first class support for streaming. Agentic applications often take a while to run, and so giving the user some idea of what is happening is important, and streaming is a great way to do that. LangGraph supports streaming of both events ([like a tool call being taken](../how-tos/stream-updates.ipynb)) as well as of [tokens that an LLM may emit](../how-tos/streaming-tokens.ipynb).
 
 ## Deployment
 
@@ -48,8 +48,8 @@ So you've built your LangGraph object - now what?
 
 Now you need to deploy it. 
 There are many ways to deploy LangGraph objects, and the right solution depends on your needs and use case.
-We'll highlight two ways here: using [LangGraph Cloud](/langgraph/cloud) or rolling your own solution.
+We'll highlight two ways here: using [LangGraph Cloud](../cloud/index.md) or rolling your own solution.
 
-[LangGraph Cloud](/langgraph/cloud) is an opinionated way to deploy LangGraph objects from the LangChain team. Please see the [LangGraph Cloud documentation](/langgraph/cloud) for all the details about what it involves, to see if it is a good fit for you.
+[LangGraph Cloud](../cloud/index.md) is an opinionated way to deploy LangGraph objects from the LangChain team. Please see the [LangGraph Cloud documentation](../cloud/index.md) for all the details about what it involves, to see if it is a good fit for you.
 
 If it is not a good fit, you may want to roll your own deployment. In this case, we would recommend using [FastAPI](https://fastapi.tiangolo.com/) to stand up a server. You can then call this graph from inside the FastAPI server as you see fit.

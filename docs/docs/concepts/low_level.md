@@ -42,7 +42,7 @@ The first thing you do when you define a graph is define the `State` of the grap
 
 ### Schema
 
-The main documented way to specify the schema of a graph is by using `TypedDict`. However, we also support [using a Pydantic BaseModel](/langgraph/how-tos/state-model/) as your graph state to add **default values** and additional data validation.
+The main documented way to specify the schema of a graph is by using `TypedDict`. However, we also support [using a Pydantic BaseModel](../how-tos/state-model.ipynb) as your graph state to add **default values** and additional data validation.
 
 ### Reducers
 
@@ -60,7 +60,6 @@ class State(TypedDict):
 
 In this example, no reducer functions are specified for any key. Let's assume the input to the graph is `{"foo": 1, "bar": ["hi"]}`. Let's then assume the first `Node` returns `{"foo": 2}`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{"foo": 2, "bar": ["hi"]}`. If the second node returns `{"bar": ["bye"]}` then the `State` would then be `{"foo": 2, "bar": ["bye"]}`
 
-
 **Example B:**
 
 ```python
@@ -73,7 +72,6 @@ class State(TypedDict):
 ```
 
 In this example, we've used the `Annotated` type to specify a reducer function (`operator.add`) for the second key (`bar`). Note that the first key remains unchanged. Let's assume the input to the graph is `{"foo": 1, "bar": ["hi"]}`. Let's then assume the first `Node` returns `{"foo": 2}`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{"foo": 2, "bar": ["hi"]}`. If the second node returns `{"bar": ["bye"]}` then the `State` would then be `{"foo": 2, "bar": ["hi", "bye"]}`. Notice here that the `bar` key is updated by adding the two lists together.
-
 
 ### MessageState
 
@@ -103,7 +101,7 @@ class State(MessagesState):
 
 In LangGraph, nodes are typically python functions (sync or `async`) where the **first** positional argument is the [state](#state), and (optionally), the **second** positional argument is a "config", containing optional [configurable parameters](#configuration) (such as a `thread_id`).
 
-Similar to `NetworkX`, you add these nodes to a graph using the [add_node](/langgraph/reference/graphs#langgraph.graph.MessageGraph) method:
+Similar to `NetworkX`, you add these nodes to a graph using the [add_node][langgraph.graph.StateGraph.add_node] method:
 
 ```python
 from langchain_core.runnables import RunnableConfig
@@ -126,7 +124,6 @@ builder.add_node("my_node", my_node)
 builder.add_node("other_node", my_other_node)
 ...
 ```
-
 
 Behind the scenes, functions are converted to [RunnableLambda's](https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.base.RunnableLambda.html#langchain_core.runnables.base.RunnableLambda), which add batch and async support to your function, along with native tracing and debugging.
 
@@ -170,7 +167,7 @@ A node can have MULTIPLE outgoing edges. If a node has multiple out-going edges,
 
 ### Normal Edges
 
-If you **always** want to go from node A to node B, you can use the [add_edge](/langgraph/reference/graphs#langgraph.graph.StateGraph.add_edge) method directly.
+If you **always** want to go from node A to node B, you can use the [add_edge][langgraph.graph.StateGraph.add_edge] method directly.
 
 ```python
 graph.add_edge("node_a", "node_b")
@@ -178,7 +175,7 @@ graph.add_edge("node_a", "node_b")
 
 ### Conditional Edges
 
-If you want to **optionally** route to 1 or more edges (or optionally terminate), you can use the [add_conditional_edges](/langgraph/reference/graphs#langgraph.graph.StateGraph.add_conditional_edges) method. This method accepts the name of a node and a "routing function" to call after that node is executed:
+If you want to **optionally** route to 1 or more edges (or optionally terminate), you can use the [add_conditional_edges][langgraph.graph.StateGraph.add_conditional_edges] method. This method accepts the name of a node and a "routing function" to call after that node is executed:
 
 ```python
 graph.add_edge("node_a", routing_function)
@@ -196,7 +193,7 @@ graph.add_edge("node_a", routing_function, {True: "node_b", False: "node_c"})
 
 ### Entry Point
 
-The entry point is first node to call when the graph starts. You can use [`set_entry_point`](/langgraph/reference/graphs#langgraph.graph.StateGraph.set_entry_point) to specify this.
+The entry point is first node to call when the graph starts. You can use [`set_entry_point`][langgraph.graph.StateGraph.set_entry_point] to specify this.
 
 ```python
 graph.set_entry_point("node_a")
@@ -213,7 +210,7 @@ graph.add_edge(START, "node_a")
 ### Conditional Entry Point
 
 The conditional entry point is used when you want to specify a function to call to determine which node(s) should be called first.
-You can use [`set_conditional_entry_point`](/langgraph/reference/graphs#langgraph.graph.StateGraph.set_conditional_entry_point) to specify this.
+You can use [`set_conditional_entry_point`][langgraph.graph.StateGraph.set_conditional_entry_point] to specify this.
 
 ```python
 graph.set_conditional_entry_point(routing_function)
@@ -229,7 +226,7 @@ graph.set_conditional_entry_point(routing_function, {True: "node_b", False: "nod
 
 By default, `Nodes` and `Edges` are defined ahead of time and operate on the same shared state. However, there can be cases where the exact edges are not known ahead of time and/or you may want different versions of `State` to exist at the same time. A common of example of this is with `map-reduce` design patterns. In this design pattern, a first node may generate a list of objects, and you may want to apply some other node to all those objects. The number of objects may be unknown ahead of time (meaning the number of edges may not be known) and the input `State` to the downstream `Node` should be different (one for each generated object).
 
-To support this design pattern, LangGraph supports returning [`Send`](/langgraph/reference/graphs#send) objects from conditional edges. `Send` takes two arguments: first is the name of the node, and second is the state to pass to that node.
+To support this design pattern, LangGraph supports returning [`Send`](../reference/graphs.md#send) objects from conditional edges. `Send` takes two arguments: first is the name of the node, and second is the state to pass to that node.
 
 ```python
 def continue_to_jokes(state: OverallState):
@@ -240,15 +237,15 @@ graph.add_conditional_edges("node_a", continue_to_jokes)
 
 ## Checkpointer
 
-One of the main benefits of LangGraph is that it comes backed by a persistence layer. This is accomplished via [checkpointers](/langgraph/reference/checkpoints#basecheckpointsaver).
+One of the main benefits of LangGraph is that it comes backed by a persistence layer. This is accomplished via [checkpointers][basecheckpointsaver].
 
-Checkpointers can be used to save a _checkpoint_ of the state of a graph after all steps of the graph. This allows for several things. 
+Checkpointers can be used to save a _checkpoint_ of the state of a graph after all steps of the graph. This allows for several things.
 
-First, it allows for [human-in-the-loop workflows](agentic_concepts#human-in-the-loop), as it allows humans to inspect, interrupt, and approve steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
+First, it allows for [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop), as it allows humans to inspect, interrupt, and approve steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
 
-Second, it allows for ["memory"](agentic_concepts#memory) between interactions. You can use checkpointers to create threads and save the state of a thread after a graph executes. In the case of repeated human interactions (like conversations) any follow up messages can be sent to that checkpoint, which will retain its memory of previous ones.
+Second, it allows for ["memory"](agentic_concepts.md#memory) between interactions. You can use checkpointers to create threads and save the state of a thread after a graph executes. In the case of repeated human interactions (like conversations) any follow up messages can be sent to that checkpoint, which will retain its memory of previous ones.
 
-See [this guide](/langgraph/how-tos/persistence) for how to add a checkpointer to your graph.
+See [this guide](../how-tos/persistence.ipynb) for how to add a checkpointer to your graph.
 
 ## Threads
 
@@ -266,7 +263,7 @@ config = {"configurable": {"thread_id": "a"}}
 graph.invoke(inputs, config=config)
 ```
 
-See [this guide](/langgraph/how-tos/persistence) for how to use threads.
+See [this guide](../how-tos/persistence.ipynb) for how to use threads.
 
 ## Checkpointer state
 
@@ -288,7 +285,7 @@ You can get the state of a checkpointer by calling `graph.get_state(config)`. Th
 
 ### Get state history
 
-You can also call `graph.get_state_history(config)` to get a list of the history of the graph. The config should contain `thread_id`, and the state history will be fetched for that thread. 
+You can also call `graph.get_state_history(config)` to get a list of the history of the graph. The config should contain `thread_id`, and the state history will be fetched for that thread.
 
 ### Update state
 
@@ -297,7 +294,6 @@ You can also interact with the state directly and update it. This takes three di
 - config
 - values
 - `as_node`
-
 
 **config**
 
@@ -318,13 +314,14 @@ class State(TypedDict):
     bar: Annotated[list[str], add]
 ```
 
-Let's now assume the current state of the graph is 
+Let's now assume the current state of the graph is
 
 ```
 {"foo": 1, "bar": ["a"]}
 ```
 
 If you update the state as below:
+
 ```
 graph.update_state(config, {"foo": 2, "bar": ["b"]})
 ```
@@ -373,11 +370,11 @@ def node_a(state, config):
     ...
 ```
 
-See [this guide](/langgraph/how-tos/configuration) for a full breakdown on configuration
+See [this guide](../how-tos/configuration.ipynb) for a full breakdown on configuration
 
 ## Breakpoints
 
-It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either *before* a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.) 
+It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either _before_ a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.)
 
 You **MUST** use a [checkpoiner](#checkpointer) when using breakpoints. This is because your graph needs to be able to resume execution.
 
@@ -391,21 +388,18 @@ graph.invoke(inputs, config=config)
 graph.invoke(None, config=config)
 ```
 
-See [this guide](/langgraph/how-tos/human_in_the_loop/breakpoints) for a full walkthrough of how to add breakpoints.
+See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for a full walkthrough of how to add breakpoints.
 
 ## Visualization
 
-It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](https://langchain-ai.github.io/langgraph/how-tos/visualization/) for more info.
-
-See [this guide](/langgraph/how-tos/visualization) for how to visualize your graph.
+It's often nice to be able to visualize graphs, especially as they get more complex. LangGraph comes with several built-in ways to visualize graphs. See [this how-to guide](../how-tos/visualization.ipynb) for more info.
 
 ## Streaming
 
 LangGraph is built with first class support for streaming. There are several different streaming modes that LangGraph supports:
 
-- [`"values"`](/langgraph/how-tos/stream-values): This streams the full value of the state after each step of the graph.
-- [`"updates`](/langgraph/how-tos/stream-updates): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
+- [`"values"`](../how-tos/stream-values.ipynb): This streams the full value of the state after each step of the graph.
+- [`"updates`](../how-tos/stream-updates.ipynb): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
 - `"debug"`: This streams as much information as possible throughout the execution of the graph.
 
-In addition, you can use the [`astream_events`](https://langchain-ai.github.io/langgraph/how-tos/streaming-tokens/) method to stream back events that happen _inside_ nodes. This is useful for [streaming tokens of LLM calls](/langgraph/how-tos/streaming-tokens).
-
+In addition, you can use the [`astream_events`](../how-tos/streaming-events-from-within-tools.ipynb) method to stream back events that happen _inside_ nodes. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.ipynb).
