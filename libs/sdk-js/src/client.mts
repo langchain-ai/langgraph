@@ -106,21 +106,66 @@ class BaseClient {
 }
 
 class CronsClient extends BaseClient {
+  /**
+   * 
+   * @param threadId The ID of the thread.
+   * @param assistantId Assistant ID to use for this cron job.
+   * @param payload Payload for creating a cron job.
+   * @returns The created background run.
+   */
   async create_for_thread(
     threadId: string,
     assistantId: string,
     payload?: CronsCreatePayload,
   ): Promise<Run> {
-    {
-      "schedule": payload?.schedule,
-      "input": payload?.input,
-      "config": payload?.config,
-      "metadata": payload?.metadata,
-      "assistant_id": assistantId,
-      "interrupt_before": payload?.interrupt_before,
-      "interrupt_after": payload?.interrupt_after,
-      "webhook": payload?.webhook,
+    const json: Record<string, any> = {
+      schedule: payload?.schedule,
+      input: payload?.input,
+      config: payload?.config,
+      metadata: payload?.metadata,
+      assistant_id: assistantId,
+      interrupt_before: payload?.interruptBefore,
+      interrupt_after: payload?.interruptAfter,
+      webhook: payload?.webhook,
+    };
+    return this.fetch<Run>(`/threads/${threadId}/runs/crons`, {
+      method: "POST",
+      json,
+      signal: payload?.signal,
+    });
   }
+
+  /**
+   * 
+   * @param assistantId Assistant ID to use for this cron job.
+   * @param payload Payload for creating a cron job.
+   * @returns 
+   */
+  async create(
+    assistantId: string,
+    payload?: CronsCreatePayload,
+  ): Promise<Run> {
+    const json: Record<string, any> = {
+      schedule: payload?.schedule,
+      input: payload?.input,
+      config: payload?.config,
+      metadata: payload?.metadata,
+      assistant_id: assistantId,
+      interrupt_before: payload?.interruptBefore,
+      interrupt_after: payload?.interruptAfter,
+      webhook: payload?.webhook,
+    };
+    return this.fetch<Run>(`/runs/crons`, {
+      method: "POST",
+      json,
+      signal: payload?.signal,
+    });
+  }
+
+  async delete(cronId: string): Promise<void> {
+      await this.fetch<void>(`/runs/crons/${cronId}`, {
+        method: "DELETE",
+      });
   }
 
 }
