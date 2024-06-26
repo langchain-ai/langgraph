@@ -143,6 +143,7 @@ nav:
           - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
           - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
           - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
+          - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
       - Other:
           - Run graph asynchronously: how-tos/async.ipynb
           - Visualize your graph: how-tos/visualization.ipynb
