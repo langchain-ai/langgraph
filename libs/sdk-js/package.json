@@ -1,6 +1,6 @@
 {
   "name": "@langchain/langgraph-sdk",
-  "version": "0.0.1-rc.13",
+  "version": "0.0.1-rc.14",
   "description": "Client library for interacting with the LangGraph API",
   "type": "module",
   "packageManager": "yarn@1.22.19",
@@ -26,7 +26,10 @@
     "@tsconfig/recommended": "^1.0.2",
     "@types/node": "^20.12.12",
     "@types/uuid": "^9.0.1",
+    "concat-md": "^0.5.1",
     "prettier": "^3.2.5",
+    "typedoc": "^0.26.1",
+    "typedoc-plugin-markdown": "^4.1.0",
     "typescript": "^5.4.5"
   },
   "exports": {

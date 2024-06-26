@@ -224,6 +224,8 @@ class Graph:
     def set_entry_point(self, key: str) -> None:
         """Specifies the first node to be called in the graph.
 
+        Equivalent to calling `add_edge(START, key)`.
+
         Parameters:
             key (str): The key of the node to set as the entry point.
 

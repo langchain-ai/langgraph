@@ -9,7 +9,9 @@ import click.exceptions
 
 import langgraph_cli.config
 import langgraph_cli.docker
+from langgraph_cli.analytics import log_command
 from langgraph_cli.config import Config
+from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
@@ -18,7 +20,7 @@ from langgraph_cli.util import clean_empty_lines
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
     "-d",
-    help="Advanced: Path to docker-compose.yml file with additional services to launch",
+    help="Advanced: Path to docker-compose.yml file with additional services to launch.",
     type=click.Path(
         exists=True,
         file_okay=True,
@@ -79,7 +81,7 @@ OPT_CONFIG = click.option(
     }
 
     Defaults to looking for langgraph.json in the current directory.""",
-    default="langgraph.json",
+    default=DEFAULT_CONFIG,
     type=click.Path(
         exists=True,
         file_okay=True,
@@ -92,7 +94,7 @@ OPT_PORT = click.option(
     "--port",
     "-p",
     type=int,
-    default=8123,
+    default=DEFAULT_PORT,
     show_default=True,
     help="""
     Port to expose.
@@ -166,6 +168,7 @@ def cli():
     help="Wait for services to start before returning. Implies --detach",
 )
 @cli.command(help="Start langgraph API server")
+@log_command
 def up(
     config: pathlib.Path,
     docker_compose: Optional[pathlib.Path],
@@ -254,6 +257,7 @@ def up(
 @OPT_VERBOSE
 @OPT_DEBUGGER_PORT
 @cli.command(help="Stop langgraph API server")
+@log_command
 def down(
     config: pathlib.Path,
     docker_compose: Optional[pathlib.Path],
@@ -290,6 +294,7 @@ def down(
 @OPT_CONFIG
 @click.option("--follow", "-f", is_flag=True, help="Follow logs")
 @cli.command(help="Show langgraph API server logs")
+@log_command
 def logs(
     config: pathlib.Path,
     docker_compose: Optional[pathlib.Path],
@@ -347,6 +352,7 @@ def logs(
     """,
 )
 @cli.command(help="Build langgraph API server docker image")
+@log_command
 def build(
     config: pathlib.Path,
     platform: Optional[str],
@@ -409,6 +415,7 @@ def export():
 @OPT_WATCH
 @OPT_LANGGRAPH_API_PATH
 @export.command(name="compose", help="Export docker compose file")
+@log_command
 def export_compose(
     output: pathlib.Path,
     config: pathlib.Path,
@@ -455,6 +462,7 @@ def export_compose(
     help="Build and export a helm chart to deploy to a Kubernetes cluster",
     hidden=True,
 )
+@log_command
 def export_helm(
     output: pathlib.Path,
     config: pathlib.Path,
