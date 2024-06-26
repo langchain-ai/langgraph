@@ -168,10 +168,10 @@ nav:
       - Tutorials:
           - Quick Start: 'cloud/quick_start.md'
       - How-to Guides:
+          - Test with LangGraph Studio: 'cloud/how-tos/studio.md'
           - Deployment:
               - Setup App: 'cloud/deployment/setup.md'
               - Deploy to Cloud: 'cloud/deployment/cloud.md'
-              - Test with Studio: 'cloud/deployment/studio.md'
               - Self-Host: 'cloud/deployment/self_hosted.md'
           - Streaming:
               - Stream Values: 'cloud/how-tos/cloud_examples/stream_values.ipynb'
