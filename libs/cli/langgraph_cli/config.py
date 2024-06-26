@@ -223,13 +223,15 @@ def config_to_docker(config_path: pathlib.Path, config: Config):
     # https://til.simonwillison.net/python/pyproject
     faux_pkgs_str = f"{os.linesep}{os.linesep}".join(
         f"""ADD {relpath} {destpath}
-RUN cat <<EOF > /deps/__outer_{fullpath.name}/pyproject.toml
-[project]
-name = "{fullpath.name}"
-version = "0.1"
-[tool.setuptools.package-data]
-"*" = ["**/*"]
-EOF"""
+RUN set -ex && \\
+    for line in '[project]' \\
+                'name = "{fullpath.name}"' \\
+                'version = "0.1"' \\
+                '[tool.setuptools.package-data]' \\
+                '"*" = ["**/*"]'; do \\
+        echo "$line" >> /deps/__outer_{fullpath.name}/pyproject.toml; \\
+    done
+"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
     )
     local_pkgs_str = os.linesep.join(
