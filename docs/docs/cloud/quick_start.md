@@ -110,10 +110,10 @@ If you are hosting multiple graphs, you should see all of them in this response.
         "assistant_id": "123e4567-e89b-12d3-a456-426614174000",
         "input": {     
             "messages": [
-            {               
-                "role": "user",
-                "content": "How are you?"
-            }           
+                {               
+                    "role": "user",
+                    "content": "How are you?"
+                }           
             ]       
         },
         "metadata": {},
@@ -126,7 +126,7 @@ If you are hosting multiple graphs, you should see all of them in this response.
         ]
     }'
 
-Make sure to edit the `input` and `assistant_id` fields to match what assistant you want to test. If you receive a 200 response then congratulations your graph has run successfully and you are ready to move on to hosting on Langgraph Cloud!
+Make sure to edit the `input` and `assistant_id` fields to match what assistant you want to test. If you receive a 200 response then congratulations your graph has run successfully and you are ready to move on to hosting on LangGraph Cloud!
 
 ## Deploy to Cloud
 
@@ -140,7 +140,7 @@ Once you have created your github repository with a Python file containing your 
 
 ***If you have not deployed to LangGraph Cloud before:*** there will be a button that shows up saying Import from GitHub. You’ll need to follow that flow to connect LangGraph Cloud to GitHub.
 
-***Once you have set up your GitHub connection:*** the new deployment page will look as follows
+***Once you have set up your GitHub connection:*** the new deployment page will look as follows:
 
 ![Screenshot 2024-06-11 at 1.17.03 PM.png](./deployment/img/deployment_page.png)
 
@@ -177,7 +177,7 @@ You can access the docs by clicking on the API docs link, which should send you 
 
 ![Screenshot 2024-06-19 at 2.27.24 PM.png](./deployment/img/api_page.png)
 
-You won’t actually be able to test any of the API endpoints without authorizing first. To do so, click on the Authorize button in the top right corner, input your `LANGCHAIN_API_KEY`  in the `API Key` box, and then click `Authorize`  to finish the process. You should now be able to select any of the API endpoints, click `Try it out` , enter the parameters you would like to pass, and then click `Execute` to view the results of the API call.
+You won’t actually be able to test any of the API endpoints without authorizing first. To do so, click on the Authorize button in the top right corner, input your `LANGCHAIN_API_KEY`  in the `API Key` box, and then click `Authorize` to finish the process. You should now be able to select any of the API endpoints, click `Try it out`, enter the parameters you would like to pass, and then click `Execute` to view the results of the API call.
 
 ## Interact with your deployment via LangGraph Studio
 
@@ -191,4 +191,4 @@ On this page you can test out your graph by passing in starting states and click
 
 ## Use with the SDK
 
-Once you have tested that your hosted graph works as expected using Langgraph Studio, you can start using your hosted graph all over your organization by using the Langgraph SDK. You can learn about how to do that by following [this how-to guide](./sdk/python_sdk.ipynb)
+Once you have tested that your hosted graph works as expected using LangGraph Studio, you can start using your hosted graph all over your organization by using the LangGraph SDK. You can learn about how to do that by following [this how-to guide](./sdk/python_sdk.ipynb).
