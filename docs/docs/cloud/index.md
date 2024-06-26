@@ -8,7 +8,7 @@
 
 ## Overview
 
-LangGraph Cloud is a managed service for deploying and hosting LangGraph applications. Deploying applications with LangGraph Cloud shortens the time-to-market for developers. With one click, deploy a production-ready API with built-in persistence for your LangGraph application. LangGraph Cloud APIs are horizatonally scalable and deployed with durable storage.
+LangGraph Cloud is a managed service for deploying and hosting LangGraph applications. Deploying applications with LangGraph Cloud shortens the time-to-market for developers. With one click, deploy a production-ready API with built-in persistence for your LangGraph application. LangGraph Cloud APIs are horizontally scalable and deployed with durable storage.
 
 The LangGraph Cloud API exposes functionality of your LangGraph application through [Assistants](./concepts/index.md#assistants). An assistant abstracts the cognitive architecture of your graph. Invoke an assistant by calling the pre-built [API endpoints](./reference/api/api_ref.md).
 
