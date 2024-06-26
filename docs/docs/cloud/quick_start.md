@@ -126,7 +126,7 @@ If you are hosting multiple graphs, you should see all of them in this response.
         ]
     }'
 
-Make sure to edit the `input` and `assistant_id` fields to match what assistant you want to test. If you receive a 200 response then congratulations your graph has run successfully and you are ready to move on to hosting on LangGraph Cloud!
+Make sure to edit the `input` and `assistant_id` fields to match what assistant you want to test. If you receive a 200 response then congratulations your graph has run successfully and you are ready to deploy it to LangGraph Cloud!
 
 ## Deploy to Cloud
 
