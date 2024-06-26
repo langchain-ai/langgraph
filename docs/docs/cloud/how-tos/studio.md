@@ -1,6 +1,6 @@
 # How to Test with LangGraph Studio
 
-LangGraph applications can be tested with LangGraph Studio. LangGraph Studio is a robust UI for testing and exercising functionality of the graphs in a LangGraph application. The LangGraph Studio UI connects directly to a LangGraph Cloud deployments or to a local LangGraph API instance.
+LangGraph applications can be tested with LangGraph Studio. LangGraph Studio is a robust UI for testing the functionality of a LangGraph application. The LangGraph Studio UI connects directly to a LangGraph Cloud deployments or to a local LangGraph API instance.
 
 The LangGraph Studio UI is available within <a href="https://www.langchain.com/langsmith" target="_blank">LangSmith</a>. To test a LangGraph application, navigate to the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>.
 
@@ -17,9 +17,10 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
 
 ## Test Local Instance
 
-The LangGraph Studio UI connects directly to local LangGraph API instances. This is helpful for quickly iterating and testing during the development process.
+If you are [self-hosting](/docs/cloud/deployment/self_hosted/) LangGraph Cloud with a license key,
+you can connect the LangGraph Studio UI connects directly to local LangGraph API instances. This is helpful for quickly iterating and testing during the development process.
 
-Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
+Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>:
 
 1. Find the hostname of the local LangGraph API instance. For example, `http://localhost:9123`.
 1. Navigate to the URL `/studio/thread/` and set the `baseUrl` query parameter to the hostname. For example, `https://smith.langchain.com/studio/thread?baseUrl=http://localhost:9123`.
