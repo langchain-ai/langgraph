@@ -1,5 +1,6 @@
 import json
 import pathlib
+import sys
 from typing import Callable, Optional
 
 import click
@@ -193,12 +194,25 @@ def test(
                     "2",
                 ]
             )
+
+        def on_stdout(line: str):
+            if "GET /ok" in line:
+                set("")
+                sys.stdout.write(
+                    f"""Ready!
+- API: http://localhost:{port}
+"""
+                )
+                sys.stdout.flush()
+                return True
+
         runner.run(
             subp_exec(
                 "docker",
                 *args,
                 tag,
                 verbose=verbose,
+                on_stdout=on_stdout,
             )
         )
 
