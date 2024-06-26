@@ -27,7 +27,7 @@ def not_implemented_sync_method(func: T) -> T:
             "The AsyncSqliteSaver does not support synchronous methods. "
             "Consider using the SqliteSaver instead.\n"
             "from langgraph.checkpoint.sqlite import SqliteSaver\n"
-            "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#sqlitesaver "
+            "See https://langchain-ai.github.io/langgraph/reference/checkpoints/langgraph.checkpoint.sqlite.SqliteSaver "
             "for more information."
         )
 
@@ -135,7 +135,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         Note:
             This method is not implemented for the AsyncSqliteSaver. Use `aget` instead.
-            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+            Or consider using the [SqliteSaver][sqlitesaver] checkpointer.
         """
 
     @not_implemented_sync_method
@@ -151,7 +151,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         Note:
             This method is not implemented for the AsyncSqliteSaver. Use `alist` instead.
-            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+            Or consider using the [SqliteSaver][sqlitesaver] checkpointer.
         """
 
     @not_implemented_sync_method

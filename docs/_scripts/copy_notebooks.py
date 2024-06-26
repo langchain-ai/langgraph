@@ -1,4 +1,6 @@
+import json
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -77,6 +79,20 @@ _HIDE = set(
         "rag/langgraph_rag_agent_llama3_local.ipynb",
         "rag/langgraph_self_rag_pinecone_movies.ipynb",
         "rag/langgraph_adaptive_rag_cohere.ipynb",
+        "dynamically-returning-directly.ipynb",
+        "force-calling-a-tool-first.ipynb",
+        "managing-agent-steps.ipynb",
+        "pass-run-time-values-to-tools.ipynb",
+        "respond-in-format.ipynb",
+        "quickstart.ipynb",
+        "human-in-the-loop.ipynb",
+        "learning.ipynb",
+        "managing-conversation-history.ipynb",
+        "docs/quickstart.ipynb",
+        "tutorials/rag-agent-testing.ipynb",
+        "state-context-key.ipynb",
+        "time-travel.ipynb",
+        "code_assistant/langgraph_code_assistant_mistral.ipynb",
     ]
 )
 
@@ -96,6 +112,44 @@ def clean_notebooks():
         for root in reversed(traversed):
             if not os.listdir(root):
                 os.rmdir(root)
+
+
+def update_notebook_links(notebook_path):
+    with open(notebook_path, "r", encoding="utf-8") as f:
+        notebook = json.load(f)
+
+    for cell in notebook["cells"]:
+        if cell["cell_type"] == "markdown":
+            for i, source in enumerate(cell["source"]):
+                # Update relative notebook links
+                cell["source"][i] = re.sub(
+                    r"\[([^\]]+)\]\(([^:)]+\.ipynb)\)",
+                    lambda m: transform_link(m.group(1), m.group(2)),
+                    source,
+                )
+
+    with open(notebook_path, "w", encoding="utf-8") as f:
+        json.dump(notebook, f, indent=2)
+
+
+def transform_link(text, link):
+    dir_path, filename = os.path.split(link)
+
+    # Remove the .ipynb extension
+    filename_without_ext = os.path.splitext(filename)[0]
+
+    # If it's a local link (starts with ./)
+    if link.startswith("./"):
+        # Change to parent directory and remove ./ prefix
+        new_link = f"../{filename_without_ext}/"
+    elif dir_path:
+        # If there's a directory path, keep it and add one more level up
+        new_link = f"../{dir_path}/{filename_without_ext}/"
+    else:
+        # If it's just a filename, simply go one level up
+        new_link = f"../{filename_without_ext}/"
+
+    return f"[{text}]({new_link})"
 
 
 def copy_notebooks():
@@ -148,16 +202,8 @@ def copy_notebooks():
                     content = content.replace('src=\\"./img/', 'src=\\"../img/')
                     with open(dst_path, "w") as f:
                         f.write(content)
+                    update_notebook_links(dst_path)
                 dst_dir = dst_dir_
-
-    # Top level notebooks are "how-to's"
-    # for file in examples_dir.iterdir():
-    #     if file.suffix.endswith(".ipynb") and not os.path.isdir(
-    #         os.path.join(examples_dir, file)
-    #     ):
-    #         src_path = os.path.join(examples_dir, file)
-    #         dst_path = os.path.join(docs_dir, "how-tos", file.name)
-    #         shutil.copy(src_path, dst_path)
 
 
 if __name__ == "__main__":
