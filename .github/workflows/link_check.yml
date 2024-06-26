@@ -26,10 +26,10 @@ jobs:
       - name: Check links in Markdown files
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
-          folder-path: 'examples/'
+          folder-path: "examples/"
           check-modified-files-only: ${{ github.event_name != 'schedule' }}
-          file-path: './README.md'
-          config-file: './.markdown-link-check.config.json'
+          file-path: "./README.md"
+          config-file: "./.markdown-link-check.config.json"
 
   notebook-link-check:
     runs-on: ubuntu-latest
@@ -53,14 +53,25 @@ jobs:
         env:
           LANGCHAIN_API_KEY: test
         run: |
-          if [ "${{ github.event_name }}" != "schedule" ]; then
+          if [ "${{ github.event_name }}" == "schedule" ] || [ "${{ github.event_name }}" == "workflow_dispatch" ] || ([ "${{ github.event_name }}" == "push" ] && [ "${{ github.ref }}" == "refs/heads/main" ]); then
+            echo "Running link check on all notebooks in examples directory..."
+            poetry run pytest -v --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links examples
+          else
+            echo "Fetching changes from origin/main..."
             git fetch origin main
-            CHANGED_FILES=$(git diff --name-only origin/main | grep '\.ipynb$')
-            if [ -n "$CHANGED_FILES" ]; then
-               poetry run pytest --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links $CHANGED_FILES 
+            echo "Checking for changed notebook files..."
+            CHANGED_FILES=$(git diff --name-only origin/main | grep '\.ipynb$' || true)
+            echo "Changed files: ${CHANGED_FILES}"
+            if [ -n "${CHANGED_FILES}" ]; then
+              echo "Running link check on changed notebook files..."
+              poetry run pytest -v --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links ${CHANGED_FILES}
+              PYTEST_EXIT_CODE=$?
+              echo "pytest exit code: ${PYTEST_EXIT_CODE}"
+              if [ ${PYTEST_EXIT_CODE} -ne 0 ]; then
+                echo "pytest failed with exit code ${PYTEST_EXIT_CODE}"
+                exit ${PYTEST_EXIT_CODE}
+              fi
             else
               echo "No notebook files changed."
             fi
-          else
-             poetry run pytest --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links examples
           fi
