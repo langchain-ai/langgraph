@@ -273,13 +273,24 @@ class AssistantsClient:
     async def search(
         self, *, metadata: Metadata = None, limit: int = 10, offset: int = 0
     ) -> list[Assistant]:
+        """Search for assistants.
+
+        Args:
+            metadata (dict, optional): Metadata to filter by. Defaults to None.
+            limit (int, optional): The maximum number of results to return. Defaults to 10.
+            offset (int, optional): The number of results to skip. Defaults to 0.
+
+        Returns:
+            list[Assistant]: A list of assistants.
+        """
         payload: Dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
         if metadata:
             payload["metadata"] = metadata
-        """Search for assistants."""
+        else:
+            payload["metadata"] = {}
         return await self.http.post(
             "/assistants/search",
             json=payload,
@@ -412,8 +423,7 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-    ) -> AsyncIterator[StreamPart]:
-        ...
+    ) -> AsyncIterator[StreamPart]: ...
 
     @overload
     def stream(
@@ -428,8 +438,7 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
-    ) -> AsyncIterator[StreamPart]:
-        ...
+    ) -> AsyncIterator[StreamPart]: ...
 
     def stream(
         self,
@@ -482,8 +491,7 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
-    ) -> Run:
-        ...
+    ) -> Run: ...
 
     @overload
     async def create(
@@ -499,8 +507,7 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-    ) -> Run:
-        ...
+    ) -> Run: ...
 
     async def create(
         self,
@@ -547,8 +554,7 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
     async def wait(
@@ -561,8 +567,7 @@ class RunsClient:
         config: Optional[Config] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     async def wait(
         self,
