@@ -60,7 +60,6 @@ class State(TypedDict):
 
 In this example, no reducer functions are specified for any key. Let's assume the input to the graph is `{"foo": 1, "bar": ["hi"]}`. Let's then assume the first `Node` returns `{"foo": 2}`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{"foo": 2, "bar": ["hi"]}`. If the second node returns `{"bar": ["bye"]}` then the `State` would then be `{"foo": 2, "bar": ["bye"]}`
 
-
 **Example B:**
 
 ```python
@@ -73,7 +72,6 @@ class State(TypedDict):
 ```
 
 In this example, we've used the `Annotated` type to specify a reducer function (`operator.add`) for the second key (`bar`). Note that the first key remains unchanged. Let's assume the input to the graph is `{"foo": 1, "bar": ["hi"]}`. Let's then assume the first `Node` returns `{"foo": 2}`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{"foo": 2, "bar": ["hi"]}`. If the second node returns `{"bar": ["bye"]}` then the `State` would then be `{"foo": 2, "bar": ["hi", "bye"]}`. Notice here that the `bar` key is updated by adding the two lists together.
-
 
 ### MessageState
 
@@ -127,7 +125,6 @@ builder.add_node("other_node", my_other_node)
 ...
 ```
 
-
 Behind the scenes, functions are converted to [RunnableLambda's](https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.base.RunnableLambda.html#langchain_core.runnables.base.RunnableLambda), which add batch and async support to your function, along with native tracing and debugging.
 
 If you add a node to graph without specifying a name, it will be given a default name equivalent to the function name.
@@ -178,7 +175,7 @@ graph.add_edge("node_a", "node_b")
 
 ### Conditional Edges
 
-If you want to **optionally** route to 1 or more edges (or optionally terminate), you can use the [add_conditional_edges](https://langchain-ai.github.io/langgraph/reference/graphs/#langgraph.graph.StateGraph.add_conditional_edges) method. This method accepts the name of a node and a "routing function" to call after that node is executed:
+If you want to **optionally** route to 1 or more edges (or optionally terminate), you can use the [add_conditional_edges][langgraph.graph.StateGraph.add_conditional_edges] method. This method accepts the name of a node and a "routing function" to call after that node is executed:
 
 ```python
 graph.add_edge("node_a", routing_function)
@@ -241,7 +238,7 @@ graph.add_conditional_edges("node_a", continue_to_jokes)
 
 One of the main benefits of LangGraph is that it comes backed by a persistence layer. This is accomplished via [checkpointers](https://langchain-ai.github.io/langgraph/reference/checkpoints/#basecheckpointsaver).
 
-Checkpointers can be used to save a _checkpoint_ of the state of a graph after all steps of the graph. This allows for several things. 
+Checkpointers can be used to save a _checkpoint_ of the state of a graph after all steps of the graph. This allows for several things.
 
 First, it allows for human-in-the-loop workflows, as it allows humans to inspect, interrupt, and approve steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
 
@@ -271,8 +268,7 @@ When interacting with the checkpointer state, you must specify [thread identifie
 
 Each checkpoint has two properties:
 
--**values**: This is the value of the state at this point in time.
--**next**: This is a tuple of the nodes to execute next in the graph.
+-**values**: This is the value of the state at this point in time. -**next**: This is a tuple of the nodes to execute next in the graph.
 
 ### Get state
 
@@ -280,7 +276,7 @@ You can get the state of a checkpointer by calling `graph.get_state(config)`. Th
 
 ### Get state history
 
-You can also call `graph.get_state_history(config)` to get a list of the history of the graph. The config should contain `thread_id`, and the state history will be fetched for that thread. 
+You can also call `graph.get_state_history(config)` to get a list of the history of the graph. The config should contain `thread_id`, and the state history will be fetched for that thread.
 
 ### Update state
 
@@ -289,7 +285,6 @@ You can also interact with the state directly and update it. This takes three di
 - config
 - values
 - `as_node`
-
 
 **config**
 
@@ -310,13 +305,14 @@ class State(TypedDict):
     bar: Annotated[list[str], add]
 ```
 
-Let's now assume the current state of the graph is 
+Let's now assume the current state of the graph is
 
 ```
 {"foo": 1, "bar": ["a"]}
 ```
 
 If you update the state as below:
+
 ```
 graph.update_state(config, {"foo": 2, "bar": ["b"]})
 ```
@@ -367,7 +363,7 @@ def node_a(state, config):
 
 ## Breakpoints
 
-It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either *before* a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.) 
+It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either _before_ a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.)
 
 You **MUST** use a [checkpoiner](#checkpointer) when using breakpoints. This is because your graph needs to be able to resume execution.
 
@@ -394,4 +390,3 @@ LangGraph is built with first class support for streaming. There are several dif
 - `"debug"`: This streams as much information as possible throughout the execution of the graph.
 
 In addition, you can use the [`astream_events`](https://langchain-ai.github.io/langgraph/how-tos/streaming-tokens/) method to stream back events that happen _inside_ nodes. This is useful for streaming tokens of LLM calls.
-
