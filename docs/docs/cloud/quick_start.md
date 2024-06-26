@@ -15,24 +15,24 @@ This quick start guide will cover how to build a simple chatbot with LangGraph, 
 2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). 
 
     ```python
-   from langchain_anthropic import ChatAnthropic
-   from langgraph.graph import END, StateGraph, MessagesState
-   
-   model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
-   
-   graph_workflow = StateGraph(MessagesState)
-   
-   
-   def agent(state: MessagesState):
-       response = model.invoke(state["messages"])
-       return {"messages": [response]}
-   
-   
-   graph_workflow.add_node(agent)
-   graph_workflow.add_edge("agent", END)
-   graph_workflow.set_entry_point("agent")
-   
-   graph = graph_workflow.compile()
+    from langchain_anthropic import ChatAnthropic
+    from langgraph.graph import END, StateGraph, MessagesState
+    
+    model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+    
+    graph_workflow = StateGraph(MessagesState)
+    
+    
+    def agent(state: MessagesState):
+        response = model.invoke(state["messages"])
+        return {"messages": [response]}
+    
+    
+    graph_workflow.add_node(agent)
+    graph_workflow.add_edge("agent", END)
+    graph_workflow.set_entry_point("agent")
+    
+    graph = graph_workflow.compile()
     ```
 
 3. The `requirements.txt` file should contain any dependencies for your graph(s). In this case we only require two packages for our graph to run:
