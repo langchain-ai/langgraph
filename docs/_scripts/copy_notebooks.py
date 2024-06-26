@@ -1,4 +1,6 @@
+import json
 import os
+import re
 import shutil
 from pathlib import Path
 
@@ -98,6 +100,44 @@ def clean_notebooks():
                 os.rmdir(root)
 
 
+def update_notebook_links(notebook_path):
+    with open(notebook_path, "r", encoding="utf-8") as f:
+        notebook = json.load(f)
+
+    for cell in notebook["cells"]:
+        if cell["cell_type"] == "markdown":
+            for i, source in enumerate(cell["source"]):
+                # Update relative notebook links
+                cell["source"][i] = re.sub(
+                    r"\[([^\]]+)\]\(([^:)]+\.ipynb)\)",
+                    lambda m: transform_link(m.group(1), m.group(2)),
+                    source,
+                )
+
+    with open(notebook_path, "w", encoding="utf-8") as f:
+        json.dump(notebook, f, indent=2)
+
+
+def transform_link(text, link):
+    dir_path, filename = os.path.split(link)
+
+    # Remove the .ipynb extension
+    filename_without_ext = os.path.splitext(filename)[0]
+
+    # If it's a local link (starts with ./)
+    if link.startswith("./"):
+        # Change to parent directory and remove ./ prefix
+        new_link = f"../{filename_without_ext}/"
+    elif dir_path:
+        # If there's a directory path, keep it and add one more level up
+        new_link = f"../{dir_path}/{filename_without_ext}/"
+    else:
+        # If it's just a filename, simply go one level up
+        new_link = f"../{filename_without_ext}/"
+
+    return f"[{text}]({new_link})"
+
+
 def copy_notebooks():
     # Nested ones are mostly tutorials rn
     for root, dirs, files in os.walk(examples_dir):
@@ -148,6 +188,7 @@ def copy_notebooks():
                     content = content.replace('src=\\"./img/', 'src=\\"../img/')
                     with open(dst_path, "w") as f:
                         f.write(content)
+                    update_notebook_links(dst_path)
                 dst_dir = dst_dir_
 
     # Top level notebooks are "how-to's"
