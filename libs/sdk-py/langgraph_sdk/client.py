@@ -22,6 +22,7 @@ from langgraph_sdk.schema import (
     StreamMode,
     Thread,
     ThreadState,
+    ThreadStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -319,7 +320,12 @@ class ThreadsClient:
         await self.http.delete(f"/threads/{thread_id}")
 
     async def search(
-        self, *, metadata: Metadata = None, limit: int = 10, offset: int = 0
+        self,
+        *,
+        metadata: Metadata = None,
+        status: Optional[ThreadStatus] = None,
+        limit: int = 10,
+        offset: int = 0,
     ) -> list[Thread]:
         """Search for threads."""
         payload: Dict[str, Any] = {
@@ -328,6 +334,8 @@ class ThreadsClient:
         }
         if metadata:
             payload["metadata"] = metadata
+        if status:
+            payload["status"] = status
         return await self.http.post(
             "/threads/search",
             json=payload,
