@@ -223,7 +223,7 @@ def config_to_docker(config_path: pathlib.Path, config: Config):
     # https://til.simonwillison.net/python/pyproject
     faux_pkgs_str = f"{os.linesep}{os.linesep}".join(
         f"""ADD {relpath} {destpath}
-COPY <<EOF /deps/__outer_{fullpath.name}/pyproject.toml
+RUN cat <<EOF > /deps/__outer_{fullpath.name}/pyproject.toml
 [project]
 name = "{fullpath.name}"
 version = "0.1"
