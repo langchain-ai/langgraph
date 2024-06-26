@@ -7,7 +7,7 @@ import pytest
 from langgraph_cli.config import config_to_docker, validate_config
 from langgraph_cli.util import clean_empty_lines
 
-PATH_TO_CONFIG = pathlib.Path("tests/unit_tests/test_config.json")
+PATH_TO_CONFIG = pathlib.Path(__file__).parent / "test_config.json"
 
 
 def test_validate_config():
