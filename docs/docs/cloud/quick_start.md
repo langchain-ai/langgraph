@@ -1,7 +1,6 @@
 # Quick Start
 This quick start guide will cover how to develop an application for LangGraph Cloud, run it locally in Docker, and call the APIs to invoke a graph.
 
-Alternatively, clone or fork the [`langgraph/example`](https://github.com/langchain-ai/langgraph-example) GitHub repository and follow the instructions in the `README`.
 
 ## Set up local files
 
@@ -16,10 +15,10 @@ Alternatively, clone or fork the [`langgraph/example`](https://github.com/langch
 2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at somepoint in your file you compile your graph and assign that Runnable to a variable (in this case the `graph` variable). 
 
     ```python
-    from langchain_openai import ChatOpenAI
+    from langchain_anthropic import ChatAnthropic
     from langgraph.graph import END, MessageGraph
 
-    model = ChatOpenAI(temperature=0)
+    model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
 
     graph_workflow = MessageGraph()
 
@@ -33,9 +32,9 @@ Alternatively, clone or fork the [`langgraph/example`](https://github.com/langch
 3. The `requirements.txt` file should contain any dependencies for your graph(s). In this case we only require two packages for our graph to run:
 
         langgraph
-        langchain_openai
+        langchain_anthropic
 
-4. The `langgraph.json` file is a configuration file that describes what graph you are going to host. It is important to note that you can host multiple graphs at a time. In this case we only host one: the `graph` Runnable from `agent.py`, but we could have defined multiple different graphs within `agent.py` to host, or written multiple python files to each host one or more graphs. Each graph you wish to host should have a unique identifier.
+4. The `langgraph.json` file is a configuration file that describes what graph you are going to host. It is important to note that you can host multiple graphs at a time. In this case we only host one: the compiled `graph` object from `agent.py`, but we could have defined multiple different graphs within `agent.py` to host, or written multiple python files to each host one or more graphs. Each graph you wish to host should have a unique identifier.
 
     ```json
     {
@@ -51,7 +50,7 @@ Alternatively, clone or fork the [`langgraph/example`](https://github.com/langch
 
 5. The `.env` file should contain the environment variables that are needed to run your graph. In this case we just need to specify the OpenAI API key, as well as the authentication type for langgraph.  
 
-        OPENAI_API_KEY=<add your key here>
+        ANTHROPIC_API_KEY=<add your key here>
         LANGGRAPH_AUTH_TYPE=noop
 
     !!! warning "Disable Authentication"
@@ -61,7 +60,10 @@ Now that we have set everything up on our local file system, we are ready to hos
 
 ## Run Locally
 
-1. Install the [LangGraph CLI](./reference/cli.md#installation).
+1. Install the LangGraph CLI by using the following steps:
+    1. Ensure that Docker is installed (confirm by running `docker --version` in your terminal).
+    2. Install the `langgraph-cli` Python package (e.g. `pip install langgraph-cli`).
+    3. Run the command `langgraph --help` to confirm that the CLI is installed.
 
 2. Run the following command to start the API server in Docker:
 
@@ -101,7 +103,7 @@ If the hosting is working as expected, you should receive a 200 response which l
         }
     ]
 
-If you are hosting multiple graphs, you should see all of them in this response. Once you have verified that this step is working as intended, you can test out that invoking your hosted graphs works as intended without any bugs. You can do this by calling the a version of the following cURL command:
+Once you have verified that this step is working, you can test out that invoking your hosted graphs works as intended without any bugs. You can do this by calling the a version of the following cURL command:
 
     curl --request POST \
         --url http://localhost:8123/runs/stream \
@@ -126,7 +128,7 @@ If you are hosting multiple graphs, you should see all of them in this response.
         ]
     }'
 
-Make sure to edit the `input` and `assistant_id` fields to match what assistant you want to test. If you receive a 200 response then congratulations your graph has run successfully and you are ready to move on to hosting on Langgraph Cloud!
+Make sure to edit the `input` and `assistant_id` fields to match what assistant you want to test. If you receive a 200 response then congratulations your graph has run successfully and you are ready to move on to hosting on LangGraph Cloud!
 
 ## Deploy to Cloud
 
@@ -136,7 +138,9 @@ Create a git repo in the `<my-app>` directory, and verify it’s existence. You 
 
 ### Deploy from GitHub with LangGraph Cloud
 
-Once you have created your github repository with a Python file containing your compiled graph as well as a `langgraph.json` file containing the configuration for hosting your graph, you can head over to LangSmith and click on the 🚀 icon on the left navbar to create a new deployment. Click the `+ New Deployment` button. 
+Once you have created your github repository with a Python file containing your compiled graph as well as a `langgraph.json` file containing the configuration for hosting your graph, you can head over to LangSmith and click on the 🚀 icon on the left navbar to create a new deployment. Then click the `+ New Deployment` button. 
+
+![Langsmith Workflow](./img/cloud_deployment.png)
 
 ***If you have not deployed to LangGraph Cloud before:*** there will be a button that shows up saying Import from GitHub. You’ll need to follow that flow to connect LangGraph Cloud to GitHub.
 
@@ -181,8 +185,6 @@ You won’t actually be able to test any of the API endpoints without authorizin
 
 ## Interact with your deployment via LangGraph Studio
 
-### Access Studio
-
 If you click on your deployment you should see a blue button in the top right that says `LangGraph Studio`. Clicking on this button will take you to a page that looks like this:
 
 ![Screenshot 2024-06-11 at 2.51.51 PM.png](./deployment/img/graph_visualization.png)
@@ -191,4 +193,67 @@ On this page you can test out your graph by passing in starting states and click
 
 ## Use with the SDK
 
-Once you have tested that your hosted graph works as expected using Langgraph Studio, you can start using your hosted graph all over your organization by using the Langgraph SDK. You can learn about how to do that by following [this how-to guide](./sdk/python_sdk.ipynb)
+Once you have tested that your hosted graph works as expected using LangGraph Studio, you can start using your hosted graph all over your organization by using the LangGraph SDK. Let's see how we can access our hosted graph and execute our run from a python file. 
+
+First, make sure you have the SDK installed by calling `pip install langgraph_sdk`.
+
+The first thing to do when using the SDK is to setup our client, access our assistant, and create a thread to execute a run on:
+
+```python
+from langgraph_sdk import get_client
+
+# get top-level LangGraphClient
+# this is the url for self-hosted LangGraph, replace with your hosted URL if applicable
+client = get_client(url="http://localhost:8123")
+
+# Search all hosted graphs
+assistants = await client.assistants.search()
+# In this example we select the first assistant since we are only hosting a single graph
+assistant = assistants[0]
+
+# We create a thread for tracking the state of our run
+thread = await client.threads.create()
+```
+
+We can then execute a run on the thread:
+
+```python
+input = {"messages":[{"role": "user", "content": "Hello! My name is Bagatur and I am 26 years old."}]}
+
+async for chunk in client.runs.stream(
+        thread['thread_id'],
+        assistant["assistant_id"],
+        input=input,
+        stream_mode="updates",
+    ):
+    if chunk.data and "run_id" not in chunk.data:
+            print(chunk.data)
+```
+
+    {'agent': {'messages': [{'content': "Hi Bagatur! It's nice to meet you. How can I assist you today?", 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_9cb5d38cf7'}, 'type': 'ai', 'name': None, 'id': 'run-c89118b7-1b1e-42b9-a85d-c43fe99881cd', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
+
+
+You can learn more about the Python SDK in [this how-to guide](./sdk/python_sdk.ipynb), and read up on the Javascript SDK in [this how-to guide](./sdk/js_sdk.ipynb)
+
+## What's Next
+
+Congratulations! If you've worked your way through this tutorial you are well on your way to becoming a LangGraph Cloud expert. Here are some other resources to check out to help you out on the path to expertise:
+
+### LangGraph Cloud How-tos
+
+If you want to learn more about streaming from hosted graphs, check out the Streaming [how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/stream_values/).
+
+To learn more about double-texting and all the ways you can handle it in your application, read up on these [how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/interrupt_concurrent/).
+
+To learn about how to include different human-in-the-loop behavior in your graph, take a look at [these how-tos](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/human_in_the_loop_breakpoint/).
+
+### LangGraph Tutorials
+
+Before hosting, you have to write a graph to host. Here are some tutorials to get you more comfortable with writing LangGraph graphs and give you inspiration for the types of graphs you want to host.
+
+[This tutorial](https://langchain-ai.github.io/langgraph/tutorials/customer-support/customer-support/) walks you through how to write a customer support bot using LangGraph.
+
+If you are interested in writing a SQL agent, check out [this tutorial](https://langchain-ai.github.io/langgraph/tutorials/sql-agent/).
+
+Check out the [LangGraph tutorials](https://langchain-ai.github.io/langgraph/tutorials/) page to read about more exciting use cases.
+
