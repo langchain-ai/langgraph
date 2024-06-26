@@ -15,7 +15,6 @@ from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
 from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
-from langgraph_cli.util import clean_empty_lines
 
 OPT_DOCKER_COMPOSE = click.option(
     "--docker-compose",
@@ -351,14 +350,20 @@ def logs(
     \b
     """,
 )
+@click.option(
+    "--base-image",
+    hidden=True,
+)
 @cli.command(help="Build langgraph API server docker image")
 @log_command
 def build(
     config: pathlib.Path,
     platform: Optional[str],
+    base_image: Optional[str],
     pull: bool,
     tag: str,
 ):
+    base_image = base_image or "langchain/langgraph-api"
     with open(config) as f:
         config_json = langgraph_cli.config.validate_config(json.load(f))
     with Runner() as runner:
@@ -370,7 +375,7 @@ def build(
                 subp_exec(
                     "docker",
                     "pull",
-                    f"langchain/langgraph-api:{config_json['python_version']}",
+                    f"{base_image}:{config_json['python_version']}",
                 )
             )
         # apply options
@@ -383,116 +388,13 @@ def build(
         if platform:
             args.extend(["--platform", platform])
         # apply config
-        stdin = langgraph_cli.config.config_to_docker(config, config_json)
+        stdin = langgraph_cli.config.config_to_docker(config, config_json, base_image)
         # run docker build
         runner.run(
             subp_exec(
                 "docker", "build", *args, str(config.parent), input=stdin, verbose=True
             )
         )
-
-
-@cli.group(help="Export langgraph compose files")
-def export():
-    pass
-
-
-@click.option(
-    "--output",
-    "-o",
-    help="Output path to write the docker compose file to",
-    type=click.Path(
-        exists=False,
-        file_okay=True,
-        dir_okay=False,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
-    required=True,
-)
-@OPT_CONFIG
-@OPT_PORT
-@OPT_WATCH
-@OPT_LANGGRAPH_API_PATH
-@export.command(name="compose", help="Export docker compose file")
-@log_command
-def export_compose(
-    output: pathlib.Path,
-    config: pathlib.Path,
-    port: int,
-    watch: bool,
-    langgraph_api_path: Optional[pathlib.Path],
-):
-    with Runner() as runner:
-        capabilities = langgraph_cli.docker.check_capabilities(runner)
-        _, stdin = prepare(
-            runner,
-            capabilities=capabilities,
-            config_path=config,
-            docker_compose=None,
-            pull=False,
-            watch=watch,
-            langgraph_api_path=langgraph_api_path,
-            port=port,
-            verbose=False,
-        )
-
-    with open(output, "w") as f:
-        f.write(clean_empty_lines(stdin))
-
-
-@click.option(
-    "--output",
-    "-o",
-    help="Output path (directory) to write the helm chart to",
-    type=click.Path(
-        exists=False,
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
-    required=True,
-)
-@OPT_PORT
-@OPT_DOCKER_COMPOSE
-@OPT_CONFIG
-@export.command(
-    name="helm",
-    help="Build and export a helm chart to deploy to a Kubernetes cluster",
-    hidden=True,
-)
-@log_command
-def export_helm(
-    output: pathlib.Path,
-    config: pathlib.Path,
-    docker_compose: Optional[pathlib.Path],
-    port: int,
-):
-    with open(config) as f:
-        config_json = langgraph_cli.config.validate_config(json.load(f))
-
-    with Runner() as runner:
-        # check docker available
-        capabilities = langgraph_cli.docker.check_capabilities(runner)
-        # prepare args
-        stdin = langgraph_cli.docker.compose(capabilities, port=port)
-        args = [
-            "convert",
-            "--chart",
-            "-o",
-            str(output),
-            "-v",
-        ]
-        # apply options
-        if docker_compose:
-            args.extend(["-f", str(docker_compose)])
-
-        args.extend(["-f", "-"])  # stdin
-        # apply config
-        stdin += langgraph_cli.config.config_to_compose(config, config_json)
-        # run kompose convert
-        runner.run(subp_exec("kompose", *args, input=stdin))
 
 
 def prepare_args_and_stdin(
@@ -524,7 +426,11 @@ def prepare_args_and_stdin(
     args.extend(["-f", "-"])  # stdin
     # apply config
     stdin += langgraph_cli.config.config_to_compose(
-        config_path, config, watch=watch, langgraph_api_path=langgraph_api_path
+        config_path,
+        config,
+        watch=watch,
+        langgraph_api_path=langgraph_api_path,
+        base_image="langchain/langgraph-api",
     )
     return args, stdin
 

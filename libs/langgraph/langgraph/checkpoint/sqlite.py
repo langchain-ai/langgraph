@@ -56,7 +56,7 @@ _AIO_ERROR_MSG = (
     "from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver\n"
     "Note: AsyncSqliteSaver requires the aiosqlite package to use.\n"
     "Install with:\n`pip install aiosqlite`\n"
-    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#asyncsqlitesaver"
+    "See https://langchain-ai.github.io/langgraph/reference/checkpoints/asyncsqlitesaver"
     "for more information."
 )
 
@@ -69,7 +69,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         (demos and small projects) and does not
         scale to multiple threads.
         For a similar sqlite saver with `async` support,
-        consider using AsyncSqliteSaver.
+        consider using [AsyncSqliteSaver][asyncsqlitesaver].
 
     Args:
         conn (sqlite3.Connection): The SQLite database connection.
@@ -399,7 +399,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use get_tuple() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+            Use get_tuple() instead, or consider using [AsyncSqliteSaver][asyncsqlitesaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
@@ -415,7 +415,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use list() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+            Use list() instead, or consider using [AsyncSqliteSaver][asyncsqlitesaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
         yield
@@ -430,7 +430,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         Note:
             This async method is not supported by the SqliteSaver class.
-            Use put() instead, or consider using [AsyncSqliteSaver](#asyncsqlitesaver).
+            Use put() instead, or consider using [AsyncSqliteSaver][asyncsqlitesaver].
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 

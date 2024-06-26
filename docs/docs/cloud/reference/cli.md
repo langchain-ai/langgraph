@@ -3,8 +3,8 @@ The LangGraph CLI includes commands to build and run a LangGraph Cloud API serve
 
 ## Installation
 1. Ensure that Docker is installed (e.g. `docker --version`).
-1. Install the `langgraph-cli` Python package (e.g. `pip install langgraph-cli`).
-1. Run the command `langgraph --help` to confirm that the CLI is installed.
+2. Install the `langgraph-cli` Python package (e.g. `pip install langgraph-cli`).
+3. Run the command `langgraph --help` to confirm that the CLI is installed.
 
 ## Configuration File
 The LangGraph CLI requires a JSON configuration file with the following keys:
