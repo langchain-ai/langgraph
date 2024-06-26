@@ -272,15 +272,22 @@ class AssistantsClient:
         await self.http.delete(f"/assistants/{assistant_id}")
 
     async def search(
-        self, *, metadata: Metadata = None, limit: int = 10, offset: int = 0
+        self,
+        *,
+        metadata: Metadata = None,
+        graph_id: Optional[str] = None,
+        limit: int = 10,
+        offset: int = 0,
     ) -> list[Assistant]:
+        """Search for assistants."""
         payload: Dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
         if metadata:
             payload["metadata"] = metadata
-        """Search for assistants."""
+        if graph_id:
+            payload["graph_id"] = graph_id
         return await self.http.post(
             "/assistants/search",
             json=payload,
