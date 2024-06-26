@@ -12,7 +12,7 @@ This quick start guide will cover how to build a simple chatbot with LangGraph, 
         |-- langgraph.json      # configuration file for LangGraph
         |-- .env                # environment files with API keys
 
-2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign that Runnable to a variable (in this case the `graph` variable). 
+2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). 
 
     ```python
    from langchain_anthropic import ChatAnthropic
@@ -40,7 +40,7 @@ This quick start guide will cover how to build a simple chatbot with LangGraph, 
         langgraph
         langchain_anthropic
 
-4. The `langgraph.json` file is a configuration file that describes what graph you are going to host. It is important to note that you can host multiple graphs at a time. In this case we only host one: the compiled `graph` object from `agent.py`, but we could have defined multiple different graphs within `agent.py` to host, or written multiple python files to each host one or more graphs. Each graph you wish to host should have a unique identifier.
+4. The `langgraph.json` file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`.
 
     ```json
     {
