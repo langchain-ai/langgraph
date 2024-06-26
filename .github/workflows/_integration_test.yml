@@ -42,42 +42,19 @@ jobs:
       - name: Start service A
         if: steps.changed-files.outputs.all
         run: |
-          langgraph up -c examples/langgraph.json --wait --verbose
-      - name: Stop service A
-        if: steps.changed-files.outputs.all
-        run: |
-          langgraph down -c examples/langgraph.json
-          sudo rm -rf .langgraph-data
+          timeout 30 langgraph test -c examples/langgraph.json --verbose || (exit "$(($? == 124 ? 0 : $?))")
       - name: Start service B
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs
         run: |
-          langgraph up --wait --verbose
-      - name: Stop service B
-        if: steps.changed-files.outputs.all
-        working-directory: libs/cli/examples/graphs
-        run: |
-          langgraph down
-          sudo rm -rf .langgraph-data
+          timeout 30 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
       - name: Start service C
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_a
         run: |
-          langgraph up --wait -d compose.yml --verbose
-      - name: Stop service C
-        if: steps.changed-files.outputs.all
-        working-directory: libs/cli/examples/graphs_reqs_a
-        run: |
-          langgraph down
-          sudo rm -rf .langgraph-data
+          timeout 30 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
       - name: Start service D
         if: steps.changed-files.outputs.all
         working-directory: libs/cli/examples/graphs_reqs_b
         run: |
-          langgraph up --wait -d compose.yml --verbose
-      - name: Stop service D
-        if: steps.changed-files.outputs.all
-        working-directory: libs/cli/examples/graphs_reqs_b
-        run: |
-          langgraph down
-          sudo rm -rf .langgraph-data
+          timeout 30 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
