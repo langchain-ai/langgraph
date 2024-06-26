@@ -1,5 +1,13 @@
 # Quick Start
-This quick start guide will cover how to build a simple chatbot with LangGraph, deploy it to LangGraph Cloud, use the LangGraph Studio to visualize and test it out, and use the LangGraph Cloud SDK to interact with it.
+This quick start guide will cover how to build a simple agent that can look up things on the internet. We will then deploy it to LangGraph Cloud, use the LangGraph Studio to visualize and test it out, and use the LangGraph SDK to interact with it.
+
+## Set up requirements
+
+This tutorial will use:
+
+- Anthropic for the LLM - sign up and get an API key [here](https://console.anthropic.com/)
+- Tavily for the search engine - sign up and get an API key [here](https://app.tavily.com/)
+- LangSmith for hosting - sign up and get an API key [here](https://smith.langchain.com/)
 
 
 ## Set up local files
@@ -16,29 +24,22 @@ This quick start guide will cover how to build a simple chatbot with LangGraph, 
 
     ```python
    from langchain_anthropic import ChatAnthropic
-   from langgraph.graph import END, StateGraph, MessagesState
+   from langchain_community.tools.tavily_search import TavilySearchResults
+   from langgraph.prebuilt import create_react_agent
    
    model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
    
-   graph_workflow = StateGraph(MessagesState)
+   tools = [TavilySearchResults(max_results=2)]
    
-   
-   def agent(state: MessagesState):
-       response = model.invoke(state["messages"])
-       return {"messages": [response]}
-   
-   
-   graph_workflow.add_node(agent)
-   graph_workflow.add_edge("agent", END)
-   graph_workflow.set_entry_point("agent")
-   
-   graph = graph_workflow.compile()
+   graph = create_react_agent(model, tools)
     ```
 
-3. The `requirements.txt` file should contain any dependencies for your graph(s). In this case we only require two packages for our graph to run:
+3. The `requirements.txt` file should contain any dependencies for your graph(s). In this case we only require four packages for our graph to run:
 
         langgraph
         langchain_anthropic
+        tavily-python
+        langchain_community
 
 4. The `langgraph.json` file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`.
 
@@ -47,8 +48,7 @@ This quick start guide will cover how to build a simple chatbot with LangGraph, 
         "dependencies": ["."],
         "graphs": {
             "agent": "./agent.py:graph"
-        },
-        "env": ".env"
+        }
     }
     ```
 
@@ -79,9 +79,9 @@ To deploy your application, you should do the following:
 1. Select your GitHub username or organization from the selector
 2. Search for your repo to deploy in the search bar and select it
 3. Choose any name
-4. In the `LangGraph API config file` field, enter the path to your `langgraph.json` file (if left blank langsmith will automatically search for it on deployment)
+4. In the `LangGraph API config file` field, enter the path to your `langgraph.json` file (which in this case is just `langgraph.json`)
 5. For Git Reference, you can select either the git branch for the code you want to deploy, or the exact commit SHA. 
-6. If your chain relies on environment variables (for example, an OPENAI_API_KEY), add those in. They will be propagated to the underlying server so your code can access them.
+6. If your chain relies on environment variables, add those in. They will be propagated to the underlying server so your code can access them. In this case, we need `ANTHROPIC_API_KEY` and `TAVILY_API_KEY`.
 
 Putting this all together, you should have something as follows for your deployment details:
 
