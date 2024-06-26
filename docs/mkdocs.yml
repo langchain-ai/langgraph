@@ -80,14 +80,6 @@ plugins:
       execute: false
       include_source: True
       include_requirejs: true
-  - git-committers:
-      repository: langchain-ai/langgraph
-      branch: main
-      docs_path: docs/docs/
-      token: !ENV ["MKDOCS_GIT_COMMITTERS_APIKEY"]
-  # TODO: Add minify plugin once it works alright with code block copying
-  # - minify:
-  #     minify_html: true
 nav:
   - Home: 
       - 'index.md'
@@ -150,6 +142,7 @@ nav:
          - Stream LLM tokens: how-tos/streaming-tokens.ipynb
          - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
          - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
+         - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
      - Other:
          - Run graph asynchronously: how-tos/async.ipynb
          - Visualize your graph: how-tos/visualization.ipynb

@@ -19,6 +19,7 @@ _MANUAL = {
         "stream-multiple.ipynb",
         "streaming-tokens.ipynb",
         "streaming-content.ipynb",
+        "streaming-events-from-within-tools.ipynb",
         "persistence.ipynb",
         "visualization.ipynb",
         "state-model.ipynb",
