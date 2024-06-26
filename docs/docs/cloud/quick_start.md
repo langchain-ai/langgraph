@@ -48,13 +48,73 @@ This tutorial will use:
         "dependencies": ["."],
         "graphs": {
             "agent": "./agent.py:graph"
-        }
+        },
+        "env": ".env"
     }
     ```
 
     Learn more about the LangGraph CLI configuration file [here](./reference/cli.md#configuration-file).
+5. The `.env` file should have any environment variables needed to run your graph. This will only be used for local testing, so if you are not testing locally you can skip this step. NOTE: if you do add this, you should NOT check this into git. For this graph, we need two environment variables:
+
+    ```shell
+    ANTHROPIC_API_KEY=...
+    TAVILY_API_KEY=...
+    ```
 
 Now that we have set everything up on our local file system, we are ready to host our graph. 
+
+## Test the graph build locally
+
+Before deploying to the cloud, we probably want to test the building of our graph locally. This is useful to make sure we have configured our CLI configuration file correctly and our graph runs.
+
+In order to do this we can first install the LangGraph CLI
+
+```shell
+pip install langgraph-cli
+```
+
+We can then stand up a simple test server. The server this stands up is INCREDIBLY simple - it is just a single endpoint and has no persistence. **This should not be used for hosting your application, only for testing the build and basic functionality.**
+
+```shell
+langgraph test
+```
+
+This will test building of the agent server. If this runs successfully, you should see something like:
+
+```shell
+Ready!
+- API: http://localhost:8123
+2024-06-26 19:20:41,056:INFO:uvicorn.access 127.0.0.1:44138 - "GET /ok HTTP/1.1" 200
+```
+
+You can now test this out! Again, we only expose a single simple endpoint (for streaming stateless runs). This is intended to allow you to test that the agent is properly set up, but should **NOT** but used for production purposes. To test it out, you can go to another terminal window and run:
+
+```shell
+curl --request POST \
+    --url http://localhost:8123/runs/stream \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "assistant_id": "agent",
+    "input": {
+        "messages": [
+            {
+                "role": "user",
+                "content": "How are you?"
+            }
+        ]
+    },
+    "metadata": {},
+    "config": {
+        "configurable": {}
+    },
+    "multitask_strategy": "reject",
+    "stream_mode": [
+        "values"
+    ]
+}'
+```
+
+If you get back a valid response, then all is functioning properly!
 
 ## Deploy to Cloud
 
