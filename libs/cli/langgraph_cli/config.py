@@ -191,7 +191,7 @@ def _update_graph_paths(
             config["graphs"][graph_id] = f"{module_str}:{attr_str}"
 
 
-def config_to_docker(config_path: pathlib.Path, config: Config):
+def config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
     # configure pip
     pip_install = "pip install -c /api/constraints.txt"
     if config.get("pip_config_file"):
@@ -237,7 +237,7 @@ EOF"""
         for fullpath, relpath in local_deps.real_pkgs.items()
     )
 
-    return f"""FROM langchain/langgraph-api:{config['python_version']}
+    return f"""FROM {base_image}:{config['python_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
 
@@ -261,6 +261,7 @@ ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 def config_to_compose(
     config_path: pathlib.Path,
     config: Config,
+    base_image: str,
     watch: bool = False,
     langgraph_api_path: Optional[pathlib.Path] = None,
 ):
@@ -301,6 +302,6 @@ def config_to_compose(
         build:
             context: .
             dockerfile_inline: |
-{textwrap.indent(config_to_docker(config_path, config), "                ")}
+{textwrap.indent(config_to_docker(config_path, config, base_image), "                ")}
         {watch_str}
 """
