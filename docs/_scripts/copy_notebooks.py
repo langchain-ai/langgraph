@@ -79,6 +79,19 @@ _HIDE = set(
         "rag/langgraph_rag_agent_llama3_local.ipynb",
         "rag/langgraph_self_rag_pinecone_movies.ipynb",
         "rag/langgraph_adaptive_rag_cohere.ipynb",
+        "dynamically-returning-directly.ipynb",
+        "force-calling-a-tool-first.ipynb",
+        "managing-agent-steps.ipynb",
+        "pass-run-time-values-to-tools.ipynb",
+        "respond-in-format.ipynb",
+        "quickstart.ipynb",
+        "human-in-the-loop.ipynb",
+        "learning.ipynb",
+        "managing-conversation-history.ipynb",
+        "rag-agent-testing.ipynb",
+        "state-context-key.ipynb",
+        "time-travel.ipynb",
+        "code_assistant/langgraph_code_assistant_mistral.ipynb",
     ]
 )
 
@@ -190,7 +203,6 @@ def copy_notebooks():
                         f.write(content)
                     update_notebook_links(dst_path)
                 dst_dir = dst_dir_
-
 
 
 if __name__ == "__main__":
