@@ -28,6 +28,7 @@ Example `.env` file:
 ```
 MY_ENV_VAR_1=foo
 MY_ENV_VAR_2=bar
+OPENAI_API_KEY=key
 ```
 
 Example file directory:
@@ -77,13 +78,13 @@ Example `langgraph.json` file:
 ```json
 {
     "dependencies": [
-        "./my-app"
+        "."
     ],
     "graphs": {
         "openai_agent": "./openai_agent.py:agent",
         "anthropic_agent": "./anthropic_agent.py:agent"
     },
-    "env": ".env"
+    "env": "./.env"
 }
 ```
 
