@@ -5,8 +5,7 @@ on:
     branches:
       - main
   pull_request:
-    branches:
-      - main
+    types: [opened, synchronize, reopened]
   workflow_dispatch:
 
 env:
@@ -22,7 +21,7 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
-  deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -45,24 +44,44 @@ jobs:
         env:
           MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
 
-      - name: Configure GitHub Pages
-        if: github.ref == 'refs/heads/main'
-        uses: actions/configure-pages@v4
-
-      - name: Upload Pages Artifact
-        if: github.ref == 'refs/heads/main'
+      - name: Upload artifact
         uses: actions/upload-pages-artifact@v3
         with:
           path: ./docs/site/
 
+  deploy-preview:
+    needs: build
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy to GitHub Pages
-        if: github.ref == 'refs/heads/main'
         id: deployment
         uses: actions/deploy-pages@v4
-
-      - name: Deploy Pull Request Preview
-        if: github.event_name == 'pull_request'
-        uses: actions/upload-artifact@v2
         with:
-          name: pr-preview-${{ github.event.number }}
-          path: ./docs/site/
+          preview: true
+
+      - name: Get preview URL
+        run: |
+          echo "Preview URL: ${{ steps.deployment.outputs.page_url }}"
+          echo "preview_url=${{ steps.deployment.outputs.page_url }}" >> $GITHUB_ENV
+
+      - name: Comment PR
+        uses: actions/github-script@v6
+        with:
+          github-token: ${{secrets.GITHUB_TOKEN}}
+          script: |
+            github.rest.issues.createComment({
+              issue_number: context.issue.number,
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              body: `📝 Documentation preview for this PR is ready!\n\n[View Preview](${process.env.preview_url})`
+            })
+
+  deploy-production:
+    needs: build
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
