@@ -272,12 +272,15 @@ See [this guide](/langgraph/how-tos/persistence) for how to use threads.
 
 When you use a checkpointer with a graph, you can interact with the state of that graph.
 This usually done when enabling different human-in-the-loop interaction patterns.
-When interacting with the checkpointer state, you must specify [thread identifiers](#threads)
+Each time you run the graph, the checkpointer creates several checkpoints every time a
+node or set of nodes finishes running.
+The most recent checkpoint is the current state of the thread.
+When interacting with the checkpointer state, you must specify a [thread identifier](#threads).
 
 Each checkpoint has two properties:
 
--**values**: This is the value of the state at this point in time.
--**next**: This is a tuple of the nodes to execute next in the graph.
+- **values**: This is the value of the state at this point in time.
+- **next**: This is a tuple of the nodes to execute next in the graph.
 
 ### Get state
 
