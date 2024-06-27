@@ -7,7 +7,7 @@ The final repo structure will look something like this:
 ```bash
 my-app/
 |-- requirements.txt    # package dependencies
-|-- .env                # environment variabls
+|-- .env                # environment variables
 |-- openai_agent.py     # code for an agent
 |-- anthropic_agent.py  # code for another agent
 |-- langgraph.json      # configuration file for LangGraph
