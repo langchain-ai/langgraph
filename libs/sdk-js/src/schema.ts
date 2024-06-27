@@ -71,10 +71,10 @@ export interface Thread {
 export interface Cron {
   cron_id: string;
   thread_id: Optional<string>;
-  end_time: Optional<Date>;
+  end_time: Optional<string>;
   schedule: string;
-  created_at: Date;
-  updated_at: Date;
+  created_at: string;
+  updated_at: string;
   payload: Record<string, unknown>;
 }
 

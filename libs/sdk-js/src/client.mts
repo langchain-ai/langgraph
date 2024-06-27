@@ -114,7 +114,7 @@ class CronsClient extends BaseClient {
    * @param payload Payload for creating a cron job.
    * @returns The created background run.
    */
-  async create_for_thread(
+  async createForThread(
     threadId: string,
     assistantId: string,
     payload?: CronsCreatePayload,
@@ -132,7 +132,6 @@ class CronsClient extends BaseClient {
     return this.fetch<Run>(`/threads/${threadId}/runs/crons`, {
       method: "POST",
       json,
-      signal: payload?.signal,
     });
   }
 
@@ -159,7 +158,6 @@ class CronsClient extends BaseClient {
     return this.fetch<Run>(`/runs/crons`, {
       method: "POST",
       json,
-      signal: payload?.signal,
     });
   }
 
