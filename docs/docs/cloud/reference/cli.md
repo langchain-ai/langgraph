@@ -3,8 +3,8 @@ The LangGraph CLI includes commands to build and run a LangGraph Cloud API serve
 
 ## Installation
 1. Ensure that Docker is installed (e.g. `docker --version`).
-1. Install the `langgraph-cli` Python package (e.g. `pip install langgraph-cli`).
-1. Run the command `langgraph --help` to confirm that the CLI is installed.
+2. Install the `langgraph-cli` Python package (e.g. `pip install langgraph-cli`).
+3. Run the command `langgraph --help` to confirm that the CLI is installed.
 
 ## Configuration File
 The LangGraph CLI requires a JSON configuration file with the following keys:
@@ -82,61 +82,20 @@ langgraph build [OPTIONS]
 | `-c, --config FILE` | `langgraph.json` | Path to configuration file declaring dependencies, graphs and environment variables. |
 | `--help` | | Display command documentation. |
 
-### `down`
-Stop LangGraph Cloud API server.
+### `test`
+Test your LangGraph in the cloud. The only function you can call from the SDK after testing your graph is `client.runs.stream(thread_id=None, ...)`
 
 **Usage**
 ```
-langgraph down [OPTIONS]
+langgraph test [OPTIONS]
 ```
 
 **Options**
 
 | Option | Default | Description |
 | ------ | ------- | ----------- |
-| `--debugger-port INTEGER` | | Pull the debugger image locally and serve the UI on specified port. |
 | `--verbose` | | Show more output from the server logs. |
 | `-c, --config FILE` | `langgraph.json` | Path to configuration file declaring dependencies, graphs and environment variables. |
-| `-d, --docker-compose FILE` | | Advanced. Path to `docker-compose.yml` file with additional services to launch. |
-| `-p, --port INTEGER` | `8123` | Port to expose. Example: `langgraph up --port 8000` |
-| `--help` | | Display command documentation. |
-
-### `logs`
-Show LangGraph Cloud API server logs.
-
-**Usage**
-```
-langgraph logs [OPTIONS]
-```
-
-**Options**
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `-f, --follow` | | Follow logs. |
-| `-c, --config FILE` | `langgraph.json` | Path to configuration file declaring dependencies, graphs and environment variables. |
-| `-d, --docker-compose FILE` | | Advanced. Path to `docker-compose.yml` file with additional services to launch. |
-| `--help` | | Display command documentation. |
-
-### `up`
-Start LangGraph Cloud API server.
-
-**Usage**
-```
-langgraph up [OPTIONS]
-```
-
-**Options**
-
-| Option | Default | Description |
-| ------ | ------- | ----------- |
-| `--wait` | | Wait for services to start before returning. Implies `--detach`. |
-| `--watch` | | Restart on file changes. |
-| `--debugger-port INTEGER` | | Pull the debugger image locally and serve the UI on specified port. |
-| `--verbose` | | Show more output from the server logs. |
-| `-c, --config FILE` | `langgraph.json` | Path to configuration file declaring dependencies, graphs and environment variables. |
-| `-d, --docker-compose FILE` | | Advanced. Path to `docker-compose.yml` file with additional services to launch. |
-| `-p, --port INTEGER` | `8123` | Port to expose. Example: `langgraph up --port 8000` |
-| `--pull / --no-pull` | `--pull` | Build with latest remote Docker image. Use `--no-pull` for running the LangGraph Cloud API server with locally built images. |
-| `--recreate / --no-recreate` | `--no-recreate` | Recreate containers even if their configuration and image haven't changed. |
+| `-p, --port INTEGER` | `8123` | Port to expose. Example: `langgraph test --port 8000` |
+| `--pull / --no-pull` | `pull` | Pull latest images. Use --no-pull for running the server with locally-built images. Example: `langgraph up --no-pull` |
 | `--help` | | Display command documentation. |

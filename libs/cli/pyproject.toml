@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-cli"
-version = "0.1.42"
+version = "0.1.45a1"
 description = "CLI for interacting with LangGraph API"
 authors = []
 license = "MIT"
