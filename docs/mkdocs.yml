@@ -196,7 +196,9 @@ nav:
           - Test with LangGraph Studio: 
               - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
               - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
+              - Add breakpoints in LangGraph Studio: "cloud/how-tos/add_breakpoints.md"
               - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
+          - Start Using the SDK: 'cloud/how-tos/intialize_sdk.md'
           - Run Agent in Background: "cloud/how-tos/cloud_examples/background_run.ipynb"
           - Run Multiple Agents in Thread: "cloud/how-tos/cloud_examples/same-thread.ipynb"
           - Create Agents with Configuration: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
