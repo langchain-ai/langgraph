@@ -46,6 +46,23 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         for production workloads, due to limitations in SQLite's write performance. For
         production workloads, consider using a more robust database like PostgreSQL.
 
+    !!! Important
+        Remember to **close the database connection** after executing your code,
+        otherwise, you may see the graph "hang" after execution (since the program
+        will not exit until the connection is closed).
+
+        The easiest way to do this is to use the `async with` statement, as shown in the
+        examples below.
+
+        ```python
+        async with AsyncSqliteSaver.from_conn_string("checkpoints.sqlite") as saver:
+            # Your code here
+            graph = builder.compile(checkpointer=saver)
+            config = {"configurable": {"thread_id": "thread-1"}}
+            async for event in graph.astream_events(..., config, version="v1"):
+                print(event)
+        ```
+
     Args:
         conn (aiosqlite.Connection): The asynchronous SQLite database connection.
         serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
