@@ -194,7 +194,7 @@ class AssistantsClient extends BaseClient {
    * @returns List of assistants.
    */
   async search(query?: {
-    assistantId?: string;
+    graphId?: string;
     metadata?: Metadata;
     limit?: number;
     offset?: number;
@@ -202,7 +202,7 @@ class AssistantsClient extends BaseClient {
     return this.fetch<Assistant[]>("/assistants/search", {
       method: "POST",
       json: {
-        assistant_id: query?.assistantId ?? undefined,
+        graph_id: query?.graphId ?? undefined,
         metadata: query?.metadata ?? undefined,
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
