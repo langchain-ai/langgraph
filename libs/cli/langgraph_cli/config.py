@@ -267,7 +267,7 @@ def config_to_compose(
     watch: bool = False,
 ):
     env_vars = config["env"].items() if isinstance(config["env"], dict) else {}
-    env_vars_str = "\n".join(f"            {k}: {v}" for k, v in env_vars)
+    env_vars_str = "\n".join(f'            {k}: "{v}"' for k, v in env_vars)
     env_file_str = (
         f"env_file: {config['env']}" if isinstance(config["env"], str) else ""
     )
