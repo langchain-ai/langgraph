@@ -22,7 +22,7 @@ def Runner():
                 pass
 
             def run(self, coro):
-                asyncio.run(coro)
+                return asyncio.run(coro)
 
         yield _Runner()
 
