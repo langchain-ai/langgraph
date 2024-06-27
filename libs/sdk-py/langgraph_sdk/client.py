@@ -271,12 +271,19 @@ class AssistantsClient:
         await self.http.delete(f"/assistants/{assistant_id}")
 
     async def search(
-        self, *, metadata: Metadata = None, limit: int = 10, offset: int = 0
+        self,
+        *,
+        assistant_id: Optional[str] = None,
+        metadata: Metadata = None,
+        limit: int = 10,
+        offset: int = 0
     ) -> list[Assistant]:
         payload: Dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
+        if assistant_id:
+            payload['assistant_id'] = assistant_id
         if metadata:
             payload["metadata"] = metadata
         """Search for assistants."""
