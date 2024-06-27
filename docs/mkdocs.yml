@@ -85,7 +85,7 @@ nav:
       - "index.md"
   - Tutorials:
       - "tutorials/index.md"
-      - Introduction: tutorials/introduction.ipynb
+      - Quick Start: tutorials/introduction.ipynb
       - Chatbots:
           - Customer Support: tutorials/customer-support/customer-support.ipynb
           - Prompt Generation from User Requirements: tutorials/chatbots/information-gather-prompting.ipynb
@@ -145,6 +145,7 @@ nav:
           - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
           - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
           - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
+          - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
       - Other:
           - Run graph asynchronously: how-tos/async.ipynb
           - Visualize your graph: how-tos/visualization.ipynb
@@ -166,7 +167,7 @@ nav:
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
       - Errors: reference/errors.md
-  - "Cloud (alpha)":
+  - "Cloud (beta)":
       - "cloud/index.md"
       - Tutorials:
           - Quick Start: "cloud/quick_start.md"
@@ -176,6 +177,7 @@ nav:
               - Setup App: "cloud/deployment/setup.md"
               - Deploy to Cloud: "cloud/deployment/cloud.md"
               - Self-Host: "cloud/deployment/self_hosted.md"
+              - Start Using the SDK: 'cloud/how-tos/initialize_sdk.md'
           - Streaming:
               - Stream Values: "cloud/how-tos/cloud_examples/stream_values.ipynb"
               - Stream Updates: "cloud/how-tos/cloud_examples/stream_updates.ipynb"
@@ -193,22 +195,20 @@ nav:
               - Wait for User Input: "cloud/how-tos/cloud_examples/human_in_the_loop_user_input.ipynb"
               - Edit Graph State: "cloud/how-tos/cloud_examples/human_in_the_loop_edit_state.ipynb"
               - Replay and Branch from Prior States: "cloud/how-tos/cloud_examples/human_in_the_loop_time_travel.ipynb"
-          - Test with LangGraph Studio: 
+          - LangGraph Studio:
               - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
               - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
               - Add breakpoints in LangGraph Studio: "cloud/how-tos/add_breakpoints.md"
               - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
-          - Start Using the SDK: 'cloud/how-tos/initialize_sdk.md'
-          - Run Agent in Background: "cloud/how-tos/cloud_examples/background_run.ipynb"
-          - Run Multiple Agents in Thread: "cloud/how-tos/cloud_examples/same-thread.ipynb"
-          - Create Agents with Configuration: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
-          - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
-          - Create Cron Jobs: "cloud/how-tos/cloud_examples/cron_jobs.ipynb"
-          - Create Stateless Runs: "cloud/how-tos/cloud_examples/stateless_runs.ipynb"
-          - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
-          - SDK:
-              - Python: "cloud/sdk/python_sdk.ipynb"
-              - JS/TS: "cloud/sdk/js_sdk.ipynb"
+          - Different Types of Runs:
+              - Run an Agent in the Background: "cloud/how-tos/cloud_examples/background_run.ipynb"
+              - Run Multiple Agents in Same Thread: "cloud/how-tos/cloud_examples/same-thread.ipynb"
+              - Create Cron Jobs: "cloud/how-tos/cloud_examples/cron_jobs.ipynb"
+              - Create Stateless Runs: "cloud/how-tos/cloud_examples/stateless_runs.ipynb"
+          - Other:
+              - Configure Agents: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
+              - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
+              - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
       - Conceptual Guides: "cloud/concepts/index.md"
       - Reference:
           - API: "cloud/reference/api/api_ref.md"

@@ -4,7 +4,7 @@ import pathlib
 import click
 import pytest
 
-from langgraph_cli.config import config_to_docker, validate_config
+from langgraph_cli.config import config_to_compose, config_to_docker, validate_config
 from langgraph_cli.util import clean_empty_lines
 
 PATH_TO_CONFIG = pathlib.Path(__file__).parent / "test_config.json"
@@ -230,3 +230,178 @@ RUN set -ex && \\
 RUN PIP_CONFIG_FILE=/pipconfig.txt pip install -c /api/constraints.txt -e /deps/*
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_graphs/src/agent.py:graph"}'"""
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
+
+
+# config_to_compose
+def test_config_to_compose_simple_config():
+    graphs = {"agent": "./agent.py:graph"}
+    expected_compose_stdin = """\
+        
+        pull_policy: build
+        build:
+            context: .
+            dockerfile_inline: |
+                FROM langchain/langgraph-api:3.11
+                ADD . /deps/__outer_unit_tests/unit_tests
+                RUN set -ex && \\
+                    for line in '[project]' \\
+                                'name = "unit_tests"' \\
+                                'version = "0.1"' \\
+                                '[tool.setuptools.package-data]' \\
+                                '"*" = ["**/*"]'; do \\
+                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                    done
+                RUN pip install -c /api/constraints.txt -e /deps/*
+                ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
+                WORKDIR /deps/__outer_unit_tests/unit_tests
+        """
+    actual_compose_stdin = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
+    )
+    assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin
+
+
+def test_config_to_compose_env_vars():
+    graphs = {"agent": "./agent.py:graph"}
+    expected_compose_stdin = """                        OPENAI_API_KEY: "key"
+        
+        pull_policy: build
+        build:
+            context: .
+            dockerfile_inline: |
+                FROM langchain/langgraph-api-custom:3.11
+                ADD . /deps/__outer_unit_tests/unit_tests
+                RUN set -ex && \\
+                    for line in '[project]' \\
+                                'name = "unit_tests"' \\
+                                'version = "0.1"' \\
+                                '[tool.setuptools.package-data]' \\
+                                '"*" = ["**/*"]'; do \\
+                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                    done
+                RUN pip install -c /api/constraints.txt -e /deps/*
+                ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
+                WORKDIR /deps/__outer_unit_tests/unit_tests
+        """
+    openai_api_key = "key"
+    actual_compose_stdin = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "dependencies": ["."],
+                "graphs": graphs,
+                "env": {"OPENAI_API_KEY": openai_api_key},
+            }
+        ),
+        "langchain/langgraph-api-custom",
+    )
+    assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin
+
+
+def test_config_to_compose_env_file():
+    graphs = {"agent": "./agent.py:graph"}
+    expected_compose_stdin = """\
+        env_file: .env
+        pull_policy: build
+        build:
+            context: .
+            dockerfile_inline: |
+                FROM langchain/langgraph-api:3.11
+                ADD . /deps/__outer_unit_tests/unit_tests
+                RUN set -ex && \\
+                    for line in '[project]' \\
+                                'name = "unit_tests"' \\
+                                'version = "0.1"' \\
+                                '[tool.setuptools.package-data]' \\
+                                '"*" = ["**/*"]'; do \\
+                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                    done
+                RUN pip install -c /api/constraints.txt -e /deps/*
+                ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
+                WORKDIR /deps/__outer_unit_tests/unit_tests
+        """
+    actual_compose_stdin = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs, "env": ".env"}),
+        "langchain/langgraph-api",
+    )
+    assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin
+
+
+def test_config_to_compose_watch():
+    graphs = {"agent": "./agent.py:graph"}
+    expected_compose_stdin = """\
+        
+        pull_policy: build
+        build:
+            context: .
+            dockerfile_inline: |
+                FROM langchain/langgraph-api:3.11
+                ADD . /deps/__outer_unit_tests/unit_tests
+                RUN set -ex && \\
+                    for line in '[project]' \\
+                                'name = "unit_tests"' \\
+                                'version = "0.1"' \\
+                                '[tool.setuptools.package-data]' \\
+                                '"*" = ["**/*"]'; do \\
+                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                    done
+                RUN pip install -c /api/constraints.txt -e /deps/*
+                ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
+                WORKDIR /deps/__outer_unit_tests/unit_tests
+        
+        develop:
+            watch:
+                - path: test_config.json
+                  action: rebuild
+                - path: .
+                  action: rebuild\
+"""
+    actual_compose_stdin = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs}),
+        "langchain/langgraph-api",
+        watch=True,
+    )
+    assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin
+
+
+def test_config_to_compose_end_to_end():
+    # test all of the above + langgraph API path
+    graphs = {"agent": "./agent.py:graph"}
+    expected_compose_stdin = """\
+        env_file: .env
+        pull_policy: build
+        build:
+            context: .
+            dockerfile_inline: |
+                FROM langchain/langgraph-api:3.11
+                ADD . /deps/__outer_unit_tests/unit_tests
+                RUN set -ex && \\
+                    for line in '[project]' \\
+                                'name = "unit_tests"' \\
+                                'version = "0.1"' \\
+                                '[tool.setuptools.package-data]' \\
+                                '"*" = ["**/*"]'; do \\
+                        echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
+                    done
+                RUN pip install -c /api/constraints.txt -e /deps/*
+                ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
+                WORKDIR /deps/__outer_unit_tests/unit_tests
+        
+        develop:
+            watch:
+                - path: test_config.json
+                  action: rebuild
+                - path: .
+                  action: rebuild\
+"""
+    actual_compose_stdin = config_to_compose(
+        PATH_TO_CONFIG,
+        validate_config({"dependencies": ["."], "graphs": graphs, "env": ".env"}),
+        "langchain/langgraph-api",
+        watch=True,
+    )
+    assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin

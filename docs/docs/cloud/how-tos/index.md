@@ -46,10 +46,25 @@ When creating complex graphs, leaving every decision up to the LLM can be danger
 
 ## LangGraph Studio
 
-- [Test Cloud Deployment](https://langchain-ai.github.io/langgraph/cloud/how-tos/test_deployment/)
-- [Invoke graph in LangGraph Studio](https://langchain-ai.github.io/langgraph/cloud/how-tos/invoke_studio/)
+LangGraph Studio is a built-in UI for visualizing, testing, and debugging your agents.
+
+- [How to enter LangGraph Studio](https://langchain-ai.github.io/langgraph/cloud/how-tos/test_deployment/)
+- [How to test your graph in LangGraph Studio](https://langchain-ai.github.io/langgraph/cloud/how-tos/invoke_studio/)
 - [Interact with threads in LangGraph Studio](https://langchain-ai.github.io/langgraph/cloud/how-tos/threads_studio/)
 
-## And more!
+## Different Types of Runs:
 
-The four sections above don't cover everything that is possible with LangGraph Cloud - make sure to check out our other how-to guides to learn even more!
+LangGraph Cloud supports multiple types of runs besides streaming runs.
+
+- [How to run an agent in the background](cloud_examples/background_run.ipynb)
+- [How to run multiple agents in the same thread](cloud_examples/same-thread.ipynb)
+- [How to create cron jobs](cloud_examples/cron_jobs.ipynb)
+- [How to create stateless runs](cloud_examples/stateless_runs.ipynb)
+
+## Other 
+
+Other guides that may prove helpful!
+
+- [How to configure agents](cloud_examples/configuration_cloud.ipynb)
+- [How to convert LangGraph calls to LangGraph cloud calls](cloud_examples/langgraph_to_langgraph_cloud.ipynb)
+- [How to integrate webhooks](cloud_examples/webhooks.ipynb)
