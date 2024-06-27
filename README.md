@@ -220,4 +220,4 @@ final_state["messages"][-1].content
 
 ## Contributing
 
-For more information on how to contribute, see [here](./CONTRIBUTING.md).
+For more information on how to contribute, see [here](https://github.com/langchain-ai/langgraph/CONTRIBUTING.md).
