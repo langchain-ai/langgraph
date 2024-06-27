@@ -20,7 +20,7 @@ This tutorial will use:
         |-- langgraph.json      # configuration file for LangGraph
         |-- .env                # environment files with API keys
 
-2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). 
+2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent, read more about it [here](/langgraph/concepts/agentic_concepts/#react-agent).
 
     ```python
    from langchain_anthropic import ChatAnthropic
@@ -167,7 +167,7 @@ You can access the docs by clicking on the API docs link, which should send you 
 
 ![API Docs page](./deployment/img/api_page.png)
 
-You won’t actually be able to test any of the API endpoints without authorizing first. To do so, click on the Authorize button in the top right corner, input your `LANGCHAIN_API_KEY`  in the `API Key` box, and then click `Authorize` to finish the process. You should now be able to select any of the API endpoints, click `Try it out`, enter the parameters you would like to pass, and then click `Execute` to view the results of the API call.
+You won’t actually be able to test any of the API endpoints without authorizing first. To do so, grab your Langsmith API key and add it at the top where it says `API KEY (X-API-KEY)`. You should now be able to select any of the API endpoints, click `Test Request`, enter the parameters you would like to pass, and then click `Send` to view the results of the API call.
 
 ## Interact with your deployment via LangGraph Studio
 
