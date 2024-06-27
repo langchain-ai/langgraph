@@ -279,7 +279,18 @@ class AssistantsClient:
         limit: int = 10,
         offset: int = 0,
     ) -> list[Assistant]:
-        """Search for assistants."""
+        """Search for assistants.
+
+        Args:
+            metadata (dict, optional): Metadata to filter by. Defaults to None.
+            graph_id (str, optional): The ID of the graph to filter by. Defaults to None.
+                The graph ID is normally set in your langgraph.json configuration.
+            limit (int, optional): The maximum number of results to return. Defaults to 10.
+            offset (int, optional): The number of results to skip. Defaults to 0.
+
+        Returns:
+            list[Assistant]: A list of assistants.
+        """
         payload: Dict[str, Any] = {
             "limit": limit,
             "offset": offset,
