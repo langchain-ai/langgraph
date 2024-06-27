@@ -265,7 +265,7 @@ def test_config_to_compose_simple_config():
 
 def test_config_to_compose_env_vars():
     graphs = {"agent": "./agent.py:graph"}
-    expected_compose_stdin = """                        OPENAI_API_KEY: key
+    expected_compose_stdin = """                        OPENAI_API_KEY: "key"
         
         pull_policy: build
         build:
