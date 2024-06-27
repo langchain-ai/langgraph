@@ -1,25 +1,36 @@
-# General guidelines
+# Contributing to LangGraph
+
+Thank you for being interested in contributing to LangGraph!
+
+## General guidelines
 
 Here are some things to keep in mind for all types of contributions:
 
 - Follow the ["fork and pull request"](https://docs.github.com/en/get-started/exploring-projects-on-github/contributing-to-a-project) workflow.
 - Fill out the checked-in pull request template when opening pull requests. Note related issues and tag relevant maintainers.
 - Ensure your PR passes formatting, linting, and testing checks before requesting a review.
-  - If you would like comments or feedback on your current progress, please open an issue or discussion and tag a maintainer.
-  - See the sections on [Testing](/docs/contributing/code/setup#testing) and [Formatting and Linting](/docs/contributing/code/setup#formatting-and-linting) for how to run these checks locally.
+  - If you would like comments or feedback, please open an issue or discussion and tag a maintainer.
 - Backwards compatibility is key. Your changes must not be breaking, except in case of critical bug and security fixes.
 - Look for duplicate PRs or issues that have already been opened before opening a new one.
 - Keep scope as isolated as possible. As a general rule, your changes should not affect more than one package at a time.
 
-# Contribute Documentation
+### Bugfixes
+
+For bug fixes, please open up an issue before proposing a fix to ensure the proposal properly addresses the underlying problem. In general, bug fixes should all have an accompanying unit test that fails before the fix.
+
+### New features
+
+For new features, please start a new [discussion](https://github.com/langchain-ai/langgraph/discussions), where the maintainers will help with scoping out the necessary changes.
+
+## Contribute Documentation
 
 Documentation is a vital part of LangGraph. We welcome both new documentation for new features and
 community improvements to our current documentation. Please read the resources below before getting started:
 
 - [Documentation style guide](#documentation-style-guide)
-- [Documentation Setup](/docs/contributing/documentation/setup/)
+- [Documentation setup](#setup)
 
-# Documentation Style Guide
+## Documentation Style Guide
 
 As LangGraph continues to grow, the surface area of documentation required to cover it continues to grow too.
 This page provides guidelines for anyone writing documentation for LangGraph, as well as some of our philosophies around organization and structure.
@@ -29,15 +40,16 @@ This page provides guidelines for anyone writing documentation for LangGraph, as
 LangGraph's documentation follows the [Diataxis framework](https://diataxis.fr).
 Under this framework, all documentation falls under one of four categories: [Tutorials](#tutorials),
 [How-to guides](#how-to-guides),
-[References](#references), and [Explanations](#conceptual-guide).
+[References](#references), and [Explanations (aka conceptual guides)](#conceptual-guide).
 
 ### Tutorials
 
 Tutorials are lessons that take the reader through a practical activity. Their purpose is to help the user
-gain understanding of concepts and how they interact by showing one way to achieve some goal in a hands-on way. They should not cover
-multiple permutations of ways to achieve that goal in-depth, and the end result of a tutorial does not need to
-be completely production-ready against all cases. Information on how to address additional scenarios
-can occur in how-to guides.
+gain understanding of concepts and how they interact by showing one way to achieve some goal in a hands-on way.
+
+They should **avoid** giving
+multiple permutations of ways to achieve that goal in-depth. Choice is burdensome. Instead, they should guide a new user through a recommended path to accomplishing a concrete goal. While the end result of a tutorial does not necessarily need to
+be completely production-ready, it should be useful and practically satisfy the the goal that you clearly stated in the tutorial's introduction.
 
 To quote the Diataxis website:
 
@@ -52,17 +64,19 @@ Some examples include:
 
 Here are some high-level tips on writing a good tutorial:
 
-- Focus on guiding the user to get something done, but keep in mind the end-goal is more to impart principles than to create a perfect production system
-- Be specific, not abstract and follow one path
-  - No need to go deeply into alternative approaches, but it’s ok to reference them, ideally with a link to an appropriate how-to guide
-- Get "a point on the board" as soon as possible - something the user can run that outputs something
-  - You can iterate and expand afterwards
-  - Try to frequently checkpoint at given steps where the user can run code and see progress
-- Focus on results, not technical explanation
+- Focus on guiding the user to get something done, but keep in mind the end-goal is more to impart principles than to create a perfect production system.
+- Be specific, not abstract and follow one path.
+  - No need to go deeply into alternative approaches, but it’s ok to reference them, ideally with a link to an appropriate how-to guide.
+- Get "a point on the board" as soon as possible - something the user can run that outputs something.
+  - You can iterate and expand afterwards.
+  - Try to frequently checkpoint at given steps where the user can run code and see progress.
+- Focus on results, not technical explanation.
   - Crosslink heavily to appropriate conceptual/reference pages
-- The first time you mention a LangGraph concept, use its full name (e.g. "human-in-the-loop"), and link to its conceptual/other documentation page
-  - It's also helpful to add a prerequisite callout that links to any pages with necessary background information
-- End with a recap/next steps section summarizing what the tutorial covered and future reading, such as related how-to guides
+- The first time you mention a LangGraph concept, use its full name (e.g. "human-in-the-loop"), and link to its conceptual/other documentation page.
+  - It's also helpful to add a prerequisite callout that links to any pages with necessary background information.
+- End with a recap/next steps section summarizing what the tutorial covered and future reading, such as related how-to guides.
+- Use phrases like "Next we can run X & Y. We will expect Z.". Then afterwards, use language like "Notice Z" that recalls our expectations and directs the reader's attention to the topic we are trying to teach.
+- Do not shy away from repetition.
 
 ### How-to guides
 
@@ -87,17 +101,16 @@ Here are some high-level tips on writing a good how-to guide:
 - Assume familiarity of concepts, but explain why suggested actions are helpful
   - Crosslink heavily to conceptual/reference pages
 - Discuss alternatives and responses to real-world tradeoffs that may arise when solving a problem
-- Use lots of example code
+- Use lots of example code, ideally within complete code blocks that the reader can copy and run.
 - End with a recap/next steps section summarizing what the tutorial covered and future reading, such as other related how-to guides
 
-### Conceptual guide
+### Conceptual guides
 
-LangGraph's conceptual guide falls under the **Explanation** quadrant of Diataxis. They should cover LangChain terms and concepts
+LangGraph's conceptual guides fall under the **Explanation** quadrant of Diataxis. They should cover LangChain terms and concepts
 in a more abstract way than how-to guides or tutorials, and should be geared towards curious users interested in
-gaining a deeper understanding of the framework. There should be few, if any, concrete code examples. The goal here is to
-impart perspective to the user rather than to finish a practical project.
+gaining a deeper understanding of the framework. Try to avoid excessively large code examples. The goal here is to
+impart perspective to the user rather than to finish a practical project. These guides should cover **why** things work they way they do.
 
-This guide on documentation style is meant to fall under this category.
 
 To quote the Diataxis website:
 
@@ -172,7 +185,7 @@ Be concise, including in code samples.
 - Use tables (especially for **Reference** sections) and diagrams often to present information visually
 - Include the table of contents for longer documentation pages to help readers navigate the content, but hide it for shorter pages
 
-# Setup
+## Setup
 
 LangChain documentation consists of two components:
 
@@ -188,7 +201,7 @@ The content for the API reference is autogenerated by scanning the docstrings in
 We appreciate all contributions to the documentation, whether it be fixing a typo,
 adding a new tutorial or example and whether it be in the main documentation or the API Reference.
 
-## 📜 Main Documentation
+### 📜 Main Documentation
 
 The content for the main documentation is located in the `/docs` directory of the monorepo.
 
@@ -203,9 +216,8 @@ After modifying the documentation:
 1. Run the linting and formatting commands (see below) to ensure that the documentation is well-formatted and free of errors.
 2. Optionally build the documentation locally to verify that the changes look good.
 3. Make a pull request with the changes.
-4. You can preview and verify that the changes are what you wanted by clicking the `View deployment` or `Visit Preview` buttons on the pull request `Conversation` page. This will take you to a preview of the documentation changes.
 
-## ⚒️ Linting and Building Documentation Locally
+### ⚒️ Linting and Building Documentation Locally
 
 After writing up the documentation, you may want to lint and build the documentation
 locally to ensure that it looks good and is free of errors.
@@ -217,9 +229,9 @@ From the **monorepo root**, run the following command to install the dependencie
 
 ```bash
 poetry install --with docs --no-root
-````
+```
 
-### Building
+#### Building
 
 The code that builds the documentation is located in the `/docs` directory of the monorepo.
 
@@ -235,15 +247,15 @@ You can build and preview the documentation as outlined below:
 make serve-docs
 ```
 
-### Linting
+#### Linting
 
-The Main Documentation is linted from the **monorepo root**. To lint the main documentation, run the following from there:
+The documentation is linted from the **monorepo root**. To lint it, run the following from there:
 
 ```bash
 make spellcheck
 ```
 
-## ️In-code Documentation
+### ️In-code Documentation
 
 The in-code documentation is autogenerated from docstrings.
 
