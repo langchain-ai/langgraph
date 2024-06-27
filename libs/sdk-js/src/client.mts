@@ -8,6 +8,7 @@ import {
   Run,
   Thread,
   ThreadState,
+  Cron,
 } from "./schema.js";
 import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.mjs";
 import { EventSourceParser, createParser } from "eventsource-parser";
@@ -162,10 +163,36 @@ class CronsClient extends BaseClient {
     });
   }
 
+  /**
+   * 
+   * @param cronId Cron ID of Cron job to delete.
+   */
   async delete(cronId: string): Promise<void> {
       await this.fetch<void>(`/runs/crons/${cronId}`, {
         method: "DELETE",
       });
+  }
+
+  /**
+   * 
+   * @param query Query options.
+   * @returns List of crons.
+   */
+  async search(query?: {
+    assistantId?: string;
+    threadId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<Cron[]> {
+    return this.fetch<Cron[]>("/runs/crons/search", {
+      method: "POST",
+      json: {
+        assistant_id: query?.assistantId ?? undefined,
+        thread_id: query?.threadId ?? undefined,
+        limit: query?.limit ?? 10,
+        offset: query?.offset ?? 0,
+      }
+    })
   }
 
 }
@@ -747,5 +774,6 @@ export class Client {
     this.assistants = new AssistantsClient(config);
     this.threads = new ThreadsClient(config);
     this.runs = new RunsClient(config);
+    this.crons = new CronsClient(config);
   }
 }
