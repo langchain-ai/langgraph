@@ -130,8 +130,10 @@ nav:
           - Create subgraphs: how-tos/subgraph.ipynb
           - Create branches for parallel execution: how-tos/branching.ipynb
           - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
-      - Human-in-the-loop:
+      - Persistence:
           - Add persistence ("memory"): how-tos/persistence.ipynb
+          - Create custom checkpointer using Postgres: how-tos/persistence_postgres.ipynb
+      - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
           - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
           - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
@@ -200,6 +202,7 @@ nav:
           - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
           - Create Cron Jobs: "cloud/how-tos/cloud_examples/cron_jobs.ipynb"
           - Create Stateless Runs: "cloud/how-tos/cloud_examples/stateless_runs.ipynb"
+          - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
           - SDK:
               - Python: "cloud/sdk/python_sdk.ipynb"
               - JS/TS: "cloud/sdk/js_sdk.ipynb"

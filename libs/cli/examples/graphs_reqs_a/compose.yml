@@ -1,5 +1,0 @@
-services:
-  langgraph-api:
-    build: yoyoyo # invalid, will be overridden by generated compose file
-    environment:
-      HELLO: world

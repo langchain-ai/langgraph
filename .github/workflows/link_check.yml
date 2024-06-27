@@ -67,7 +67,7 @@ jobs:
               poetry run pytest -v --check-links-ignore "https://(api|web)\.smith\.langchain\.com/.*" --check-links-ignore "https://x.com/.*" --check-links ${CHANGED_FILES}
               PYTEST_EXIT_CODE=$?
               echo "pytest exit code: ${PYTEST_EXIT_CODE}"
-              if [ ${PYTEST_EXIT_CODE} -ne 0 ]; then
+              if [ "${PYTEST_EXIT_CODE}" -ne 0 ] && [ "${PYTEST_EXIT_CODE}" -ne 5 ]; then
                 echo "pytest failed with exit code ${PYTEST_EXIT_CODE}"
                 exit ${PYTEST_EXIT_CODE}
               fi

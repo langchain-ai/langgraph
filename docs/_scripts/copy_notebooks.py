@@ -23,6 +23,7 @@ _MANUAL = {
         "streaming-content.ipynb",
         "streaming-events-from-within-tools.ipynb",
         "persistence.ipynb",
+        "persistence_postgres.ipynb",
         "visualization.ipynb",
         "state-model.ipynb",
         "subgraph.ipynb",
@@ -53,13 +54,9 @@ _MANUAL = {
 }
 _MANUAL_INVERSE = {v: docs_dir / k for k, vs in _MANUAL.items() for v in vs}
 _HOW_TOS = {"agent_executor", "chat_agent_executor_with_function_calling", "docs"}
-_MAP = {
-    "persistence_postgres.ipynb": "tutorial",
-}
 _HIDE = set(
     str(examples_dir / f)
     for f in [
-        "persistence_postgres.ipynb",
         "agent_executor/base.ipynb",
         "agent_executor/force-calling-a-tool-first.ipynb",
         "agent_executor/high-level.ipynb",
@@ -170,8 +167,6 @@ def copy_notebooks():
         for file in files:
             dst_dir_ = dst_dir
             if file.endswith((".ipynb", ".png")):
-                if file in _MAP:
-                    dst_dir = os.path.join(dst_dir, _MAP[file])
                 src_path = os.path.join(root, file)
                 if src_path in _HIDE:
                     print("Hiding:", src_path)

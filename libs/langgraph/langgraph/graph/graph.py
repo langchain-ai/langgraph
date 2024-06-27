@@ -203,13 +203,18 @@ class Graph:
                 "not be reflected in the compiled graph."
             )
         # coerce path_map to a dictionary
-        if isinstance(path_map, dict):
-            path_map = path_map.copy()
-        elif isinstance(path_map, list):
-            path_map = {name: name for name in path_map}
-        elif rtn_type := get_type_hints(path).get("return"):
-            if get_origin(rtn_type) is Literal:
-                path_map = {name: name for name in get_args(rtn_type)}
+        try:
+            if isinstance(path_map, dict):
+                path_map = path_map.copy()
+            elif isinstance(path_map, list):
+                path_map = {name: name for name in path_map}
+            elif rtn_type := get_type_hints(path.__call__).get(
+                "return"
+            ) or get_type_hints(path).get("return"):
+                if get_origin(rtn_type) is Literal:
+                    path_map = {name: name for name in get_args(rtn_type)}
+        except Exception:
+            pass
         # find a name for the condition
         path = coerce_to_runnable(path, name=None, trace=True)
         name = path.name or "condition"
