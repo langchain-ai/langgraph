@@ -5,6 +5,8 @@ Metadata = Optional[dict[str, Any]]
 
 RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
 
+ThreadStatus = Literal["idle", "busy", "interrupted"]
+
 StreamMode = Literal["values", "messages", "updates", "events", "debug"]
 
 MultitaskStrategy = Literal["reject", "interrupt", "rollback", "enqueue"]
@@ -70,8 +72,8 @@ class Thread(TypedDict):
     """The last time the thread was updated."""
     metadata: Metadata
     """The thread metadata."""
-    multitask_strategy: MultitaskStrategy
-    """The multitask strategy for this thread."""
+    status: ThreadStatus
+    """The status of the thread, one of 'idle', 'busy', 'interrupted'."""
 
 
 class ThreadState(TypedDict):
@@ -102,6 +104,8 @@ class Run(TypedDict):
     updated_at: datetime
     """The last time the run was updated."""
     status: RunStatus
-    """The status of the run. One of 'pending', 'running', 'error', 'success'."""
+    """The status of the run. One of 'pending', 'running', "error", 'success', "timeout", "interrupted"."""
     metadata: Metadata
     """The run metadata."""
+    multitask_strategy: MultitaskStrategy
+    """Strategy to handle concurrent runs on the same thread."""

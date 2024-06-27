@@ -16,12 +16,19 @@ These how-to guides show how to achieve that controllability.
 - [How to create branches for parallel execution](branching.ipynb)
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 
+
+## Persistence
+
+LangGraph makes it easy to persist state across graph runs. The guide below shows how to add persistence to your graph.
+
+- [How to add persistence ("memory") to your graph](persistence.ipynb)
+- [How to create a custom checkpointer using Postgres](persistence_postgres.ipynb)
+
 ## Human in the Loop
 
 One of LangGraph's main benefits is that it makes human-in-the-loop workflows easy.
 These guides cover common examples of that.
 
-- [How to add persistence ("memory") to your graph](persistence.ipynb)
 - [How to add breakpoints](human_in_the_loop/breakpoints.ipynb)
 - [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb)
 - [How to wait for user input](human_in_the_loop/wait-user-input.ipynb)
