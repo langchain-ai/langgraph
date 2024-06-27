@@ -22,6 +22,7 @@ These how-to guides show how to achieve that controllability.
 LangGraph makes it easy to persist state across graph runs. The guide below shows how to add persistence to your graph.
 
 - [How to add persistence ("memory") to your graph](persistence.ipynb)
+- [How to create a custom checkpointer using Postgres](persistence_postgres.ipynb)
 
 ## Human in the Loop
 
@@ -44,6 +45,7 @@ These guides show how to use different streaming modes.
 - [How to stream arbitrarily nested content](streaming-content.ipynb)
 - [How to configure multiple streaming modes at the same time](stream-multiple.ipynb)
 - [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
+- [How to stream events from the final node](streaming-from-final-node.ipynb)
 
 ## Other
 - [How to run graph asynchronously](async.ipynb)
