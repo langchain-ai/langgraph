@@ -159,7 +159,7 @@ def cli():
     is_flag=True,
     help="Wait for services to start before returning. Implies --detach",
 )
-@cli.command(help="Start langgraph API server")
+@cli.command(help="Start langgraph API server. Requires a license key.")
 @log_command
 def up(
     config: pathlib.Path,
