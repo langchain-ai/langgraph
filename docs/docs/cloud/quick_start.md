@@ -231,8 +231,6 @@ async for chunk in client.runs.stream(
     {'agent': {'messages': [{'content': "Hi Bagatur! It's nice to meet you. How can I assist you today?", 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_9cb5d38cf7'}, 'type': 'ai', 'name': None, 'id': 'run-c89118b7-1b1e-42b9-a85d-c43fe99881cd', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
 
 
-You can learn more about the Python SDK in [this how-to guide](./sdk/python_sdk.ipynb), and read up on the Javascript SDK in [this how-to guide](./sdk/js_sdk.ipynb)
-
 ## What's Next
 
 Congratulations! If you've worked your way through this tutorial you are well on your way to becoming a LangGraph Cloud expert. Here are some other resources to check out to help you out on the path to expertise:
