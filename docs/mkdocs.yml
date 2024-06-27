@@ -167,7 +167,7 @@ nav:
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
       - Errors: reference/errors.md
-  - "Cloud (alpha)":
+  - "Cloud (beta)":
       - "cloud/index.md"
       - Tutorials:
           - Quick Start: "cloud/quick_start.md"
