@@ -20,7 +20,7 @@ This tutorial will use:
         |-- langgraph.json      # configuration file for LangGraph
         |-- .env                # environment files with API keys
 
-2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent, read more about it [here](/langgraph/concepts/agentic_concepts/#react-agent).
+2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent, read more about it [here](..//concepts/agentic_concepts/#react-agent).
 
     ```python
    from langchain_anthropic import ChatAnthropic
