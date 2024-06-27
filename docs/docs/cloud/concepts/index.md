@@ -59,7 +59,7 @@ See the <a href="../reference/api/api_ref.html#tag/runscreate/POST/threads/{thre
 
 ### Human-in-the-Loop
 
-There are many occasions where the graph cannot run completely autonomously. For instance, the user might need to input some additional arguments to a function call, or select the next edge for the graph to continue on. In these instances, we need to insert some human in the loop interaction, which you can learn about in the [human in the loop how-tos](../how-tos/#human-in-the-loop).
+There are many occasions where the graph cannot run completely autonomously. For instance, the user might need to input some additional arguments to a function call, or select the next edge for the graph to continue on. In these instances, we need to insert some human in the loop interaction, which you can learn about in the [human in the loop how-tos](../how-tos/index.md#human-in-the-loop).
 
 ### Double Texting
 
