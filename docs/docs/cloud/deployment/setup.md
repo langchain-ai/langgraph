@@ -1,12 +1,23 @@
 # How to Set Up a LangGraph Application for Deployment
 
-A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment.
+A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `requirements.txt` to specify project dependencies. If you prefer using poetry for dependency management, check out [this how-to guide](./setup_pyproject.md) on using `pyproject.toml` for LangGraph Cloud.
+
+The final repo structure will look something like this:
+
+```bash
+my-app/
+|-- requirements.txt    # package dependencies
+|-- .env                # environment variables
+|-- openai_agent.py     # code for an agent
+|-- anthropic_agent.py  # code for another agent
+|-- langgraph.json      # configuration file for LangGraph
+```
 
 After each step, an example file directory is provided to demonstrate how code can be organized.
 
 ## Specify Dependencies
 
-Dependencies can optionally be specified in one of the following files: `pyproject.toml`, `setup.py`, or `requirements.txt`. If neither of these files is created, then dependencies can be specified later in the [LangGraph API configuration file](#create-langgraph-api-config).
+Dependencies can optionally be specified in one of the following files: `pyproject.toml`, `setup.py`, or `requirements.txt`. If none of these files is created, then dependencies can be specified later in the [LangGraph API configuration file](#create-langgraph-api-config).
 
 Example `requirements.txt` file:
 ```
@@ -91,7 +102,8 @@ Example `langgraph.json` file:
 Note that the variable name of the `CompiledGraph` appears at the end of the value of each subkey in the top-level `graphs` key (i.e. `:<variable_name>`).
 
 Example file directory:
-```
+
+```bash
 my-app/
 |-- requirements.txt
 |-- .env
@@ -103,3 +115,7 @@ my-app/
 ## Upload to GitHub
 
 To deploy the LangGraph application to LangGraph Cloud, the code must be uploaded to a GitHub repository.
+
+## Next
+
+After you setup your repo, it's time to [deploy your app](./cloud.md).

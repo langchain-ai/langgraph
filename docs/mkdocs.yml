@@ -175,6 +175,7 @@ nav:
           - "cloud/how-tos/index.md"
           - Deployment:
               - Setup App: "cloud/deployment/setup.md"
+              - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
               - Deploy to Cloud: "cloud/deployment/cloud.md"
               - Self-Host: "cloud/deployment/self_hosted.md"
           - Streaming:
