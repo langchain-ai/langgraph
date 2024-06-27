@@ -59,11 +59,11 @@ See the <a href="../reference/api/api_ref.html#tag/runscreate/POST/threads/{thre
 
 ### Human-in-the-Loop
 
-There are many occasions where the graph cannot run completely autonomously. For instance, the user might need to input some additional arguments to a function call, or select the next edge for the graph to continue on. In these instances, we need to insert some human in the loop interaction, which you can learn about in the [human in the loop how-tos](../how-tos/cloud_examples/human_in_the_loop_breakpoint.ipynb).
+There are many occasions where the graph cannot run completely autonomously. For instance, the user might need to input some additional arguments to a function call, or select the next edge for the graph to continue on. In these instances, we need to insert some human in the loop interaction, which you can learn about in the [human in the loop how-tos](../how-tos/index.md#human-in-the-loop).
 
 ### Double Texting
 
-Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), Langgraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how-tos/cloud_examples/interrupt_concurrent.ipynb). These options are:
+Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), Langgraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how-tos/index.md#double-texting). These options are:
 
 - `reject`: This is the simplest option, this just rejects any follow up runs and does not allow double texting. See the [how-to guide](../how-tos/cloud_examples/reject_concurrent.ipynb) for configuring the reject double text option.
 - `enqueue`: This is a relatively simple option which continues the first run until it completes the whole run, then sends the new input as a separate run. See the [how-to guide](../how-tos/cloud_examples/enqueue_concurrent.ipynb) for configuring the enqueue double text option.
@@ -87,6 +87,12 @@ The only difference is in stateless background runs, if the task worker dies hal
 - a stateless background run would retry from the beginning
 
 See the [how-to guide](../how-tos/cloud_examples/stateless_runs.ipynb) for creating stateless runs.
+
+### Webhooks
+
+For all types of runs, langgraph cloud supports completion webhooks. When you create the run you can pass a webhook URL to be called when the completes (successfully or not). This is especially useful for background runs and cron jobs, as the webhook can give you an indication the run has completed and you can perform further actions for your appilcation.
+
+See this [how-to guide](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/webhooks/) to learn about how to use webhooks with LangGraph Cloud.
 
 ## Deployment
 
