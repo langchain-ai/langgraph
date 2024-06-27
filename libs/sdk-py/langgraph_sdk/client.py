@@ -22,6 +22,7 @@ from langgraph_sdk.schema import (
     StreamMode,
     Thread,
     ThreadState,
+    Cron
 )
 
 logger = logging.getLogger(__name__)
@@ -690,7 +691,7 @@ class CronClient:
 
     async def search(
         self, *, assistant_id: Optional[str] = None, thread_id: Optional[str] = None
-    ) -> ThreadState:
+    ) -> list[Cron]:
         """Get a list of all the cron jobs."""
         payload = {
             "assistant_id": assistant_id,
