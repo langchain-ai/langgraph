@@ -110,9 +110,8 @@ class Run(TypedDict):
     multitask_strategy: MultitaskStrategy
     """Strategy to handle concurrent runs on the same thread."""
 
-class Cron(TypedDict):
-    """Cron model."""
 
+class Cron(TypedDict):
     cron_id: str
     """The ID of the cron."""
     thread_id: Optional[str]
