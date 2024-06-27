@@ -1543,6 +1543,46 @@
         }
       }
     },
+    "/runs": {
+      "post": {
+        "tags": [
+          "runs/create"
+        ],
+        "summary": "Run Stateless",
+        "description": "Create a stateless run that will run in the background.",
+        "operationId": "run_stateless_runs_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/RunCreate"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {}
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runs/crons/{cron_id}": {
       "delete": {
         "tags": [
