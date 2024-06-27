@@ -716,7 +716,7 @@ class CronClient:
         limit: int = 10,
         offset: int = 0,
     ) -> list[Cron]:
-        """Get a list of all the cron jobs."""
+        """Get a list of cron jobs."""
         payload = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
