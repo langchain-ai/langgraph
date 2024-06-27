@@ -30,7 +30,7 @@ The LangGraph Cloud API provides several endpoints for creating and managing run
 
 ### Cron Jobs
 
-It's often useful to run graphs on some schedule. LangGraph Cloud supports cron jobs, which run on a user defined schedule. The user specifies a schedule, an assistant, and some input. After than, on the specified schedule LangGraph cloud will:
+It's often useful to run graphs on some schedule. LangGraph Cloud supports cron jobs, which run on a user defined schedule. The user specifies a schedule, an assistant, and some input. After than, on the specified schedule LangGraph Cloud will:
 
 - Create a new thread with the specified assistant
 - Send the specified input to that thread

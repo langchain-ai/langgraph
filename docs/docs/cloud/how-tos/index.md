@@ -12,7 +12,7 @@ Welcome to the LangGraph Cloud how-to guides! These guides provide practical, st
 LangGraph Cloud gives you best in class observability, testing, and hosting services. Read more about them in these how to guides:
 
 - [How to set up app for deployment](https://langchain-ai.github.io/langgraph/cloud/deployment/setup/)
-- [How to deploy to LangGraph cloud](https://langchain-ai.github.io/langgraph/cloud/deployment/cloud/)
+- [How to deploy to LangGraph Cloud](https://langchain-ai.github.io/langgraph/cloud/deployment/cloud/)
 - [How to self-host](https://langchain-ai.github.io/langgraph/cloud/deployment/self_hosted/)
 
 ## Streaming
@@ -52,4 +52,4 @@ When creating complex graphs, leaving every decision up to the LLM can be danger
 
 ## And more!
 
-The four sections above don't cover everything that is possible with LangGraph cloud - make sure to check out our other how-to guides to learn even more!
+The four sections above don't cover everything that is possible with LangGraph Cloud - make sure to check out our other how-to guides to learn even more!
