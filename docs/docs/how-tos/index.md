@@ -22,6 +22,7 @@ These how-to guides show how to achieve that controllability.
 LangGraph makes it easy to persist state across graph runs. The guide below shows how to add persistence to your graph.
 
 - [How to add persistence ("memory") to your graph](persistence.ipynb)
+- [How to manage conversation history](managing-conversation-history.ipynb)
 - [How to create a custom checkpointer using Postgres](persistence_postgres.ipynb)
 
 ## Human in the Loop
