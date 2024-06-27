@@ -217,3 +217,7 @@ final_state["messages"][-1].content
 * [Conceptual Guides](https://langchain-ai.github.io/langgraph/concepts/): In-depth explanations of the key concepts and principles behind LangGraph, such as nodes, edges, state and more.
 * [API Reference](https://langchain-ai.github.io/langgraph/reference/graphs/): Review important classes and methods, simple examples of how to use the graph and checkpointing APIs, higher-level prebuilt components and more.
 * [Cloud (beta)](https://langchain-ai.github.io/langgraph/cloud/): With one click, deploy LangGraph applications to LangGraph Cloud.
+
+## Contributing
+
+For more information on how to contribute, see [here](https://github.com/langchain-ai/langgraph/CONTRIBUTING.md).
