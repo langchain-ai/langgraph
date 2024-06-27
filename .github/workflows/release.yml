@@ -121,13 +121,12 @@ jobs:
         run: |
           {
             echo 'release-body<<EOF'
-            echo "# Release $TAG"
             if [ -z "$PREV_TAG" ]; then
               echo "Initial release"
             else
               echo "Changes since $PREV_TAG"
               echo
-              git log --format="%s" "$PREV_TAG"..HEAD -- $WORKING_DIR
+              git log --format="%s" "$PREV_TAG"..HEAD -- $WORKING_DIR | awk '{print "* " $0}'
             fi
             echo EOF
           } >> "$GITHUB_OUTPUT"
