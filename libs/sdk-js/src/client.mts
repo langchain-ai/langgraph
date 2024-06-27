@@ -108,7 +108,7 @@ class BaseClient {
 
 class CronsClient extends BaseClient {
   /**
-   * 
+   *
    * @param threadId The ID of the thread.
    * @param assistantId Assistant ID to use for this cron job.
    * @param payload Payload for creating a cron job.
@@ -137,10 +137,10 @@ class CronsClient extends BaseClient {
   }
 
   /**
-   * 
+   *
    * @param assistantId Assistant ID to use for this cron job.
    * @param payload Payload for creating a cron job.
-   * @returns 
+   * @returns
    */
   async create(
     assistantId: string,
@@ -164,17 +164,17 @@ class CronsClient extends BaseClient {
   }
 
   /**
-   * 
+   *
    * @param cronId Cron ID of Cron job to delete.
    */
   async delete(cronId: string): Promise<void> {
-      await this.fetch<void>(`/runs/crons/${cronId}`, {
-        method: "DELETE",
-      });
+    await this.fetch<void>(`/runs/crons/${cronId}`, {
+      method: "DELETE",
+    });
   }
 
   /**
-   * 
+   *
    * @param query Query options.
    * @returns List of crons.
    */
@@ -191,10 +191,9 @@ class CronsClient extends BaseClient {
         thread_id: query?.threadId ?? undefined,
         limit: query?.limit ?? 10,
         offset: query?.offset ?? 0,
-      }
-    })
+      },
+    });
   }
-
 }
 
 class AssistantsClient extends BaseClient {

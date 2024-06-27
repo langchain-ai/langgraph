@@ -13,8 +13,6 @@ export type StreamEvent =
   | "messages/complete"
   | (string & {});
 
-
-
 interface RunsInvokePayload {
   /**
    * Input to the run. Pass `null` to resume from the current state of the thread.
