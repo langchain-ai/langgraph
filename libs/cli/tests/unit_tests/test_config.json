@@ -1,15 +1,13 @@
 {
     "python_version": "3.12",
     "pip_config_file": "pipconfig.txt",
-    "dockerfile_lines": [
-        "ARG meow"
-    ],
+    "dockerfile_lines": ["ARG meow"],
     "dependencies": [
         "langchain_openai",
         "."
     ],
     "graphs": {
-        "agent": "./agent.py:graph"
+        "agent": "tests/unit_tests/agent.py:graph"
     },
     "env": ".env"
 }
