@@ -132,6 +132,7 @@ nav:
           - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
       - Persistence:
           - Add persistence ("memory"): how-tos/persistence.ipynb
+          - Create custom checkpointer using Postgres: how-tos/persistence_postgres.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
           - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
