@@ -23,15 +23,15 @@ This tutorial will use:
 2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent, read more about it [here](..//concepts/agentic_concepts.md#react-agent).
 
     ```python
-   from langchain_anthropic import ChatAnthropic
-   from langchain_community.tools.tavily_search import TavilySearchResults
-   from langgraph.prebuilt import create_react_agent
+    from langchain_anthropic import ChatAnthropic
+    from langchain_community.tools.tavily_search import TavilySearchResults
+    from langgraph.prebuilt import create_react_agent
    
-   model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
+    model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
    
-   tools = [TavilySearchResults(max_results=2)]
+    tools = [TavilySearchResults(max_results=2)]
    
-   graph = create_react_agent(model, tools)
+    graph = create_react_agent(model, tools)
     ```
 
 3. The `requirements.txt` file should contain any dependencies for your graph(s). In this case we only require four packages for our graph to run:
@@ -230,8 +230,6 @@ async for chunk in client.runs.stream(
 
     {'agent': {'messages': [{'content': "Hi Bagatur! It's nice to meet you. How can I assist you today?", 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_9cb5d38cf7'}, 'type': 'ai', 'name': None, 'id': 'run-c89118b7-1b1e-42b9-a85d-c43fe99881cd', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
 
-
-You can learn more about the Python SDK in [this how-to guide](./sdk/python_sdk.ipynb), and read up on the Javascript SDK in [this how-to guide](./sdk/js_sdk.ipynb)
 
 ## What's Next
 
