@@ -1,6 +1,5 @@
 import json
 import pathlib
-import shutil
 import sys
 from typing import Callable, Optional
 
@@ -130,11 +129,6 @@ OPT_VERBOSE = click.option(
     help="Show more output from the server logs",
 )
 OPT_WATCH = click.option("--watch", is_flag=True, help="Restart on file changes")
-OPT_LANGGRAPH_API_PATH = click.option(
-    "--langgraph-api-path",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, resolve_path=True),
-    hidden=True,
-)
 OPT_DEBUGGER_PORT = click.option(
     "--debugger-port",
     type=int,
@@ -159,7 +153,6 @@ def cli():
 @OPT_VERBOSE
 @OPT_DEBUGGER_PORT
 @OPT_WATCH
-@OPT_LANGGRAPH_API_PATH
 @OPT_POSTGRES_URI
 @click.option(
     "--wait",
@@ -175,7 +168,6 @@ def up(
     recreate: bool,
     pull: bool,
     watch: bool,
-    langgraph_api_path: Optional[pathlib.Path],
     wait: bool,
     verbose: bool,
     debugger_port: Optional[int],
@@ -191,7 +183,6 @@ def up(
             port=port,
             pull=pull,
             watch=watch,
-            langgraph_api_path=langgraph_api_path,
             verbose=verbose,
             debugger_port=debugger_port,
             postgres_uri=postgres_uri,
@@ -200,7 +191,6 @@ def up(
         args.extend(["up", "--remove-orphans"])
         if recreate:
             args.extend(["--force-recreate", "--renew-anon-volumes"])
-            shutil.rmtree(config.parent / ".langgraph-data", ignore_errors=True)
             try:
                 runner.run(subp_exec("docker", "volume", "rm", "langgraph-data"))
             except click.exceptions.Exit:
@@ -449,7 +439,6 @@ def prepare_args_and_stdin(
     docker_compose: Optional[pathlib.Path],
     port: int,
     watch: bool,
-    langgraph_api_path: Optional[pathlib.Path],
     debugger_port: Optional[int] = None,
     postgres_uri: Optional[str] = None,
 ):
@@ -473,7 +462,6 @@ def prepare_args_and_stdin(
         config_path,
         config,
         watch=watch,
-        langgraph_api_path=langgraph_api_path,
         base_image="langchain/langgraph-api",
     )
     return args, stdin
@@ -488,7 +476,6 @@ def prepare(
     port: int,
     pull: bool,
     watch: bool,
-    langgraph_api_path: Optional[pathlib.Path],
     verbose: bool,
     debugger_port: Optional[int] = None,
     postgres_uri: Optional[str] = None,
@@ -513,7 +500,6 @@ def prepare(
         docker_compose=docker_compose,
         port=port,
         watch=watch,
-        langgraph_api_path=langgraph_api_path,
         debugger_port=debugger_port,
         postgres_uri=postgres_uri,
     )

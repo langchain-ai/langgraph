@@ -265,7 +265,6 @@ def config_to_compose(
     config: Config,
     base_image: str,
     watch: bool = False,
-    langgraph_api_path: Optional[pathlib.Path] = None,
 ):
     env_vars = config["env"].items() if isinstance(config["env"], dict) else {}
     env_vars_str = "\n".join(f"            {k}: {v}" for k, v in env_vars)
@@ -280,15 +279,9 @@ def config_to_compose(
         ]
         watch_actions = "\n".join(
             f"""- path: {path}
-  action: rebuild
-  ignore:
-    - .langgraph-data"""
+  action: rebuild"""
             for path in watch_paths
         )
-        if langgraph_api_path:
-            watch_actions += f"""\n- path: {langgraph_api_path}
-  action: sync+restart
-  target: /api/langgraph_api"""
         watch_str = f"""
         develop:
             watch:
