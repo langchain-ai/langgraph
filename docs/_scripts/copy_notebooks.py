@@ -22,6 +22,7 @@ _MANUAL = {
         "streaming-tokens.ipynb",
         "streaming-content.ipynb",
         "streaming-events-from-within-tools.ipynb",
+        "streaming-from-final-node.ipynb",
         "persistence.ipynb",
         "persistence_postgres.ipynb",
         "visualization.ipynb",

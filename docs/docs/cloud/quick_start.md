@@ -1,5 +1,13 @@
 # Quick Start
-This quick start guide will cover how to build a simple chatbot with LangGraph, deploy it to LangGraph Cloud, use the LangGraph Studio to visualize and test it out, and use the LangGraph Cloud SDK to interact with it.
+This quick start guide will cover how to build a simple agent that can look up things on the internet. We will then deploy it to LangGraph Cloud, use the LangGraph Studio to visualize and test it out, and use the LangGraph SDK to interact with it.
+
+## Set up requirements
+
+This tutorial will use:
+
+- Anthropic for the LLM - sign up and get an API key [here](https://console.anthropic.com/)
+- Tavily for the search engine - sign up and get an API key [here](https://app.tavily.com/)
+- LangSmith for hosting - sign up and get an API key [here](https://smith.langchain.com/)
 
 
 ## Set up local files
@@ -12,33 +20,26 @@ This quick start guide will cover how to build a simple chatbot with LangGraph, 
         |-- langgraph.json      # configuration file for LangGraph
         |-- .env                # environment files with API keys
 
-2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). 
+2. The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent, read more about it [here](..//concepts/agentic_concepts.md#react-agent).
 
     ```python
     from langchain_anthropic import ChatAnthropic
-    from langgraph.graph import END, StateGraph, MessagesState
-    
+    from langchain_community.tools.tavily_search import TavilySearchResults
+    from langgraph.prebuilt import create_react_agent
+   
     model = ChatAnthropic(model="claude-3-5-sonnet-20240620")
-    
-    graph_workflow = StateGraph(MessagesState)
-    
-    
-    def agent(state: MessagesState):
-        response = model.invoke(state["messages"])
-        return {"messages": [response]}
-    
-    
-    graph_workflow.add_node(agent)
-    graph_workflow.add_edge("agent", END)
-    graph_workflow.set_entry_point("agent")
-    
-    graph = graph_workflow.compile()
+   
+    tools = [TavilySearchResults(max_results=2)]
+   
+    graph = create_react_agent(model, tools)
     ```
 
-3. The `requirements.txt` file should contain any dependencies for your graph(s). In this case we only require two packages for our graph to run:
+3. The `requirements.txt` file should contain any dependencies for your graph(s). In this case we only require four packages for our graph to run:
 
         langgraph
         langchain_anthropic
+        tavily-python
+        langchain_community
 
 4. The `langgraph.json` file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`.
 
@@ -53,8 +54,67 @@ This quick start guide will cover how to build a simple chatbot with LangGraph, 
     ```
 
     Learn more about the LangGraph CLI configuration file [here](./reference/cli.md#configuration-file).
+5. The `.env` file should have any environment variables needed to run your graph. This will only be used for local testing, so if you are not testing locally you can skip this step. NOTE: if you do add this, you should NOT check this into git. For this graph, we need two environment variables:
+
+    ```shell
+    ANTHROPIC_API_KEY=...
+    TAVILY_API_KEY=...
+    ```
 
 Now that we have set everything up on our local file system, we are ready to host our graph. 
+
+## Test the graph build locally
+
+Before deploying to the cloud, we probably want to test the building of our graph locally. This is useful to make sure we have configured our CLI configuration file correctly and our graph runs.
+
+In order to do this we can first install the LangGraph CLI
+
+```shell
+pip install langgraph-cli
+```
+
+We can then stand up a simple test server. The server this stands up is INCREDIBLY simple - it is just a single endpoint and has no persistence. **This should not be used for hosting your application, only for testing the build and basic functionality.**
+
+```shell
+langgraph test
+```
+
+This will test building of the agent server. If this runs successfully, you should see something like:
+
+```shell
+Ready!
+- API: http://localhost:8123
+2024-06-26 19:20:41,056:INFO:uvicorn.access 127.0.0.1:44138 - "GET /ok HTTP/1.1" 200
+```
+
+You can now test this out! Again, we only expose a single simple endpoint (for streaming stateless runs). This is intended to allow you to test that the agent is properly set up, but should **NOT** but used for production purposes. To test it out, you can go to another terminal window and run:
+
+```shell
+curl --request POST \
+    --url http://localhost:8123/runs/stream \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "assistant_id": "agent",
+    "input": {
+        "messages": [
+            {
+                "role": "user",
+                "content": "How are you?"
+            }
+        ]
+    },
+    "metadata": {},
+    "config": {
+        "configurable": {}
+    },
+    "multitask_strategy": "reject",
+    "stream_mode": [
+        "values"
+    ]
+}'
+```
+
+If you get back a valid response, then all is functioning properly!
 
 ## Deploy to Cloud
 
@@ -79,9 +139,9 @@ To deploy your application, you should do the following:
 1. Select your GitHub username or organization from the selector
 2. Search for your repo to deploy in the search bar and select it
 3. Choose any name
-4. In the `LangGraph API config file` field, enter the path to your `langgraph.json` file (if left blank langsmith will automatically search for it on deployment)
+4. In the `LangGraph API config file` field, enter the path to your `langgraph.json` file (which in this case is just `langgraph.json`)
 5. For Git Reference, you can select either the git branch for the code you want to deploy, or the exact commit SHA. 
-6. If your chain relies on environment variables (for example, an OPENAI_API_KEY), add those in. They will be propagated to the underlying server so your code can access them.
+6. If your chain relies on environment variables, add those in. They will be propagated to the underlying server so your code can access them. In this case, we need `ANTHROPIC_API_KEY` and `TAVILY_API_KEY`.
 
 Putting this all together, you should have something as follows for your deployment details:
 
@@ -107,7 +167,7 @@ You can access the docs by clicking on the API docs link, which should send you 
 
 ![API Docs page](./deployment/img/api_page.png)
 
-You won’t actually be able to test any of the API endpoints without authorizing first. To do so, click on the Authorize button in the top right corner, input your `LANGCHAIN_API_KEY`  in the `API Key` box, and then click `Authorize` to finish the process. You should now be able to select any of the API endpoints, click `Try it out`, enter the parameters you would like to pass, and then click `Execute` to view the results of the API call.
+You won’t actually be able to test any of the API endpoints without authorizing first. To do so, grab your Langsmith API key and add it at the top where it says `API KEY (X-API-KEY)`. You should now be able to select any of the API endpoints, click `Test Request`, enter the parameters you would like to pass, and then click `Send` to view the results of the API call.
 
 ## Interact with your deployment via LangGraph Studio
 
@@ -171,19 +231,17 @@ async for chunk in client.runs.stream(
     {'agent': {'messages': [{'content': "Hi Bagatur! It's nice to meet you. How can I assist you today?", 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_9cb5d38cf7'}, 'type': 'ai', 'name': None, 'id': 'run-c89118b7-1b1e-42b9-a85d-c43fe99881cd', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
 
 
-You can learn more about the Python SDK in [this how-to guide](./sdk/python_sdk.ipynb), and read up on the Javascript SDK in [this how-to guide](./sdk/js_sdk.ipynb)
-
 ## What's Next
 
 Congratulations! If you've worked your way through this tutorial you are well on your way to becoming a LangGraph Cloud expert. Here are some other resources to check out to help you out on the path to expertise:
 
 ### LangGraph Cloud How-tos
 
-If you want to learn more about streaming from hosted graphs, check out the Streaming [how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/stream_values/).
+If you want to learn more about streaming from hosted graphs, check out the Streaming [how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/#streaming).
 
-To learn more about double-texting and all the ways you can handle it in your application, read up on these [how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/interrupt_concurrent/).
+To learn more about double-texting and all the ways you can handle it in your application, read up on these [how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/#double-texting).
 
-To learn about how to include different human-in-the-loop behavior in your graph, take a look at [these how-tos](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/human_in_the_loop_breakpoint/).
+To learn about how to include different human-in-the-loop behavior in your graph, take a look at [these how-tos](https://langchain-ai.github.io/langgraph/cloud/how-tos/#human-in-the-loop).
 
 ### LangGraph Tutorials
 
