@@ -19,6 +19,7 @@ jobs:
 
     outputs:
       pkg-name: ${{ steps.check-version.outputs.pkg-name }}
+      short-pkg-name: ${{ steps.check-version.outputs.short-pkg-name }}
       version: ${{ steps.check-version.outputs.version }}
       tag: ${{ steps.check-version.outputs.tag }}
 
@@ -68,6 +69,7 @@ jobs:
             TAG="${SHORT_PKG_NAME}==${VERSION}"
           fi
           echo pkg-name="$PKG_NAME" >> $GITHUB_OUTPUT
+          echo short-pkg-name="$SHORT_PKG_NAME" >> $GITHUB_OUTPUT
           echo version="$VERSION" >> $GITHUB_OUTPUT
           echo tag="$TAG" >> $GITHUB_OUTPUT
 
@@ -92,10 +94,15 @@ jobs:
         working-directory: langgraph/${{ inputs.working-directory }}
         env:
           PKG_NAME: ${{ needs.build.outputs.pkg-name }}
+          SHORT_PKG_NAME: ${{ needs.build.outputs.short-pkg-name }}
           VERSION: ${{ needs.build.outputs.version }}
           TAG: ${{ needs.build.outputs.tag }}
         run: |
-          REGEX="^$PKG_NAME==\\d+\\.\\d+\\.\\d+\$"
+          if [ -z $SHORT_PKG_NAME ]; then
+            REGEX="^\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?$"
+          else
+            REGEX="^$SHORT_PKG_NAME==\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?$"
+          fi
           echo $REGEX
           PREV_TAG=$(git tag --sort=-creatordate | grep -P $REGEX || true | head -1)
           if [ "$TAG" == "$PREV_TAG" ]; then
@@ -114,13 +121,12 @@ jobs:
         run: |
           {
             echo 'release-body<<EOF'
-            echo "# Release $TAG"
             if [ -z "$PREV_TAG" ]; then
               echo "Initial release"
             else
               echo "Changes since $PREV_TAG"
               echo
-              git log --format="%s" "$PREV_TAG"..HEAD -- $WORKING_DIR
+              git log --format="%s" "$PREV_TAG"..HEAD -- $WORKING_DIR | awk '{print "* " $0}'
             fi
             echo EOF
           } >> "$GITHUB_OUTPUT"

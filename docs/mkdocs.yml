@@ -34,18 +34,18 @@ theme:
     - search.suggest
     - toc.follow
   palette:
-  - scheme: default
-    primary: white
-    accent: gray
-    toggle:
-      icon: material/brightness-7
-      name: Switch to dark mode
-  - scheme: slate
-    primary: grey
-    accent: white
-    toggle:
-      icon: material/brightness-4
-      name: Switch to light mode
+    - scheme: default
+      primary: white
+      accent: gray
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - scheme: slate
+      primary: grey
+      accent: white
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
   font:
     text: "Public Sans"
     code: "Roboto Mono"
@@ -60,7 +60,7 @@ plugins:
             - https://docs.python.org/3/objects.inv
             - https://api.python.langchain.com/en/latest/objects.inv
           options:
-            members_order: source 
+            members_order: source
             allow_inspection: true
             heading_level: 3
             show_bases: true
@@ -68,9 +68,9 @@ plugins:
             inherited_members: true
             # merge_init_into_class: true
             selection:
-                docstring_style: google
+              docstring_style: google
             docstring_section_style: list
-            show_root_toc_entry: false 
+            show_root_toc_entry: false
             # show_signature_annotations: true
             # show_symbol_type_heading: true
             show_symbol_type_toc: true
@@ -80,20 +80,12 @@ plugins:
       execute: false
       include_source: True
       include_requirejs: true
-  - git-committers:
-      repository: langchain-ai/langgraph
-      branch: main
-      docs_path: docs/docs/
-      token: !ENV ["MKDOCS_GIT_COMMITTERS_APIKEY"]
-  # TODO: Add minify plugin once it works alright with code block copying
-  # - minify:
-  #     minify_html: true
 nav:
-  - Home: 
-      - 'index.md'
+  - Home:
+      - "index.md"
   - Tutorials:
-      - 'tutorials/index.md'
-      - Introduction: tutorials/introduction.ipynb
+      - "tutorials/index.md"
+      - Quick Start: tutorials/introduction.ipynb
       - Chatbots:
           - Customer Support: tutorials/customer-support/customer-support.ipynb
           - Prompt Generation from User Requirements: tutorials/chatbots/information-gather-prompting.ipynb
@@ -108,101 +100,123 @@ nav:
           - Self-RAG using local LLMs: tutorials/rag/langgraph_self_rag_local.ipynb
           - SQL Agent: tutorials/sql-agent.ipynb
       - Agent Architectures:
-        - Multi-Agent Systems:
-            - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
-            - Supervision: tutorials/multi_agent/agent_supervisor.ipynb
-            - Hierarchical Teams: tutorials/multi_agent/hierarchical_agent_teams.ipynb
-        - Planning Agents:
-            - Plan-and-Execute: tutorials/plan-and-execute/plan-and-execute.ipynb
-            - Reasoning without Observation: tutorials/rewoo/rewoo.ipynb
-            - LLMCompiler: tutorials/llm-compiler/LLMCompiler.ipynb
-        - Reflection & Critique:
-            - Basic Reflection: tutorials/reflection/reflection.ipynb
-            - Reflexion: tutorials/reflexion/reflexion.ipynb
-            - Language Agent Tree Search: tutorials/lats/lats.ipynb
-            - Self-Discover Agent: tutorials/self-discover/self-discover.ipynb
+          - Multi-Agent Systems:
+              - Collaboration: tutorials/multi_agent/multi-agent-collaboration.ipynb
+              - Supervision: tutorials/multi_agent/agent_supervisor.ipynb
+              - Hierarchical Teams: tutorials/multi_agent/hierarchical_agent_teams.ipynb
+          - Planning Agents:
+              - Plan-and-Execute: tutorials/plan-and-execute/plan-and-execute.ipynb
+              - Reasoning without Observation: tutorials/rewoo/rewoo.ipynb
+              - LLMCompiler: tutorials/llm-compiler/LLMCompiler.ipynb
+          - Reflection & Critique:
+              - Basic Reflection: tutorials/reflection/reflection.ipynb
+              - Reflexion: tutorials/reflexion/reflexion.ipynb
+              - Language Agent Tree Search: tutorials/lats/lats.ipynb
+              - Self-Discover Agent: tutorials/self-discover/self-discover.ipynb
       - Evaluation & Analysis:
           - Chatbot Evaluation via Simulation:
               - Agent-based: tutorials/chatbot-simulation-evaluation/agent-simulation-evaluation.ipynb
               - In LangSmith: tutorials/chatbot-simulation-evaluation/langsmith-agent-simulation-evaluation.ipynb
       - Experimental:
-        - Web Research (STORM): tutorials/storm/storm.ipynb
-        - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
-        - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
-        - Competitive Programming: tutorials/usaco/usaco.ipynb
-        - Extract structured output: tutorials/extraction/retries.ipynb
+          - Web Research (STORM): tutorials/storm/storm.ipynb
+          - TNT-LLM: tutorials/tnt-llm/tnt-llm.ipynb
+          - Web Navigation: tutorials/web-navigation/web_voyager.ipynb
+          - Competitive Programming: tutorials/usaco/usaco.ipynb
+          - Extract structured output: tutorials/extraction/retries.ipynb
 
   - "How-to Guides":
-     - 'how-tos/index.md'
-     - Controllability:
-         - Create subgraphs: how-tos/subgraph.ipynb
-         - Create branches for parallel execution: how-tos/branching.ipynb
-         - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
-     - Human-in-the-loop:
-         - Add persistence ("memory"): how-tos/persistence.ipynb
-         - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
-         - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
-         - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
-         - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
-     - Streaming:
-         - Stream LLM tokens: how-tos/streaming-tokens.ipynb
-         - Stream Arbitrarily Nested Content: how-tos/streaming-content.ipynb
-     - Other:
-         - Run graph asynchronously: how-tos/async.ipynb
-         - Visualize your graph: how-tos/visualization.ipynb
-         - Add runtime configuration: how-tos/configuration.ipynb
-         - Use Pydantic model as state: how-tos/state-model.ipynb
-     - Prebuilt ReAct Agent:
-         - Create a ReAct agent: how-tos/create-react-agent.ipynb
-         - Add Memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
-         - Add a System Prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
-         - Add Human-in-the-Loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
-  - 'Conceptual Guides':
-     - 'concepts/index.md'
-     - LangGraph for Agentic Applications: concepts/high_level.md
-     - Low Level LangGraph Concepts: concepts/low_level.md
-     - Common Agentic Patterns: concepts/agentic_concepts.md
+      - "how-tos/index.md"
+      - Controllability:
+          - Create subgraphs: how-tos/subgraph.ipynb
+          - Create branches for parallel execution: how-tos/branching.ipynb
+          - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
+      - Persistence:
+          - Add persistence ("memory"): how-tos/persistence.ipynb
+          - Manage conversation history: how-tos/managing-conversation-history.ipynb
+          - Create custom checkpointer using Postgres: how-tos/persistence_postgres.ipynb
+      - Human-in-the-loop:
+          - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
+          - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
+          - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
+          - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
+      - Streaming:
+          - Stream full state: how-tos/stream-values.ipynb
+          - Stream state updates: how-tos/stream-updates.ipynb
+          - Stream LLM tokens: how-tos/streaming-tokens.ipynb
+          - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
+          - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
+          - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
+          - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
+      - Other:
+          - Run graph asynchronously: how-tos/async.ipynb
+          - Visualize your graph: how-tos/visualization.ipynb
+          - Add runtime configuration: how-tos/configuration.ipynb
+          - Use Pydantic model as state: how-tos/state-model.ipynb
+      - Prebuilt ReAct Agent:
+          - Create a ReAct agent: how-tos/create-react-agent.ipynb
+          - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
+          - Add a system prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
+          - Add human-in-the-Loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
+  - "Conceptual Guides":
+      - "concepts/index.md"
+      - LangGraph for Agentic Applications: concepts/high_level.md
+      - Low Level LangGraph Concepts: concepts/low_level.md
+      - Common Agentic Patterns: concepts/agentic_concepts.md
+      - FAQ: concepts/faq.md
   - Reference:
       - Graphs: reference/graphs.md
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
       - Errors: reference/errors.md
-  - 'Cloud (alpha)':
-      - 'cloud/index.md'
+  - "Cloud (beta)":
+      - "cloud/index.md"
       - Tutorials:
-          - Quick Start: 'cloud/quick_start.md'
-          - SDK:
-              - Python: 'cloud/sdk/python_sdk.ipynb'
-              - JS/TS: 'cloud/sdk/js_sdk.ipynb'
+          - Quick Start: "cloud/quick_start.md"
+      - How-to Guides: 
+          - "cloud/how-tos/index.md"
           - Deployment:
-              - Self-Hosted: 'cloud/deployment/self_hosted.md'
-              - Managed: 'cloud/deployment/managed.md'
-      - How-to Guides:
+              - Setup App: "cloud/deployment/setup.md"
+              - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
+              - Deploy to Cloud: "cloud/deployment/cloud.md"
+              - Self-Host: "cloud/deployment/self_hosted.md"
           - Streaming:
-              - Stream Values: 'cloud/how-tos/cloud_examples/stream_values.ipynb'
-              - Stream Updates: 'cloud/how-tos/cloud_examples/stream_updates.ipynb'
-              - Stream Messages: 'cloud/how-tos/cloud_examples/stream_messages.ipynb'
-              - Stream Events: 'cloud/how-tos/cloud_examples/stream_events.ipynb'
-              - Stream Debug: 'cloud/how-tos/cloud_examples/stream_debug.ipynb'
-          - Double Texting: 
-              - Interrupt: 'cloud/how-tos/cloud_examples/interrupt_concurrent.ipynb'
-              - Rollback: 'cloud/how-tos/cloud_examples/rollback_concurrent.ipynb'
-              - Reject: 'cloud/how-tos/cloud_examples/reject_concurrent.ipynb'
-              - Enqueue: 'cloud/how-tos/cloud_examples/enqueue_concurrent.ipynb'
-          - Run Agent in Background: 'cloud/how-tos/cloud_examples/background_run.ipynb'
-          - Run Multiple Agents in Thread: 'cloud/how-tos/cloud_examples/same-thread.ipynb'
-          - Human in the loop: 'cloud/how-tos/cloud_examples/human-in-the-loop_cloud.ipynb'
-          - Create Agents with Configuration: 'cloud/how-tos/cloud_examples/configuration_cloud.ipynb'
-          - Convert LangGraph calls to LangGraph Cloud calls: 'cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb'
-      - Conceptual Guides:
-          'cloud/concepts/index.md'
+              - Stream Values: "cloud/how-tos/cloud_examples/stream_values.ipynb"
+              - Stream Updates: "cloud/how-tos/cloud_examples/stream_updates.ipynb"
+              - Stream Messages: "cloud/how-tos/cloud_examples/stream_messages.ipynb"
+              - Stream Events: "cloud/how-tos/cloud_examples/stream_events.ipynb"
+              - Stream Debug: "cloud/how-tos/cloud_examples/stream_debug.ipynb"
+              - Multiple Modes: "cloud/how-tos/cloud_examples/stream_multiple.ipynb"
+          - Double Texting:
+              - Interrupt: "cloud/how-tos/cloud_examples/interrupt_concurrent.ipynb"
+              - Rollback: "cloud/how-tos/cloud_examples/rollback_concurrent.ipynb"
+              - Reject: "cloud/how-tos/cloud_examples/reject_concurrent.ipynb"
+              - Enqueue: "cloud/how-tos/cloud_examples/enqueue_concurrent.ipynb"
+          - Human-in-the-Loop: 
+              - Add Breakpoint: "cloud/how-tos/cloud_examples/human_in_the_loop_breakpoint.ipynb"
+              - Wait for User Input: "cloud/how-tos/cloud_examples/human_in_the_loop_user_input.ipynb"
+              - Edit Graph State: "cloud/how-tos/cloud_examples/human_in_the_loop_edit_state.ipynb"
+              - Replay and Branch from Prior States: "cloud/how-tos/cloud_examples/human_in_the_loop_time_travel.ipynb"
+          - LangGraph Studio:
+              - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
+              - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
+              - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
+          - Different Types of Runs:
+              - Run an Agent in the Background: "cloud/how-tos/cloud_examples/background_run.ipynb"
+              - Run Multiple Agents in Same Thread: "cloud/how-tos/cloud_examples/same-thread.ipynb"
+              - Create Cron Jobs: "cloud/how-tos/cloud_examples/cron_jobs.ipynb"
+              - Create Stateless Runs: "cloud/how-tos/cloud_examples/stateless_runs.ipynb"
+          - Other:
+              - Configure Agents: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
+              - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
+              - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
+      - Conceptual Guides: "cloud/concepts/index.md"
       - Reference:
-          - API: 'cloud/reference/api_ref.md'
+          - API: "cloud/reference/api/api_ref.md"
           - SDK:
-              - Python: 'cloud/reference/sdk/python_sdk_ref.md'
-              - JS/TS: 'cloud/reference/sdk/js_ts_sdk_ref.md'
-          - CLI: 'cloud/reference/cli.md'
-
+              - Python: "cloud/reference/sdk/python_sdk_ref.md"
+              - JS/TS: "cloud/reference/sdk/js_ts_sdk_ref.md"
+          - CLI: "cloud/reference/cli.md"
+          - Environment Variables: "cloud/reference/env_var.md"
 
 markdown_extensions:
   - abbr
@@ -233,7 +247,7 @@ markdown_extensions:
   - pymdownx.magiclink:
       normalize_issue_symbols: true
       repo_url_shorthand: true
-      user: langchain-ai 
+      user: langchain-ai
       repo: langgraph
   - pymdownx.mark
   - pymdownx.smartsymbols
@@ -258,7 +272,7 @@ extra_css:
 
 extra:
   social:
-    - icon: fontawesome/brands/js 
+    - icon: fontawesome/brands/js
       link: https://langchain-ai.github.io/langgraphjs/
     - icon: fontawesome/brands/github
       link: https://github.com/langchain-ai/langgraph
@@ -278,5 +292,10 @@ extra:
         - icon: material/emoticon-sad-outline
           name: This page could be improved
           data: 0
-          note: >- 
+          note: >-
             Thanks for your feedback! Please help us improve this page by adding to the discussion below.
+validation:
+  omitted_files: warn
+  absolute_links: warn
+  unrecognized_links: warn
+  anchors: warn

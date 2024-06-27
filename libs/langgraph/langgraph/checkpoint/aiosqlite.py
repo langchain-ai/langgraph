@@ -27,7 +27,7 @@ def not_implemented_sync_method(func: T) -> T:
             "The AsyncSqliteSaver does not support synchronous methods. "
             "Consider using the SqliteSaver instead.\n"
             "from langgraph.checkpoint.sqlite import SqliteSaver\n"
-            "See https://langchain-ai.github.io/langgraph/reference/checkpoints/#sqlitesaver "
+            "See https://langchain-ai.github.io/langgraph/reference/checkpoints/langgraph.checkpoint.sqlite.SqliteSaver "
             "for more information."
         )
 
@@ -45,6 +45,23 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         While this class does support asynchronous checkpointing, it is not recommended
         for production workloads, due to limitations in SQLite's write performance. For
         production workloads, consider using a more robust database like PostgreSQL.
+
+    !!! Important
+        Remember to **close the database connection** after executing your code,
+        otherwise, you may see the graph "hang" after execution (since the program
+        will not exit until the connection is closed).
+
+        The easiest way to do this is to use the `async with` statement, as shown in the
+        examples below.
+
+        ```python
+        async with AsyncSqliteSaver.from_conn_string("checkpoints.sqlite") as saver:
+            # Your code here
+            graph = builder.compile(checkpointer=saver)
+            config = {"configurable": {"thread_id": "thread-1"}}
+            async for event in graph.astream_events(..., config, version="v1"):
+                print(event)
+        ```
 
     Args:
         conn (aiosqlite.Connection): The asynchronous SQLite database connection.
@@ -135,7 +152,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         Note:
             This method is not implemented for the AsyncSqliteSaver. Use `aget` instead.
-            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+            Or consider using the [SqliteSaver][sqlitesaver] checkpointer.
         """
 
     @not_implemented_sync_method
@@ -151,7 +168,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         Note:
             This method is not implemented for the AsyncSqliteSaver. Use `alist` instead.
-            Or consider using the [SqliteSaver](#sqlitesaver) checkpointer.
+            Or consider using the [SqliteSaver][sqlitesaver] checkpointer.
         """
 
     @not_implemented_sync_method

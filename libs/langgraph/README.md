@@ -72,7 +72,7 @@ tool_node = ToolNode(tools)
 model = ChatOpenAI(temperature=0).bind_tools(tools)
 
 # Define the function that determines whether to continue or not
-def should_continue(state: AgentState) -> Literal["tools", END]:
+def should_continue(state: MessagesState) -> Literal["tools", END]:
     messages = state['messages']
     last_message = messages[-1]
     # If the LLM makes a tool call, then we route to the "tools" node
@@ -83,7 +83,7 @@ def should_continue(state: AgentState) -> Literal["tools", END]:
 
 
 # Define the function that calls the model
-def call_model(state: AgentState):
+def call_model(state: MessagesState):
     messages = state['messages']
     response = model.invoke(messages)
     # We return a list, because this will get added to the existing list
@@ -216,3 +216,8 @@ final_state["messages"][-1].content
 * [How-to Guides](https://langchain-ai.github.io/langgraph/how-tos/): Accomplish specific things within LangGraph, from streaming, to adding memory & persistence, to common design patterns (branching, subgraphs, etc.), these are the place to go if you want to copy and run a specific code snippet.
 * [Conceptual Guides](https://langchain-ai.github.io/langgraph/concepts/): In-depth explanations of the key concepts and principles behind LangGraph, such as nodes, edges, state and more.
 * [API Reference](https://langchain-ai.github.io/langgraph/reference/graphs/): Review important classes and methods, simple examples of how to use the graph and checkpointing APIs, higher-level prebuilt components and more.
+* [Cloud (beta)](https://langchain-ai.github.io/langgraph/cloud/): With one click, deploy LangGraph applications to LangGraph Cloud.
+
+## Contributing
+
+For more information on how to contribute, see [here](https://github.com/langchain-ai/langgraph/CONTRIBUTING.md).
