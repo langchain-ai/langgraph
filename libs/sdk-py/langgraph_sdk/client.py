@@ -22,6 +22,7 @@ from langgraph_sdk.schema import (
     StreamMode,
     Thread,
     ThreadState,
+    ThreadStatus,
 )
 
 logger = logging.getLogger(__name__)
@@ -273,20 +274,31 @@ class AssistantsClient:
     async def search(
         self,
         *,
-        assistant_id: Optional[str] = None,
         metadata: Metadata = None,
+        graph_id: Optional[str] = None,
         limit: int = 10,
-        offset: int = 0
+        offset: int = 0,
     ) -> list[Assistant]:
+        """Search for assistants.
+
+        Args:
+            metadata (dict, optional): Metadata to filter by. Defaults to None.
+            graph_id (str, optional): The ID of the graph to filter by. Defaults to None.
+                The graph ID is normally set in your langgraph.json configuration.
+            limit (int, optional): The maximum number of results to return. Defaults to 10.
+            offset (int, optional): The number of results to skip. Defaults to 0.
+
+        Returns:
+            list[Assistant]: A list of assistants.
+        """
         payload: Dict[str, Any] = {
             "limit": limit,
             "offset": offset,
         }
-        if assistant_id:
-            payload['assistant_id'] = assistant_id
         if metadata:
             payload["metadata"] = metadata
-        """Search for assistants."""
+        if graph_id:
+            payload["graph_id"] = graph_id
         return await self.http.post(
             "/assistants/search",
             json=payload,
@@ -326,7 +338,12 @@ class ThreadsClient:
         await self.http.delete(f"/threads/{thread_id}")
 
     async def search(
-        self, *, metadata: Metadata = None, limit: int = 10, offset: int = 0
+        self,
+        *,
+        metadata: Metadata = None,
+        status: Optional[ThreadStatus] = None,
+        limit: int = 10,
+        offset: int = 0,
     ) -> list[Thread]:
         """Search for threads."""
         payload: Dict[str, Any] = {
@@ -335,6 +352,8 @@ class ThreadsClient:
         }
         if metadata:
             payload["metadata"] = metadata
+        if status:
+            payload["status"] = status
         return await self.http.post(
             "/threads/search",
             json=payload,
@@ -451,6 +470,7 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results."""
@@ -463,6 +483,7 @@ class RunsClient:
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
             "feedback_keys": feedback_keys,
+            "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
         }
@@ -580,6 +601,7 @@ class RunsClient:
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait for and return the final state."""
@@ -590,6 +612,7 @@ class RunsClient:
             "assistant_id": assistant_id,
             "interrupt_before": interrupt_before,
             "interrupt_after": interrupt_after,
+            "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
         }

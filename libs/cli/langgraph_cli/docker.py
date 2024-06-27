@@ -37,7 +37,7 @@ DEBUGGER = """
         image: langchain/langgraph-debugger
         restart: on-failure
         ports:
-            - "{debugger_port}:80"
+            - "{debugger_port}:3968"
         depends_on:
             langgraph-postgres:
                 condition: service_healthy

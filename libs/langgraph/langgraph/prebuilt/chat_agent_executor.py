@@ -52,7 +52,6 @@ def create_function_calling_executor(
         >>> model = ChatOpenAI()
         >>>
         >>> app = create_react_agent(model, tools)
-        >>>
         >>> inputs = {"messages": [("user", "what is the weather in sf")]}
         >>> for s in app.stream(inputs):
         ...     print(list(s.values())[0])

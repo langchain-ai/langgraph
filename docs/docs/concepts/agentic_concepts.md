@@ -16,17 +16,21 @@ Since LangGraph nodes can be arbitrary Python functions, you can do this however
 
 Memory is a key concept to agentic applications. Memory is important because end users often expect the application they are interacting with remember previous interactions. The most simple example of this is chatbots - they clearly need to remember previous messages in a conversation.
 
-LangGraph is perfectly suited to give you full control over the memory of your application. With user defined [`State`](#state) you can specify the exact schema of the memory you want to retain. With [checkpointers](#checkpointer) you can store checkpoints of previous interactions and resume from there in follow up interactions.
+LangGraph is perfectly suited to give you full control over the memory of your application. With user defined [`State`](./low_level.md#state) you can specify the exact schema of the memory you want to retain. With [checkpointers](./low_level.md#checkpointer) you can store checkpoints of previous interactions and resume from there in follow up interactions.
+
+See [this guide](../how-tos/persistence.ipynb) for how to add memory to your graph.
 
 ## Human-in-the-loop
 
-Agentic systems often require some human-in-the-loop (or "on-the-loop") interaction patterns. This is because agentic systems are still not super reliable, so having a human involved is required for any sensitive tasks/actions. These are all easily enabled in LangGraph, largely due to [checkpointers](#checkpointer). The reason a checkpointer is necessary is that a lot of these interaction patterns involve running a graph up until a certain point, waiting for some sort of human feedback, and then continuing. When you want to "continue" you will need to access the state of the graph previous to getting interrupted, and checkpointers are a built in, highly convenient way to do that.
+Agentic systems often require some human-in-the-loop (or "on-the-loop") interaction patterns. This is because agentic systems are still not super reliable, so having a human involved is required for any sensitive tasks/actions. These are all easily enabled in LangGraph, largely due to [checkpointers](./low_level.md#checkpointer). The reason a checkpointer is necessary is that a lot of these interaction patterns involve running a graph up until a certain point, waiting for some sort of human feedback, and then continuing. When you want to "continue" you will need to access the state of the graph previous to getting interrupted, and checkpointers are a built in, highly convenient way to do that.
 
 There are a few common human-in-the-loop interaction patterns we see emerging.
 
 ### Approval
 
-A basic one is to have the agent wait for approval before executing certain tools. This may be all tools, or just a subset of tools. This is generally recommend for more sensitive actions (like writing to a database). This can easily be done in LangGraph by setting a [breakpoint](#breakpoints) before specific nodes.
+A basic one is to have the agent wait for approval before executing certain tools. This may be all tools, or just a subset of tools. This is generally recommend for more sensitive actions (like writing to a database). This can easily be done in LangGraph by setting a [breakpoint](./low_level.md#breakpoints) before specific nodes.
+
+See [this guide](../how-tos/human_in_the_loop/breakpoints.ipynb) for how do this in LangGraph.
 
 ### Wait for input
 
@@ -38,21 +42,27 @@ A similar one is to have the agent wait for human input. This can be done by:
 4. Update the state with that user input, acting as that node
 5. Resume execution
 
+See [this guide](../how-tos/human_in_the_loop/wait-user-input.ipynb) for how do this in LangGraph.
+
 ### Edit agent actions
 
-This is a more advanced interaction pattern. In this interaction pattern the human can actually edit some of the agent's previous decisions. This can be done either during the flow (after a [breakpoint](#breakpoints), part of the [approval](#approval) flow) or after the fact (as part of [time-travel](#time-travel))
+This is a more advanced interaction pattern. In this interaction pattern the human can actually edit some of the agent's previous decisions. This can be done either during the flow (after a [breakpoint](./low_level.md#breakpoints), part of the [approval](#approval) flow) or after the fact (as part of [time-travel](#time-travel))
+
+See [this guide](../how-tos/human_in_the_loop/edit-graph-state.ipynb) for how do this in LangGraph.
 
 ### Time travel
 
 This is a pretty advanced interaction pattern. In this interaction pattern, the human can look back at the list of previous checkpoints, find one they like, optionally [edit it](#edit-agent-actions), and then resume execution from there.
 
+See [this guide](../how-tos/human_in_the_loop/time-travel.ipynb) for how to do this in LangGraph.
+
 ## Map-Reduce
 
 A common pattern in agents is to generate a list of objects, do some work on each of those objects, and then combine the results. This is very similar to the common [map-reduce](https://en.wikipedia.org/wiki/MapReduce) operation. This can be tricky for a few reasons. First, it can be tough to define a structured graph ahead of time because the length of the list of objects may be unknown. Second, in order to do this map-reduce you need multiple versions of the state to exist... but the graph shares a common shared state, so how can this be?
 
-LangGraph supports this via the [Send](#send) api. This can be used to allow a conditional edge to Send multiple different states to multiple nodes. The state it sends can be different from the state of the core graph.
+LangGraph supports this via the [Send](./low_level.md#send) api. This can be used to allow a conditional edge to Send multiple different states to multiple nodes. The state it sends can be different from the state of the core graph.
 
-See a how-to guide for this [here](https://langchain-ai.github.io/langgraph/how-tos/map-reduce/)
+See a how-to guide for this [here](../how-tos/map-reduce.ipynb)
 
 ## Multi-agent
 
@@ -76,7 +86,7 @@ This "reflection" step often uses an LLM, but doesn't have to. A good example of
 
 One of the most common agent architectures is what is commonly called the ReAct agent architecture. In this architecture, an LLM is called repeatedly in a while-loop. At each step the agent decides which tools to call, and what the inputs to those tools should be. Those tools are then executed, and the outputs are fed back into the LLM as observations. The while-loop terminates when the agent decides it is not worth calling any more tools.
 
-One of the few high level, pre-built agents we have in LangGraph - you can use it with [`create_react_agent`](https://langchain-ai.github.io/langgraph/reference/prebuilt/#create_react_agent)
+One of the few high level, pre-built agents we have in LangGraph - you can use it with [`create_react_agent`](../reference/prebuilt.md#create_react_agent)
 
 This is named after and based on the [ReAct](https://arxiv.org/abs/2210.03629) paper. However, there are several differences between this paper and our implementation:
 
@@ -85,3 +95,5 @@ This is named after and based on the [ReAct](https://arxiv.org/abs/2210.03629) p
 - Third, the paper required all inputs to the tools to be a single string. This was largely due to LLMs not being super capable at the time, and only really being able to generate a single input. Our implementation allows for using tools that require multiple inputs.
 - Forth, the paper only looks at calling a single tool at the time, largely due to limitations in LLMs performance at the time. Our implementation allows for calling multiple tools at a time.
 - Finally, the paper asked the LLM to explicitly generate a "Thought" step before deciding which tools to call. This is the "Reasoning" part of "ReAct". Our implementation does not do this by default, largely because LLMs have gotten much better and that is not as necessary. Of course, if you wish to prompt it do so, you certainly can.
+
+See [this guide](../how-tos/human_in_the_loop/time-travel.ipynb) for a full walkthrough of how to use the prebuilt ReAct agent.
