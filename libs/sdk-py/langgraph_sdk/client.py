@@ -709,7 +709,7 @@ class CronClient:
         await self.http.delete(f"/runs/crons/{cron_id}")
 
     async def search(
-        self, 
+        self,
         *,
         assistant_id: Optional[str] = None,
         thread_id: Optional[str] = None,
