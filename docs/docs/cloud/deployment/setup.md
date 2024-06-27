@@ -28,6 +28,7 @@ Example `.env` file:
 ```
 MY_ENV_VAR_1=foo
 MY_ENV_VAR_2=bar
+OPENAI_API_KEY=key
 ```
 
 Example file directory:
@@ -39,7 +40,7 @@ my-app/
 
 ## Define Graphs
 
-Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each [CompiledGraph](../../../reference/graphs/#compiledgraph) to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph API configuration file](../reference/cli.md#configuration-file).
+Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each [CompiledGraph][compiledgraph] to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph API configuration file](../reference/cli.md#configuration-file).
 
 Example `openai_agent.py` file:
 ```python
@@ -77,13 +78,13 @@ Example `langgraph.json` file:
 ```json
 {
     "dependencies": [
-        "./my-app"
+        "."
     ],
     "graphs": {
         "openai_agent": "./openai_agent.py:agent",
         "anthropic_agent": "./anthropic_agent.py:agent"
     },
-    "env": ".env"
+    "env": "./.env"
 }
 ```
 

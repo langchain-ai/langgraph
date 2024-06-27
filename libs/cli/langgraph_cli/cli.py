@@ -1,8 +1,7 @@
 import json
 import pathlib
-import shutil
 import sys
-from typing import Optional
+from typing import Callable, Optional
 
 import click
 import click.exceptions
@@ -10,25 +9,10 @@ import click.exceptions
 import langgraph_cli.config
 import langgraph_cli.docker
 from langgraph_cli.analytics import log_command
-from langgraph_cli.config import Config
 from langgraph_cli.constants import DEFAULT_CONFIG, DEFAULT_PORT
-from langgraph_cli.docker import DockerCapabilities
 from langgraph_cli.exec import Runner, subp_exec
 from langgraph_cli.progress import Progress
-from langgraph_cli.util import clean_empty_lines
 
-OPT_DOCKER_COMPOSE = click.option(
-    "--docker-compose",
-    "-d",
-    help="Advanced: Path to docker-compose.yml file with additional services to launch.",
-    type=click.Path(
-        exists=True,
-        file_okay=True,
-        dir_okay=False,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
-)
 OPT_CONFIG = click.option(
     "--config",
     "-c",
@@ -105,12 +89,6 @@ OPT_PORT = click.option(
     \b
     """,
 )
-OPT_RECREATE = click.option(
-    "--recreate/--no-recreate",
-    default=False,
-    show_default=True,
-    help="Recreate containers even if their configuration and image haven't changed",
-)
 OPT_PULL = click.option(
     "--pull/--no-pull",
     default=True,
@@ -130,21 +108,6 @@ OPT_VERBOSE = click.option(
     default=False,
     help="Show more output from the server logs",
 )
-OPT_WATCH = click.option("--watch", is_flag=True, help="Restart on file changes")
-OPT_LANGGRAPH_API_PATH = click.option(
-    "--langgraph-api-path",
-    type=click.Path(exists=True, file_okay=False, dir_okay=True, resolve_path=True),
-    hidden=True,
-)
-OPT_DEBUGGER_PORT = click.option(
-    "--debugger-port",
-    type=int,
-    help="Pull the debugger image locally and serve the UI on specified port",
-)
-OPT_POSTGRES_URI = click.option(
-    "--postgres-uri",
-    help="Postgres URI to use for the database. Defaults to launching a local database",
-)
 
 
 @click.group()
@@ -152,178 +115,147 @@ def cli():
     pass
 
 
-@OPT_RECREATE
 @OPT_PULL
 @OPT_PORT
-@OPT_DOCKER_COMPOSE
 @OPT_CONFIG
 @OPT_VERBOSE
-@OPT_DEBUGGER_PORT
-@OPT_WATCH
-@OPT_LANGGRAPH_API_PATH
-@OPT_POSTGRES_URI
-@click.option(
-    "--wait",
-    is_flag=True,
-    help="Wait for services to start before returning. Implies --detach",
+@cli.command(
+    help="Start langgraph test server. This command enables you to confirm your graph will work inside the langgraph API server, before using LangGraph Cloud."
 )
-@cli.command(help="Start langgraph API server")
 @log_command
-def up(
+def test(
     config: pathlib.Path,
-    docker_compose: Optional[pathlib.Path],
     port: int,
-    recreate: bool,
     pull: bool,
-    watch: bool,
-    langgraph_api_path: Optional[pathlib.Path],
-    wait: bool,
+    # stop_when_ready: bool,
     verbose: bool,
-    debugger_port: Optional[int],
-    postgres_uri: Optional[str],
 ):
     with Runner() as runner, Progress(message="Pulling...") as set:
+        # check docker available
         capabilities = langgraph_cli.docker.check_capabilities(runner)
-        args, stdin = prepare(
+        # open config
+        with open(config) as f:
+            config_json = langgraph_cli.config.validate_config(json.load(f))
+        # build
+        base_image = "langchain/langgraph-trial"
+        tag = f"langgraph-test-{config.parent.name}"
+        _build(
             runner,
-            capabilities=capabilities,
-            config_path=config,
-            docker_compose=docker_compose,
-            port=port,
-            pull=pull,
-            watch=watch,
-            langgraph_api_path=langgraph_api_path,
-            verbose=verbose,
-            debugger_port=debugger_port,
-            postgres_uri=postgres_uri,
+            set,
+            config,
+            config_json,
+            None,
+            base_image,
+            pull,
+            tag,
         )
-        # add up + options
-        args.extend(["up", "--remove-orphans"])
-        if recreate:
-            args.extend(["--force-recreate", "--renew-anon-volumes"])
-            shutil.rmtree(config.parent / ".langgraph-data", ignore_errors=True)
-            try:
-                runner.run(subp_exec("docker", "volume", "rm", "langgraph-data"))
-            except click.exceptions.Exit:
-                pass
-        if watch:
-            args.append("--watch")
-        if wait:
-            args.append("--wait")
+        # run
+        set("Running...")
+        args = [
+            "run",
+            "--rm",
+            "-p",
+            f"{port}:8000",
+        ]
+        if isinstance(config_json["env"], str):
+            args.extend(
+                [
+                    "--env-file",
+                    str(config.parent / config_json["env"]),
+                ]
+            )
         else:
-            args.append("--abort-on-container-exit")
-        # run docker compose
-        set("Building...")
+            for k, v in config_json["env"].items():
+                args.extend(
+                    [
+                        "-e",
+                        f"{k}={v}",
+                    ]
+                )
+        if capabilities.healthcheck_start_interval:
+            args.extend(
+                [
+                    "--health-interval",
+                    "5s",
+                    "--health-retries",
+                    "1",
+                    "--health-start-period",
+                    "10s",
+                    "--health-start-interval",
+                    "1s",
+                ]
+            )
+        else:
+            args.extend(
+                [
+                    "--health-interval",
+                    "5s",
+                    "--health-retries",
+                    "2",
+                ]
+            )
 
         def on_stdout(line: str):
-            if "unpacking to docker.io" in line:
-                set("Starting...")
-            elif "GET /ok" in line:
-                debugger_origin = (
-                    f"http://localhost:{debugger_port}"
-                    if debugger_port
-                    else "https://smith.langchain.com"
-                )
+            if "GET /ok" in line:
                 set("")
                 sys.stdout.write(
                     f"""Ready!
 - API: http://localhost:{port}
-- Docs: http://localhost:{port}/docs
-- Debugger: {debugger_origin}/studio/?baseUrl=http://127.0.0.1:{port}
 """
                 )
                 sys.stdout.flush()
                 return True
 
-        if capabilities.compose_type == "plugin":
-            compose_cmd = ["docker", "compose"]
-        elif capabilities.compose_type == "standalone":
-            compose_cmd = ["docker-compose"]
-
         runner.run(
             subp_exec(
-                *compose_cmd,
+                "docker",
                 *args,
-                input=stdin,
+                tag,
                 verbose=verbose,
                 on_stdout=on_stdout,
             )
         )
 
 
-@OPT_PORT
-@OPT_DOCKER_COMPOSE
-@OPT_CONFIG
-@OPT_VERBOSE
-@OPT_DEBUGGER_PORT
-@cli.command(help="Stop langgraph API server")
-@log_command
-def down(
+def _build(
+    runner,
+    set: Callable[[str], None],
     config: pathlib.Path,
-    docker_compose: Optional[pathlib.Path],
-    port: int,
-    verbose: bool,
-    debugger_port: Optional[int],
+    config_json: dict,
+    platform: Optional[str],
+    base_image: Optional[str],
+    pull: bool,
+    tag: str,
 ):
-    with Runner() as runner:
-        capabilities = langgraph_cli.docker.check_capabilities(runner)
-        args, stdin = prepare(
-            runner,
-            capabilities=capabilities,
-            config_path=config,
-            docker_compose=docker_compose,
-            port=port,
-            pull=False,
-            watch=False,
-            langgraph_api_path=None,
-            verbose=verbose,
-            debugger_port=debugger_port,
+    base_image = base_image or "langchain/langgraph-api"
+
+    # pull latest images
+    if pull:
+        runner.run(
+            subp_exec(
+                "docker",
+                "pull",
+                f"{base_image}:{config_json['python_version']}",
+            )
         )
-        # add down + options
-        args.append("down")
-        # run docker compose
-        if capabilities.compose_type == "plugin":
-            compose_cmd = ["docker", "compose"]
-        elif capabilities.compose_type == "standalone":
-            compose_cmd = ["docker-compose"]
-
-        runner.run(subp_exec(*compose_cmd, *args, input=stdin, verbose=verbose))
-
-
-@OPT_DOCKER_COMPOSE
-@OPT_CONFIG
-@click.option("--follow", "-f", is_flag=True, help="Follow logs")
-@cli.command(help="Show langgraph API server logs")
-@log_command
-def logs(
-    config: pathlib.Path,
-    docker_compose: Optional[pathlib.Path],
-    follow: bool,
-):
-    with Runner() as runner:
-        capabilities = langgraph_cli.docker.check_capabilities(runner)
-        args, stdin = prepare(
-            runner,
-            capabilities=capabilities,
-            config_path=config,
-            docker_compose=docker_compose,
-            port=8123,
-            pull=False,
-            watch=False,
-            verbose=False,
-            langgraph_api_path=None,
+    set("Building...")
+    # apply options
+    args = [
+        "-f",
+        "-",  # stdin
+        "-t",
+        tag,
+    ]
+    if platform:
+        args.extend(["--platform", platform])
+    # apply config
+    stdin = langgraph_cli.config.config_to_docker(config, config_json, base_image)
+    # run docker build
+    runner.run(
+        subp_exec(
+            "docker", "build", *args, str(config.parent), input=stdin, verbose=True
         )
-        # add logs + options
-        args.append("logs")
-        if follow:
-            args.extend(["-f"])
-        # run docker compose
-        if capabilities.compose_type == "plugin":
-            compose_cmd = ["docker", "compose"]
-        elif capabilities.compose_type == "standalone":
-            compose_cmd = ["docker-compose"]
-
-        runner.run(subp_exec(*compose_cmd, *args, input=stdin, verbose=True))
+    )
 
 
 @OPT_CONFIG
@@ -351,220 +283,24 @@ def logs(
     \b
     """,
 )
+@click.option(
+    "--base-image",
+    hidden=True,
+)
 @cli.command(help="Build langgraph API server docker image")
 @log_command
 def build(
     config: pathlib.Path,
     platform: Optional[str],
+    base_image: Optional[str],
     pull: bool,
     tag: str,
 ):
-    with open(config) as f:
-        config_json = langgraph_cli.config.validate_config(json.load(f))
-    with Runner() as runner:
+    with Runner() as runner, Progress(message="Pulling...") as set:
         # check docker available
         langgraph_cli.docker.check_capabilities(runner)
-        # pull latest images
-        if pull:
-            runner.run(
-                subp_exec(
-                    "docker",
-                    "pull",
-                    f"langchain/langgraph-api:{config_json['python_version']}",
-                )
-            )
-        # apply options
-        args = [
-            "-f",
-            "-",  # stdin
-            "-t",
-            tag,
-        ]
-        if platform:
-            args.extend(["--platform", platform])
-        # apply config
-        stdin = langgraph_cli.config.config_to_docker(config, config_json)
-        # run docker build
-        runner.run(
-            subp_exec(
-                "docker", "build", *args, str(config.parent), input=stdin, verbose=True
-            )
-        )
-
-
-@cli.group(help="Export langgraph compose files")
-def export():
-    pass
-
-
-@click.option(
-    "--output",
-    "-o",
-    help="Output path to write the docker compose file to",
-    type=click.Path(
-        exists=False,
-        file_okay=True,
-        dir_okay=False,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
-    required=True,
-)
-@OPT_CONFIG
-@OPT_PORT
-@OPT_WATCH
-@OPT_LANGGRAPH_API_PATH
-@export.command(name="compose", help="Export docker compose file")
-@log_command
-def export_compose(
-    output: pathlib.Path,
-    config: pathlib.Path,
-    port: int,
-    watch: bool,
-    langgraph_api_path: Optional[pathlib.Path],
-):
-    with Runner() as runner:
-        capabilities = langgraph_cli.docker.check_capabilities(runner)
-        _, stdin = prepare(
-            runner,
-            capabilities=capabilities,
-            config_path=config,
-            docker_compose=None,
-            pull=False,
-            watch=watch,
-            langgraph_api_path=langgraph_api_path,
-            port=port,
-            verbose=False,
-        )
-
-    with open(output, "w") as f:
-        f.write(clean_empty_lines(stdin))
-
-
-@click.option(
-    "--output",
-    "-o",
-    help="Output path (directory) to write the helm chart to",
-    type=click.Path(
-        exists=False,
-        file_okay=False,
-        dir_okay=True,
-        resolve_path=True,
-        path_type=pathlib.Path,
-    ),
-    required=True,
-)
-@OPT_PORT
-@OPT_DOCKER_COMPOSE
-@OPT_CONFIG
-@export.command(
-    name="helm",
-    help="Build and export a helm chart to deploy to a Kubernetes cluster",
-    hidden=True,
-)
-@log_command
-def export_helm(
-    output: pathlib.Path,
-    config: pathlib.Path,
-    docker_compose: Optional[pathlib.Path],
-    port: int,
-):
-    with open(config) as f:
-        config_json = langgraph_cli.config.validate_config(json.load(f))
-
-    with Runner() as runner:
-        # check docker available
-        capabilities = langgraph_cli.docker.check_capabilities(runner)
-        # prepare args
-        stdin = langgraph_cli.docker.compose(capabilities, port=port)
-        args = [
-            "convert",
-            "--chart",
-            "-o",
-            str(output),
-            "-v",
-        ]
-        # apply options
-        if docker_compose:
-            args.extend(["-f", str(docker_compose)])
-
-        args.extend(["-f", "-"])  # stdin
-        # apply config
-        stdin += langgraph_cli.config.config_to_compose(config, config_json)
-        # run kompose convert
-        runner.run(subp_exec("kompose", *args, input=stdin))
-
-
-def prepare_args_and_stdin(
-    *,
-    capabilities: DockerCapabilities,
-    config_path: pathlib.Path,
-    config: Config,
-    docker_compose: Optional[pathlib.Path],
-    port: int,
-    watch: bool,
-    langgraph_api_path: Optional[pathlib.Path],
-    debugger_port: Optional[int] = None,
-    postgres_uri: Optional[str] = None,
-):
-    # prepare args
-    stdin = langgraph_cli.docker.compose(
-        capabilities,
-        port=port,
-        debugger_port=debugger_port,
-        postgres_uri=postgres_uri,
-    )
-    args = [
-        "--project-directory",
-        str(config_path.parent),
-    ]
-    # apply options
-    if docker_compose:
-        args.extend(["-f", str(docker_compose)])
-    args.extend(["-f", "-"])  # stdin
-    # apply config
-    stdin += langgraph_cli.config.config_to_compose(
-        config_path, config, watch=watch, langgraph_api_path=langgraph_api_path
-    )
-    return args, stdin
-
-
-def prepare(
-    runner,
-    *,
-    capabilities: DockerCapabilities,
-    config_path: pathlib.Path,
-    docker_compose: Optional[pathlib.Path],
-    port: int,
-    pull: bool,
-    watch: bool,
-    langgraph_api_path: Optional[pathlib.Path],
-    verbose: bool,
-    debugger_port: Optional[int] = None,
-    postgres_uri: Optional[str] = None,
-):
-    with open(config_path) as f:
-        config = langgraph_cli.config.validate_config(json.load(f))
-    # pull latest images
-    if pull:
-        runner.run(
-            subp_exec(
-                "docker",
-                "pull",
-                f"langchain/langgraph-api:{config['python_version']}",
-                verbose=verbose,
-            )
-        )
-
-    args, stdin = prepare_args_and_stdin(
-        capabilities=capabilities,
-        config_path=config_path,
-        config=config,
-        docker_compose=docker_compose,
-        port=port,
-        watch=watch,
-        langgraph_api_path=langgraph_api_path,
-        debugger_port=debugger_port,
-        postgres_uri=postgres_uri,
-    )
-    return args, stdin
+        # open config
+        with open(config) as f:
+            config_json = langgraph_cli.config.validate_config(json.load(f))
+        # build
+        _build(runner, set, config, config_json, platform, base_image, pull, tag)
