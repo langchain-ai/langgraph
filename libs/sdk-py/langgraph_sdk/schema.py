@@ -109,3 +109,21 @@ class Run(TypedDict):
     """The run metadata."""
     multitask_strategy: MultitaskStrategy
     """Strategy to handle concurrent runs on the same thread."""
+
+class Cron(TypedDict):
+    """Cron model."""
+
+    cron_id: str
+    """The ID of the cron."""
+    thread_id: Optional[str]
+    """The ID of the thread."""
+    end_time: Optional[datetime]
+    """The end date to stop running the cron."""
+    schedule: str
+    """The schedule to run, cron format."""
+    created_at: datetime
+    """The time the cron was created."""
+    updated_at: datetime
+    """The last time the cron was updated."""
+    payload: dict
+    """The run payload to use for creating new run."""
