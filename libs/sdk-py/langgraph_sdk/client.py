@@ -709,12 +709,19 @@ class CronClient:
         await self.http.delete(f"/runs/crons/{cron_id}")
 
     async def search(
-        self, *, assistant_id: Optional[str] = None, thread_id: Optional[str] = None
+        self, 
+        *,
+        assistant_id: Optional[str] = None,
+        thread_id: Optional[str] = None,
+        limit: int = 10,
+        offset: int = 0,
     ) -> list[Cron]:
         """Get a list of all the cron jobs."""
         payload = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
+            "limit": limit,
+            "offset": offset,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.post("/runs/crons/search", json=payload)
