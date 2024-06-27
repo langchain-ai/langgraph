@@ -29,7 +29,6 @@ def test_prepare_args_and_stdin():
         port=port,
         debugger_port=debugger_port,
         watch=True,
-        langgraph_api_path="path/to/langgraph-api",
     )
 
     expected_args = [
@@ -97,15 +96,8 @@ services:
             watch:
                 - path: langgraph.json
                   action: rebuild
-                  ignore:
-                    - .langgraph-data
                 - path: .
-                  action: rebuild
-                  ignore:
-                    - .langgraph-data
-                - path: path/to/langgraph-api
-                  action: sync+restart
-                  target: /api/langgraph_api\
+                  action: rebuild\
 """
     assert actual_args == expected_args
     assert clean_empty_lines(actual_stdin) == expected_stdin

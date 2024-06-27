@@ -354,14 +354,10 @@ def test_config_to_compose_watch():
         
         develop:
             watch:
-                - path: tests/unit_tests/test_config.json
+                - path: test_config.json
                   action: rebuild
-                  ignore:
-                    - .langgraph-data
-                - path: tests/unit_tests
-                  action: rebuild
-                  ignore:
-                    - .langgraph-data\
+                - path: .
+                  action: rebuild\
 """
     actual_compose_stdin = config_to_compose(
         PATH_TO_CONFIG,
@@ -397,23 +393,15 @@ def test_config_to_compose_end_to_end():
         
         develop:
             watch:
-                - path: tests/unit_tests/test_config.json
+                - path: test_config.json
                   action: rebuild
-                  ignore:
-                    - .langgraph-data
-                - path: tests/unit_tests
-                  action: rebuild
-                  ignore:
-                    - .langgraph-data
-                - path: path/to/langgraph/api
-                  action: sync+restart
-                  target: /api/langgraph_api\
+                - path: .
+                  action: rebuild\
 """
     actual_compose_stdin = config_to_compose(
         PATH_TO_CONFIG,
         validate_config({"dependencies": ["."], "graphs": graphs, "env": ".env"}),
         "langchain/langgraph-api",
         watch=True,
-        langgraph_api_path="path/to/langgraph/api",
     )
     assert clean_empty_lines(actual_compose_stdin) == expected_compose_stdin

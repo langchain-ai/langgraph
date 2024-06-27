@@ -272,10 +272,8 @@ def config_to_compose(
         f"env_file: {config['env']}" if isinstance(config["env"], str) else ""
     )
     if watch:
-        watch_paths = [config_path] + [
-            config_path.parent / dep
-            for dep in config["dependencies"]
-            if dep.startswith(".")
+        watch_paths = [config_path.name] + [
+            dep for dep in config["dependencies"] if dep.startswith(".")
         ]
         watch_actions = "\n".join(
             f"""- path: {path}
