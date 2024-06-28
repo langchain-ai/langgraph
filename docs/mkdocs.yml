@@ -151,6 +151,7 @@ nav:
           - Run graph asynchronously: how-tos/async.ipynb
           - Visualize your graph: how-tos/visualization.ipynb
           - Add runtime configuration: how-tos/configuration.ipynb
+          - Pass additional arguments to tools: how-tos/pass-arguments-to-tools.ipynb
           - Use Pydantic model as state: how-tos/state-model.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
