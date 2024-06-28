@@ -58,7 +58,7 @@ Now we can stream by values, which streams the full state of the graph after eac
         print("\n\n")
     ```
 
-=== "Javacript"
+=== "Javascript"
     
 
     ```js
