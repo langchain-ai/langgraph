@@ -1,39 +1,65 @@
+---
+hide:
+  - toc
+---
+
 # How-to guides
 
 Welcome to the LangGraph how-to guides! These guides provide practical, step-by-step instructions for accomplishing key tasks in LangGraph.
 
-## Core
+## Controllability
 
-The core guides show how to address common needs when building out AI workflows, with special focus placed on [ReAct](https://arxiv.org/abs/2210.03629)-style agents with [tool calling](https://python.langchain.com/docs/modules/model_io/chat/function_calling/).
+LangGraph is known for being a highly controllable agent framework.
+These how-to guides show how to achieve that controllability.
 
-- [Persistence](persistence.ipynb): How to give your graph "memory" and resilience by saving and loading state
-- [Time travel](time-travel.ipynb): How to navigate and manipulate graph state history once it's persisted
-- [Async execution](async.ipynb): How to run nodes asynchronously for improved performance
-- [Streaming responses](streaming-tokens.ipynb): How to stream agent responses in real-time
-- [Visualization](visualization.ipynb): How to visualize your graphs
-- [Configuration](configuration.ipynb): How to indicate that a graph can swap out configurable components
+- [How to create subgraphs](subgraph.ipynb)
+- [How to create branches for parallel execution](branching.ipynb)
+- [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 
-### Design patterns
 
-Recipes showing how to apply common design patterns in your workflows:
+## Persistence
 
-- [Subgraphs](subgraph.ipynb): How to compose subgraphs within a larger graph
-- [Branching](branching.ipynb): How to create branching logic in your graphs for parallel node execution
-- [Map-reduce](map-reduce.ipynb): How to branch **different views** of the state for parallel node execution (even applying the same node in parallel N times)
-- [Human-in-the-loop](human-in-the-loop.ipynb): How to incorporate human feedback and intervention
+LangGraph makes it easy to persist state across graph runs. The guide below shows how to add persistence to your graph.
 
-The following examples are useful especially if you are used to LangChain's AgentExecutor configurations.
+- [How to add persistence ("memory") to your graph](persistence.ipynb)
+- [How to manage conversation history](managing-conversation-history.ipynb)
+- [How to create a custom checkpointer using Postgres](persistence_postgres.ipynb)
 
-- [Force calling a tool first](force-calling-a-tool-first.ipynb): Define a fixed workflow before ceding control to the ReAct agent
-- [Pass run time values to tools](pass-run-time-values-to-tools.ipynb): Pass values that are only known at run time to tools (e.g., the ID of the user who made the request)
-- [Dynamic direct return](dynamically-returning-directly.ipynb): Let the LLM decide whether the graph should finish after a tool is run or whether the LLM should be able to review the output and keep going
-- [Respond in structured format](respond-in-format.ipynb): Let the LLM use tools or populate schema to provide the user. Useful if your agent should generate structured content
-- [Managing agent steps](managing-agent-steps.ipynb): How to format the intermediate steps of your workflow for the agent
+## Human in the Loop
 
-### Alternative ways to define state
+One of LangGraph's main benefits is that it makes human-in-the-loop workflows easy.
+These guides cover common examples of that.
 
-- [Pydantic state](state-model.ipynb): Use a Pydantic model as your state
+- [How to add breakpoints](human_in_the_loop/breakpoints.ipynb)
+- [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb)
+- [How to wait for user input](human_in_the_loop/wait-user-input.ipynb)
+- [How to view and update past graph state](human_in_the_loop/time-travel.ipynb)
 
-### Structured output
+## Streaming
 
-- [Extraction with re-prompting](./extraction/retries.ipynb): How to generate complex nested schemas using JSONPatch retries, for when function calling is insufficient, and regular reprompting still fails to generate valid results
+LangGraph is built to be streaming first.
+These guides show how to use different streaming modes.
+
+- [How to stream full state of your graph](stream-values.ipynb)
+- [How to stream state updates of your graph](stream-updates.ipynb)
+- [How to stream LLM tokens](streaming-tokens.ipynb)
+- [How to stream arbitrarily nested content](streaming-content.ipynb)
+- [How to configure multiple streaming modes at the same time](stream-multiple.ipynb)
+- [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
+- [How to stream events from the final node](streaming-from-final-node.ipynb)
+
+## Other
+- [How to run graph asynchronously](async.ipynb)
+- [How to visualize your graph](visualization.ipynb)
+- [How to add runtime configuration to your graph](configuration.ipynb)
+- [How to use a Pydantic model as your state](state-model.ipynb)
+
+## Prebuilt ReAct Agent
+
+These guides show how to use the prebuilt ReAct agent.
+Please note that here will we use a **prebuilt agent**. One of the big benefits of LangGraph is that you can easily create your own agent architectures. So while it's fine to start here to build an agent quickly, we would strongly recommend learning how to build your own agent so that you can take full advantage of LangGraph.
+
+- [How to create a ReAct agent](create-react-agent.ipynb)
+- [How to add memory to a ReAct agent](create-react-agent-memory.ipynb)
+- [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
+- [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
