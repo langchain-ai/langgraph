@@ -175,13 +175,12 @@ def up(
     debugger_port: Optional[int],
     postgres_uri: Optional[str],
 ):
-    sys.stdout.write(
-        """Starting LangGraph API server...
-For local testing, requires a LangSmith API key with access to LangGraph Cloud closed beta, in env var LANGSMITH_API_KEY.
-For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.
-"""
+    click.secho("Starting LangGraph API server...", fg="green")
+    click.secho(
+        """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Cloud closed beta.
+For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
+        fg="red",
     )
-    sys.stdout.flush()
     with Runner() as runner, Progress(message="Pulling...") as set:
         capabilities = langgraph_cli.docker.check_capabilities(runner)
         args, stdin = prepare(
