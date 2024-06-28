@@ -99,12 +99,13 @@ jobs:
           TAG: ${{ needs.build.outputs.tag }}
         run: |
           if [ -z $SHORT_PKG_NAME ]; then
-            REGEX="^\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?$"
+            REGEX="^\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?\$"
           else
-            REGEX="^$SHORT_PKG_NAME==\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?$"
+            REGEX="^$SHORT_PKG_NAME==\\d+\\.\\d+\\.\\d+((a|b|rc)\\d+)?\$"
           fi
           echo $REGEX
-          PREV_TAG=$(git tag --sort=-creatordate | grep -P $REGEX || true | head -1)
+          PREV_TAG=$(git tag --sort=-creatordate | grep -P $REGEX | head -1)
+          echo $PREV_TAG
           if [ "$TAG" == "$PREV_TAG" ]; then
             echo "No new version to release"
             exit 1
