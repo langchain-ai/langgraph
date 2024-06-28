@@ -86,9 +86,9 @@ Streaming debug events produces responses containing `type` and `timestamp` keys
         }
     );
     for await (const chunk of streamResponse) {
-        console.log(f"Receiving new event of type: {chunk.event}...")
-        console.log(chunk.data)
-        console.log("\n\n")
+        console.log(`Receiving new event of type: ${chunk.event}...`);
+        console.log(chunk.data);
+        console.log("\n\n");
     }
     ```
 

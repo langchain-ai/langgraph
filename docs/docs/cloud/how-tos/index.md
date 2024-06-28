@@ -39,10 +39,10 @@ Graph execution can take a while, and sometimes users may change their mind abou
 
 When creating complex graphs, leaving every decision up to the LLM can be dangerous, especially when the decisions involve invoking certain tools or accessing specific documents. To remedy this, LangGraph allows you to insert human-in-the-loop behavior to ensure your graph does not have undesired outcomes. Read more about the different ways you can add human-in-the-loop capabilities to your LangGraph Cloud projects in these how-to guides:
 
-- [How to add a breakpoint](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/human_in_the_loop_breakpoint/)
-- [How to wait for user input](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/human_in_the_loop_user_input/)
-- [How to edit graph state](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/human_in_the_loop_edit_state/)
-- [How to replay and branch from prior states](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/human_in_the_loop_time_travel/)
+- [How to add a breakpoint](https://langchain-ai.github.io/langgraph/cloud/how-tos/human_in_the_loop_breakpoint/)
+- [How to wait for user input](https://langchain-ai.github.io/langgraph/cloud/how-tos/human_in_the_loop_user_input/)
+- [How to edit graph state](https://langchain-ai.github.io/langgraph/cloud/how-tos/human_in_the_loop_edit_state/)
+- [How to replay and branch from prior states](https://langchain-ai.github.io/langgraph/cloud/how-tos/human_in_the_loop_time_travel/)
 
 ## LangGraph Studio
 

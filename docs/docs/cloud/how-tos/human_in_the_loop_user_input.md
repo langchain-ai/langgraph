@@ -1,0 +1,177 @@
+# How to Wait for User Input
+
+One of the main human-in-the-loop interaction patterns is waiting for human input. A key use case involves asking the user clarifying questions. One way to accomplish this is simply go to the `END` node and exit the graph. Then, any user response comes back in as fresh invocation of the graph. This is basically just creating a chatbot architecture.
+
+The issue with this is it is tough to resume back in a particular point in the graph. Often times the agent is halfway through some process, and just needs a bit of a user input. Although it is possible to design your graph in such a way where you have a `conditional_entry_point` to route user messages back to the right place, that is not super scalable (as it essentially involves having a routing function that can end up almost anywhere).
+
+A separate way to do this is to have a node explicitly for getting user input. This is easy to implement in a notebook setting - you just put an `input()` call in the node. But that isn't exactly production ready.
+
+Luckily, LangGraph makes it possible to do similar things in a production way. The basic idea is:
+
+- Set up a node that represents human input. This can have specific incoming/outgoing edges (as you desire). There shouldn't actually be any logic inside this node.
+- Add a breakpoint before the node. This will stop the graph before this node executes (which is good, because there's no real logic in it anyways)
+- Use `.update_state` to update the state of the graph. Pass in whatever human response you get. The key here is to use the `as_node` parameter to apply this update **as if you were that node**. This will have the effect of making it so that when you resume execution next it resumes as if that node just acted, and not from the beginning.
+
+## Setup
+
+We are not going to show the full code for the graph we are hosting, but you can see it [here](https://langchain-ai.github.io/langgraph/how-tos/human_in_the_loop/wait-user-input/#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
+
+### SDK initialization
+
+First, we need to setup our client so that we can communicate with our hosted graph:
+
+=== "Python"
+
+    ```python
+    from langgraph_sdk import get_client
+    client = get_client(url="whatever-your-deployment-url-is")
+    assistants = await client.assistants.search()
+    assistants = [a for a in assistants if not a['config']]
+    assistant = assistants[0]
+    thread = await client.threads.create()
+    ```
+
+=== "Javascript"
+
+    ```js
+    import { Client } from "@langchain/langgraph-sdk";
+
+    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
+    let assistants = await client.assistants.search();
+    assistants = assistants.filter(a => !a.config);
+    const assistant = assistants[0];
+    const thread = await client.threads.create();
+    ```
+
+## Waiting for user input
+
+### Initial invocation
+
+Now, let's invoke our graph by interrupting before `ask_human` node:
+
+=== "Python"
+
+    ```python
+    input = {'messages':[{"role":"user","content":"Use the search tool to ask the user where they are, then look up the weather there"}]}
+
+    async for chunk in client.runs.stream(
+        thread["thread_id"],
+        assistant["assistant_id"],
+        input=input,
+        stream_mode="updates",
+        interrupt_before=["ask_human"],
+    ):
+        if chunk.data and "run_id" not in chunk.data:
+            print(chunk.data)
+    ```
+=== "Javascript"
+
+    ```js
+    const input = {
+        "messages": [
+            {
+                "role": "human",
+                "content": "Use the search tool to ask the user where they are, then look up the weather there",
+            }
+        ]
+    }
+
+    const streamResponse = client.runs.stream(
+        thread["thread_id"],
+        assistant["assistant_id"],
+        {
+            input: input,
+            streamMode: "updates",
+            interruptBefore: ["ask_human"],
+        }
+    );
+    for await (const chunk of streamResponse) {
+        if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
+            console.log(chunk.data);
+        }
+    }
+    ```
+    
+Output:
+
+    {'agent': {'messages': [{'content': [{'text': "Certainly! I'll use the AskHuman function to ask the user about their location, and then I'll use the search function to look up the weather for that location. Let's start by asking the user where they are.", 'type': 'text'}, {'id': 'toolu_01RFahzYPvnPWTb2USk2RdKR', 'input': {'question': 'Where are you currently located?'}, 'name': 'AskHuman', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-a8422215-71d3-4093-afb4-9db141c94ddb', 'example': False, 'tool_calls': [{'name': 'AskHuman', 'args': {'question': 'Where are you currently located?'}, 'id': 'toolu_01RFahzYPvnPWTb2USk2RdKR'}], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
+
+
+### Adding user input to state
+
+We now want to update this thread with a response from the user. We then can kick off another run.
+
+Because we are treating this as a tool call, we will need to update the state as if it is a response from a tool call. In order to do this, we will need to check the state to get the ID of the tool call.
+
+
+=== "Python"
+
+    ```python
+    state = await client.threads.get_state(thread['thread_id'])
+    tool_call_id = state['values']['messages'][-1]['tool_calls'][0]['id']
+
+    # We now create the tool call with the id and the response we want
+    tool_message = [{"tool_call_id": tool_call_id, "type": "tool", "content": "san francisco"}]
+
+    await client.threads.update_state(thread['thread_id'], {"messages": tool_message}, as_node="ask_human")
+    ```
+
+=== "Javascript"
+
+    ```js
+    const state = await client.threads.getState(thread['thread_id']);
+    const tool_call_id = state['values']['messages'][-1]['tool_calls'][0]['id'];
+
+    # We now create the tool call with the id and the response we want
+    const tool_message = [{"tool_call_id": tool_call_id, "type": "tool", "content": "san francisco"}];
+
+    await client.threads.updateState(thread['thread_id'], {values: {"messages": tool_message}, asNode:"ask_human"})
+    ```
+
+Output:
+
+    {'configurable': {'thread_id': '10d0ee61-db47-48fc-a58c-109a1e68cd73',
+      'thread_ts': '1ef32729-3cc3-6647-8002-14dcb621b46e'}}
+
+
+
+### Invoking after receiving human input
+
+We can now tell the agent to continue. We can just pass in None as the input to the graph, since no additional input is needed:
+
+=== "Python"
+
+    ```python
+    async for chunk in client.runs.stream(
+        thread["thread_id"],
+        assistant["assistant_id"], # graph_id
+        input=None,
+        stream_mode="updates",
+    ):
+        if chunk.data and "run_id" not in chunk.data:
+            print(chunk.data)
+    ```
+=== "Javascript"
+
+    ```js
+    const streamResponse = client.runs.stream(
+        thread["thread_id"],
+        assistant["assistant_id"],
+        {
+            input: null,
+            streamMode: "updates",
+        }
+    );
+    for await (const chunk of streamResponse) {
+        if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
+            console.log(chunk.data);
+        }
+    }
+    ```
+
+Output:
+
+    {'agent': {'messages': [{'content': [{'text': "Thank you for letting me know that you're in San Francisco. Now, I'll use the search function to look up the weather in San Francisco.", 'type': 'text'}, {'id': 'toolu_01K57ofmgG2wyJ8tYJjbq5k7', 'input': {'query': 'current weather in San Francisco'}, 'name': 'search', 'type': 'tool_use'}], 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-241baed7-db5e-44ce-ac3c-56431705c22b', 'example': False, 'tool_calls': [{'name': 'search', 'args': {'query': 'current weather in San Francisco'}, 'id': 'toolu_01K57ofmgG2wyJ8tYJjbq5k7'}], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
+    {'action': {'messages': [{'content': '["I looked up: current weather in San Francisco. Result: It\'s sunny in San Francisco, but you better look out if you\'re a Gemini 😈."]', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'tool', 'name': 'search', 'id': '8b699b95-8546-4557-8e66-14ea71a15ed8', 'tool_call_id': 'toolu_01K57ofmgG2wyJ8tYJjbq5k7'}]}}
+    {'agent': {'messages': [{'content': "Based on the search results, I can provide you with information about the current weather in San Francisco:\n\nThe weather in San Francisco is currently sunny. It's a beautiful day in the city! \n\nHowever, I should note that the search result included an unusual comment about Gemini zodiac signs. This appears to be either a joke or potentially irrelevant information added by the search engine. For accurate and detailed weather information, you might want to check a reliable weather service or app for San Francisco.\n\nIs there anything else you'd like to know about the weather or San Francisco?", 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-b4d7309f-f849-46aa-b6ef-475bcabd2be9', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
+

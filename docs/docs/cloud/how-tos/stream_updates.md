@@ -82,9 +82,9 @@ Now we can stream by updates, which outputs updates made to the state by each no
         }
     );
     for await (const chunk of streamResponse) {
-        console.log(f"Receiving new event of type: {chunk.event}...")
-        console.log(chunk.data)
-        console.log("\n\n")
+        console.log(`Receiving new event of type: ${chunk.event}...`);
+        console.log(chunk.data);
+        console.log("\n\n");
     }
     ```
 

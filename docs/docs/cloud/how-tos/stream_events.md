@@ -2,7 +2,7 @@
 This guide covers how to stream events from your graph (`stream_mode="events"`). Depending on the use case and user experience of your LangGraph application, your application may process event types differently.
 
 === "Python"
-    
+
     ```python
     from langgraph_sdk import get_client
 
@@ -38,6 +38,7 @@ Streaming events produces responses containing an `event` key (in addition to ot
 
 
 === "Python"
+
     ```python
     # create input
     input = {
@@ -84,9 +85,9 @@ Streaming events produces responses containing an `event` key (in addition to ot
         }
     );
     for await (const chunk of streamResponse) {
-        console.log(f"Receiving new event of type: {chunk.event}...")
-        console.log(chunk.data)
-        console.log("\n\n")
+        console.log(`Receiving new event of type: ${chunk.event}...`);
+        console.log(chunk.data);
+        console.log("\n\n");
     }
     ```
 
