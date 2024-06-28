@@ -81,7 +81,6 @@ When configuring multiple streaming modes for a run, responses for each respecti
         "agent",
         {
             input: input,
-            config: {"configurable": metadata},
             streamMode: ["messages", "events", "debug"]
         }
     );

@@ -69,7 +69,6 @@ Now we can stream by values, which streams the full state of the graph after eac
         "agent",
         {
             input: input,
-            config: {"configurable": metadata},
             streamMode: "values"
         }
     );
@@ -130,13 +129,12 @@ If we want to just get the final result, we can use this endpoint and just keep 
 === "Javascript"
 
     ```js
-    var final_answer;
+    let final_answer;
     const streamResponse = client.runs.stream(
         thread["thread_id"],
         "agent",
         {
             input: input,
-            config: {"configurable": metadata},
             streamMode: "values"
         }
     );
