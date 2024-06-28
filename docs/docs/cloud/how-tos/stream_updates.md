@@ -16,7 +16,7 @@ First let's set up our client and thread:
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client()
+    client = get_client(url="whatever-your-deployment-url-is")
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -51,7 +51,7 @@ Now we can stream by updates, which outputs updates made to the state by each no
     input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant_id,
+        "agent",
         input=input,
         stream_mode="updates",
     ):
@@ -63,8 +63,7 @@ Now we can stream by updates, which outputs updates made to the state by each no
 === "Javascript"
 
     ```js
-    # create input
-    var input = {
+    const input = {
         "messages": [
             {
                 "role": "human",
@@ -73,7 +72,6 @@ Now we can stream by updates, which outputs updates made to the state by each no
         ]
     }
 
-    # stream events
     const streamResponse = client.runs.stream(
         thread["thread_id"],
         "agent",

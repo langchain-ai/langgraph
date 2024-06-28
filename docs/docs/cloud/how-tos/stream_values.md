@@ -16,7 +16,7 @@ First let's set up our client and thread:
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client()
+    client = get_client(url="whatever-your-deployment-url-is")
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -49,7 +49,7 @@ Now we can stream by values, which streams the full state of the graph after eac
     # stream values
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant_id, 
+        "agent", 
         input=input,
         stream_mode="values"
     ):
@@ -62,9 +62,8 @@ Now we can stream by values, which streams the full state of the graph after eac
     
 
     ```js
-    var input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
+    const input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
 
-    # stream events
     const streamResponse = client.runs.stream(
         thread["thread_id"],
         "agent",

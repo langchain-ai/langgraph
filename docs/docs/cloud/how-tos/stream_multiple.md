@@ -9,7 +9,7 @@ First let's set up our client and thread:
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client()
+    client = get_client(url="whatever-your-deployment-url-is")
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -66,7 +66,7 @@ When configuring multiple streaming modes for a run, responses for each respecti
 
     ```js
     # create input
-    var input = {
+    const input = {
         "messages": [
             {
                 "role": "human",
@@ -75,7 +75,7 @@ When configuring multiple streaming modes for a run, responses for each respecti
         ]
     }
 
-    # stream events
+    # stream events with multiple streaming modes
     const streamResponse = client.runs.stream(
         thread["thread_id"],
         "agent",

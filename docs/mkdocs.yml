@@ -269,7 +269,7 @@ markdown_extensions:
       custom_checkbox: true
   - markdown_include.include:
       base_path: ./
-  #- github-callouts
+  - github-callouts
 extra_css:
   - css/mkdocstrings.css
 

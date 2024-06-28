@@ -6,7 +6,7 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client()
+    client = get_client(url="whatever-your-deployment-url-is")
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -65,7 +65,7 @@ Streaming events produces responses containing an `event` key (in addition to ot
 
     ```js
     # create input
-    var input = {
+    const input = {
         "messages": [
             {
                 "role": "human",

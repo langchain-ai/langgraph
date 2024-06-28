@@ -10,9 +10,10 @@ LangGraph Cloud supports multiple streaming modes. The main ones are:
 This guide covers `stream_mode="messages"`.
 
 In order to use this mode, the state of the graph you are interacting with MUST have a messages key that is a list of messages.
-Eg, the state should look something like:
+Eg, the state should look something like the following code block. Note that LangGraph Cloud only supports hosting graphs written in Python at the moment,
+but JS support is on the way.
 
-=== "Python"
+
     ```python
     from typing import TypedDict, Annotated
     from langgraph.graph import add_messages
@@ -22,26 +23,6 @@ Eg, the state should look something like:
         messages: Annotated[list[AnyMessage], add_messages]
     ```
 
-=== "Javascript"
-
-    ```js
-    import { AnyMessage } from "@langchain/core/messages";
-    import { StateGraphArgs } from "@langchain/langgraph";
-
-
-    // Define the state interface
-    interface AgentState {
-        messages: AnyMessage[];
-    }
-
-    // Define the graph state
-    const graphState: StateGraphArgs<AgentState>["channels"] = {
-        messages: {
-            value: (x: AnyMessage[], y: AnyMessage[]) => x.concat(y),
-            default: () => [],
-        },
-    };
-    ```
 
 OR it should be an instance or subclass of `from langgraph.graph import MessageState` (`MessageState` is just a helper type hint equivalent to the above).
 
@@ -57,7 +38,7 @@ First let's set up our client and thread:
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client()
+    client = get_client(url="whatever-your-deployment-url-is")
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -163,8 +144,7 @@ Now we can stream by messages, which will return complete messages (at the end o
 === "Javascript"
 
     ```js
-    # create input
-    var input = {
+    const input = {
         "messages": [
             {
                 "role": "human",
@@ -174,7 +154,6 @@ Now we can stream by messages, which will return complete messages (at the end o
     }
     var config = {"configurable": {"model_name": "openai"}}
 
-    # stream events
     const streamResponse = client.runs.stream(
         thread["thread_id"],
         "agent",

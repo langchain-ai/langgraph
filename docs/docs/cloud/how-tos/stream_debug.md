@@ -8,7 +8,7 @@ First let's set up our client and thread:
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client()
+    client = get_client(url="whatever-your-deployment-url-is")
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -51,7 +51,7 @@ Streaming debug events produces responses containing `type` and `timestamp` keys
         ]
     }
 
-    # stream events
+    # stream debug
     async for chunk in client.runs.stream(
         thread_id=thread["thread_id"],
         assistant_id="agent",
@@ -67,7 +67,7 @@ Streaming debug events produces responses containing `type` and `timestamp` keys
 
     ```js
     # create input
-    var input = {
+    const input = {
         "messages": [
             {
                 "role": "human",
@@ -76,7 +76,7 @@ Streaming debug events produces responses containing `type` and `timestamp` keys
         ]
     }
 
-    # stream events
+    # stream debug
     const streamResponse = client.runs.stream(
         thread["thread_id"],
         "agent",
