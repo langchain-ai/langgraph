@@ -47,13 +47,13 @@ The LangGraph Cloud API offers several features to support complex agent archite
 
 Streaming is critical for making LLM applications feel responsive to end users. When creating a streaming run, the streaming mode determines what data is streamed back to the API client. The LangGraph Cloud API supports five streaming modes.
 
-- `values`: Stream the full state of the graph after each node is executed. See the [how-to guide](../how-tos/cloud_examples/stream_values.ipynb) for streaming values.
-- `messages`: Stream complete messages (at the end of node execution) as well as tokens for any messages generated inside a node. This mode is primarily meant for powering chat applications. This is only an option if your graph contains a `messages` key. See the [how-to guide](../how-tos/cloud_examples/stream_messages.ipynb) for streaming messages.
-- `updates`: Streams updates to the state of the graph after each node is executed. See the [how-to guide](../how-tos/cloud_examples/stream_updates.ipynb) for streaming updates.
-- `events`: Stream all events (including the state of the graph) after each node is executed. See the [how-to guide](../how-tos/cloud_examples/stream_events.ipynb) for streaming events. This can be used to do token-by-token streaming for LLMs.
-- `debug`: Stream debug events after each node is executed. See the [how-to guide](../how-tos/cloud_examples/stream_debug.ipynb) for streaming debug events.
+- `values`: Stream the full state of the graph after each node is executed. See the [how-to guide](../how-tos/stream_values.md) for streaming values.
+- `messages`: Stream complete messages (at the end of node execution) as well as tokens for any messages generated inside a node. This mode is primarily meant for powering chat applications. This is only an option if your graph contains a `messages` key. See the [how-to guide](../how-tos/stream_messages.md) for streaming messages.
+- `updates`: Streams updates to the state of the graph after each node is executed. See the [how-to guide](../how-tos/stream_updates.md) for streaming updates.
+- `events`: Stream all events (including the state of the graph) after each node is executed. See the [how-to guide](../how-tos/stream_events.md) for streaming events. This can be used to do token-by-token streaming for LLMs.
+- `debug`: Stream debug events after each node is executed. See the [how-to guide](../how-tos/stream_debug.md) for streaming debug events.
 
-You can also specify multiple streaming modes at the same time. See the [how-to guide](../how-tos/cloud_examples/stream_multiple.ipynb) for configuring multiple streaming modes at the same time.
+You can also specify multiple streaming modes at the same time. See the [how-to guide](../how-tos/stream_multiple.md) for configuring multiple streaming modes at the same time.
 
 See the <a href="../reference/api/api_ref.html#tag/runscreate/POST/threads/{thread_id}/runs/stream" target="_blank">API reference</a> for how to create streaming runs.
 
