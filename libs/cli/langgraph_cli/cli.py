@@ -159,7 +159,9 @@ def cli():
     is_flag=True,
     help="Wait for services to start before returning. Implies --detach",
 )
-@cli.command(help="Start langgraph API server. Requires a license key.")
+@cli.command(
+    help="Start langgraph API server. For local testing, requires a LangSmith API key with access to LangGraph Cloud closed beta. Requires a license key for production use."
+)
 @log_command
 def up(
     config: pathlib.Path,
@@ -173,6 +175,12 @@ def up(
     debugger_port: Optional[int],
     postgres_uri: Optional[str],
 ):
+    click.secho("Starting LangGraph API server...", fg="green")
+    click.secho(
+        """For local dev, requires env var LANGSMITH_API_KEY with access to LangGraph Cloud closed beta.
+For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KEY.""",
+        fg="red",
+    )
     with Runner() as runner, Progress(message="Pulling...") as set:
         capabilities = langgraph_cli.docker.check_capabilities(runner)
         args, stdin = prepare(

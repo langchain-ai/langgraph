@@ -15,6 +15,7 @@ import langgraph_sdk
 from langgraph_sdk.schema import (
     Assistant,
     Config,
+    Cron,
     GraphSchema,
     Metadata,
     MultitaskStrategy,
@@ -717,6 +718,24 @@ class CronClient:
     async def delete(self, cron_id: str) -> None:
         """Delete a cron."""
         await self.http.delete(f"/runs/crons/{cron_id}")
+
+    async def search(
+        self,
+        *,
+        assistant_id: Optional[str] = None,
+        thread_id: Optional[str] = None,
+        limit: int = 10,
+        offset: int = 0,
+    ) -> list[Cron]:
+        """Get a list of cron jobs."""
+        payload = {
+            "assistant_id": assistant_id,
+            "thread_id": thread_id,
+            "limit": limit,
+            "offset": offset,
+        }
+        payload = {k: v for k, v in payload.items() if v is not None}
+        return await self.http.post("/runs/crons/search", json=payload)
 
 
 def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
