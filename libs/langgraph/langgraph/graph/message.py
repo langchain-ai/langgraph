@@ -4,10 +4,10 @@ from typing import Annotated, TypedDict, Union
 from langchain_core.messages import (
     AnyMessage,
     MessageLikeRepresentation,
+    RemoveMessage,
     convert_to_messages,
     message_chunk_to_message,
 )
-from langchain_core.messages.modifier import RemoveMessage
 
 from langgraph.graph.state import StateGraph
 
