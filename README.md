@@ -29,7 +29,7 @@ LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [A
 ## Installation
 
 ```shell
-pip install -U langgraph
+pip install -U langgraph langchain-openai langchain-community langchain-core
 ```
 
 ## Example
