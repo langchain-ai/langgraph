@@ -4,6 +4,7 @@ from typing import Annotated, TypedDict, Union
 from langchain_core.messages import (
     AnyMessage,
     MessageLikeRepresentation,
+    RemoveMessage,
     convert_to_messages,
     message_chunk_to_message,
 )
@@ -79,8 +80,16 @@ def add_messages(left: Messages, right: Messages) -> Messages:
     merged = left.copy()
     for m in right:
         if (existing_idx := left_idx_by_id.get(m.id)) is not None:
-            merged[existing_idx] = m
+            if isinstance(m, RemoveMessage):
+                del merged[existing_idx]
+            else:
+                merged[existing_idx] = m
         else:
+            if isinstance(m, RemoveMessage):
+                raise ValueError(
+                    f"Attempting to delete a message with an ID that doesn't exist ('{m.id}')"
+                )
+
             merged.append(m)
     return merged
 
