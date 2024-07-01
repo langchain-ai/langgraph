@@ -179,6 +179,7 @@ nav:
               - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
               - Deploy to Cloud: "cloud/deployment/cloud.md"
               - Self-Host: "cloud/deployment/self_hosted.md"
+              - Start Using the SDK: 'cloud/how-tos/initialize_sdk.md'
           - Streaming:
               - Stream Values: "cloud/how-tos/cloud_examples/stream_values.ipynb"
               - Stream Updates: "cloud/how-tos/cloud_examples/stream_updates.ipynb"
@@ -199,6 +200,7 @@ nav:
           - LangGraph Studio:
               - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
               - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
+              - Add breakpoints in LangGraph Studio: "cloud/how-tos/add_breakpoints.md"
               - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
           - Different Types of Runs:
               - Run an Agent in the Background: "cloud/how-tos/cloud_examples/background_run.ipynb"
