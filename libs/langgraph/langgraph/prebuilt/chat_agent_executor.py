@@ -275,7 +275,7 @@ def create_react_agent(
         ...     # You can do more complex modifications here
         ...     return prompt.invoke({"messages": messages})
         >>>
-        >>> app = create_react_agent(model, tools, messages_modifier=modify_messages)
+        >>> graph = create_react_agent(model, tools, messages_modifier=modify_messages)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
