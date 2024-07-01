@@ -1,0 +1,18 @@
+[tool.poetry]
+name = "langgraph-examples"
+version = "0.1.0"
+description = ""
+authors = []
+readme = "README.md"
+packages = []
+package-mode = false
+
+[tool.poetry.dependencies]
+python = "^3.9.0,<4.0"
+jupyter = "^1.0.0"
+langgraph-cli = {path = "../../cli", develop = true}
+langgraph-sdk = {path = "../../sdk-py", develop = true}
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

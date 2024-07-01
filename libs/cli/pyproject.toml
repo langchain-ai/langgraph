@@ -1,0 +1,55 @@
+[tool.poetry]
+name = "gigagraph-cli"
+version = "0.1.47"
+description = "CLI for interacting with GigaGraph API"
+authors = []
+license = "MIT"
+readme = "README.md"
+repository = "https://github.com/ai-forever/gigagraph"
+packages = [{include = "langgraph_cli"}]
+
+[tool.poetry.scripts]
+gigagraph = "langgraph_cli.cli:cli"
+
+[tool.poetry.dependencies]
+python = "^3.9.0,<4.0"
+click = "^8.1.7"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.1.4"
+codespell = "^2.2.0"
+pytest = "^7.2.1"
+pytest-asyncio = "^0.21.1"
+pytest-mock = "^3.11.1"
+pytest-watch = "^4.2.0"
+mypy = "^1.10.0"
+
+[tool.pytest.ini_options]
+# --strict-markers will raise errors on unknown marks.
+# https://docs.pytest.org/en/7.1.x/how-to/mark.html#raising-errors-on-unknown-marks
+#
+# https://docs.pytest.org/en/7.1.x/reference/reference.html
+# --strict-config       any warnings encountered while parsing the `pytest`
+#                       section of the configuration file raise errors.
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+asyncio_mode = "auto"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+select = [
+  # pycodestyle
+  "E",
+  # Pyflakes
+  "F",
+  # pyupgrade
+  "UP",
+  # flake8-bugbear
+  "B",
+  # isort
+  "I",
+]
+ignore = [ "E501", "B008" ]

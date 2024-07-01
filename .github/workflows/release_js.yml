@@ -1,0 +1,38 @@
+name: JS Release
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    # Disallow publishing from branches that aren't `main`.
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+
+    strategy:
+      matrix:
+        working-directory:
+          - "libs/sdk-js"
+
+    defaults:
+      run:
+        working-directory: ${{ matrix.working-directory }}
+
+    steps:
+      - uses: actions/checkout@v4
+      # JS Build
+      - name: Use Node.js
+        uses: actions/setup-node@v3
+        with:
+          node-version: "20"
+          cache: "yarn"
+          cache-dependency-path: ${{ matrix.working-directory }}/yarn.lock
+
+      - name: Install dependencies
+        run: yarn install
+      - name: Build
+        run: yarn build
+      - name: Publish package to NPM
+        run: |
+          echo "//registry.npmjs.org/:_authToken=${{ secrets.NPM_TOKEN }}" > .npmrc
+          npm publish

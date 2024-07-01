@@ -1,0 +1,25 @@
+{
+	"folders": [
+		{
+			"name": "gigagraph",
+			"path": ".."
+		},
+		{
+			"name": "cli",
+			"path": "../libs/cli"
+		},
+		{
+			"name": "langgraph",
+			"path": "../libs/langgraph"
+		},
+		{
+			"name": "sdk-js",
+			"path": "../libs/sdk-js"
+		},
+		{
+			"name": "sdk-py",
+			"path": "../libs/sdk-py"
+		}
+	],
+	"settings": {}
+}
