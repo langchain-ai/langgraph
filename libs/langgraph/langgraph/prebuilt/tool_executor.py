@@ -54,6 +54,7 @@ class ToolExecutor(RunnableCallable):
             when an invalid tool is requested. Defaults to INVALID_TOOL_MSG_TEMPLATE.
 
     Examples:
+        Basic usage:
 
         ```pycon
         >>> from langchain_core.tools import tool
@@ -74,6 +75,7 @@ class ToolExecutor(RunnableCallable):
         >>> print(result)
         "Searching for: What is the capital of France?"
         ```
+        Handling invalid tool:
 
         ```pycon
         >>> invocation = ToolInvocation(
