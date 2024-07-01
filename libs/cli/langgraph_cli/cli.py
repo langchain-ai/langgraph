@@ -134,6 +134,12 @@ OPT_DEBUGGER_PORT = click.option(
     type=int,
     help="Pull the debugger image locally and serve the UI on specified port",
 )
+OPT_DEBUGGER_HOST = click.option(
+    "--debugger-host",
+    type=str,
+    help="Host for the debugger UI. Defaults to localhost",
+)
+
 OPT_POSTGRES_URI = click.option(
     "--postgres-uri",
     help="Postgres URI to use for the database. Defaults to launching a local database",
@@ -152,6 +158,7 @@ def cli():
 @OPT_CONFIG
 @OPT_VERBOSE
 @OPT_DEBUGGER_PORT
+@OPT_DEBUGGER_HOST
 @OPT_WATCH
 @OPT_POSTGRES_URI
 @click.option(
@@ -173,6 +180,7 @@ def up(
     wait: bool,
     verbose: bool,
     debugger_port: Optional[int],
+    debugger_host: Optional[str],
     postgres_uri: Optional[str],
 ):
     click.secho("Starting LangGraph API server...", fg="green")
@@ -193,6 +201,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             watch=watch,
             verbose=verbose,
             debugger_port=debugger_port,
+            debugger_host=debugger_host,
             postgres_uri=postgres_uri,
         )
         # add up + options
@@ -448,6 +457,7 @@ def prepare_args_and_stdin(
     port: int,
     watch: bool,
     debugger_port: Optional[int] = None,
+    debugger_host: Optional[str] = None,
     postgres_uri: Optional[str] = None,
 ):
     # prepare args
@@ -455,6 +465,7 @@ def prepare_args_and_stdin(
         capabilities,
         port=port,
         debugger_port=debugger_port,
+        debugger_host=debugger_host,
         postgres_uri=postgres_uri,
     )
     args = [
@@ -486,6 +497,7 @@ def prepare(
     watch: bool,
     verbose: bool,
     debugger_port: Optional[int] = None,
+    debugger_host: Optional[str] = None,
     postgres_uri: Optional[str] = None,
 ):
     with open(config_path) as f:
@@ -509,6 +521,7 @@ def prepare(
         port=port,
         watch=watch,
         debugger_port=debugger_port,
+        debugger_host=debugger_host or f"http://127.0.0.1:{DEFAULT_PORT}",
         postgres_uri=postgres_uri,
     )
     return args, stdin
