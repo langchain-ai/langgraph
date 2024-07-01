@@ -34,11 +34,13 @@ class ToolInvocation(Serializable):
         tool_input (Union[str, dict]): The input to pass in to the Tool.
 
     Examples:
-
-            invocation = ToolInvocation(
-                tool="search",
-                tool_input="What is the capital of France?"
-            )
+        Basic usage:
+        ```pycon
+        >>> invocation = ToolInvocation(
+        ...    tool="search",
+        ...     tool_input="What is the capital of France?"
+        ... )
+        ```
     """
 
     tool: str
