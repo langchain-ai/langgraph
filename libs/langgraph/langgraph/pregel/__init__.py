@@ -1510,7 +1510,11 @@ class Pregel(
             except NameError:
                 pass
             # wait for all background tasks to finish
-            await asyncio.shield(asyncio.gather(*bg))
+            fut = asyncio.gather(*bg)
+            # mark the exception as retrieved
+            fut.add_done_callback(_mark_cancelled_as_seen)
+            # wait for the future to finish, shielded from cancellation
+            await asyncio.shield(fut)
 
     def invoke(
         self,
@@ -2021,3 +2025,10 @@ def _with_mode(mode: StreamMode, on: bool, iter: Iterator[Any]) -> Iterator[Any]
             yield (mode, chunk)
     else:
         yield from iter
+
+
+def _mark_cancelled_as_seen(fut: concurrent.futures.Future) -> None:
+    try:
+        fut.exception()
+    except (asyncio.CancelledError, concurrent.futures.CancelledError):
+        pass
