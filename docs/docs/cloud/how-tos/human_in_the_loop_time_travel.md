@@ -15,9 +15,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```python
     from langgraph_sdk import get_client
     client = get_client(url="whatever-your-deployment-url-is")
-    assistants = await client.assistants.search()
-    assistants = [a for a in assistants if not a['config']]
-    assistant = assistants[0]
+    assistant_id = "agent"
     thread = await client.threads.create()
     ```
 
@@ -27,9 +25,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    let assistants = await client.assistants.search();
-    assistants = assistants.filter(a => !a.config);
-    const assistant = assistants[0];
+    let assistantId = agent;
     const thread = await client.threads.create();
     ```
 
@@ -46,11 +42,11 @@ Before replaying a state - we need to create states to replay from! In order to 
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant["assistant_id"], # graph_id
+        assistant_id, # graph_id
         input=input,
         stream_mode="updates",
     ):
-        if chunk.data and "run_id" not in chunk.data:
+        if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
     ```
 
@@ -58,26 +54,26 @@ Before replaying a state - we need to create states to replay from! In order to 
 
     ```js
     const input = {
-        "messages": [
-            {
-                "role": "human",
-                "content": "Please search the weather in SF",
-            }
-        ]
+      "messages": [
+        {
+          "role": "human",
+          "content": "Please search the weather in SF",
+        }
+      ]
     }
 
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        assistant["assistant_id"],
-        {
-            input: input,
-            streamMode: "updates",
-        }
+      thread["thread_id"],
+      assistantId,
+      {
+        input: input,
+        streamMode: "updates",
+      }
     );
     for await (const chunk of streamResponse) {
-        if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
-            console.log(chunk.data);
-        }
+      if (chunk.data && chunk.event !== "metadata") {
+        console.log(chunk.data);
+      }
     }
     ```
     
@@ -107,8 +103,8 @@ Now let's get our list of states, and invoke from the third state (right before 
     const states = await client.threads.getHistory(thread['thread_id']);
 
     // We can confirm that this state is correct by checking the 'next' attribute and seeing that it is the tool call node
-    const state_to_replay = states[2];
-    console.log(state_to_replay['next']);
+    const stateToReplay = states[2];
+    console.log(stateToReplay['next']);
     ```
 
 Output:
@@ -124,12 +120,12 @@ To rerun from a state, we need to pass in the `checkpoint_id` into the config of
     ```python
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant["assistant_id"], # graph_id
+        assistant_id, # graph_id
         input=None,
         stream_mode="updates",
         config={"configurable":{"thread_ts":state_to_replay['checkpoint_id']}}
     ):
-        if chunk.data and "run_id" not in chunk.data:
+        if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
     ```
 
@@ -137,18 +133,18 @@ To rerun from a state, we need to pass in the `checkpoint_id` into the config of
 
     ```js
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        assistant["assistant_id"],
-        {
-            input: null,
-            streamMode: "updates",
-            config: {"configurable":{"thread_ts":state_to_replay['checkpoint_id']}},
-        }
+      thread["thread_id"],
+      assistantId,
+      {
+        input: null,
+        streamMode: "updates",
+        config: {"configurable":{"thread_ts":stateToReplay['checkpoint_id']}},
+      }
     );
     for await (const chunk of streamResponse) {
-        if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
-            console.log(chunk.data);
-        }
+      if (chunk.data && chunk.event !== "metadata") {
+        console.log(chunk.data);
+      }
     }
     ```
 
@@ -184,12 +180,12 @@ Let's show how to do this to edit the state at a particular point in time. Let's
     ```js
     // Let's now get the last message in the state
     // This is the one with the tool calls that we want to update
-    let last_message = state_to_replay['values']['messages'][-1];
+    let lastMessage = stateToReplay['values']['messages'][-1];
 
     // Let's now update the args for that tool call
-    last_message['tool_calls'][0]['args'] = {'query': 'current weather in SF'};
+    lastMessage['tool_calls'][0]['args'] = {'query': 'current weather in SF'};
 
-    const new_state = await client.threads.updateState(thread['thread_id'],{values:{"messages":[last_message]},checkpointId:state_to_replay['checkpoint_id']});
+    const newState = await client.threads.updateState(thread['thread_id'],{values:{"messages":[lastMessage]},checkpointId:stateToReplay['checkpoint_id']});
     ```
 
 Now we can rerun our graph with this new config, starting from the `new_state`, which is a branch of our `state_to_replay`:
@@ -204,7 +200,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
         stream_mode="updates",
         config={"configurable":{"thread_ts":new_state['configurable']['thread_ts']}}
     ):
-        if chunk.data and "run_id" not in chunk.data:
+        if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
     ```
 
@@ -212,18 +208,18 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
 
     ```js
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        assistant["assistant_id"],
-        {
-            input: null,
-            streamMode: "updates",
-            config: {"configurable":{"thread_ts":new_state['configurable']['thread_ts']}},
-        }
+      thread["thread_id"],
+      assistant["assistant_id"],
+      {
+        input: null,
+        streamMode: "updates",
+        config: {"configurable":{"thread_ts":newState['configurable']['thread_ts']}},
+      }
     );
     for await (const chunk of streamResponse) {
-        if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
-            console.log(chunk.data);
-        }
+      if (chunk.data && chunk.event !== "metadata") {
+        console.log(chunk.data);
+      }
     }
     ```
 

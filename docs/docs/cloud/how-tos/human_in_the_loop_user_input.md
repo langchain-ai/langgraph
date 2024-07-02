@@ -25,9 +25,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```python
     from langgraph_sdk import get_client
     client = get_client(url="whatever-your-deployment-url-is")
-    assistants = await client.assistants.search()
-    assistants = [a for a in assistants if not a['config']]
-    assistant = assistants[0]
+    assistant_id = "agent"
     thread = await client.threads.create()
     ```
 
@@ -37,9 +35,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    let assistants = await client.assistants.search();
-    assistants = assistants.filter(a => !a.config);
-    const assistant = assistants[0];
+    let assistantId = "agent";
     const thread = await client.threads.create();
     ```
 
@@ -56,39 +52,39 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant["assistant_id"],
+        assistant_id,
         input=input,
         stream_mode="updates",
         interrupt_before=["ask_human"],
     ):
-        if chunk.data and "run_id" not in chunk.data:
+        if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
     ```
 === "Javascript"
 
     ```js
     const input = {
-        "messages": [
-            {
-                "role": "human",
-                "content": "Use the search tool to ask the user where they are, then look up the weather there",
-            }
-        ]
+      "messages": [
+        {
+          "role": "human",
+          "content": "Use the search tool to ask the user where they are, then look up the weather there",
+        }
+      ]
     }
 
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        assistant["assistant_id"],
-        {
-            input: input,
-            streamMode: "updates",
-            interruptBefore: ["ask_human"],
-        }
+      thread["thread_id"],
+      assistantId,
+      {
+        input: input,
+        streamMode: "updates",
+        interruptBefore: ["ask_human"],
+      }
     );
     for await (const chunk of streamResponse) {
-        if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
-            console.log(chunk.data);
-        }
+      if (chunk.data && chunk.event !== "metadata") {
+        console.log(chunk.data);
+      }
     }
     ```
     
@@ -120,12 +116,12 @@ Because we are treating this as a tool call, we will need to update the state as
 
     ```js
     const state = await client.threads.getState(thread['thread_id']);
-    const tool_call_id = state['values']['messages'][-1]['tool_calls'][0]['id'];
+    const toolCallId = state['values']['messages'][-1]['tool_calls'][0]['id'];
 
     # We now create the tool call with the id and the response we want
-    const tool_message = [{"tool_call_id": tool_call_id, "type": "tool", "content": "san francisco"}];
+    const toolMessage = [{"tool_call_id": toolCallId, "type": "tool", "content": "san francisco"}];
 
-    await client.threads.updateState(thread['thread_id'], {values: {"messages": tool_message}, asNode:"ask_human"})
+    await client.threads.updateState(thread['thread_id'], {values: {"messages": toolMessage}, asNode:"ask_human"})
     ```
 
 Output:
@@ -144,28 +140,28 @@ We can now tell the agent to continue. We can just pass in None as the input to 
     ```python
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant["assistant_id"], # graph_id
+        assistant_id, # graph_id
         input=None,
         stream_mode="updates",
     ):
-        if chunk.data and "run_id" not in chunk.data:
+        if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
     ```
 === "Javascript"
 
     ```js
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        assistant["assistant_id"],
-        {
-            input: null,
-            streamMode: "updates",
-        }
+      thread["thread_id"],
+      assistantId,
+      {
+        input: null,
+        streamMode: "updates",
+      }
     );
     for await (const chunk of streamResponse) {
-        if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
-            console.log(chunk.data);
-        }
+      if (chunk.data && chunk.event !== "metadata") {
+        console.log(chunk.data);
+      }
     }
     ```
 

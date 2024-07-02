@@ -1,11 +1,28 @@
 ## Interrupt
 
-This notebook assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](https://langchain-ai.github.io/langgraph/cloud/concepts/#double-texting).
+This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](https://langchain-ai.github.io/langgraph/cloud/concepts/#double-texting).
 
 The guide covers the `interrupt` option for double texting, which interrupts the prior run of the graph and starts a new one with the double-text. This option does not delete the first run, but rather keeps it in the database but sets its status to `interrupted`. Below is a quick example of using the `interrupt` option.
 
-First, let's import our required packages and instantiate our client, assistant, and thread.
+First, we will define a quick helper function for printing out JS model outputs (you can skip this if using Python):
 
+```js
+import { coerceMessageLikeToMessage } from "@langchain/core/messages"
+
+function prettyPrint(m) {
+  m = coerceMessageLikeToMessage(m);
+  let padded = " " + m._getType() + " ";
+  let sepLen = Math.floor((80 - padded.length) / 2);
+  let sep = "=".repeat(sepLen);
+  let secondSep = sep + (padded.length % 2 ? "=" : "");
+  
+  console.log(`${sep}${padded}${secondSep}`);
+  console.log("\n\n");
+  console.log(m.content);
+}
+```
+
+Now, let's import our required packages and instantiate our client, assistant, and thread.
 
 === "Python"
 
@@ -24,10 +41,9 @@ First, let's import our required packages and instantiate our client, assistant,
 
     ```js
     import { Client } from "@langchain/langgraph-sdk";
-    import { coerceMessageLikeToMessage } from "@langchain/core/messages"
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    const assistant_id = "agent";
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 
@@ -57,20 +73,20 @@ Now we can start our two runs and join the second on euntil it has completed:
 
     ```js
     // the first run will be interrupted
-    let interrupted_run = await client.runs.create(
-        thread["thread_id"],
-        assistant_id,
-        { input: { messages: [{ role: "human", content: "what's the weather in sf?" }] } }
+    let interruptedRun = await client.runs.create(
+      thread["thread_id"],
+      assistantId,
+      { input: { messages: [{ role: "human", content: "what's the weather in sf?" }] } }
     );
     await new Promise(resolve => setTimeout(resolve, 2000)); 
 
     let run = await client.runs.create(
-        thread["thread_id"],
-        assistant_id,
-        { 
-            input: { messages: [{ role: "human", content: "what's the weather in nyc?" }] },
-            multitaskStrategy: "interrupt" 
-        }
+      thread["thread_id"],
+      assistantId,
+      { 
+        input: { messages: [{ role: "human", content: "what's the weather in nyc?" }] },
+        multitaskStrategy: "interrupt" 
+      }
     );
 
     // wait until the second run completes
@@ -94,19 +110,8 @@ We can see that the thread has partial data from the first run + data from the s
     ```js
     const state = await client.threads.getState(thread["thread_id"]);
 
-    const baseMessages = state["values"]["messages"].map((message) =>
-        coerceMessageLikeToMessage(message);
-    );
-
-    for (const m in baseMessages) {
-        let padded = " " + m._getType() + " ";
-        let sepLen = Math.floor((80 - padded.length) / 2);
-        let sep = "=".repeat(sepLen);
-        let secondSep = sep + (padded.length % 2 ? "=" : "");
-        
-        console.log(`${sep}${padded}${secondSep}`);
-        console.log("\n\n");
-        console.log(m.content);
+    for (const m of state['values']['messages']) {
+      prettyPrint(m);
     }
     ```
 
@@ -165,7 +170,7 @@ Verify that the original, interrupted run was interrupted
 === "Javascript"
 
     ```js
-    console.log((await client.runs.get(thread['thread_id'], interrupted_run["run_id"]))["status"])
+    console.log((await client.runs.get(thread['thread_id'], interruptedRun["run_id"]))["status"])
     ```
 
 Output:

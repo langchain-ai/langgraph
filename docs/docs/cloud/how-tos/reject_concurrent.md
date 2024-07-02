@@ -1,10 +1,28 @@
 ## Reject
 
-This notebook assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](https://langchain-ai.github.io/langgraph/cloud/concepts/#double-texting).
+This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](https://langchain-ai.github.io/langgraph/cloud/concepts/#double-texting).
 
 The guide covers the `reject` option for double texting, which rejects the new run of the graph by throwing an error and continues with the original run until completion. Below is a quick example of using the `reject` option.
 
-First, let's import our required packages and instantiate our client, assistant, and thread.
+First, we will define a quick helper function for printing out JS model outputs (you can skip this if using Python):
+
+```js
+import { coerceMessageLikeToMessage } from "@langchain/core/messages"
+
+function prettyPrint(m) {
+  m = coerceMessageLikeToMessage(m);
+  let padded = " " + m._getType() + " ";
+  let sepLen = Math.floor((80 - padded.length) / 2);
+  let sep = "=".repeat(sepLen);
+  let secondSep = sep + (padded.length % 2 ? "=" : "");
+  
+  console.log(`${sep}${padded}${secondSep}`);
+  console.log("\n\n");
+  console.log(m.content);
+}
+```
+
+Now, let's import our required packages and instantiate our client, assistant, and thread.
 
 === "Python"
 
@@ -22,10 +40,9 @@ First, let's import our required packages and instantiate our client, assistant,
 
     ```js
     import { Client } from "@langchain/langgraph-sdk";
-    import { coerceMessageLikeToMessage } from "@langchain/core/messages"
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    const assistant_id = "agent";
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 
@@ -57,22 +74,22 @@ Now we can run a thread and try to run a second one with the "reject" option, wh
 
     ```js
     const run = await client.runs.create(
-        thread["thread_id"],
-        assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
+      thread["thread_id"],
+      assistantId,
+      input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
     );
     
     try {
-        await client.runs.create(
-            thread["thread_id"],
-            assistant_id,
-            { 
-                input: {"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
-                multitask_strategy:"reject"
-            },
-        );
+      await client.runs.create(
+        thread["thread_id"],
+        assistantId,
+        { 
+          input: {"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
+          multitask_strategy:"reject"
+        },
+      );
     } catch (e) {
-        console.error("Failed to start concurrent run", e);
+      console.error("Failed to start concurrent run", e);
     }
     ```
 
@@ -101,19 +118,8 @@ We can verify that the original thread finished executing:
 
     const state = await client.threads.getState(thread["thread_id"]);
 
-    const baseMessages = state["values"]["messages"].map((message) =>
-        coerceMessageLikeToMessage(message);
-    );
-
-    for (const m in baseMessages) {
-        let padded = " " + m._getType() + " ";
-        let sepLen = Math.floor((80 - padded.length) / 2);
-        let sep = "=".repeat(sepLen);
-        let secondSep = sep + (padded.length % 2 ? "=" : "");
-        
-        console.log(`${sep}${padded}${secondSep}`);
-        console.log("\n\n");
-        console.log(m.content);
+    for (const m of state["values"]["messages"]) {
+      prettyPrint(m);
     }
     ```
 

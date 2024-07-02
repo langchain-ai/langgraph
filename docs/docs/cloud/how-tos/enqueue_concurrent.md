@@ -1,11 +1,29 @@
 ## Enqueue
 
-This notebook assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](https://langchain-ai.github.io/langgraph/cloud/concepts/#double-texting).
+This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](https://langchain-ai.github.io/langgraph/cloud/concepts/#double-texting).
 
 The guide covers the `enqueue` option for double texting, which adds the interruptions to a queue and executes them in the order they are received by the client. Below is a quick example of using the `enqueue` option.
 
-First, let's import our required packages and instantiate our client, assistant, and thread.
 
+First, we will define a quick helper function for printing out JS model outputs (you can skip this if using Python):
+
+```js
+import { coerceMessageLikeToMessage } from "@langchain/core/messages"
+
+function prettyPrint(m) {
+  m = coerceMessageLikeToMessage(m);
+  let padded = " " + m._getType() + " ";
+  let sepLen = Math.floor((80 - padded.length) / 2);
+  let sep = "=".repeat(sepLen);
+  let secondSep = sep + (padded.length % 2 ? "=" : "");
+  
+  console.log(`${sep}${padded}${secondSep}`);
+  console.log("\n\n");
+  console.log(m.content);
+}
+```
+
+Then, let's import our required packages and instantiate our client, assistant, and thread.
 
 === "Python"
 
@@ -25,10 +43,10 @@ First, let's import our required packages and instantiate our client, assistant,
 
     ```js
     import { Client } from "@langchain/langgraph-sdk";
-    import { coerceMessageLikeToMessage } from "@langchain/core/messages"
+    
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    const assistant_id = "agent";
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 
@@ -53,17 +71,17 @@ Now let's start two runs, with the second interrupting the first one with a mult
 === "Javascript"
 
     ```js
-    const first_run = await client.runs.create(
-        thread["thread_id"],
-        assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
+    const firstRun = await client.runs.create(
+      thread["thread_id"],
+      assistantId,
+      input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
     )
 
-    const second_run = await client.runs.create(
-        thread["thread_id"],
-        assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
-        multitask_strategy="enqueue",
+    const secondRun = await client.runs.create(
+      thread["thread_id"],
+      assistantId,
+      input={"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
+      multitask_strategy="enqueue",
     )
     ```
 
@@ -84,23 +102,12 @@ Verify that the thread has data from both runs:
 === "Javascript"
 
     ```js
-    await client.runs.join(thread["thread_id"], second_run["run_id"]);
+    await client.runs.join(thread["thread_id"], secondRun["run_id"]);
 
     const state = await client.threads.getState(thread["thread_id"]);
 
-    const baseMessages = state["values"]["messages"].map((message) =>
-        coerceMessageLikeToMessage(message);
-    );
-
-    for (const m in baseMessages) {
-        let padded = " " + m._getType() + " ";
-        let sepLen = Math.floor((80 - padded.length) / 2);
-        let sep = "=".repeat(sepLen);
-        let secondSep = sep + (padded.length % 2 ? "=" : "");
-        
-        console.log(`${sep}${padded}${secondSep}`);
-        console.log("\n\n");
-        console.log(m.content);
+    for (const m of state["values"]["messages"]) {
+      prettyPrint(m);
     }
     ```
 

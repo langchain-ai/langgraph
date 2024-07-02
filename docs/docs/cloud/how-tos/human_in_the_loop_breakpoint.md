@@ -22,9 +22,7 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     ```python
     from langgraph_sdk import get_client
     client = get_client(url="whatever-your-deployment-url-is")
-    assistants = await client.assistants.search()
-    assistants = [a for a in assistants if not a['config']]
-    assistant = assistants[0]
+    assistant_id = "agent"
     thread = await client.threads.create()
     ```
 
@@ -34,9 +32,7 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    let assistants = await client.assistants.search();
-    assistants = assistants.filter(a => !a.config);
-    const assistant = assistants[0];
+    let assistantId = "agent"
     const thread = await client.threads.create();
     ```
 
@@ -57,7 +53,7 @@ And, now let's compile it with a breakpoint before the tool node:
     input = {"messages": [{"role": "human", "content": "what's the weather in sf"}]}
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant["assistant_id"],
+        assistant_id,
         input=input,
         stream_mode="updates",
         interrupt_before=["action"],
@@ -70,27 +66,27 @@ And, now let's compile it with a breakpoint before the tool node:
 
     ```js
     const input = {
-        "messages": [
-            {
-                "role": "human",
-                "content": "what's the weather in sf",
-            }
-        ]
+      "messages": [
+        {
+          "role": "human",
+          "content": "what's the weather in sf",
+        }
+      ]
     }
 
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        assistant["assistant_id"],
-        {
-            input: input,
-            streamMode: "updates",
-            interruptBefore: ["action"],
-        }
+      thread["thread_id"],
+      assistantId,
+      {
+        input: input,
+        streamMode: "updates",
+        interruptBefore: ["action"],
+      }
     );
     for await (const chunk of streamResponse) {
-        console.log(`Receiving new event of type: ${chunk.event}...`);
-        console.log(chunk.data);
-        console.log("\n\n");
+      console.log(`Receiving new event of type: ${chunk.event}...`);
+      console.log(chunk.data);
+      console.log("\n\n");
     }
     ```
 

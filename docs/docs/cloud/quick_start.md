@@ -224,7 +224,7 @@ async for chunk in client.runs.stream(
         input=input,
         stream_mode="updates",
     ):
-    if chunk.data and "run_id" not in chunk.data:
+    if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
 ```
 
