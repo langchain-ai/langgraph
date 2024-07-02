@@ -34,11 +34,13 @@ class ToolInvocation(Serializable):
         tool_input (Union[str, dict]): The input to pass in to the Tool.
 
     Examples:
-
-            invocation = ToolInvocation(
-                tool="search",
-                tool_input="What is the capital of France?"
-            )
+        Basic usage:
+        ```pycon
+        >>> invocation = ToolInvocation(
+        ...    tool="search",
+        ...     tool_input="What is the capital of France?"
+        ... )
+        ```
     """
 
     tool: str
@@ -54,6 +56,7 @@ class ToolExecutor(RunnableCallable):
             when an invalid tool is requested. Defaults to INVALID_TOOL_MSG_TEMPLATE.
 
     Examples:
+        Basic usage:
 
         ```pycon
         >>> from langchain_core.tools import tool
@@ -74,6 +77,7 @@ class ToolExecutor(RunnableCallable):
         >>> print(result)
         "Searching for: What is the capital of France?"
         ```
+        Handling invalid tool:
 
         ```pycon
         >>> invocation = ToolInvocation(

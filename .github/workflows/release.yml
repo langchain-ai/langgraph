@@ -136,6 +136,7 @@ jobs:
     needs:
       - build
       - release-notes
+    permissions: write-all
     uses:
       ./.github/workflows/_test_release.yml
     with:

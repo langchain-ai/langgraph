@@ -41,7 +41,7 @@ This tutorial will use:
         tavily-python
         langchain_community
 
-4. The `langgraph.json` file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`.
+4. The [`langgraph.json`][langgraph.json] file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`.
 
     ```json
     {
@@ -65,7 +65,7 @@ Now that we have set everything up on our local file system, we are ready to hos
 
 ## Test the graph build locally
 
-Before deploying to the cloud, we probably want to test the building of our graph locally. This is useful to make sure we have configured our CLI configuration file correctly and our graph runs.
+Before deploying to the cloud, we probably want to test the building of our graph locally. This is useful to make sure we have configured our [CLI configuration file][langgraph.json] correctly and our graph runs.
 
 In order to do this we can first install the LangGraph CLI
 
@@ -224,8 +224,8 @@ async for chunk in client.runs.stream(
         input=input,
         stream_mode="updates",
     ):
-    if chunk.data and "run_id" not in chunk.data:
-            print(chunk.data)
+    if chunk.data and chunk.event != "metadata": 
+        print(chunk.data)
 ```
 
     {'agent': {'messages': [{'content': "Hi Bagatur! It's nice to meet you. How can I assist you today?", 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_9cb5d38cf7'}, 'type': 'ai', 'name': None, 'id': 'run-c89118b7-1b1e-42b9-a85d-c43fe99881cd', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
