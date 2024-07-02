@@ -60,7 +60,7 @@ jobs:
             echo "Fetching changes from origin/main..."
             git fetch origin main
             echo "Checking for changed notebook files..."
-            CHANGED_FILES=$(git diff --name-only origin/main | grep '\.ipynb$' || true)
+            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep '\.ipynb$' || true)
             echo "Changed files: ${CHANGED_FILES}"
             if [ -n "${CHANGED_FILES}" ]; then
               echo "Running link check on changed notebook files..."

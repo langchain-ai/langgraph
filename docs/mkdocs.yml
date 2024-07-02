@@ -180,12 +180,12 @@ nav:
               - Deploy to Cloud: "cloud/deployment/cloud.md"
               - Self-Host: "cloud/deployment/self_hosted.md"
           - Streaming:
-              - Stream Values: "cloud/how-tos/cloud_examples/stream_values.ipynb"
-              - Stream Updates: "cloud/how-tos/cloud_examples/stream_updates.ipynb"
-              - Stream Messages: "cloud/how-tos/cloud_examples/stream_messages.ipynb"
-              - Stream Events: "cloud/how-tos/cloud_examples/stream_events.ipynb"
-              - Stream Debug: "cloud/how-tos/cloud_examples/stream_debug.ipynb"
-              - Multiple Modes: "cloud/how-tos/cloud_examples/stream_multiple.ipynb"
+              - Stream Values: "cloud/how-tos/stream_values.md"
+              - Stream Updates: "cloud/how-tos/stream_updates.md"
+              - Stream Messages: "cloud/how-tos/stream_messages.md"
+              - Stream Events: "cloud/how-tos/stream_events.md"
+              - Stream Debug: "cloud/how-tos/stream_debug.md"
+              - Multiple Modes: "cloud/how-tos/stream_multiple.md"
           - Double Texting:
               - Interrupt: "cloud/how-tos/cloud_examples/interrupt_concurrent.ipynb"
               - Rollback: "cloud/how-tos/cloud_examples/rollback_concurrent.ipynb"
@@ -226,6 +226,9 @@ markdown_extensions:
   - def_list
   - footnotes
   - md_in_html
+  - pymdownx.superfences
+  - pymdownx.tabbed:
+      alternate_style: true
   - toc:
       permalink: true
   - pymdownx.arithmatex:
