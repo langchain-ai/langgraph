@@ -7494,3 +7494,57 @@ def test_checkpoint_metadata() -> None:
         assert chkpnt_tuple.metadata["thread_id"] == "2"
         assert chkpnt_tuple.metadata["test_config_3"] == "foo"
         assert chkpnt_tuple.metadata["test_config_4"] == "bar"
+
+
+def test_remove_message_via_state_update():
+    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
+
+    workflow = MessageGraph()
+    workflow.add_node(
+        "chatbot",
+        lambda state: [
+            AIMessage(
+                content="Hello! How can I help you",
+            )
+        ],
+    )
+
+    workflow.set_entry_point("chatbot")
+    workflow.add_edge("chatbot", END)
+
+    checkpointer = MemorySaver()
+    app = workflow.compile(checkpointer=checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    output = app.invoke([HumanMessage(content="Hi")], config=config)
+    app.update_state(config, values=[RemoveMessage(id=output[-1].id)])
+
+    updated_state = app.get_state(config)
+
+    assert len(updated_state.values) == 1
+    assert updated_state.values[-1].content == "Hi"
+
+
+def test_remove_message_from_node():
+    from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
+
+    workflow = MessageGraph()
+    workflow.add_node(
+        "chatbot",
+        lambda state: [
+            AIMessage(
+                content="Hello!",
+            ),
+            AIMessage(
+                content="How can I help you?",
+            ),
+        ],
+    )
+    workflow.add_node("delete_messages", lambda state: [RemoveMessage(id=state[-2].id)])
+    workflow.set_entry_point("chatbot")
+    workflow.add_edge("chatbot", "delete_messages")
+    workflow.add_edge("delete_messages", END)
+
+    app = workflow.compile()
+    output = app.invoke([HumanMessage(content="Hi")])
+    assert len(output) == 2
+    assert output[-1].content == "How can I help you?"
