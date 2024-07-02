@@ -5,7 +5,7 @@ This guide covers how to configure multiple streaming modes at the same time.
 First let's set up our client and thread:
 
 === "Python"
-    
+
     ```python
     from langgraph_sdk import get_client
 
@@ -20,8 +20,8 @@ First let's set up our client and thread:
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    # create thread
+    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    // create thread
     const thread = await client.threads.create();
     console.log(thread)
     ```
@@ -34,11 +34,10 @@ Output:
      'updated_at': '2024-06-24T21:30:07.980789+00:00',
      'metadata': {}}
 
-
-
 When configuring multiple streaming modes for a run, responses for each respective mode will be produced. In the following example, note that a `list` of modes (`messages`, `events`, `debug`) is passed to the `stream_mode` parameter and the response contains `events`, `debug`, `messages/complete`, `messages/metadata`, and `messages/partial` event types.
 
 === "Python"
+
     ```python
     # create input
     input = {
@@ -65,29 +64,29 @@ When configuring multiple streaming modes for a run, responses for each respecti
 === "Javascript"
 
     ```js
-    # create input
+    // create input
     const input = {
-        "messages": [
-            {
-                "role": "human",
-                "content": "What's the weather in SF?",
-            }
-        ]
+      "messages": [
+        {
+          "role": "human",
+          "content": "What's the weather in SF?",
+        }
+      ]
     }
 
-    # stream events with multiple streaming modes
+    // stream events with multiple streaming modes
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        "agent",
-        {
-            input: input,
-            streamMode: ["messages", "events", "debug"]
-        }
+      thread["thread_id"],
+      "agent",
+      {
+        input,
+        streamMode: ["messages", "events", "debug"]
+      }
     );
     for await (const chunk of streamResponse) {
-        console.log(f"Receiving new event of type: {chunk.event}...")
-        console.log(chunk.data)
-        console.log("\n\n")
+      console.log(f"Receiving new event of type: {chunk.event}...")
+      console.log(chunk.data)
+      console.log("\n\n")
     }
     ```
 

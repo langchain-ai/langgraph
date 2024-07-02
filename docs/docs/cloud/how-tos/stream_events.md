@@ -2,7 +2,7 @@
 This guide covers how to stream events from your graph (`stream_mode="events"`). Depending on the use case and user experience of your LangGraph application, your application may process event types differently.
 
 === "Python"
-    
+
     ```python
     from langgraph_sdk import get_client
 
@@ -17,8 +17,8 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    # create thread
+    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    // create thread
     const thread = await client.threads.create();
     console.log(thread)
     ```
@@ -38,6 +38,7 @@ Streaming events produces responses containing an `event` key (in addition to ot
 
 
 === "Python"
+
     ```python
     # create input
     input = {
@@ -64,7 +65,7 @@ Streaming events produces responses containing an `event` key (in addition to ot
 === "Javascript"
 
     ```js
-    # create input
+    // create input
     const input = {
         "messages": [
             {
@@ -74,19 +75,19 @@ Streaming events produces responses containing an `event` key (in addition to ot
         ]
     }
 
-    # stream events
+    // stream events
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        "agent",
-        {
-            input: input,
-            streamMode: "events"
-        }
+      thread["thread_id"],
+      "agent",
+      {
+        input,
+        streamMode: "events"
+      }
     );
     for await (const chunk of streamResponse) {
-        console.log(f"Receiving new event of type: {chunk.event}...")
-        console.log(chunk.data)
-        console.log("\n\n")
+      console.log(f"Receiving new event of type: {chunk.event}...")
+      console.log(chunk.data)
+      console.log("\n\n")
     }
     ```
 
@@ -266,21 +267,21 @@ Token-by-token streaming can be implemented with the `events` streaming mode. Th
 === "Javascript"
 
     ```js
-    var llm_response = "";
-    # stream events
+    const llmResponse = "";
+    // stream events
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        "agent",
-        {
-            input: input,
-            streamMode: "events"
-        }
+      thread["thread_id"],
+      "agent",
+      {
+        input,
+        streamMode: "events"
+      }
     );
     for await (const chunk of streamResponse) {
-        if (chunk.event === "events" && chunk.data.event === "on_chat_model_stream") {
-            llm_response += chunk.data.data.chunk.content;
-            console.log(llm_response);
-        }
+      if (chunk.event === "events" && chunk.data.event === "on_chat_model_stream") {
+        llmResponse += chunk.data.data.chunk.content;
+        console.log(llmResponse);
+      }
     }
     ```
 

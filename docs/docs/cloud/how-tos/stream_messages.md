@@ -9,10 +9,10 @@ LangGraph Cloud supports multiple streaming modes. The main ones are:
 
 This guide covers `stream_mode="messages"`.
 
-In order to use this mode, the state of the graph you are interacting with MUST have a messages key that is a list of messages.
-Eg, the state should look something like the following code block. Note that LangGraph Cloud only supports hosting graphs written in Python at the moment,
-but JS support is on the way.
+In order to use this mode, the state of the graph you are interacting with MUST have a `messages` key that is a list of messages.
+E.g., the state should look something like:
 
+=== "Python"
 
     ```python
     from typing import TypedDict, Annotated
@@ -24,7 +24,10 @@ but JS support is on the way.
     ```
 
 
-OR it should be an instance or subclass of `from langgraph.graph import MessageState` (`MessageState` is just a helper type hint equivalent to the above).
+Alternatively, you can use an instance or subclass of `from langgraph.graph import MessagesState` (`MessagesState` is equivalent to the implementation above).
+
+> [!NOTE]
+> LangGraph Cloud only supports hosting graphs written in Python at the moment.
 
 With `stream_mode="messages"` two things will be streamed back:
 
@@ -34,7 +37,7 @@ With `stream_mode="messages"` two things will be streamed back:
 First let's set up our client and thread:
 
 === "Python"
-    
+
     ```python
     from langgraph_sdk import get_client
 
@@ -49,28 +52,24 @@ First let's set up our client and thread:
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    # create thread
+    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    // create thread
     const thread = await client.threads.create();
     console.log(thread)
     ```
 
-
 Output:
-
-
 
     {'thread_id': 'e1431c95-e241-4d1d-a252-27eceb1e5c86',
      'created_at': '2024-06-21T15:48:59.808924+00:00',
      'updated_at': '2024-06-21T15:48:59.808924+00:00',
      'metadata': {}}
 
-First let's write a quick helper function:
+Let's also define a helper function for better formatting of the tool calls in messages
 
 === "Python"
-    ```python
-    # Helper function for formatting messages
 
+    ```python
     def format_tool_calls(tool_calls):
         if tool_calls:
             formatted_calls = []
@@ -81,25 +80,25 @@ First let's write a quick helper function:
             return "\n".join(formatted_calls)
         return "No tool calls"
     ```
+
 === "Javascript"
 
     ```js
-        // Helper function for formatting messages
-
-        function formatToolCalls(toolCalls) {
-        if (toolCalls && toolCalls.length > 0) {
-            const formattedCalls = toolCalls.map(call => {
-                return `Tool Call ID: ${call.id}, Function: ${call.name}, Arguments: ${call.args}`;
-            });
-            return formattedCalls.join("\n");
-        }
-        return "No tool calls";
+    function formatToolCalls(toolCalls) {
+      if (toolCalls && toolCalls.length > 0) {
+        const formattedCalls = toolCalls.map(call => {
+          return `Tool Call ID: ${call.id}, Function: ${call.name}, Arguments: ${call.args}`;
+        });
+        return formattedCalls.join("\n");
+      }
+      return "No tool calls";
     }
     ```
 
 Now we can stream by messages, which will return complete messages (at the end of node execution) as well as tokens for any messages generated inside a node:
 
 === "Python"
+
     ```python
     input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
     config = {"configurable": {"model_name": "openai"}}
@@ -145,60 +144,60 @@ Now we can stream by messages, which will return complete messages (at the end o
 
     ```js
     const input = {
-        "messages": [
-            {
-                "role": "human",
-                "content": "What's the weather in sf",
-            }
-        ]
+      "messages": [
+        {
+          "role": "human",
+          "content": "What's the weather in sf",
+        }
+      ]
     }
-    var config = {"configurable": {"model_name": "openai"}}
+    const config = {"configurable": {"model_name": "openai"}}
 
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        "agent",
-        {
-            input: input,
-            config: config,
-            streamMode: "messages"
-        }
+      thread["thread_id"],
+      "agent",
+      {
+        input,
+        config,
+        streamMode: "messages"
+      }
     );
     for await (const event of streamResponse) {
-        if (event.event === "metadata") {
-            console.log(`Metadata: Run ID - ${event.data.run_id}`);
-            console.log("-".repeat(50));
-        } else if (event.event === "messages/partial") {
-            event.data.forEach(dataItem => {
-                if (dataItem.role && dataItem.role === "user") {
-                    console.log(`Human: ${dataItem.content}`);
-                } else {
-                    const toolCalls = dataItem.tool_calls || [];
-                    const invalidToolCalls = dataItem.invalid_tool_calls || [];
-                    const content = dataItem.content || "";
-                    const responseMetadata = dataItem.response_metadata || {};
+      if (event.event === "metadata") {
+        console.log(`Metadata: Run ID - ${event.data.run_id}`);
+        console.log("-".repeat(50));
+      } else if (event.event === "messages/partial") {
+        event.data.forEach(dataItem => {
+          if (dataItem.role && dataItem.role === "user") {
+            console.log(`Human: ${dataItem.content}`);
+          } else {
+            const toolCalls = dataItem.tool_calls || [];
+            const invalidToolCalls = dataItem.invalid_tool_calls || [];
+            const content = dataItem.content || "";
+            const responseMetadata = dataItem.response_metadata || {};
 
-                    if (content) {
-                        console.log(`AI: ${content}`);
-                    }
+            if (content) {
+              console.log(`AI: ${content}`);
+            }
 
-                    if (toolCalls.length > 0) {
-                        console.log("Tool Calls:");
-                        console.log(formatToolCalls(toolCalls));
-                    }
+            if (toolCalls.length > 0) {
+              console.log("Tool Calls:");
+              console.log(formatToolCalls(toolCalls));
+            }
 
-                    if (invalidToolCalls.length > 0) {
-                        console.log("Invalid Tool Calls:");
-                        console.log(formatToolCalls(invalidToolCalls));
-                    }
+            if (invalidToolCalls.length > 0) {
+              console.log("Invalid Tool Calls:");
+              console.log(formatToolCalls(invalidToolCalls));
+            }
 
-                    if (responseMetadata) {
-                        const finishReason = responseMetadata.finish_reason || "N/A";
-                        console.log(`Response Metadata: Finish Reason - ${finishReason}`);
-                    }
-                }
-            });
-            console.log("-".repeat(50));
-        }
+            if (responseMetadata) {
+              const finishReason = responseMetadata.finish_reason || "N/A";
+              console.log(`Response Metadata: Finish Reason - ${finishReason}`);
+            }
+          }
+        });
+        console.log("-".repeat(50));
+      }
     }
     ```
 

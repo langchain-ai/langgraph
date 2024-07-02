@@ -12,7 +12,7 @@ This guide covers `stream_mode="updates"`.
 First let's set up our client and thread:
 
 === "Python"
-    
+
     ```python
     from langgraph_sdk import get_client
 
@@ -28,15 +28,13 @@ First let's set up our client and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    # create thread
+    // create thread
     const thread = await client.threads.create();
     console.log(thread)
     ```
 
 
 Output:
-
-
 
     {'thread_id': '979e3c89-a702-4882-87c2-7a59a250ce16',
      'created_at': '2024-06-21T15:22:07.453100+00:00',
@@ -47,8 +45,16 @@ Now we can stream by updates, which outputs updates made to the state by each no
 
 
 === "Python"
+
     ```python
-    input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
+    input = {
+        "messages": [
+            {
+                "role": "human",
+                "content": "what's the weather in la"
+            }
+        ]
+    }
     async for chunk in client.runs.stream(
         thread["thread_id"],
         "agent",
@@ -64,27 +70,26 @@ Now we can stream by updates, which outputs updates made to the state by each no
 
     ```js
     const input = {
-        "messages": [
-            {
-                "role": "human",
-                "content": "What's the weather in la",
-            }
-        ]
+      "messages": [
+        {
+          "role": "human",
+          "content": "What's the weather in la",
+        }
+      ]
     }
 
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        "agent",
-        {
-            input: input,
-            config: {"configurable": metadata},
-            streamMode: "updates"
-        }
+      thread["thread_id"],
+      "agent",
+      {
+        input,
+        streamMode: "updates"
+      }
     );
     for await (const chunk of streamResponse) {
-        console.log(f"Receiving new event of type: {chunk.event}...")
-        console.log(chunk.data)
-        console.log("\n\n")
+      console.log(f"Receiving new event of type: {chunk.event}...")
+      console.log(chunk.data)
+      console.log("\n\n")
     }
     ```
 

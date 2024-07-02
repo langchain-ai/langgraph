@@ -12,7 +12,7 @@ This guide covers `stream_mode="values"`.
 First let's set up our client and thread:
 
 === "Python"
-    
+
     ```python
     from langgraph_sdk import get_client
 
@@ -27,8 +27,8 @@ First let's set up our client and thread:
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    # create thread
+    const client = new Client({ apiUrl: "whatever-your-deployment-url-is" });
+    // create thread
     const thread = await client.threads.create();
     console.log(thread)
     ```
@@ -43,6 +43,7 @@ Output:
 Now we can stream by values, which streams the full state of the graph after each node has finished executing:
 
 === "Python"
+
     ```python
     input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
 
@@ -65,17 +66,17 @@ Now we can stream by values, which streams the full state of the graph after eac
     const input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
 
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        "agent",
-        {
-            input: input,
-            streamMode: "values"
-        }
+      thread["thread_id"],
+      "agent",
+      {
+        input,
+        streamMode: "values"
+      }
     );
     for await (const chunk of streamResponse) {
-        console.log(f"Receiving new event of type: {chunk.event}...")
-        console.log(chunk.data)
-        console.log("\n\n")
+      console.log(f"Receiving new event of type: {chunk.event}...")
+      console.log(chunk.data)
+      console.log("\n\n")
     }
     ```
 
@@ -121,7 +122,12 @@ If we want to just get the final result, we can use this endpoint and just keep 
 
     ```python
     final_answer = None
-    async for chunk in client.runs.stream(thread["thread_id"], assistant_id, input=input):
+    async for chunk in client.runs.stream(
+        thread["thread_id"],
+        "agent",
+        input=input,
+        stream_mode="values"
+    ):
         if chunk.event == "values":
             final_answer = chunk.data
     ```
@@ -129,17 +135,17 @@ If we want to just get the final result, we can use this endpoint and just keep 
 === "Javascript"
 
     ```js
-    let final_answer;
+    let finalAnswer;
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        "agent",
-        {
-            input: input,
-            streamMode: "values"
-        }
+      thread["thread_id"],
+      "agent",
+      {
+        input,
+        streamMode: "values"
+      }
     );
     for await (const chunk of streamResponse) {
-        final_answer = chunk.data;
+      finalAnswer = chunk.data;
     }
     ```
 

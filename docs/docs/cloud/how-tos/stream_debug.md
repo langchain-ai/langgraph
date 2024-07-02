@@ -1,4 +1,5 @@
 # How to stream debug events
+
 This guide covers how to stream debug events from your graph (`stream_mode="debug"`).
 
 First let's set up our client and thread:
@@ -19,8 +20,8 @@ First let's set up our client and thread:
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    # create thread
+    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    // create thread
     const thread = await client.threads.create();
     console.log(thread)
     ```
@@ -32,8 +33,6 @@ Output:
      'created_at': '2024-06-21T22:10:27.696862+00:00',
      'updated_at': '2024-06-21T22:10:27.696862+00:00',
      'metadata': {}}
-
-
 
 Streaming debug events produces responses containing `type` and `timestamp` keys. Debug events correspond to different steps in the graph's execution (e.g. `task`, `task_result`, `checkpoint`).
 
@@ -66,7 +65,7 @@ Streaming debug events produces responses containing `type` and `timestamp` keys
 === "Javascript"
 
     ```js
-    # create input
+    // create input
     const input = {
         "messages": [
             {
@@ -76,19 +75,19 @@ Streaming debug events produces responses containing `type` and `timestamp` keys
         ]
     }
 
-    # stream debug
+    // stream debug
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        "agent",
-        {
-            input: input,
-            streamMode: "debug"
-        }
+      thread["thread_id"],
+      "agent",
+      {
+        input,
+        streamMode: "debug"
+      }
     );
     for await (const chunk of streamResponse) {
-        console.log(f"Receiving new event of type: {chunk.event}...")
-        console.log(chunk.data)
-        console.log("\n\n")
+      console.log(f"Receiving new event of type: {chunk.event}...")
+      console.log(chunk.data)
+      console.log("\n\n")
     }
     ```
 
