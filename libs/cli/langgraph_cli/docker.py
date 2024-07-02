@@ -32,18 +32,6 @@ DB = """
 """
 
 
-DEBUGGER = """
-    langgraph-debugger:
-        image: langchain/langgraph-debugger
-        restart: on-failure
-        ports:
-            - "{debugger_port}:3968"
-        depends_on:
-            langgraph-postgres:
-                condition: service_healthy
-"""
-
-
 class Version(NamedTuple):
     major: int
     minor: int
@@ -117,11 +105,36 @@ def check_capabilities(runner) -> DockerCapabilities:
     )
 
 
+def debugger_compose(*, port: Optional[int] = None, host: Optional[str] = None) -> str:
+    if port is None:
+        return ""
+
+    compose_str = """
+    langgraph-debugger:
+        image: langchain/langgraph-debugger
+        restart: on-failure
+        depends_on:
+            langgraph-postgres:
+                condition: service_healthy
+        ports:
+            - "{port}:3968"
+"""
+
+    if host:
+        compose_str += """
+        environment:
+            VITE_STUDIO_LOCAL_GRAPH_URL: {host}
+"""
+
+    return compose_str.format(port=port, host=host)
+
+
 def compose(
     capabilities: DockerCapabilities,
     *,
     port: int,
     debugger_port: Optional[int] = None,
+    debugger_host: Optional[str] = None,
     # postgres://user:password@host:port/database?option=value
     postgres_uri: Optional[str] = None,
 ) -> str:
@@ -151,7 +164,7 @@ def compose(
 
     compose_str = f"""{volumes}services:
 {db}
-{DEBUGGER.format(debugger_port=debugger_port) if debugger_port else ""}
+{debugger_compose(port=debugger_port, host=debugger_host)}
     langgraph-api:
         ports:
             - "{port}:8000\""""
