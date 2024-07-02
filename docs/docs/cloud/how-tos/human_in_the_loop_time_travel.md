@@ -24,7 +24,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
+    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
     const assistantId = agent;
     const thread = await client.threads.create();
     ```
@@ -38,7 +38,7 @@ Before replaying a state - we need to create states to replay from! In order to 
 === "Python"
 
     ```python
-    input = {'messages':[{"role":"user","content":"Please search the weather in SF"}]}
+    input = { 'messages':[{ "role":"user", "content":"Please search the weather in SF" }] }
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
@@ -53,14 +53,7 @@ Before replaying a state - we need to create states to replay from! In order to 
 === "Javascript"
 
     ```js
-    const input = {
-      "messages": [
-        {
-          "role": "human",
-          "content": "Please search the weather in SF",
-        }
-      ]
-    }
+    const input = {"messages": [{ "role": "human", "content": "Please search the weather in SF"}] }
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],

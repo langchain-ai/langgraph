@@ -9,7 +9,6 @@ First, we will define a quick helper function for printing out JS model outputs 
 
 ```js
 function prettyPrint(m) {
-  m = coerceMessageLikeToMessage(m);
   const padded = " " + m['type'] + " ";
   const sepLen = Math.floor((80 - padded.length) / 2);
   const sep = "=".repeat(sepLen);
@@ -43,7 +42,7 @@ Then, let's import our required packages and instantiate our client, assistant, 
     import { Client } from "@langchain/langgraph-sdk";
     
 
-    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
+    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
     const assistantId = "agent";
     const thread = await client.threads.create();
     ```

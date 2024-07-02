@@ -34,7 +34,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
+    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
     const assistantId = "agent";
     const thread = await client.threads.create();
     ```
@@ -48,7 +48,7 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
 === "Python"
 
     ```python
-    input = {'messages':[{"role":"user","content":"Use the search tool to ask the user where they are, then look up the weather there"}]}
+    input = { 'messages':[{ "role":"user", "content":"Use the search tool to ask the user where they are, then look up the weather there" }] }
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
@@ -63,14 +63,7 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
 === "Javascript"
 
     ```js
-    const input = {
-      "messages": [
-        {
-          "role": "human",
-          "content": "Use the search tool to ask the user where they are, then look up the weather there",
-        }
-      ]
-    }
+    const input = { "messages":[{ "role":"human", "content": "Use the search tool to ask the user where they are, then look up the weather there"}] }
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],

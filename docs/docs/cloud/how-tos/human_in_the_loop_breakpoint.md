@@ -31,7 +31,7 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
+    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
     const assistantId = "agent"
     const thread = await client.threads.create();
     ```
@@ -65,14 +65,7 @@ And, now let's compile it with a breakpoint before the tool node:
 === "Javascript"
 
     ```js
-    const input = {
-      "messages": [
-        {
-          "role": "human",
-          "content": "what's the weather in sf",
-        }
-      ]
-    }
+    const input = { "messages": [{ "role": "human", "content": "what's the weather in sf"}] }
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
