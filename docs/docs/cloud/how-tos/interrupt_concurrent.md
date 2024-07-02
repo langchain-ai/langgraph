@@ -7,14 +7,12 @@ The guide covers the `interrupt` option for double texting, which interrupts the
 First, we will define a quick helper function for printing out JS model outputs (you can skip this if using Python):
 
 ```js
-import { coerceMessageLikeToMessage } from "@langchain/core/messages"
-
 function prettyPrint(m) {
   m = coerceMessageLikeToMessage(m);
-  let padded = " " + m._getType() + " ";
-  let sepLen = Math.floor((80 - padded.length) / 2);
-  let sep = "=".repeat(sepLen);
-  let secondSep = sep + (padded.length % 2 ? "=" : "");
+  const padded = " " + m['type'] + " ";
+  const sepLen = Math.floor((80 - padded.length) / 2);
+  const sep = "=".repeat(sepLen);
+  const secondSep = sep + (padded.length % 2 ? "=" : "");
   
   console.log(`${sep}${padded}${secondSep}`);
   console.log("\n\n");

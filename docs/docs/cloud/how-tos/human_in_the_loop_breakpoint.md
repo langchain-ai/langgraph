@@ -32,7 +32,7 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    let assistantId = "agent"
+    const assistantId = "agent"
     const thread = await client.threads.create();
     ```
 

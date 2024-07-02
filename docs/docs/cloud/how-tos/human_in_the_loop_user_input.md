@@ -35,7 +35,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    let assistantId = "agent";
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 

@@ -25,7 +25,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({apiUrl:"whatever-your-deployment-url-is"});
-    let assistantId = agent;
+    const assistantId = agent;
     const thread = await client.threads.create();
     ```
 
@@ -123,7 +123,7 @@ To rerun from a state, we need to pass in the `checkpoint_id` into the config of
         assistant_id, # graph_id
         input=None,
         stream_mode="updates",
-        config={"configurable":{"thread_ts":state_to_replay['checkpoint_id']}}
+        config={"configurable": {"thread_ts": state_to_replay['checkpoint_id']}}
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -138,7 +138,7 @@ To rerun from a state, we need to pass in the `checkpoint_id` into the config of
       {
         input: null,
         streamMode: "updates",
-        config: {"configurable":{"thread_ts":stateToReplay['checkpoint_id']}},
+        config: {"configurable": {"thread_ts": stateToReplay['checkpoint_id']}},
       }
     );
     for await (const chunk of streamResponse) {
@@ -198,7 +198,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
         assistant["assistant_id"], # graph_id
         input=None,
         stream_mode="updates",
-        config={"configurable":{"thread_ts":new_state['configurable']['thread_ts']}}
+        config={"configurable": {"thread_ts": new_state['configurable']['thread_ts']}}
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -213,7 +213,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
       {
         input: null,
         streamMode: "updates",
-        config: {"configurable":{"thread_ts":newState['configurable']['thread_ts']}},
+        config: {"configurable": {"thread_ts": newState['configurable']['thread_ts']}},
       }
     );
     for await (const chunk of streamResponse) {
