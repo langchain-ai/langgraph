@@ -193,13 +193,7 @@ graph.add_edge("node_a", routing_function, {True: "node_b", False: "node_c"})
 
 ### Entry Point
 
-The entry point is first node to call when the graph starts. You can use [`set_entry_point`][langgraph.graph.StateGraph.set_entry_point] to specify this.
-
-```python
-graph.set_entry_point("node_a")
-```
-
-This is equivalent to adding an edge between the `START` node and this node. You may want to use `START` directly when you want to have **multiple** nodes be called first.
+The entry point is first node to call when the graph starts. You can use [`add_edge`][langgraph.graph.StateGraph.add_edge] from the virtual [`START`][start] node to the first node to execute to accomplish this.
 
 ```python
 from langgraph.graph import START
@@ -210,16 +204,19 @@ graph.add_edge(START, "node_a")
 ### Conditional Entry Point
 
 The conditional entry point is used when you want to specify a function to call to determine which node(s) should be called first.
-You can use [`set_conditional_entry_point`][langgraph.graph.StateGraph.set_conditional_entry_point] to specify this.
+
+You can use [`add_conditional_edges`][langgraph.graph.StateGraph.add_conditional_edges] from the virtual [`START`][start] node to accomplish this.
 
 ```python
-graph.set_conditional_entry_point(routing_function)
+from langgraph.graph import START
+
+graph.add_conditional_edges(START, routing_function)
 ```
 
 You can optionally provide a dictionary that maps the `routing_function`'s output to the name of the next node.
 
 ```python
-graph.set_conditional_entry_point(routing_function, {True: "node_b", False: "node_c"})
+graph.add_conditional_edges(START, routing_function, {True: "node_b", False: "node_c"})
 ```
 
 ## `Send`
