@@ -68,6 +68,16 @@ export interface Thread {
   metadata: Metadata;
 }
 
+export interface Cron {
+  cron_id: string;
+  thread_id: Optional<string>;
+  end_time: Optional<string>;
+  schedule: string;
+  created_at: string;
+  updated_at: string;
+  payload: Record<string, unknown>;
+}
+
 export type DefaultValues = Record<string, unknown>[] | Record<string, unknown>;
 
 export interface ThreadState<ValuesType = DefaultValues> {

@@ -6,6 +6,7 @@ The LangGraph CLI includes commands to build and run a LangGraph Cloud API serve
 2. Install the `langgraph-cli` Python package (e.g. `pip install langgraph-cli`).
 3. Run the command `langgraph --help` to confirm that the CLI is installed.
 
+[](){#langgraph.json}
 ## Configuration File
 The LangGraph CLI requires a JSON configuration file with the following keys:
 
