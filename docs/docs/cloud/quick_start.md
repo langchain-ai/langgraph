@@ -41,7 +41,7 @@ This tutorial will use:
         tavily-python
         langchain_community
 
-4. The `langgraph.json` file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`.
+4. The [`langgraph.json`][langgraph.json] file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`.
 
     ```json
     {
@@ -65,7 +65,7 @@ Now that we have set everything up on our local file system, we are ready to hos
 
 ## Test the graph build locally
 
-Before deploying to the cloud, we probably want to test the building of our graph locally. This is useful to make sure we have configured our CLI configuration file correctly and our graph runs.
+Before deploying to the cloud, we probably want to test the building of our graph locally. This is useful to make sure we have configured our [CLI configuration file][langgraph.json] correctly and our graph runs.
 
 In order to do this we can first install the LangGraph CLI
 

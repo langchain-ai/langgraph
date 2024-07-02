@@ -10,4 +10,5 @@ export type {
   Run,
   Thread,
   ThreadState,
+  Cron,
 } from "./schema.js";

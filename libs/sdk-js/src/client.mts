@@ -8,6 +8,7 @@ import {
   Run,
   Thread,
   ThreadState,
+  Cron,
 } from "./schema.js";
 import { AsyncCaller, AsyncCallerParams } from "./utils/async_caller.mjs";
 import { EventSourceParser, createParser } from "eventsource-parser";
@@ -17,6 +18,7 @@ import {
   RunsStreamPayload,
   RunsWaitPayload,
   StreamEvent,
+  CronsCreatePayload,
 } from "./types.mjs";
 
 interface ClientConfig {
@@ -101,6 +103,94 @@ class BaseClient {
       return undefined as T;
     }
     return response.json() as T;
+  }
+}
+
+class CronsClient extends BaseClient {
+  /**
+   *
+   * @param threadId The ID of the thread.
+   * @param assistantId Assistant ID to use for this cron job.
+   * @param payload Payload for creating a cron job.
+   * @returns The created background run.
+   */
+  async createForThread(
+    threadId: string,
+    assistantId: string,
+    payload?: CronsCreatePayload,
+  ): Promise<Run> {
+    const json: Record<string, any> = {
+      schedule: payload?.schedule,
+      input: payload?.input,
+      config: payload?.config,
+      metadata: payload?.metadata,
+      assistant_id: assistantId,
+      interrupt_before: payload?.interruptBefore,
+      interrupt_after: payload?.interruptAfter,
+      webhook: payload?.webhook,
+    };
+    return this.fetch<Run>(`/threads/${threadId}/runs/crons`, {
+      method: "POST",
+      json,
+    });
+  }
+
+  /**
+   *
+   * @param assistantId Assistant ID to use for this cron job.
+   * @param payload Payload for creating a cron job.
+   * @returns
+   */
+  async create(
+    assistantId: string,
+    payload?: CronsCreatePayload,
+  ): Promise<Run> {
+    const json: Record<string, any> = {
+      schedule: payload?.schedule,
+      input: payload?.input,
+      config: payload?.config,
+      metadata: payload?.metadata,
+      assistant_id: assistantId,
+      interrupt_before: payload?.interruptBefore,
+      interrupt_after: payload?.interruptAfter,
+      webhook: payload?.webhook,
+    };
+    return this.fetch<Run>(`/runs/crons`, {
+      method: "POST",
+      json,
+    });
+  }
+
+  /**
+   *
+   * @param cronId Cron ID of Cron job to delete.
+   */
+  async delete(cronId: string): Promise<void> {
+    await this.fetch<void>(`/runs/crons/${cronId}`, {
+      method: "DELETE",
+    });
+  }
+
+  /**
+   *
+   * @param query Query options.
+   * @returns List of crons.
+   */
+  async search(query?: {
+    assistantId?: string;
+    threadId?: string;
+    limit?: number;
+    offset?: number;
+  }): Promise<Cron[]> {
+    return this.fetch<Cron[]>("/runs/crons/search", {
+      method: "POST",
+      json: {
+        assistant_id: query?.assistantId ?? undefined,
+        thread_id: query?.threadId ?? undefined,
+        limit: query?.limit ?? 10,
+        offset: query?.offset ?? 0,
+      },
+    });
   }
 }
 
@@ -674,9 +764,15 @@ export class Client {
    */
   public runs: RunsClient;
 
+  /**
+   * The client for interacting with cron runs.
+   */
+  public crons: CronsClient;
+
   constructor(config?: ClientConfig) {
     this.assistants = new AssistantsClient(config);
     this.threads = new ThreadsClient(config);
     this.runs = new RunsClient(config);
+    this.crons = new CronsClient(config);
   }
 }

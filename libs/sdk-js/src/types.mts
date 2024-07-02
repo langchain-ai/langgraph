@@ -83,4 +83,11 @@ export interface RunsCreatePayload extends RunsInvokePayload {
   webhook?: string;
 }
 
+export interface CronsCreatePayload extends RunsCreatePayload {
+  /**
+   * Schedule for running the Cron Job
+   */
+  schedule: string;
+}
+
 export type RunsWaitPayload = RunsStreamPayload;

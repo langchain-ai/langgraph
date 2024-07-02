@@ -180,7 +180,9 @@ def create_react_agent(
         tools: A list of tools or a ToolExecutor instance.
         messages_modifier: An optional
             messages modifier. This applies to messages BEFORE they are passed into the LLM.
+
             Can take a few different forms:
+
             - SystemMessage: this is added to the beginning of the list of messages.
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages.
             - Callable: This function should take in a list of messages and the output is then passed to the language model.
@@ -197,6 +199,47 @@ def create_react_agent(
 
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
+
+    The resulting graph looks like this:
+
+    ``` mermaid
+    stateDiagram-v2
+        [*] --> Start
+        Start --> Agent
+        Agent --> Tools : continue
+        Tools --> Agent
+        Agent --> End : end
+        End --> [*]
+
+        classDef startClass fill:#ffdfba;
+        classDef endClass fill:#baffc9;
+        classDef otherClass fill:#fad7de;
+
+        class Start startClass
+        class End endClass
+        class Agent,Tools otherClass
+    ```
+
+    The "agent" node calls the language model with the messages list (after applying the messages modifier).
+    If the resulting AIMessage contains `tool_calls`, the graph will then call the ["tools"][toolnode].
+    The "tools" node executes the tools (1 tool per `tool_call`) and adds the responses to the messages list
+    as `ToolMessage` objects. The agent node then calls the language model again.
+    The process repeats until no more `tool_calls` are present in the response.
+    The agent then returns the full list of messages as a dictionary containing the key "messages".
+
+    ``` mermaid
+        sequenceDiagram
+            participant U as User
+            participant A as Agent (LLM)
+            participant T as Tools
+            U->>A: Initial input
+            Note over A: Messages modifier + LLM
+            loop while tool_calls present
+                A->>T: Execute tools
+                T-->>A: ToolMessage for each tool_calls
+            end
+            A->>U: Return final state
+    ```
 
     Examples:
         Use with a simple tool:
@@ -275,7 +318,7 @@ def create_react_agent(
         ...     # You can do more complex modifications here
         ...     return prompt.invoke({"messages": messages})
         >>>
-        >>> app = create_react_agent(model, tools, messages_modifier=modify_messages)
+        >>> graph = create_react_agent(model, tools, messages_modifier=modify_messages)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
