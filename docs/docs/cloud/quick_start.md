@@ -224,8 +224,8 @@ async for chunk in client.runs.stream(
         input=input,
         stream_mode="updates",
     ):
-    if chunk.data and "run_id" not in chunk.data:
-            print(chunk.data)
+    if chunk.data and chunk.event != "metadata": 
+        print(chunk.data)
 ```
 
     {'agent': {'messages': [{'content': "Hi Bagatur! It's nice to meet you. How can I assist you today?", 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_9cb5d38cf7'}, 'type': 'ai', 'name': None, 'id': 'run-c89118b7-1b1e-42b9-a85d-c43fe99881cd', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
