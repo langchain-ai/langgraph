@@ -80,7 +80,7 @@ jobs:
 
       - name: Check README.md is in sync
         run: |
-          if [ -n "$(git diff --name-only HEAD^ | grep 'README.md')" ]; then
+            if ! diff -q README.md libs/langgraph/README.md >/dev/null; then
             echo "README.md is out of sync with libs/langgraph/README.md"
             exit 1
-          fi
+            fi
