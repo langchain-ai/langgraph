@@ -39,7 +39,7 @@ pip install -U langgraph
 
 One of the central concepts of LangGraph is state. Each graph execution creates a state that is passed between nodes in the graph as they execute, and each node updates this internal state with its return value after it executes. The way that the graph updates its internal state is defined by either the type of graph chosen or a custom function.
 
-Let's take a look at a simple example of an agent that can search the web using [Tavily Search API](https://tavily.com/).
+Let's take a look at a simple example of an agent that can use a search tool.
 
 ```shell
 pip install langchain-anthropic
@@ -167,7 +167,7 @@ final_state["messages"][-1].content
     <summary>Initialize the model and tools.</summary>
 
     - we use `ChatAnthropic` as our LLM. **NOTE:** we need make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the `.bind_tools()` method.
-    - we define the tools we want to use - a web search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
+    - we define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
    </details>
 
 2. <details>
