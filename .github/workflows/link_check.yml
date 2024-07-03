@@ -1,4 +1,4 @@
-name: Check Links
+name: Check Docs & Links
 
 on:
   pull_request:
@@ -69,3 +69,19 @@ jobs:
               echo "No notebook files changed."
             fi
           fi
+  check-readmes-synced:
+    # This checks that the repo README.md is identical to the libs/langgraph/README.md
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check README.md is in sync
+        run: |
+            if ! diff -q README.md libs/langgraph/README.md >/dev/null; then
+            echo "README.md is out of sync with libs/langgraph/README.md"
+            diff -C 3 README.md libs/langgraph/README.md
+            exit 1
+            fi
