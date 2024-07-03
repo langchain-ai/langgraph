@@ -43,14 +43,14 @@ pip install langchain-anthropic
 ```
 
 ```shell
-export OPENAI_API_KEY=sk-...
+export ANTHROPIC_API_KEY=sk-...
 ```
 
 Optionally, we can set up [LangSmith](https://docs.smith.langchain.com/) for best-in-class observability.
 
 ```shell
-export LANGCHAIN_TRACING_V2="true"
-export LANGCHAIN_API_KEY=ls__...
+export LANGSMITH_TRACING=true
+export LANGSMITH_API_KEY=lsv2_sk_...
 ```
 
 ```python
