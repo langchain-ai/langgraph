@@ -1,11 +1,12 @@
-site_name: LangGraph
+site_name: ""
 site_description: Build language agents as graphs
 site_url: https://langchain-ai.github.io/langgraph/
 repo_url: https://github.com/langchain-ai/langgraph
 theme:
   name: material
   custom_dir: overrides
-  logo: static/wordmark.png
+  logo_dark_mode: static/wordmark_light.svg
+  logo_light_mode: static/wordmark_dark.svg
   favicon: static/favicon.png
   icon:
     repo: fontawesome/brands/git-alt

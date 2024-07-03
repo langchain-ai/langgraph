@@ -1,0 +1,4 @@
+{% if config.theme.logo_light_mode %}
+  <img src="{{ config.theme.logo_light_mode | url }}" alt="logo" class="logo-light" />
+  <img src="{{ config.theme.logo_dark_mode | url }}" alt="logo" class="logo-dark" />
+{% endif %}
