@@ -109,10 +109,14 @@ def test_runnable_modifier():
 async def test_tool_node():
     def tool1(some_val: int, some_other_val: str) -> str:
         """Tool 1 docstring."""
+        if some_val == 0:
+            raise ValueError("Test error")
         return f"{some_val} - {some_other_val}"
 
     async def tool2(some_val: int, some_other_val: str) -> str:
         """Tool 2 docstring."""
+        if some_val == 0:
+            raise ValueError("Test error")
         return f"tool2: {some_val} - {some_other_val}"
 
     result = ToolNode([tool1]).invoke(
@@ -131,9 +135,35 @@ async def test_tool_node():
             ]
         }
     )
+
     tool_message: ToolMessage = result["messages"][-1]
     assert tool_message.type == "tool"
     assert tool_message.content == "1 - foo"
+    assert tool_message.tool_call_id == "some 0"
+
+    result_error = ToolNode([tool1]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 0, "some_other_val": "foo"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+
+    tool_message: ToolMessage = result_error["messages"][-1]
+    assert tool_message.type == "tool"
+    assert (
+        tool_message.content
+        == f"Error: {repr(ValueError('Test error'))}\n Please fix your mistakes."
+    )
     assert tool_message.tool_call_id == "some 0"
 
     result2 = await ToolNode([tool2]).ainvoke(
@@ -155,6 +185,24 @@ async def test_tool_node():
     tool_message: ToolMessage = result2["messages"][-1]
     assert tool_message.type == "tool"
     assert tool_message.content == "tool2: 2 - bar"
+
+    with pytest.raises(ValueError):
+        await ToolNode([tool2], handle_tool_errors=False).ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "tool2",
+                                "args": {"some_val": 0, "some_other_val": "bar"},
+                                "id": "some 1",
+                            }
+                        ],
+                    )
+                ]
+            }
+        )
 
 
 def my_function(some_val: int, some_other_val: str) -> str:
