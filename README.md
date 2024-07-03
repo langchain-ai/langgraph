@@ -12,7 +12,7 @@
 > Looking for the JS version? Click [here](https://github.com/langchain-ai/langgraphjs) ([JS docs](https://langchain-ai.github.io/langgraphjs/)).
 
 > [!TIP]
-> [Join the waitlist](https://www.langchain.com/langgraph-cloud-beta) for [LangGraph Cloud](https://langchain-ai.github.io/langgraph/cloud/)! LangGraph Cloud is a managed service for deploying and hosting LangGraph applications.
+> Looking to deploy your LangGraph application? [Join the waitlist](https://www.langchain.com/langgraph-cloud-beta) for [LangGraph Cloud](https://langchain-ai.github.io/langgraph/cloud/), our managed service for deploying and hosting LangGraph applications.
 
 ## Overview
 
