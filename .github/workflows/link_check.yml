@@ -82,5 +82,6 @@ jobs:
         run: |
             if ! diff -q README.md libs/langgraph/README.md >/dev/null; then
             echo "README.md is out of sync with libs/langgraph/README.md"
+            diff -C 3 README.md libs/langgraph/README.md
             exit 1
             fi
