@@ -52,9 +52,11 @@ class ToolNode(RunnableCallable):
         *,
         name: str = "tools",
         tags: Optional[list[str]] = None,
+        handle_tool_errors: Optional[bool] = True,
     ) -> None:
         super().__init__(self._func, self._afunc, name=name, tags=tags, trace=False)
         self.tools_by_name: Dict[str, BaseTool] = {}
+        self.handle_tool_errors = handle_tool_errors
         for tool_ in tools:
             if not isinstance(tool_, BaseTool):
                 tool_ = create_tool(tool_)
@@ -76,7 +78,12 @@ class ToolNode(RunnableCallable):
             raise ValueError("Last message is not an AIMessage")
 
         def run_one(call: ToolCall):
-            output = self.tools_by_name[call["name"]].invoke(call["args"], config)
+            try:
+                output = self.tools_by_name[call["name"]].invoke(call["args"], config)
+            except Exception as e:
+                if not self.handle_tool_errors:
+                    raise e
+                output = f"Error: {repr(e)}\n Please fix your mistakes."
             return ToolMessage(
                 content=str_output(output), name=call["name"], tool_call_id=call["id"]
             )
@@ -104,9 +111,14 @@ class ToolNode(RunnableCallable):
             raise ValueError("Last message is not an AIMessage")
 
         async def run_one(call: ToolCall):
-            output = await self.tools_by_name[call["name"]].ainvoke(
-                call["args"], config
-            )
+            try:
+                output = await self.tools_by_name[call["name"]].ainvoke(
+                    call["args"], config
+                )
+            except Exception as e:
+                if not self.handle_tool_errors:
+                    raise e
+                output = f"Error: {repr(e)}\n Please fix your mistakes."
             return ToolMessage(
                 content=str_output(output), name=call["name"], tool_call_id=call["id"]
             )
