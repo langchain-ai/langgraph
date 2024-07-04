@@ -253,7 +253,7 @@ RUN set -ex && \\
 
 {faux_pkgs_str}
 
-RUN {pip_install} -e /deps/*
+RUN {pip_install} -e /deps/* && pip cache purge
 
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
