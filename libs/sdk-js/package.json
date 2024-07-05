@@ -1,0 +1,67 @@
+{
+  "name": "@langchain/langgraph-sdk",
+  "version": "0.0.1-rc.14",
+  "description": "Client library for interacting with the LangGraph API",
+  "type": "module",
+  "packageManager": "yarn@1.22.19",
+  "scripts": {
+    "clean": "rm -rf dist/ && node scripts/create-entrypoints.js clean",
+    "build": "yarn clean && yarn build:esm && yarn build:cjs && node scripts/create-entrypoints.js",
+    "build:esm": "rm -f src/package.json && tsc --outDir dist/ && rm -rf dist/tests dist/**/tests",
+    "build:cjs": "echo '{}' > src/package.json && tsc --outDir dist-cjs/ -p tsconfig.cjs.json && node scripts/move-cjs-to-dist.js && rm -r dist-cjs src/package.json",
+    "prepublish": "yarn run build",
+    "format": "prettier --write src",
+    "lint": "prettier --check src && tsc --noEmit"
+  },
+  "main": "index.js",
+  "license": "MIT",
+  "dependencies": {
+    "@types/json-schema": "^7.0.15",
+    "eventsource-parser": "^1.1.2",
+    "p-queue": "^6.6.2",
+    "p-retry": "4",
+    "uuid": "^9.0.0"
+  },
+  "devDependencies": {
+    "@tsconfig/recommended": "^1.0.2",
+    "@types/node": "^20.12.12",
+    "@types/uuid": "^9.0.1",
+    "concat-md": "^0.5.1",
+    "prettier": "^3.2.5",
+    "typedoc": "^0.26.1",
+    "typedoc-plugin-markdown": "^4.1.0",
+    "typescript": "^5.4.5"
+  },
+  "exports": {
+    ".": {
+      "types": {
+        "import": "./index.d.ts",
+        "require": "./index.d.cts",
+        "default": "./index.d.ts"
+      },
+      "import": "./index.js",
+      "require": "./index.cjs"
+    },
+    "./client": {
+      "types": {
+        "import": "./client.d.ts",
+        "require": "./client.d.cts",
+        "default": "./client.d.ts"
+      },
+      "import": "./client.js",
+      "require": "./client.cjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist/",
+    "client.cjs",
+    "client.js",
+    "client.d.ts",
+    "client.d.cts",
+    "index.cjs",
+    "index.js",
+    "index.d.ts",
+    "index.d.cts"
+  ]
+}
