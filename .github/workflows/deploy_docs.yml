@@ -3,8 +3,14 @@ name: Deploy Docs
 on:
   push:
     branches:
-      - main 
+      - main
+  pull_request:
+    branches:
+      - main
   workflow_dispatch:
+
+env:
+  POETRY_VERSION: "1.7.1"
 
 permissions:
   contents: read
@@ -19,33 +25,44 @@ jobs:
   deploy:
     runs-on: ubuntu-latest
     steps:
-        - uses: actions/checkout@v4
-        - name: install deps
-          run: |
-            pip install poetry poethepoet
-        - name: Set up Python
-          uses: actions/setup-python@v4
-          with:
-            python-version: 3.12
-            cache: poetry
-            cache-dependency-path: 'poetry.lock'
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
 
-        - name: Poetry install
-          run: |
-            poetry install
-            poetry run pip install -r docs/docs-requirements.txt
+      - name: Set up Python + Poetry ${{ env.POETRY_VERSION }}
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: "3.12"
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: docs
 
-        - name: Build site
-          run: make build-docs
-        
-        - name: Configure GitHub Pages
-          uses: actions/configure-pages@v4
-        
-        - name: Upload Pages Artifact
-          uses: actions/upload-pages-artifact@v3
-          with:
-            path: ./docs/site/
+      - name: Install dependencies
+        run: |
+          poetry install --with docs
 
-        - name: Deploy to GitHub Pages
-          id: deployment
-          uses: actions/deploy-pages@v4
+      - name: Build site
+        run: make build-docs
+        env:
+          MKDOCS_GIT_COMMITTERS_APIKEY: ${{ secrets.MKDOCS_GIT_COMMITTERS_APIKEY }}
+
+      - name: Configure GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        uses: actions/configure-pages@v4
+
+      - name: Upload Pages Artifact
+        if: github.ref == 'refs/heads/main'
+        uses: actions/upload-pages-artifact@v3
+        with:
+          path: ./docs/site/
+
+      - name: Deploy to GitHub Pages
+        if: github.ref == 'refs/heads/main'
+        id: deployment
+        uses: actions/deploy-pages@v4
+
+      - name: Deploy Pull Request Preview
+        if: github.event_name == 'pull_request'
+        uses: actions/upload-artifact@v2
+        with:
+          name: pr-preview-${{ github.event.number }}
+          path: ./docs/site/

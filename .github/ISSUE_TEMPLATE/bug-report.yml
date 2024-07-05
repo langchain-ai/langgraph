@@ -22,9 +22,6 @@ body:
         Разработчики стараются своевременно обрабатывать все открытые issue. Тем не менее, если вы считаете, что обнаруженную ошибку нужно рассмотреть с повышенным приоритетом, вы можете уведомить об этом руководителя проекта — @Rai220.
 
       placeholder: |
-        The following code: 
-        
-        ```python
         from langchain_core.runnables import RunnableLambda
 
         def bad_code(inputs) -> int:
@@ -32,7 +29,7 @@ body:
           
           chain = RunnableLambda(bad_code)
           chain.invoke('Hello!')
-        ```
+      render: python
   - type: textarea
     id: error
     validations:
@@ -43,6 +40,7 @@ body:
         If you are reporting an error, please include the full error message and stack trace.
       placeholder: |
         Exception + full stack trace
+      render: shell
   - type: textarea
     id: description
     attributes:

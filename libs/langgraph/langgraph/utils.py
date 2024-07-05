@@ -1,0 +1,209 @@
+import asyncio
+import enum
+import inspect
+import sys
+from contextvars import copy_context
+from functools import partial, wraps
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+
+from langchain_core.runnables.base import (
+    Runnable,
+    RunnableConfig,
+    RunnableLambda,
+    RunnableLike,
+    RunnableParallel,
+)
+from langchain_core.runnables.config import (
+    merge_configs,
+    run_in_executor,
+    var_child_runnable_config,
+)
+from langchain_core.runnables.graph import Edge, Graph, Node, is_uuid
+from langchain_core.runnables.utils import accepts_config
+from typing_extensions import TypeGuard
+
+
+# Before Python 3.11 native StrEnum is not available
+class StrEnum(str, enum.Enum):
+    """A string enum."""
+
+    pass
+
+
+class RunnableCallable(Runnable):
+    """A much simpler version of RunnableLambda that requires sync and async functions."""
+
+    def __init__(
+        self,
+        func: Callable[..., Optional[Runnable]],
+        afunc: Optional[Callable[..., Awaitable[Optional[Runnable]]]] = None,
+        *,
+        name: Optional[str] = None,
+        tags: Optional[list[str]] = None,
+        trace: bool = True,
+        recurse: bool = True,
+        **kwargs: Any,
+    ) -> None:
+        if name is not None:
+            self.name = name
+        elif func:
+            try:
+                if func.__name__ != "<lambda>":
+                    self.name = func.__name__
+            except AttributeError:
+                pass
+        elif afunc:
+            try:
+                self.name = afunc.__name__
+            except AttributeError:
+                pass
+        self.func = func
+        self.afunc = afunc
+        self.config: Optional[RunnableConfig] = {"tags": tags} if tags else None
+        self.kwargs = kwargs
+        self.trace = trace
+        self.recurse = recurse
+
+    def __repr__(self) -> str:
+        repr_args = {
+            k: v
+            for k, v in self.__dict__.items()
+            if k not in {"name", "func", "afunc", "config", "kwargs", "trace"}
+        }
+        return f"{self.get_name()}({', '.join(f'{k}={v!r}' for k, v in repr_args.items())})"
+
+    def invoke(
+        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Any:
+        if self.func is None:
+            raise TypeError(
+                f'No synchronous function provided to "{self.name}".'
+                "\nEither initialize with a synchronous function or invoke"
+                " via the async API (ainvoke, astream, etc.)"
+            )
+        kwargs = {**self.kwargs, **kwargs}
+        if self.trace:
+            ret = self._call_with_config(
+                self.func, input, merge_configs(self.config, config), **kwargs
+            )
+        else:
+            config = merge_configs(self.config, config)
+            context = copy_context()
+            context.run(var_child_runnable_config.set, config)
+            if accepts_config(self.func):
+                kwargs["config"] = config
+            ret = context.run(self.func, input, **kwargs)
+        if isinstance(ret, Runnable) and self.recurse:
+            return ret.invoke(input, config)
+        return ret
+
+    async def ainvoke(
+        self, input: Any, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Any:
+        if not self.afunc:
+            return self.invoke(input, config)
+        kwargs = {**self.kwargs, **kwargs}
+        if self.trace:
+            ret = await self._acall_with_config(
+                self.afunc, input, merge_configs(self.config, config), **kwargs
+            )
+        else:
+            config = merge_configs(self.config, config)
+            context = copy_context()
+            context.run(var_child_runnable_config.set, config)
+            if accepts_config(self.afunc):
+                kwargs["config"] = config
+            if sys.version_info >= (3, 11):
+                ret = await asyncio.create_task(
+                    self.afunc(input, **kwargs), context=context
+                )
+            else:
+                ret = await self.afunc(input, **kwargs)
+        if isinstance(ret, Runnable) and self.recurse:
+            return await ret.ainvoke(input, config)
+        return ret
+
+
+class DrawableGraph(Graph):
+    def extend(
+        self, graph: Graph, prefix: str = ""
+    ) -> tuple[Optional[Node], Optional[Node]]:
+        if all(is_uuid(node.id) for node in graph.nodes.values()):
+            super().extend(graph)
+            return graph.first_node(), graph.last_node()
+
+        new_nodes = {
+            f"{prefix}:{k}": Node(f"{prefix}:{k}", v.data)
+            for k, v in graph.nodes.items()
+        }
+        new_edges = [
+            Edge(
+                f"{prefix}:{edge.source}",
+                f"{prefix}:{edge.target}",
+                edge.data,
+                edge.conditional,
+            )
+            for edge in graph.edges
+        ]
+        self.nodes.update(new_nodes)
+        self.edges.extend(new_edges)
+        first = graph.first_node()
+        last = graph.last_node()
+        return (
+            Node(f"{prefix}:{first.id}", first.data) if first else None,
+            Node(f"{prefix}:{last.id}", last.data) if last else None,
+        )
+
+
+def is_async_callable(
+    func: Any,
+) -> TypeGuard[Callable[..., Awaitable]]:
+    """Check if a function is async."""
+    return (
+        asyncio.iscoroutinefunction(func)
+        or hasattr(func, "__call__")
+        and asyncio.iscoroutinefunction(func.__call__)
+    )
+
+
+def is_async_generator(
+    func: Any,
+) -> TypeGuard[Callable[..., AsyncIterator]]:
+    """Check if a function is an async generator."""
+    return (
+        inspect.isasyncgenfunction(func)
+        or hasattr(func, "__call__")
+        and inspect.isasyncgenfunction(func.__call__)
+    )
+
+
+def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnable:
+    """Coerce a runnable-like object into a Runnable.
+
+    Args:
+        thing: A runnable-like object.
+
+    Returns:
+        A Runnable.
+    """
+    if isinstance(thing, Runnable):
+        return thing
+    elif is_async_generator(thing) or inspect.isgeneratorfunction(thing):
+        return RunnableLambda(thing, name=name)
+    elif callable(thing):
+        if is_async_callable(thing):
+            return RunnableCallable(None, thing, name=name, trace=trace)
+        else:
+            return RunnableCallable(
+                thing,
+                wraps(thing)(partial(run_in_executor, None, thing)),
+                name=name,
+                trace=trace,
+            )
+    elif isinstance(thing, dict):
+        return RunnableParallel(thing)
+    else:
+        raise TypeError(
+            f"Expected a Runnable, callable or dict."
+            f"Instead got an unsupported type: {type(thing)}"
+        )

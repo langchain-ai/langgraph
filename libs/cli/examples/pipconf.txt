@@ -1,0 +1,2 @@
+[global]
+timeout = 60
