@@ -13,17 +13,19 @@ graph = StateGraph(MyState)
 ```
 
 ::: langgraph.graph.StateGraph
-    handler: python
+handler: python
 
 ## MessageGraph
 
 ::: langgraph.graph.message.MessageGraph
 
-
 ## CompiledGraph
 
 ::: langgraph.graph.graph.CompiledGraph
-    handler: python
+
+## StreamMode
+
+::: langgraph.pregel.StreamMode
 
 ## Constants
 
@@ -64,4 +66,3 @@ builder.add_conditional_edges("my_node", my_condition)
 ## Send
 
 ::: langgraph.constants.Send
-    handler: python

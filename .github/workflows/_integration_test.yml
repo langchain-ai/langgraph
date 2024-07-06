@@ -1,0 +1,60 @@
+name: CLI integration test
+
+on:
+  workflow_call:
+
+env:
+  POETRY_VERSION: "1.7.1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.10"
+          - "3.11"
+    name: "CLI integration test"
+    defaults:
+      run:
+        working-directory: libs/cli
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: Ana06/get-changed-files@v2.2.0
+        with:
+          filter: "libs/cli/**"
+      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
+        if: steps.changed-files.outputs.all
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ matrix.python-version }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+          cache-key: integration-test-cli
+      - name: Setup env
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples
+        run: cat .env.example > .env
+      - name: Install cli globally
+        if: steps.changed-files.outputs.all
+        run: pip install -e .
+      - name: Start service A
+        if: steps.changed-files.outputs.all
+        run: |
+          timeout 60 langgraph test -c examples/langgraph.json --verbose || (exit "$(($? == 124 ? 0 : $?))")
+      - name: Start service B
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples/graphs
+        run: |
+          timeout 60 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
+      - name: Start service C
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples/graphs_reqs_a
+        run: |
+          timeout 60 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")
+      - name: Start service D
+        if: steps.changed-files.outputs.all
+        working-directory: libs/cli/examples/graphs_reqs_b
+        run: |
+          timeout 60 langgraph test --verbose || (exit "$(($? == 124 ? 0 : $?))")

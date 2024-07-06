@@ -1,0 +1,66 @@
+name: test
+
+on:
+  workflow_call:
+    inputs:
+      working-directory:
+        required: true
+        type: string
+        description: "From which folder this pipeline executes"
+
+env:
+  POETRY_VERSION: "1.7.1"
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    strategy:
+      matrix:
+        python-version:
+          - "3.9"
+          - "3.10"
+          - "3.11"
+          - "3.12"
+    name: "test #${{ matrix.python-version }}"
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: Ana06/get-changed-files@v2.2.0
+        with:
+          filter: "${{ inputs.working-directory }}/**"
+      - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
+        if: steps.changed-files.outputs.all
+        uses: "./.github/actions/poetry_setup"
+        with:
+          python-version: ${{ matrix.python-version }}
+          poetry-version: ${{ env.POETRY_VERSION }}
+          working-directory: ${{ inputs.working-directory }}
+          cache-key: core
+
+      - name: Install dependencies
+        if: steps.changed-files.outputs.all
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: poetry install --with dev
+
+      - name: Run core tests
+        if: steps.changed-files.outputs.all
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          make test
+
+      - name: Ensure the tests did not create any additional files
+        if: steps.changed-files.outputs.all
+        shell: bash
+        working-directory: ${{ inputs.working-directory }}
+        run: |
+          set -eu
+
+          STATUS="$(git status)"
+          echo "$STATUS"
+
+          # grep will exit non-zero if the target message isn't found,
+          # and `set -e` above will cause the step to fail.
+          echo "$STATUS" | grep 'nothing to commit, working tree clean'
