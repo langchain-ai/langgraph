@@ -14,7 +14,7 @@ Luckily, LangGraph makes it possible to do similar things in a production way. T
 
 ## Setup
 
-We are not going to show the full code for the graph we are hosting, but you can see it [here](https://langchain-ai.github.io/langgraph/how-tos/human_in_the_loop/wait-user-input/#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
+We are not going to show the full code for the graph we are hosting, but you can see it [here](../../how-tos/human_in_the_loop/wait-user-input.ipynb#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
 
 ### SDK initialization
 
