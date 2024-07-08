@@ -17,7 +17,7 @@ LangGraph Cloud gives you best in class observability, testing, and hosting serv
 
 ## Streaming
 
-Streaming the results of your LLM application is vital for ensuring a good user experience, especially when your graph may call multiple models and take a long time to fully complete a run. Read about how to stream values from your graph in these how to guides:
+Streaming the results of your LLM application is vital for ensuring a good user experience, especially when your graph may call multiple models and take a long time to fully complete a run. Read about how to stream values from your graph in these how to guides: 
 
 - [How to stream values](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/stream_values/)
 - [How to stream updates](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/stream_updates/)
