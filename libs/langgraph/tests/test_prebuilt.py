@@ -22,7 +22,12 @@ from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
 
-from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent, add_messages
+from langgraph.prebuilt import (
+    ToolNode,
+    ValidationNode,
+    add_messages,
+    create_react_agent,
+)
 
 
 class FakeToolCallingModel(BaseChatModel):
