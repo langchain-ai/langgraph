@@ -134,10 +134,10 @@ OPT_DEBUGGER_PORT = click.option(
     type=int,
     help="Pull the debugger image locally and serve the UI on specified port",
 )
-OPT_DEBUGGER_HOST = click.option(
-    "--debugger-host",
+OPT_DEBUGGER_BASE_URL = click.option(
+    "--debugger-base-url",
     type=str,
-    help="Host for the debugger UI. Defaults to localhost",
+    help="URL used by the debugger to access LangGraph API. Defaults to http://127.0.0.1:[PORT]",
 )
 
 OPT_POSTGRES_URI = click.option(
@@ -158,7 +158,7 @@ def cli():
 @OPT_CONFIG
 @OPT_VERBOSE
 @OPT_DEBUGGER_PORT
-@OPT_DEBUGGER_HOST
+@OPT_DEBUGGER_BASE_URL
 @OPT_WATCH
 @OPT_POSTGRES_URI
 @click.option(
@@ -180,7 +180,7 @@ def up(
     wait: bool,
     verbose: bool,
     debugger_port: Optional[int],
-    debugger_host: Optional[str],
+    debugger_base_url: Optional[str],
     postgres_uri: Optional[str],
 ):
     click.secho("Starting LangGraph API server...", fg="green")
@@ -201,7 +201,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
             watch=watch,
             verbose=verbose,
             debugger_port=debugger_port,
-            debugger_host=debugger_host,
+            debugger_base_url=debugger_base_url,
             postgres_uri=postgres_uri,
         )
         # add up + options
@@ -230,12 +230,15 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
                     if debugger_port
                     else "https://smith.langchain.com"
                 )
+                debugger_base_url_query = (
+                    debugger_base_url or f"http://127.0.0.1:{port}"
+                )
                 set("")
                 sys.stdout.write(
                     f"""Ready!
 - API: http://localhost:{port}
 - Docs: http://localhost:{port}/docs
-- Debugger: {debugger_origin}/studio/?baseUrl=http://127.0.0.1:{port}
+- Debugger: {debugger_origin}/studio/?baseUrl={debugger_base_url_query}
 """
                 )
                 sys.stdout.flush()
@@ -457,7 +460,7 @@ def prepare_args_and_stdin(
     port: int,
     watch: bool,
     debugger_port: Optional[int] = None,
-    debugger_host: Optional[str] = None,
+    debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
 ):
     # prepare args
@@ -465,7 +468,7 @@ def prepare_args_and_stdin(
         capabilities,
         port=port,
         debugger_port=debugger_port,
-        debugger_host=debugger_host,
+        debugger_base_url=debugger_base_url,
         postgres_uri=postgres_uri,
     )
     args = [
@@ -497,7 +500,7 @@ def prepare(
     watch: bool,
     verbose: bool,
     debugger_port: Optional[int] = None,
-    debugger_host: Optional[str] = None,
+    debugger_base_url: Optional[str] = None,
     postgres_uri: Optional[str] = None,
 ):
     with open(config_path) as f:
@@ -521,7 +524,7 @@ def prepare(
         port=port,
         watch=watch,
         debugger_port=debugger_port,
-        debugger_host=debugger_host or f"http://127.0.0.1:{DEFAULT_PORT}",
+        debugger_base_url=debugger_base_url or f"http://127.0.0.1:{port}",
         postgres_uri=postgres_uri,
     )
     return args, stdin

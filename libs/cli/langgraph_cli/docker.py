@@ -105,7 +105,9 @@ def check_capabilities(runner) -> DockerCapabilities:
     )
 
 
-def debugger_compose(*, port: Optional[int] = None, host: Optional[str] = None) -> str:
+def debugger_compose(
+    *, port: Optional[int] = None, base_url: Optional[str] = None
+) -> str:
     if port is None:
         return ""
 
@@ -120,13 +122,13 @@ def debugger_compose(*, port: Optional[int] = None, host: Optional[str] = None) 
             - "{port}:3968"
 """
 
-    if host:
+    if base_url:
         compose_str += """
         environment:
-            VITE_STUDIO_LOCAL_GRAPH_URL: {host}
+            VITE_STUDIO_LOCAL_GRAPH_URL: {base_url}
 """
 
-    return compose_str.format(port=port, host=host)
+    return compose_str.format(port=port, base_url=base_url)
 
 
 def compose(
@@ -134,7 +136,7 @@ def compose(
     *,
     port: int,
     debugger_port: Optional[int] = None,
-    debugger_host: Optional[str] = None,
+    debugger_base_url: Optional[str] = None,
     # postgres://user:password@host:port/database?option=value
     postgres_uri: Optional[str] = None,
 ) -> str:
@@ -164,7 +166,7 @@ def compose(
 
     compose_str = f"""{volumes}services:
 {db}
-{debugger_compose(port=debugger_port, host=debugger_host)}
+{debugger_compose(port=debugger_port, base_url=debugger_base_url)}
     langgraph-api:
         ports:
             - "{port}:8000\""""
