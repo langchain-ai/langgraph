@@ -11,9 +11,9 @@ Welcome to the LangGraph Cloud how-to guides! These guides provide practical, st
 
 LangGraph Cloud gives you best in class observability, testing, and hosting services. Read more about them in these how to guides:
 
-- [How to set up app for deployment](../deployment/setup/)
-- [How to deploy to LangGraph cloud](../deployment/cloud/)
-- [How to self-host](../deployment/self_hosted/)
+- [How to set up app for deployment](../deployment/setup.md)
+- [How to deploy to LangGraph cloud](../deployment/cloud.md)
+- [How to self-host](../deployment/self_hosted.md)
 
 ## Streaming
 
@@ -48,9 +48,9 @@ When creating complex graphs, leaving every decision up to the LLM can be danger
 
 LangGraph Studio is a built-in UI for visualizing, testing, and debugging your agents.
 
-- [How to enter LangGraph Studio](./how-tos/test_deployment.md)
-- [How to test your graph in LangGraph Studio](./how-tos/invoke_studio.md)
-- [Interact with threads in LangGraph Studio](./how-tos/threads_studio.md)
+- [How to enter LangGraph Studio](./test_deployment.md)
+- [How to test your graph in LangGraph Studio](./invoke_studio.md)
+- [Interact with threads in LangGraph Studio](./threads_studio.md)
 
 ## Different Types of Runs:
 
