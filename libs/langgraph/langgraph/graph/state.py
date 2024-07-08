@@ -157,6 +157,7 @@ class StateGraph(Graph):
         """Adds a new node to the state graph.
 
         Will take the name of the function/runnable as the node name.
+        Can also be used as a decorator.
 
         Args:
             node (Union[str, RunnableLike)]: The function or runnable this node will run.
@@ -172,20 +173,38 @@ class StateGraph(Graph):
             >>> def my_node(state, config):
             ...    return {"x": state["x"] + 1}
             ...
-            >>> builder = StateGraph(dict)
-            >>> builder.add_node(my_node)  # node name will be 'my_node'
-            >>> builder.add_edge(START, "my_node")
-            >>> graph = builder.compile()
+            >>> graph = StateGraph(dict)
+            >>> graph.add_node(my_node)  # node name will be 'my_node'
+            >>> graph.add_edge(START, "my_node")
+            >>> graph = graph.compile()
             >>> graph.invoke({"x": 1})
             {'x': 2}
             ```
             Customize the name:
 
             ```pycon
-            >>> builder = StateGraph(dict)
-            >>> builder.add_node("my_fair_node", my_node)
-            >>> builder.add_edge(START, "my_fair_node")
-            >>> graph = builder.compile()
+            >>> graph = StateGraph(dict)
+            >>> graph.add_node("my_fair_node", my_node)
+            >>> graph.add_edge(START, "my_fair_node")
+            >>> graph = graph.compile()
+            >>> graph.invoke({"x": 1})
+            {'x': 2}
+            ```
+            Use as a decorator:
+
+            ```pycon
+            >>> graph = StateGraph(dict)
+            >>> @graph.add_node
+            ... def my_node(state, config):
+            ...    return {"x": state["x"] + 1}
+            ...
+            >>> # OR
+            >>> @graph.add_node("custom_node_name")
+            >>> def my_node(state, config):
+            ...    return {"x": state["x"] + 1}
+            ...
+            >>> graph.add_edge(START, "my_node")
+            >>> graph = graph.compile()
             >>> graph.invoke({"x": 1})
             {'x': 2}
             ```
@@ -199,10 +218,6 @@ class StateGraph(Graph):
                 node = action.name
             else:
                 node = getattr(action, "__name__", action.__class__.__name__)
-            if node is None:
-                raise ValueError(
-                    "Node name must be provided if action is not a function"
-                )
         if node in self.channels:
             raise ValueError(f"'{node}' is already being used as a state key")
         return super().add_node(node, action)
