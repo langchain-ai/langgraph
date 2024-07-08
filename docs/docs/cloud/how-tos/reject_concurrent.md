@@ -1,6 +1,6 @@
 ## Reject
 
-This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](https://langchain-ai.github.io/langgraph/cloud/concepts/#double-texting).
+This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](/cloud/concepts/#double-texting).
 
 The guide covers the `reject` option for double texting, which rejects the new run of the graph by throwing an error and continues with the original run until completion. Below is a quick example of using the `reject` option.
 

@@ -12,7 +12,7 @@ You can then resume from that spot to continue.
 
 ### Code for your graph
 
-In this how-to we use a simple ReAct style hosted graph (you can see the full code for defining it [here](https://langchain-ai.github.io/langgraph/how-tos/human_in_the_loop/breakpoints/)). The important thing is that there are two nodes (one named `agent` that calls the LLM, and one named `action` that calls the tool), and a routing function from `agent` that determines whether to call `action` next or just end the graph run (the `action` node always calls the `agent` node after execution).
+In this how-to we use a simple ReAct style hosted graph (you can see the full code for defining it [here](/how-tos/human_in_the_loop/breakpoints/)). The important thing is that there are two nodes (one named `agent` that calls the LLM, and one named `action` that calls the tool), and a routing function from `agent` that determines whether to call `action` next or just end the graph run (the `action` node always calls the `agent` node after execution).
 
 ### SDK Initialization
 

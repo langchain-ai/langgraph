@@ -237,18 +237,18 @@ Congratulations! If you've worked your way through this tutorial you are well on
 
 ### LangGraph Cloud How-tos
 
-If you want to learn more about streaming from hosted graphs, check out the Streaming [how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/#streaming).
+If you want to learn more about streaming from hosted graphs, check out the Streaming [how-to guides](/cloud/how-tos/#streaming).
 
-To learn more about double-texting and all the ways you can handle it in your application, read up on these [how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/#double-texting).
+To learn more about double-texting and all the ways you can handle it in your application, read up on these [how-to guides](/cloud/how-tos/#double-texting).
 
-To learn about how to include different human-in-the-loop behavior in your graph, take a look at [these how-tos](https://langchain-ai.github.io/langgraph/cloud/how-tos/#human-in-the-loop).
+To learn about how to include different human-in-the-loop behavior in your graph, take a look at [these how-tos](/cloud/how-tos/#human-in-the-loop).
 
 ### LangGraph Tutorials
 
 Before hosting, you have to write a graph to host. Here are some tutorials to get you more comfortable with writing LangGraph graphs and give you inspiration for the types of graphs you want to host.
 
-[This tutorial](https://langchain-ai.github.io/langgraph/tutorials/customer-support/customer-support/) walks you through how to write a customer support bot using LangGraph.
+[This tutorial](/tutorials/customer-support/customer-support/) walks you through how to write a customer support bot using LangGraph.
 
-If you are interested in writing a SQL agent, check out [this tutorial](https://langchain-ai.github.io/langgraph/tutorials/sql-agent/).
+If you are interested in writing a SQL agent, check out [this tutorial](/tutorials/sql-agent/).
 
-Check out the [LangGraph tutorials](https://langchain-ai.github.io/langgraph/tutorials/) page to read about more exciting use cases.
+Check out the [LangGraph tutorials](/tutorials/) page to read about more exciting use cases.

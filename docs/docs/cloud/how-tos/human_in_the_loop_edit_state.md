@@ -6,7 +6,7 @@ This can be in several ways, but the primary supported way is to add an "interru
 
 ## Setup
 
-We are not going to show the full code for the graph we are hosting, but you can see it [here](https://langchain-ai.github.io/langgraph/how-tos/human_in_the_loop/edit-graph-state/#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
+We are not going to show the full code for the graph we are hosting, but you can see it [here](/how-tos/human_in_the_loop/edit-graph-state/#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
 
 ### SDK initialization
 

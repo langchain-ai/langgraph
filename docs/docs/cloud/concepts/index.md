@@ -18,7 +18,7 @@ A thread contains the accumulated state of a group of runs. If a run is executed
 
 The state of a thread at a particular point in time is called a checkpoint.
 
-For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#checkpointer).
+For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](/concepts/low_level/#checkpointer).
 
 The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the <a href="../reference/api/api_ref.html#tag/threadscreate" target="_blank">API reference</a> for more details.
 
@@ -92,7 +92,7 @@ See the [how-to guide](../how-tos/cloud_examples/stateless_runs.ipynb) for creat
 
 For all types of runs, langgraph cloud supports completion webhooks. When you create the run you can pass a webhook URL to be called when the completes (successfully or not). This is especially useful for background runs and cron jobs, as the webhook can give you an indication the run has completed and you can perform further actions for your appilcation.
 
-See this [how-to guide](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/webhooks/) to learn about how to use webhooks with LangGraph Cloud.
+See this [how-to guide](/cloud/how-tos/cloud_examples/webhooks/) to learn about how to use webhooks with LangGraph Cloud.
 
 ## Deployment
 
