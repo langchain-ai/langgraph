@@ -1,6 +1,6 @@
 # Checkpoints
 
-You can [compile](/reference/graphs/#langgraph.graph.MessageGraph.compile) any LangGraph workflow with a [CheckPointer](/reference/checkpoints/#basecheckpointsaver) to give your agent "memory" by persisting its state. This permits things like:
+You can [compile][langgraph.graph.MessageGraph.compile] any LangGraph workflow with a [CheckPointer][basecheckpointsaver] to give your agent "memory" by persisting its state. This permits things like:
 
 - Remembering things across multiple interactions
 - Interrupting to wait for user input
