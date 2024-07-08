@@ -198,7 +198,7 @@ class StateGraph(Graph):
             ... def my_node(state, config):
             ...    return {"x": state["x"] + 1}
             ...
-            >>> # OR
+            >>> # Or...
             >>> @graph.add_node("custom_node_name")
             >>> def my_node(state, config):
             ...    return {"x": state["x"] + 1}
