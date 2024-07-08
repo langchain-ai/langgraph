@@ -26,7 +26,7 @@ jobs:
       - name: Check links in Markdown files
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
-          folder-path: "examples/"
+          folder-path: "examples/,docs/"
           check-modified-files-only: ${{ github.event_name != 'schedule' }}
           file-path: "./README.md"
           config-file: "./.markdown-link-check.config.json"
@@ -60,7 +60,7 @@ jobs:
             echo "Fetching changes from origin/main..."
             git fetch origin main
             echo "Checking for changed notebook files..."
-            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep '\.ipynb$|\.md$' || true)
+            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep '\.ipynb$' || true)
             echo "Changed files: ${CHANGED_FILES}"
             if [ -n "${CHANGED_FILES}" ]; then
               echo "Running link check on changed notebook files..."
