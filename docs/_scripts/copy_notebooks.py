@@ -27,6 +27,7 @@ _MANUAL = {
         "persistence.ipynb",
         "managing-conversation-history.ipynb",
         "persistence_postgres.ipynb",
+        "persistence_redis.ipynb",
         "visualization.ipynb",
         "state-model.ipynb",
         "subgraph.ipynb",
