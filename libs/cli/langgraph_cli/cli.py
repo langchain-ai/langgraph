@@ -369,6 +369,7 @@ def _build(
                 "docker",
                 "pull",
                 f"{base_image}:{config_json['python_version']}",
+                verbose=True,
             )
         )
     set("Building...")
