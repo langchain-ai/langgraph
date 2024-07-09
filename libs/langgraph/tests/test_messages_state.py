@@ -64,6 +64,17 @@ def test_remove_message():
     assert result == expected_result
 
 
+def test_duplicate_remove_message():
+    left = [
+        HumanMessage(content="Hello", id="1"),
+        AIMessage(content="Hi there!", id="2"),
+    ]
+    right = [RemoveMessage(id="2"), RemoveMessage(id="2")]
+    result = add_messages(left, right)
+    expected_result = [HumanMessage(content="Hello", id="1")]
+    assert result == expected_result
+
+
 def test_remove_nonexistent_message():
     left = [HumanMessage(content="Hello", id="1")]
     right = RemoveMessage(id="2")
