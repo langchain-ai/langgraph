@@ -1,7 +1,9 @@
 import functools
 import uuid
 from typing import TypedDict
+from unittest.mock import patch
 
+import langsmith
 import pytest
 
 from langgraph.graph import END, StateGraph
@@ -97,10 +99,18 @@ def rt_graph() -> CompiledGraph:
 
 
 def test_runnable_callable_tracing_nested(rt_graph: CompiledGraph) -> None:
-    res = rt_graph.invoke({"foo": 1})
+    with patch("langsmith.client.Client", spec=langsmith.Client) as mock_client:
+        with patch("langchain_core.tracers.langchain.get_client") as mock_get_client:
+            mock_get_client.return_value = mock_client
+            with langsmith.tracing_context(enabled=True):
+                res = rt_graph.invoke({"foo": 1})
     assert isinstance(res["node_run_id"], uuid.UUID)
 
 
 async def test_runnable_callable_tracing_nested_async(rt_graph: CompiledGraph) -> None:
-    res = await rt_graph.ainvoke({"foo": 1})
+    with patch("langsmith.client.Client", spec=langsmith.Client) as mock_client:
+        with patch("langchain_core.tracers.langchain.get_client") as mock_get_client:
+            mock_get_client.return_value = mock_client
+            with langsmith.tracing_context(enabled=True):
+                res = await rt_graph.ainvoke({"foo": 1})
     assert isinstance(res["node_run_id"], uuid.UUID)

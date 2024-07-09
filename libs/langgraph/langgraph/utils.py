@@ -25,7 +25,7 @@ from typing_extensions import TypeGuard
 try:
     from langchain_core.runnables.config import _set_config_context
 except ImportError:
-
+    # For forwards compatibility
     def _set_config_context(context: RunnableConfig) -> None:  # type: ignore
         """Set the context for the current thread."""
         var_child_runnable_config.set(context)
