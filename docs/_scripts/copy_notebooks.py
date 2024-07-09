@@ -21,6 +21,7 @@ _MANUAL = {
         "stream-updates.ipynb",
         "stream-multiple.ipynb",
         "streaming-tokens.ipynb",
+        "streaming-tokens-without-langchain.ipynb",
         "streaming-content.ipynb",
         "streaming-events-from-within-tools.ipynb",
         "streaming-from-final-node.ipynb",
