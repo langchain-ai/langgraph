@@ -29,6 +29,7 @@ _MANUAL = {
         "memory/delete-messages.ipynb",
         "memory/add-summary-conversation-history.ipynb",
         "persistence_postgres.ipynb",
+        "persistence_mongodb.ipynb",
         "visualization.ipynb",
         "state-model.ipynb",
         "subgraph.ipynb",

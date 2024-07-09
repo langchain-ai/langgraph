@@ -26,6 +26,7 @@ LangGraph makes it easy to persist state across graph runs. The guide below show
 - [How to delete messages](memory/delete-messages.ipynb)
 - [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
 - [How to create a custom checkpointer using Postgres](persistence_postgres.ipynb)
+- [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 
 ## Human in the Loop
 
