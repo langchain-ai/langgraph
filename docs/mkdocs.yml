@@ -138,6 +138,7 @@ nav:
           - Add summary of the conversation history: how-tos/memory/add-summary-conversation-history.ipynb
           - Create custom checkpointer using Postgres: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
+          - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
           - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
