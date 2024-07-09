@@ -21,14 +21,11 @@ def str_output(output: Any) -> str:
             return str(output)
 
 
-def _pick_from_state(
+def _insert_state(
     tool_: BaseTool, state: Union[dict[str, Any], list]
 ) -> dict[str, Any]:
-    if isinstance(state, list):
-        return {}
-    if model := tool_.args_schema:
-        fields = model.__fields__
-        return {k: v for k, v in state.items() if k in fields}
+    if tool_.args_schema and "state" in tool_.args_schema.__fields__:
+        return {"state": state}
     return {}
 
 
@@ -91,7 +88,7 @@ class ToolNode(RunnableCallable):
         def run_one(call: ToolCall):
             try:
                 tool_ = self.tools_by_name[call["name"]]
-                args = {**_pick_from_state(tool_, input), **call["args"]}
+                args = {**_insert_state(tool_, input), **call["args"]}
                 output = tool_.invoke(args, config)
             except Exception as e:
                 if not self.handle_tool_errors:
@@ -126,7 +123,7 @@ class ToolNode(RunnableCallable):
         async def run_one(call: ToolCall):
             try:
                 tool_ = self.tools_by_name[call["name"]]
-                args = {**_pick_from_state(tool_, input), **call["args"]}
+                args = {**_insert_state(tool_, input), **call["args"]}
                 output = await self.tools_by_name[call["name"]].ainvoke(args, config)
             except Exception as e:
                 if not self.handle_tool_errors:
