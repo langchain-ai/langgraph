@@ -134,8 +134,8 @@ nav:
       - Persistence:
           - Add persistence ("memory"): how-tos/persistence.ipynb
           - Manage conversation history: how-tos/managing-conversation-history.ipynb
-          - Create custom checkpointer using Postgres: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
+          - Create custom checkpointer using Postgres: how-tos/persistence_postgres.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
           - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
