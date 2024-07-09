@@ -193,7 +193,9 @@ def _update_graph_paths(
 
 def config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
     # configure pip
-    pip_install = "PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt"
+    pip_install = (
+        "PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt"
+    )
     if config.get("pip_config_file"):
         pip_install = f"PIP_CONFIG_FILE=/pipconfig.txt {pip_install}"
     pip_config_file_str = (
