@@ -26,7 +26,7 @@ jobs:
       - name: Check links in Markdown files
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
-          folder-path: "examples/"
+          folder-path: "examples/,docs/"
           check-modified-files-only: ${{ github.event_name != 'schedule' }}
           file-path: "./README.md"
           config-file: "./.markdown-link-check.config.json"
