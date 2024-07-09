@@ -74,13 +74,13 @@ In order to do this we can first install the LangGraph CLI
 pip install langgraph-cli
 ```
 
-We can then stand up a simple test server. The server this stands up is INCREDIBLY simple - it is just a single endpoint and has no persistence. **This should not be used for hosting your application, only for testing the build and basic functionality.**
+We can then test our API server as long as we have a valid `LANGCHAIN_API_KEY` and have access to LangGraph Cloud closed beta.
 
 ```shell
-langgraph test
+langgraph up
 ```
 
-This will test building of the agent server. If this runs successfully, you should see something like:
+This will start up the LangGraph API server locally. If this runs successfully, you should see something like:
 
 ```shell
 Ready!
@@ -88,7 +88,7 @@ Ready!
 2024-06-26 19:20:41,056:INFO:uvicorn.access 127.0.0.1:44138 - "GET /ok HTTP/1.1" 200
 ```
 
-You can now test this out! Again, we only expose a single simple endpoint (for streaming stateless runs). This is intended to allow you to test that the agent is properly set up, but should **NOT** but used for production purposes. To test it out, you can go to another terminal window and run:
+You can now test this out! **Note: a license key is needed to move from local testing to production use.** To test it out, you can go to another terminal window and run:
 
 ```shell
 curl --request POST \
