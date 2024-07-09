@@ -81,7 +81,7 @@ RUN set -ex && \\
                 '"*" = ["**/*"]'; do \\
         echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
     done
-RUN pip install -c /api/constraints.txt -e /deps/*
+RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
 WORKDIR /deps/__outer_unit_tests/unit_tests\
 """
@@ -113,7 +113,7 @@ RUN set -ex && \\
                 '"*" = ["**/*"]'; do \\
         echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
     done
-RUN PIP_CONFIG_FILE=/pipconfig.txt pip install -c /api/constraints.txt -e /deps/*
+RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
 WORKDIR /deps/__outer_unit_tests/unit_tests\
 """
@@ -163,7 +163,7 @@ RUN set -ex && \\
                 '"*" = ["**/*"]'; do \\
         echo "$line" >> /deps/__outer_graphs/pyproject.toml; \\
     done
-RUN pip install -c /api/constraints.txt -e /deps/*
+RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_graphs/src/agent.py:graph"}'\
 """
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
@@ -192,7 +192,7 @@ dependencies = ["langchain"]"""
     os.remove(pyproject_path)
     expected_docker_stdin = """FROM langchain/langgraph-api:3.11
 ADD . /deps/unit_tests
-RUN pip install -c /api/constraints.txt -e /deps/*
+RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/unit_tests/graphs/agent.py:graph"}'
 WORKDIR /deps/unit_tests"""
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
@@ -217,7 +217,7 @@ def test_config_to_docker_end_to_end():
 ARG meow
 ARG foo
 ADD pipconfig.txt /pipconfig.txt
-RUN PIP_CONFIG_FILE=/pipconfig.txt pip install -c /api/constraints.txt langchain langchain_openai
+RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt langchain langchain_openai
 ADD ./graphs/ /deps/__outer_graphs/src
 RUN set -ex && \\
     for line in '[project]' \\
@@ -227,7 +227,7 @@ RUN set -ex && \\
                 '"*" = ["**/*"]'; do \\
         echo "$line" >> /deps/__outer_graphs/pyproject.toml; \\
     done
-RUN PIP_CONFIG_FILE=/pipconfig.txt pip install -c /api/constraints.txt -e /deps/*
+RUN PIP_CONFIG_FILE=/pipconfig.txt PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_graphs/src/agent.py:graph"}'"""
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
 
@@ -251,7 +251,7 @@ def test_config_to_compose_simple_config():
                                 '"*" = ["**/*"]'; do \\
                         echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
                     done
-                RUN pip install -c /api/constraints.txt -e /deps/*
+                RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
                 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
                 WORKDIR /deps/__outer_unit_tests/unit_tests
         """
@@ -281,7 +281,7 @@ def test_config_to_compose_env_vars():
                                 '"*" = ["**/*"]'; do \\
                         echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
                     done
-                RUN pip install -c /api/constraints.txt -e /deps/*
+                RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
                 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
                 WORKDIR /deps/__outer_unit_tests/unit_tests
         """
@@ -318,7 +318,7 @@ def test_config_to_compose_env_file():
                                 '"*" = ["**/*"]'; do \\
                         echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
                     done
-                RUN pip install -c /api/constraints.txt -e /deps/*
+                RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
                 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
                 WORKDIR /deps/__outer_unit_tests/unit_tests
         """
@@ -348,7 +348,7 @@ def test_config_to_compose_watch():
                                 '"*" = ["**/*"]'; do \\
                         echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
                     done
-                RUN pip install -c /api/constraints.txt -e /deps/*
+                RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
                 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
                 WORKDIR /deps/__outer_unit_tests/unit_tests
         
@@ -387,7 +387,7 @@ def test_config_to_compose_end_to_end():
                                 '"*" = ["**/*"]'; do \\
                         echo "$line" >> /deps/__outer_unit_tests/pyproject.toml; \\
                     done
-                RUN pip install -c /api/constraints.txt -e /deps/*
+                RUN PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt -e /deps/*
                 ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_unit_tests/unit_tests/agent.py:graph"}'
                 WORKDIR /deps/__outer_unit_tests/unit_tests
         

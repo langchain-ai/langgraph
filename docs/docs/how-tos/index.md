@@ -22,9 +22,12 @@ These how-to guides show how to achieve that controllability.
 LangGraph makes it easy to persist state across graph runs. The guide below shows how to add persistence to your graph.
 
 - [How to add persistence ("memory") to your graph](persistence.ipynb)
-- [How to manage conversation history](managing-conversation-history.ipynb)
-- [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
+- [How to manage conversation history](memory/manage-conversation-history.ipynb)
+- [How to delete messages](memory/delete-messages.ipynb)
+- [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
 - [How to create a custom checkpointer using Postgres](persistence_postgres.ipynb)
+- [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
+- [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
 
 ## Human in the Loop
 
