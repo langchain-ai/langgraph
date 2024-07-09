@@ -25,7 +25,7 @@ _MANUAL = {
         "streaming-events-from-within-tools.ipynb",
         "streaming-from-final-node.ipynb",
         "persistence.ipynb",
-        "memory/managing-conversation-history.ipynb",
+        "memory/manage-conversation-history.ipynb",
         "memory/delete-messages.ipynb",
         "memory/add-summary-conversation-history.ipynb",
         "persistence_postgres.ipynb",
