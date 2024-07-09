@@ -1,4 +1,4 @@
-from typing import Mapping, Optional, Sequence, Union
+from typing import Iterable, Mapping, Optional, Sequence, Union
 
 from langgraph.channels.base import BaseChannel
 from langgraph.constants import RESERVED
@@ -76,12 +76,12 @@ def validate_graph(
 
 def validate_keys(
     keys: Optional[Union[str, Sequence[str]]],
-    channels: Mapping[str, BaseChannel],
+    valid: Iterable[str],
 ) -> None:
     if isinstance(keys, str):
-        if keys not in channels:
-            raise ValueError(f"Key {keys} not in channels")
+        if keys not in valid:
+            raise ValueError(f"Key {keys} not in list")
     elif keys is not None:
         for chan in keys:
-            if chan not in channels:
-                raise ValueError(f"Key {chan} not in channels")
+            if chan not in valid:
+                raise ValueError(f"Key {chan} not in list")

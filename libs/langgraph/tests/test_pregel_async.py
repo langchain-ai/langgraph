@@ -382,7 +382,7 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
     assert await app.ainvoke(2) == 3
-    assert await app.ainvoke(2, output_keys=["output"]) == {"output": 3}
+    assert await app.ainvoke(2, outputs=["output"]) == {"output": 3}
 
     assert await gapp.ainvoke(2) == 3
 
@@ -496,8 +496,6 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert await app.ainvoke(2) == 4
 
-    assert await app.ainvoke(2, input_keys="inbox") == 3
-
     with pytest.raises(GraphRecursionError):
         await app.ainvoke(2, {"recursion_limit": 1})
 
@@ -539,7 +537,10 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 2
 
 
-async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
+@pytest.mark.parametrize("resume_method", ["update_state", "invoke"])
+async def test_invoke_two_processes_in_out_interrupt(
+    mocker: MockerFixture, resume_method: str
+) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
@@ -590,8 +591,14 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
     assert snapshot.next == ("two",)
 
     # update the state, resume
-    await app.aupdate_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
-    assert await app.ainvoke(None, {"configurable": {"thread_id": 2}}) == 26
+    if resume_method == "update_state":
+        await app.aupdate_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
+        assert await app.ainvoke(None, {"configurable": {"thread_id": 2}}) == 26
+    else:
+        assert (
+            await app.ainvoke(25, {"configurable": {"thread_id": 2}}, as_node="one")
+            == 26
+        )
 
     # no pending tasks
     snapshot = await app.aget_state({"configurable": {"thread_id": 2}})
@@ -733,14 +740,14 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
     assert [
         c
         async for c in app.astream(
-            {"input": 2, "inbox": 12}, output_keys="output", stream_mode="updates"
+            {"input": 2, "inbox": 12}, outputs="output", stream_mode="updates"
         )
     ] == [
         {"two": 13},
         {"two": 4},
     ]
     assert [
-        c async for c in app.astream({"input": 2, "inbox": 12}, output_keys="output")
+        c async for c in app.astream({"input": 2, "inbox": 12}, outputs="output")
     ] == [13, 4]
 
     assert [
@@ -843,7 +850,7 @@ async def test_batch_two_processes_in_out() -> None:
     )
 
     assert await app.abatch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
-    assert await app.abatch([3, 2, 1, 3, 5], output_keys=["output"]) == [
+    assert await app.abatch([3, 2, 1, 3, 5], outputs=["output"]) == [
         {"output": 5},
         {"output": 4},
         {"output": 3},

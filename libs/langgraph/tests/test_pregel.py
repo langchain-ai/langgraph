@@ -313,7 +313,7 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
             "type": "object",
         }
     assert app.invoke(2) == 3
-    assert app.invoke(2, output_keys=["output"]) == {"output": 3}
+    assert app.invoke(2, outputs=["output"]) == {"output": 3}
     assert repr(app), "does not raise recursion error"
 
     assert gapp.invoke(2, debug=True) == 3
@@ -427,8 +427,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert app.invoke(2) == 4
 
-    assert app.invoke(2, input_keys="inbox") == 3
-
     with pytest.raises(GraphRecursionError):
         app.invoke(2, {"recursion_limit": 1})
 
@@ -456,7 +454,10 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 2
 
 
-def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
+@pytest.mark.parametrize("resume_method", ["update_state", "invoke"])
+def test_invoke_two_processes_in_out_interrupt(
+    mocker: MockerFixture, resume_method: str
+) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
     two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
@@ -507,8 +508,16 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     assert snapshot.next == ("two",)
 
     # update the state, resume
-    app.update_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
-    assert app.invoke(None, {"configurable": {"thread_id": 2}}) == 26
+    if resume_method == "update_state":
+        app.update_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
+        assert app.invoke(None, {"configurable": {"thread_id": 2}}) == 26
+    else:
+        assert (
+            app.invoke(
+                25, {"configurable": {"thread_id": 2}}, as_node="one", debug=True
+            )
+            == 26
+        )
 
     # no pending tasks
     snapshot = app.get_state({"configurable": {"thread_id": 2}})
@@ -647,14 +656,12 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
 
     # [12 + 1, 2 + 1 + 1]
     assert [
-        *app.stream(
-            {"input": 2, "inbox": 12}, output_keys="output", stream_mode="updates"
-        )
+        *app.stream({"input": 2, "inbox": 12}, outputs="output", stream_mode="updates")
     ] == [
         {"two": 13},
         {"two": 4},
     ]
-    assert [*app.stream({"input": 2, "inbox": 12}, output_keys="output")] == [
+    assert [*app.stream({"input": 2, "inbox": 12}, outputs="output")] == [
         13,
         4,
     ]
@@ -755,7 +762,7 @@ def test_batch_two_processes_in_out() -> None:
     )
 
     assert app.batch([3, 2, 1, 3, 5]) == [5, 4, 3, 5, 7]
-    assert app.batch([3, 2, 1, 3, 5], output_keys=["output"]) == [
+    assert app.batch([3, 2, 1, 3, 5], outputs=["output"]) == [
         {"output": 5},
         {"output": 4},
         {"output": 3},
