@@ -1,5 +1,11 @@
 import functools
+import uuid
+from typing import TypedDict
 
+import pytest
+
+from langgraph.graph import END, StateGraph
+from langgraph.graph.graph import CompiledGraph
 from langgraph.utils import is_async_callable, is_async_generator
 
 
@@ -70,3 +76,31 @@ def test_is_generator() -> None:
     assert not is_async_generator(sync_runnable)
     wrapped_sync_runnable = functools.wraps(sync_runnable)(sync_runnable)
     assert not is_async_generator(wrapped_sync_runnable)
+
+
+@pytest.fixture
+def rt_graph() -> CompiledGraph:
+    class State(TypedDict):
+        foo: int
+        node_run_id: int
+
+    def node(_: State):
+        from langsmith import get_current_run_tree  # type: ignore
+
+        return {"node_run_id": get_current_run_tree().id}  # type: ignore
+
+    graph = StateGraph(State)
+    graph.add_node(node)
+    graph.set_entry_point("node")
+    graph.add_edge("node", END)
+    return graph.compile()
+
+
+def test_runnable_callable_tracing_nested(rt_graph: CompiledGraph) -> None:
+    res = rt_graph.invoke({"foo": 1})
+    assert isinstance(res["node_run_id"], uuid.UUID)
+
+
+async def test_runnable_callable_tracing_nested_async(rt_graph: CompiledGraph) -> None:
+    res = await rt_graph.ainvoke({"foo": 1})
+    assert isinstance(res["node_run_id"], uuid.UUID)
