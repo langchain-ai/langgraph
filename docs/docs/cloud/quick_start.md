@@ -193,7 +193,7 @@ Before using, you need to get the URL of your LangGraph deployment. You can find
 You also need to make sure you have set up your API key properly so you can authenticate with LangGraph Cloud.
 
 ```shell
-export LANGCHAIN_API_KEY=...
+export LANGSMITH_API_KEY=...
 ```
 
 The first thing to do when using the SDK is to setup our client, access our assistant, and create a thread to execute a run on:
