@@ -1046,6 +1046,33 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
             checkpointer.__exit__(None, None, None)
 
 
+def test_cond_edge_after_send() -> None:
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            setattr(self, "__name__", name)
+
+        def __call__(self, state):
+            return state + [self.name]
+
+    def send_for_fun(state):
+        return [Send("2", state)]
+
+    def route_to_three(state) -> Literal["3"]:
+        return "3"
+
+    builder = StateGraph(list)
+    builder.add_node(Node("1"))
+    builder.add_node(Node("2"))
+    builder.add_node(Node("3"))
+    builder.add_edge(START, "1")
+    builder.add_conditional_edges("1", send_for_fun)
+    builder.add_conditional_edges("2", route_to_three)
+    graph = builder.compile()
+
+    assert graph.invoke(["0"]) == ["0", "1", "2", "3"]
+
+
 def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
     adder = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
 

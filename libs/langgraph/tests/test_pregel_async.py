@@ -11,6 +11,7 @@ from typing import (
     Dict,
     Generator,
     List,
+    Literal,
     Optional,
     Sequence,
     Tuple,
@@ -1152,6 +1153,33 @@ async def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
     finally:
         if getattr(checkpointer, "__aexit__", None):
             await checkpointer.__aexit__(None, None, None)
+
+
+async def test_cond_edge_after_send() -> None:
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            setattr(self, "__name__", name)
+
+        async def __call__(self, state):
+            return state + [self.name]
+
+    async def send_for_fun(state):
+        return [Send("2", state)]
+
+    async def route_to_three(state) -> Literal["3"]:
+        return "3"
+
+    builder = StateGraph(list)
+    builder.add_node(Node("1"))
+    builder.add_node(Node("2"))
+    builder.add_node(Node("3"))
+    builder.add_edge(START, "1")
+    builder.add_conditional_edges("1", send_for_fun)
+    builder.add_conditional_edges("2", route_to_three)
+    graph = builder.compile()
+
+    assert await graph.ainvoke(["0"]) == ["0", "1", "2", "3"]
 
 
 async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:

@@ -1926,7 +1926,7 @@ def _prepare_next_tasks(
                                     _local_write, writes.extend, processes, channels
                                 ),
                                 CONFIG_KEY_READ: partial(
-                                    _local_read, checkpoint, channels, tasks, config
+                                    _local_read, checkpoint, channels, writes, config
                                 ),
                             },
                         ),
