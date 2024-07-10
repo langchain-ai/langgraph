@@ -74,7 +74,7 @@ In order to do this we can first install the LangGraph CLI
 pip install langgraph-cli
 ```
 
-We can then test our API server as long as we have a valid `LANGCHAIN_API_KEY` and have access to LangGraph Cloud closed beta.
+We can then test our API server locally. This requires access to LangGraph closed beta. In order to run the server locally, you will need to add your `LANGCHAIN_API_KEY` to the .env file so we can validate you have access to LangGraph closed beta.
 
 ```shell
 langgraph up
@@ -88,7 +88,7 @@ Ready!
 2024-06-26 19:20:41,056:INFO:uvicorn.access 127.0.0.1:44138 - "GET /ok HTTP/1.1" 200
 ```
 
-You can now test this out! **Note: a license key is needed to move from local testing to production use.** To test it out, you can go to another terminal window and run:
+You can now test this out! **Note: this local server is intended SOLELY for local testing purposes and is not performant enough for production applications, so please do not use it as such.** To test it out, you can go to another terminal window and run:
 
 ```shell
 curl --request POST \

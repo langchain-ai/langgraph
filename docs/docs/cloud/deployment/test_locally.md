@@ -35,7 +35,8 @@ We can now interact with the API server using the LangGraph SDK. First, we need 
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="whatever-your-local-deployment-url-is")
+    # only pass the url argument to get_client() if you changed the default port when calling langgraph up
+    client = get_client()
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -45,7 +46,8 @@ We can now interact with the API server using the LangGraph SDK. First, we need 
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-local-deployment-url-is" });
+    // only set the apiUrl if you changed the default port when calling langgraph up
+    const client = new Client();
     const assistantId = "agent"
     const thread = await client.threads.create();
     ```
