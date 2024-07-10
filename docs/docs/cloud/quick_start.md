@@ -74,7 +74,7 @@ In order to do this we can first install the LangGraph CLI
 pip install langgraph-cli
 ```
 
-We can then test our API server locally. This requires access to LangGraph closed beta. In order to run the server locally, you will need to add your `LANGCHAIN_API_KEY` to the .env file so we can validate you have access to LangGraph closed beta.
+We can then test our API server locally. This requires access to LangGraph closed beta. In order to run the server locally, you will need to add your `LANGSMITH_API_KEY` to the .env file so we can validate you have access to LangGraph closed beta.
 
 ```shell
 langgraph up
