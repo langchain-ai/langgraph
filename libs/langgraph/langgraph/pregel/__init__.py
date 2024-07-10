@@ -884,7 +884,7 @@ class Pregel(
                 self.managed_values_dict, config, self
             ) as managed:
 
-                def put_writes(id: str, writes: Sequence[tuple[str, Any]]) -> None:
+                def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
                     if self.checkpointer is not None:
                         bg.append(
                             executor.submit(
@@ -897,7 +897,7 @@ class Pregel(
                                     },
                                 },
                                 writes,
-                                id,
+                                task_id,
                             )
                         )
 
@@ -1265,7 +1265,7 @@ class Pregel(
                 self.managed_values_dict, config, self
             ) as managed:
 
-                def put_writes(id: str, writes: Sequence[tuple[str, Any]]) -> None:
+                def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
                     if self.checkpointer is not None:
                         bg.append(
                             asyncio.create_task(
@@ -1278,7 +1278,7 @@ class Pregel(
                                         },
                                     },
                                     writes,
-                                    id,
+                                    task_id,
                                 )
                             )
                         )
