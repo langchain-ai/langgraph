@@ -1083,8 +1083,9 @@ class Pregel(
                                 # exception will be handled in panic_or_proceed
                                 futures.clear()
                             else:
-                                # save task writes to checkpointer
-                                if self.checkpointer is not None:
+                                # save task writes to checkpointer, unless this
+                                # is the single or last task in this step
+                                if futures:
                                     put_writes(task.id, task.writes)
                                 # yield updates output for the finished task
                                 if "updates" in stream_modes:
@@ -1471,8 +1472,9 @@ class Pregel(
                                 # exception will be handle in panic_or_proceed
                                 futures.clear()
                             else:
-                                # save task writes to checkpointer
-                                if self.checkpointer is not None:
+                                # save task writes to checkpointer, unless this
+                                # is the single or last task in this step
+                                if futures:
                                     put_writes(task.id, task.writes)
                                 # yield updates output for the finished task
                                 if "updates" in stream_modes:

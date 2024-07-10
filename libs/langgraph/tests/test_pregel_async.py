@@ -90,10 +90,9 @@ async def test_checkpoint_errors() -> None:
     def logic(inp: str) -> str:
         return ""
 
-    builder = Graph()
+    builder = StateGraph(Annotated[str, operator.add])
     builder.add_node("agent", logic)
-    builder.set_entry_point("agent")
-    builder.set_finish_point("agent")
+    builder.add_edge(START, "agent")
 
     graph = builder.compile(checkpointer=FaultyGetCheckpointer())
     with pytest.raises(ValueError, match="Faulty get_tuple"):
@@ -119,18 +118,6 @@ async def test_checkpoint_errors() -> None:
         ):
             pass
 
-    graph = builder.compile(checkpointer=FaultyPutWritesCheckpointer())
-    with pytest.raises(ValueError, match="Faulty put_writes"):
-        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
-    with pytest.raises(ValueError, match="Faulty put_writes"):
-        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
-            pass
-    with pytest.raises(ValueError, match="Faulty put_writes"):
-        async for _ in graph.astream_events(
-            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
-        ):
-            pass
-
     graph = builder.compile(checkpointer=FaultyVersionCheckpointer())
     with pytest.raises(ValueError, match="Faulty get_next_version"):
         await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
@@ -138,6 +125,21 @@ async def test_checkpoint_errors() -> None:
         async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
             pass
     with pytest.raises(ValueError, match="Faulty get_next_version"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+        ):
+            pass
+
+    # add a parallel node
+    builder.add_node("parallel", logic)
+    builder.add_edge(START, "parallel")
+    graph = builder.compile(checkpointer=FaultyPutWritesCheckpointer())
+    with pytest.raises(ValueError, match="Faulty put_writes"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty put_writes"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty put_writes"):
         async for _ in graph.astream_events(
             "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
         ):

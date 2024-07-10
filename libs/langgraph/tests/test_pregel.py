@@ -208,10 +208,9 @@ def test_checkpoint_errors() -> None:
     def logic(inp: str) -> str:
         return ""
 
-    builder = Graph()
+    builder = StateGraph(Annotated[str, operator.add])
     builder.add_node("agent", logic)
-    builder.set_entry_point("agent")
-    builder.set_finish_point("agent")
+    builder.add_edge(START, "agent")
 
     graph = builder.compile(checkpointer=FaultyGetCheckpointer())
     with pytest.raises(ValueError, match="Faulty get_tuple"):
@@ -221,12 +220,15 @@ def test_checkpoint_errors() -> None:
     with pytest.raises(ValueError, match="Faulty put"):
         graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
 
-    graph = builder.compile(checkpointer=FaultyPutWritesCheckpointer())
-    with pytest.raises(ValueError, match="Faulty put_writes"):
-        graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
-
     graph = builder.compile(checkpointer=FaultyVersionCheckpointer())
     with pytest.raises(ValueError, match="Faulty get_next_version"):
+        graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
+
+    # add parallel node
+    builder.add_node("parallel", logic)
+    builder.add_edge(START, "parallel")
+    graph = builder.compile(checkpointer=FaultyPutWritesCheckpointer())
+    with pytest.raises(ValueError, match="Faulty put_writes"):
         graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
 
 
