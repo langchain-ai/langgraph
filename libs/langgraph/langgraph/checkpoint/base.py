@@ -185,7 +185,9 @@ class BaseCheckpointSaver(ABC):
         writes: List[Tuple[str, Any]],
         task_id: str,
     ) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            "This method was added in langgraph 0.1.7. Please update your checkpointer to implement it."
+        )
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         if value := await self.aget_tuple(config):
@@ -219,7 +221,9 @@ class BaseCheckpointSaver(ABC):
         writes: List[Tuple[str, Any]],
         task_id: str,
     ) -> None:
-        raise NotImplementedError
+        raise NotImplementedError(
+            "This method was added in langgraph 0.1.7. Please update your checkpointer to implement it."
+        )
 
     def get_next_version(self, current: Optional[V], channel: BaseChannel) -> V:
         """Get the next version of a channel. Default is to use int versions, incrementing by 1. If you override, you can use str/int/float versions,
