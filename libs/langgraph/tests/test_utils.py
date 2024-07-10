@@ -1,4 +1,5 @@
 import functools
+import sys
 import uuid
 from typing import TypedDict
 from unittest.mock import patch
@@ -107,6 +108,10 @@ def test_runnable_callable_tracing_nested(rt_graph: CompiledGraph) -> None:
     assert isinstance(res["node_run_id"], uuid.UUID)
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 async def test_runnable_callable_tracing_nested_async(rt_graph: CompiledGraph) -> None:
     with patch("langsmith.client.Client", spec=langsmith.Client) as mock_client:
         with patch("langchain_core.tracers.langchain.get_client") as mock_get_client:
