@@ -1,7 +1,6 @@
 import asyncio
 import json
 import operator
-import time
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -233,6 +232,11 @@ async def test_step_timeout_on_stream_hang() -> None:
         AsyncSqliteSaver.from_conn_string(":memory:"),
         None,
     ],
+    ids=[
+        "memory",
+        "aiosqlite",
+        "none",
+    ],
 )
 async def test_cancel_graph_astream(
     checkpointer: Optional[BaseCheckpointSaver],
@@ -299,6 +303,11 @@ async def test_cancel_graph_astream(
         AsyncSqliteSaver.from_conn_string(":memory:"),
         None,
     ],
+    ids=[
+        "memory",
+        "aiosqlite",
+        "none",
+    ],
 )
 async def test_cancel_graph_astream_events_v2(
     checkpointer: Optional[BaseCheckpointSaver],
@@ -347,7 +356,6 @@ async def test_cancel_graph_astream_events_v2(
         ) as stream:
             async for chunk in stream:
                 if chunk["event"] == "on_chain_stream" and not chunk["parent_ids"]:
-                    print(time.perf_counter(), "got event out here", chunk)
                     got_event = True
                     assert chunk["data"]["chunk"] == {"alittlewhile": {"value": 2}}
                     break
@@ -1054,6 +1062,95 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     checkpoint = await memory.aget({"configurable": {"thread_id": "2"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"].get("total") == 5
+
+
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        AsyncSqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+async def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
+    try:
+
+        class State(TypedDict):
+            value: Annotated[int, operator.add]
+
+        class AwhileMaker:
+            def __init__(self, sleep: float, rtn: Union[Dict, Exception]) -> None:
+                self.sleep = sleep
+                self.rtn = rtn
+                self.reset()
+
+            async def __call__(self, input: State) -> Any:
+                self.calls += 1
+                await asyncio.sleep(self.sleep)
+                if isinstance(self.rtn, Exception):
+                    raise self.rtn
+                else:
+                    return self.rtn
+
+            def reset(self):
+                self.calls = 0
+
+        one = AwhileMaker(0.2, {"value": 2})
+        two = AwhileMaker(0.6, ValueError("I'm not good"))
+        builder = StateGraph(State)
+        builder.add_node("one", one)
+        builder.add_node("two", two)
+        builder.add_edge(START, "one")
+        builder.add_edge(START, "two")
+        graph = builder.compile(checkpointer=checkpointer)
+
+        # test interrupting astream
+        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        with pytest.raises(ValueError, match="I'm not good"):
+            await graph.ainvoke({"value": 1}, thread1)
+
+        # both nodes should have been called once
+        assert one.calls == 1
+        assert two.calls == 1
+
+        # latest checkpoint should be before nodes "one", "two"
+        state = await graph.aget_state(thread1)
+        assert state is not None
+        assert state.values == {"value": 1}
+        assert state.next == ("one", "two")
+        assert state.metadata == {"source": "loop", "step": 0, "writes": None}
+        # should contain pending write of "one"
+        checkpoint = await checkpointer.aget_tuple(thread1)
+        assert checkpoint is not None
+        assert checkpoint.pending_writes == [
+            (AnyStr(), "one", "one"),
+            (AnyStr(), "value", 2),
+        ]
+        # both pending writes come from same task
+        assert checkpoint.pending_writes[0][0] == checkpoint.pending_writes[1][0]
+
+        # resume execution
+        with pytest.raises(ValueError, match="I'm not good"):
+            await graph.ainvoke(None, thread1)
+
+        # node "one" succeded previously, so shouldn't be called again
+        assert one.calls == 1
+        # node "two" should have been called once again
+        assert two.calls == 2
+
+        # confirm no new checkpoints saved
+        state_two = await graph.aget_state(thread1)
+        assert state_two == state
+
+        # resume execution, without exception
+        two.rtn = {"value": 3}
+        assert await graph.ainvoke(None, thread1) == {"value": 6}
+    finally:
+        if getattr(checkpointer, "__aexit__", None):
+            await checkpointer.__aexit__(None, None, None)
 
 
 async def test_invoke_checkpoint_aiosqlite(mocker: MockerFixture) -> None:

@@ -78,7 +78,9 @@ class MemorySaver(BaseCheckpointSaver):
                     config=config,
                     checkpoint=self.serde.loads(checkpoint),
                     metadata=self.serde.loads(metadata),
-                    pending_writes=[(c, self.serde.loads(v)) for c, v in writes],
+                    pending_writes=[
+                        (id, c, self.serde.loads(v)) for id, c, v in writes
+                    ],
                 )
         else:
             if checkpoints := self.storage[thread_id]:
@@ -89,7 +91,9 @@ class MemorySaver(BaseCheckpointSaver):
                     config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                     checkpoint=self.serde.loads(checkpoint),
                     metadata=self.serde.loads(metadata),
-                    pending_writes=[(c, self.serde.loads(v)) for c, v in writes],
+                    pending_writes=[
+                        (id, c, self.serde.loads(v)) for id, c, v in writes
+                    ],
                 )
 
     def list(
@@ -194,7 +198,7 @@ class MemorySaver(BaseCheckpointSaver):
         thread_id = config["configurable"]["thread_id"]
         ts = config["configurable"]["thread_ts"]
         self.writes[(thread_id, ts)].extend(
-            [(c, self.serde.dumps(v)) for c, v in writes]
+            [(task_id, c, self.serde.dumps(v)) for c, v in writes]
         )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:

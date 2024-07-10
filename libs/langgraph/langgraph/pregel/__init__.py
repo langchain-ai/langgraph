@@ -985,8 +985,7 @@ class Pregel(
                     # increment start to 0
                     start += 1
                 else:
-                    # if received no input, take that as signal to proceed
-                    # past previous interrupt, if any
+                    # no input is taken as signal to proceed past previous interrupt
                     checkpoint = copy_checkpoint(checkpoint)
                     for k in self.stream_channels_list:
                         if k in checkpoint["channel_versions"]:
@@ -1015,6 +1014,15 @@ class Pregel(
                             else _increment
                         ),
                     )
+
+                    # assign pending writes to tasks
+                    if saved and saved.pending_writes:
+                        for task in next_tasks:
+                            task.writes.extend(
+                                (c, v)
+                                for tid, c, v in saved.pending_writes
+                                if tid == task.id
+                            )
 
                     # if no more tasks, we're done
                     if not next_tasks:
@@ -1049,12 +1057,15 @@ class Pregel(
                     futures = {
                         executor.submit(run_with_retry, task, self.retry_policy): task
                         for task in next_tasks
+                        if not task.writes
                     }
                     end_time = (
                         self.step_timeout + time.monotonic()
                         if self.step_timeout
                         else None
                     )
+                    if not futures:
+                        done, inflight = set(), set()
                     while futures:
                         done, inflight = concurrent.futures.wait(
                             futures,
@@ -1363,8 +1374,7 @@ class Pregel(
                     # increment start to 0
                     start += 1
                 else:
-                    # if received no input, take that as signal to proceed
-                    # past previous interrupt, if any
+                    # no input is taken as signal to proceed past previous interrupt
                     checkpoint = copy_checkpoint(checkpoint)
                     for k in self.stream_channels_list:
                         if k in checkpoint["channel_versions"]:
@@ -1393,6 +1403,15 @@ class Pregel(
                             else _increment
                         ),
                     )
+
+                    # assign pending writes to tasks
+                    if saved and saved.pending_writes:
+                        for task in next_tasks:
+                            task.writes.extend(
+                                (c, v)
+                                for tid, c, v in saved.pending_writes
+                                if tid == task.id
+                            )
 
                     # if no more tasks, we're done
                     if not next_tasks:
@@ -1430,10 +1449,13 @@ class Pregel(
                             arun_with_retry(task, self.retry_policy, do_stream)
                         ): task
                         for task in next_tasks
+                        if not task.writes
                     }
                     end_time = (
                         self.step_timeout + loop.time() if self.step_timeout else None
                     )
+                    if not futures:
+                        done, inflight = set(), set()
                     while futures:
                         done, inflight = await asyncio.wait(
                             futures,

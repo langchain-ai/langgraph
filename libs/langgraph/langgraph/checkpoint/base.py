@@ -118,7 +118,7 @@ class CheckpointTuple(NamedTuple):
     checkpoint: Checkpoint
     metadata: CheckpointMetadata
     parent_config: Optional[RunnableConfig] = None
-    pending_writes: Optional[List[Tuple[str, Any]]] = None
+    pending_writes: Optional[List[Tuple[str, str, Any]]] = None
 
 
 CheckpointThreadId = ConfigurableFieldSpec(
