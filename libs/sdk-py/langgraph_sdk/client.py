@@ -46,12 +46,12 @@ class RunCreate(TypedDict):
     assistant_id: str
     input: Optional[dict]
     metadata: Optional[dict]
-    config: Optional[Config] = (None,)
-    checkpoint_id: Optional[str] = (None,)
-    interrupt_before: Optional[list[str]] = (None,)
-    interrupt_after: Optional[list[str]] = (None,)
-    webhook: Optional[str] = (None,)
-    multitask_strategy: Optional[MultitaskStrategy] = (None,)
+    config: Optional[Config]
+    checkpoint_id: Optional[str]
+    interrupt_before: Optional[list[str]]
+    interrupt_after: Optional[list[str]]
+    webhook: Optional[str]
+    multitask_strategy: Optional[MultitaskStrategy]
 
 
 def get_client(
