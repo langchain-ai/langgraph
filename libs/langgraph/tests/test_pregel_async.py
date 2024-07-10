@@ -1136,7 +1136,7 @@ async def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         with pytest.raises(ValueError, match="I'm not good"):
             await graph.ainvoke(None, thread1)
 
-        # node "one" succeded previously, so shouldn't be called again
+        # node "one" succeeded previously, so shouldn't be called again
         assert one.calls == 1
         # node "two" should have been called once again
         assert two.calls == 2
