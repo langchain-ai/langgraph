@@ -171,6 +171,15 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 metadata BLOB,
                 PRIMARY KEY (thread_id, thread_ts)
             );
+            CREATE TABLE IF NOT EXISTS writes (
+                thread_id TEXT NOT NULL,
+                thread_ts TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                idx INTEGER NOT NULL,
+                channel TEXT NOT NULL,
+                value BLOB,
+                PRIMARY KEY (thread_id, thread_ts, task_id, idx)
+            );
             """
         )
 
@@ -233,56 +242,57 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             CheckpointTuple(...)
         """  # noqa
         with self.cursor(transaction=False) as cur:
+            # find the latest checkpoint for the thread_id
             if config["configurable"].get("thread_ts"):
                 cur.execute(
-                    "SELECT checkpoint, parent_ts, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
+                    "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
                     (
                         str(config["configurable"]["thread_id"]),
                         str(config["configurable"]["thread_ts"]),
                     ),
                 )
-                if value := cur.fetchone():
-                    return CheckpointTuple(
-                        config,
-                        self.serde.loads(value[0]),
-                        self.serde.loads(value[2]) if value[2] is not None else {},
-                        (
-                            {
-                                "configurable": {
-                                    "thread_id": config["configurable"]["thread_id"],
-                                    "thread_ts": value[1],
-                                }
-                            }
-                            if value[1]
-                            else None
-                        ),
-                    )
             else:
                 cur.execute(
                     "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
                     (str(config["configurable"]["thread_id"]),),
                 )
-                if value := cur.fetchone():
-                    return CheckpointTuple(
+            # if a checkpoint is found, return it
+            if value := cur.fetchone():
+                if not config["configurable"].get("thread_ts"):
+                    config = {
+                        "configurable": {
+                            "thread_id": value[0],
+                            "thread_ts": value[1],
+                        }
+                    }
+                # find any pending writes
+                cur.execute(
+                    "SELECT task_id, channel, value FROM writes WHERE thread_id = ? AND thread_ts = ?",
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        str(config["configurable"]["thread_ts"]),
+                    ),
+                )
+                # deserialize the checkpoint and metadata
+                return CheckpointTuple(
+                    config,
+                    self.serde.loads(value[3]),
+                    self.serde.loads(value[4]) if value[4] is not None else {},
+                    (
                         {
                             "configurable": {
                                 "thread_id": value[0],
-                                "thread_ts": value[1],
+                                "thread_ts": value[2],
                             }
-                        },
-                        self.serde.loads(value[3]),
-                        self.serde.loads(value[4]) if value[4] is not None else {},
-                        (
-                            {
-                                "configurable": {
-                                    "thread_id": value[0],
-                                    "thread_ts": value[2],
-                                }
-                            }
-                            if value[2]
-                            else None
-                        ),
-                    )
+                        }
+                        if value[2]
+                        else None
+                    ),
+                    [
+                        (task_id, channel, self.serde.loads(value))
+                        for task_id, channel, value in cur
+                    ],
+                )
 
     def list(
         self,
@@ -393,6 +403,28 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 "thread_ts": checkpoint["id"],
             }
         }
+
+    def put_writes(
+        self,
+        config: RunnableConfig,
+        writes: Sequence[Tuple[str, Any]],
+        task_id: str,
+    ) -> None:
+        with self.lock, self.cursor() as cur:
+            cur.executemany(
+                "INSERT OR REPLACE INTO writes (thread_id, thread_ts, task_id, idx, channel, value) VALUES (?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        str(config["configurable"]["thread_ts"]),
+                        task_id,
+                        idx,
+                        channel,
+                        self.serde.dumps(value),
+                    )
+                    for idx, (channel, value) in enumerate(writes)
+                ],
+            )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database asynchronously.

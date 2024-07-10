@@ -18,6 +18,7 @@ class PregelExecutableTask(NamedTuple):
     writes: deque[tuple[str, Any]]
     config: RunnableConfig
     triggers: list[str]
+    id: str
 
 
 class StateSnapshot(NamedTuple):
