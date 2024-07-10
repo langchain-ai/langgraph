@@ -999,7 +999,6 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         builder.add_edge(START, "two")
         graph = builder.compile(checkpointer=checkpointer)
 
-        # test interrupting astream
         thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
         with pytest.raises(ValueError, match="I'm not good"):
             graph.invoke({"value": 1}, thread1)
