@@ -1147,6 +1147,7 @@ async def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
 
         # resume execution, without exception
         two.rtn = {"value": 3}
+        # both the pending write and the new write were applied, 1 + 2 + 3 = 6
         assert await graph.ainvoke(None, thread1) == {"value": 6}
     finally:
         if getattr(checkpointer, "__aexit__", None):
