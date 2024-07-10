@@ -10,6 +10,7 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
+    Tuple,
     TypedDict,
     TypeVar,
     Union,
@@ -117,6 +118,7 @@ class CheckpointTuple(NamedTuple):
     checkpoint: Checkpoint
     metadata: CheckpointMetadata
     parent_config: Optional[RunnableConfig] = None
+    pending_writes: Optional[List[Tuple[str, Any]]] = None
 
 
 CheckpointThreadId = ConfigurableFieldSpec(
@@ -177,6 +179,14 @@ class BaseCheckpointSaver(ABC):
     ) -> RunnableConfig:
         raise NotImplementedError
 
+    def put_writes(
+        self,
+        config: RunnableConfig,
+        writes: List[Tuple[str, Any]],
+        task_id: str,
+    ) -> None:
+        raise NotImplementedError
+
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         if value := await self.aget_tuple(config):
             return value.checkpoint
@@ -201,6 +211,14 @@ class BaseCheckpointSaver(ABC):
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
     ) -> RunnableConfig:
+        raise NotImplementedError
+
+    async def aput_writes(
+        self,
+        config: RunnableConfig,
+        writes: List[Tuple[str, Any]],
+        task_id: str,
+    ) -> None:
         raise NotImplementedError
 
     def get_next_version(self, current: Optional[V], channel: BaseChannel) -> V:

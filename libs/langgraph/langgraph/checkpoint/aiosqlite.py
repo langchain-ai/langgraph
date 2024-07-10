@@ -2,7 +2,16 @@ import asyncio
 import functools
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, TypeVar
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    Iterator,
+    Optional,
+    Sequence,
+    Tuple,
+    TypeVar,
+)
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
@@ -203,6 +212,15 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     metadata BLOB,
                     PRIMARY KEY (thread_id, thread_ts)
                 );
+                CREATE TABLE IF NOT EXISTS writes (
+                    thread_id TEXT NOT NULL,
+                    thread_ts TEXT NOT NULL,
+                    task_id TEXT NOT NULL,
+                    idx INTEGER NOT NULL,
+                    channel TEXT NOT NULL,
+                    value BLOB,
+                    PRIMARY KEY (thread_id, thread_ts, task_id, idx)
+                );
                 """
             ):
                 await self.conn.commit()
@@ -358,3 +376,26 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 "thread_ts": checkpoint["id"],
             }
         }
+
+    async def aput_writes(
+        self,
+        config: RunnableConfig,
+        writes: Sequence[Tuple[str, Any]],
+        task_id: str,
+    ) -> None:
+        await self.setup()
+        async with self.conn.executemany(
+            "INSERT OR REPLACE INTO writes (thread_id, thread_ts, task_id, idx, channel, value) VALUES (?, ?, ?, ?, ?, ?)",
+            [
+                (
+                    str(config["configurable"]["thread_id"]),
+                    str(config["configurable"]["thread_ts"]),
+                    task_id,
+                    idx,
+                    channel,
+                    self.serde.dumps(value),
+                )
+                for idx, (channel, value) in enumerate(writes)
+            ],
+        ):
+            await self.conn.commit()

@@ -14,6 +14,7 @@ from typing import (
     Literal,
     Optional,
     Sequence,
+    Tuple,
     TypedDict,
     Union,
 )
@@ -193,6 +194,12 @@ def test_checkpoint_errors() -> None:
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
+    class FaultyPutWritesCheckpointer(MemorySaver):
+        def put_writes(
+            self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+        ) -> RunnableConfig:
+            raise ValueError("Faulty put_writes")
+
     class FaultyVersionCheckpointer(MemorySaver):
         def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
             raise ValueError("Faulty get_next_version")
@@ -211,6 +218,10 @@ def test_checkpoint_errors() -> None:
 
     graph = builder.compile(checkpointer=FaultyPutCheckpointer())
     with pytest.raises(ValueError, match="Faulty put"):
+        graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
+
+    graph = builder.compile(checkpointer=FaultyPutWritesCheckpointer())
+    with pytest.raises(ValueError, match="Faulty put_writes"):
         graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
 
     graph = builder.compile(checkpointer=FaultyVersionCheckpointer())

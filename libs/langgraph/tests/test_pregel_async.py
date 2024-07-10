@@ -11,8 +11,10 @@ from typing import (
     AsyncIterator,
     Dict,
     Generator,
+    List,
     Optional,
     Sequence,
+    Tuple,
     TypedDict,
     Union,
 )
@@ -75,6 +77,12 @@ async def test_checkpoint_errors() -> None:
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
+    class FaultyPutWritesCheckpointer(MemorySaver):
+        async def aput_writes(
+            self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+        ) -> RunnableConfig:
+            raise ValueError("Faulty put_writes")
+
     class FaultyVersionCheckpointer(MemorySaver):
         def get_next_version(self, current: Optional[int], channel: BaseChannel) -> int:
             raise ValueError("Faulty get_next_version")
@@ -106,6 +114,18 @@ async def test_checkpoint_errors() -> None:
         async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
             pass
     with pytest.raises(ValueError, match="Faulty put"):
+        async for _ in graph.astream_events(
+            "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
+        ):
+            pass
+
+    graph = builder.compile(checkpointer=FaultyPutWritesCheckpointer())
+    with pytest.raises(ValueError, match="Faulty put_writes"):
+        await graph.ainvoke("", {"configurable": {"thread_id": "thread-1"}})
+    with pytest.raises(ValueError, match="Faulty put_writes"):
+        async for _ in graph.astream("", {"configurable": {"thread_id": "thread-2"}}):
+            pass
+    with pytest.raises(ValueError, match="Faulty put_writes"):
         async for _ in graph.astream_events(
             "", {"configurable": {"thread_id": "thread-3"}}, version="v2"
         ):

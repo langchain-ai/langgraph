@@ -171,6 +171,15 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 metadata BLOB,
                 PRIMARY KEY (thread_id, thread_ts)
             );
+            CREATE TABLE IF NOT EXISTS writes (
+                thread_id TEXT NOT NULL,
+                thread_ts TEXT NOT NULL,
+                task_id TEXT NOT NULL,
+                idx INTEGER NOT NULL,
+                channel TEXT NOT NULL,
+                value BLOB,
+                PRIMARY KEY (thread_id, thread_ts, task_id, idx)
+            );
             """
         )
 
@@ -393,6 +402,28 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 "thread_ts": checkpoint["id"],
             }
         }
+
+    def put_writes(
+        self,
+        config: RunnableConfig,
+        writes: Sequence[Tuple[str, Any]],
+        task_id: str,
+    ) -> None:
+        with self.lock, self.cursor() as cur:
+            cur.executemany(
+                "INSERT OR REPLACE INTO writes (thread_id, thread_ts, task_id, idx, channel, value) VALUES (?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        str(config["configurable"]["thread_ts"]),
+                        task_id,
+                        idx,
+                        channel,
+                        self.serde.dumps(value),
+                    )
+                    for idx, (channel, value) in enumerate(writes)
+                ],
+            )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database asynchronously.

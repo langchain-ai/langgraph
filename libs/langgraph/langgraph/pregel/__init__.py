@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import json
 import time
 from collections import defaultdict, deque
 from functools import partial
@@ -23,6 +24,7 @@ from typing import (
     get_type_hints,
     overload,
 )
+from uuid import UUID, uuid5
 
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.globals import get_debug
@@ -442,7 +444,7 @@ class Pregel(
             and signature(self.checkpointer.list).parameters.get("filter") is None
         ):
             raise ValueError("Checkpointer does not support filtering")
-        for config, checkpoint, metadata, parent_config in self.checkpointer.list(
+        for config, checkpoint, metadata, parent_config, _ in self.checkpointer.list(
             config, before=before, limit=limit, filter=filter
         ):
             with ChannelsManager(
@@ -489,6 +491,7 @@ class Pregel(
             checkpoint,
             metadata,
             parent_config,
+            _,
         ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             async with AsyncChannelsManager(
                 self.channels, checkpoint, config
@@ -565,6 +568,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
             task.proc.invoke(
@@ -653,6 +657,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
             await task.proc.ainvoke(
@@ -879,6 +884,23 @@ class Pregel(
                 self.managed_values_dict, config, self
             ) as managed:
 
+                def put_writes(id: str, writes: Sequence[tuple[str, Any]]) -> None:
+                    if self.checkpointer is not None:
+                        bg.append(
+                            executor.submit(
+                                self.checkpointer.put_writes,
+                                {
+                                    **checkpoint_config,
+                                    "configurable": {
+                                        **checkpoint_config["configurable"],
+                                        "thread_ts": checkpoint["id"],
+                                    },
+                                },
+                                writes,
+                                id,
+                            )
+                        )
+
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
                     nonlocal checkpoint, checkpoint_config, channels
 
@@ -1050,6 +1072,9 @@ class Pregel(
                                 # exception will be handled in panic_or_proceed
                                 futures.clear()
                             else:
+                                # save task writes to checkpointer
+                                if self.checkpointer is not None:
+                                    put_writes(task.id, task.writes)
                                 # yield updates output for the finished task
                                 if "updates" in stream_modes:
                                     yield from _with_mode(
@@ -1076,7 +1101,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _ in next_tasks:
+                    for _, _, _, writes, _, _, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     if debug:
@@ -1239,6 +1264,24 @@ class Pregel(
             ) as channels, AsyncManagedValuesManager(
                 self.managed_values_dict, config, self
             ) as managed:
+
+                def put_writes(id: str, writes: Sequence[tuple[str, Any]]) -> None:
+                    if self.checkpointer is not None:
+                        bg.append(
+                            asyncio.create_task(
+                                self.checkpointer.aput_writes(
+                                    {
+                                        **checkpoint_config,
+                                        "configurable": {
+                                            **checkpoint_config["configurable"],
+                                            "thread_ts": checkpoint["id"],
+                                        },
+                                    },
+                                    writes,
+                                    id,
+                                )
+                            )
+                        )
 
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
                     nonlocal checkpoint, checkpoint_config, channels
@@ -1406,6 +1449,9 @@ class Pregel(
                                 # exception will be handle in panic_or_proceed
                                 futures.clear()
                             else:
+                                # save task writes to checkpointer
+                                if self.checkpointer is not None:
+                                    put_writes(task.id, task.writes)
                                 # yield updates output for the finished task
                                 if "updates" in stream_modes:
                                     for chunk in _with_mode(
@@ -1434,7 +1480,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _ in next_tasks:
+                    for _, _, _, writes, _, _, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     if debug:
@@ -1671,7 +1717,7 @@ def _should_interrupt(
         # and any triggered node is in interrupt_nodes list
         and any(
             node
-            for node, _, _, _, config, _ in tasks
+            for node, _, _, _, config, _, _ in tasks
             if (
                 (not config or TAG_HIDDEN not in config.get("tags"))
                 if interrupt_nodes == "*"
@@ -1825,6 +1871,14 @@ def _prepare_next_tasks(
             continue
         if for_execution:
             if node := processes[packet.node].get_node():
+                triggers = [TASKS]
+                metadata = {
+                    "langgraph_step": step,
+                    "langgraph_node": packet.node,
+                    "langgraph_triggers": triggers,
+                    "langgraph_task_idx": len(tasks),
+                }
+                task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
                 writes = deque()
                 tasks.append(
                     PregelExecutableTask(
@@ -1836,14 +1890,7 @@ def _prepare_next_tasks(
                             merge_configs(
                                 config,
                                 processes[packet.node].config,
-                                {
-                                    "metadata": {
-                                        "langgraph_step": step,
-                                        "langgraph_node": packet.node,
-                                        "langgraph_triggers": [TASKS],
-                                        "langgraph_task_idx": len(tasks),
-                                    }
-                                },
+                                {"metadata": metadata},
                             ),
                             run_name=packet.node,
                             callbacks=(
@@ -1861,7 +1908,8 @@ def _prepare_next_tasks(
                                 ),
                             },
                         ),
-                        [TASKS],
+                        triggers,
+                        task_id,
                     )
                 )
         else:
@@ -1879,7 +1927,7 @@ def _prepare_next_tasks(
     for name, proc in processes.items():
         seen = checkpoint["versions_seen"][name]
         # If any of the channels read by this process were updated
-        if triggers := [
+        if triggers := sorted(
             chan
             for chan in proc.triggers
             if not isinstance(
@@ -1887,7 +1935,7 @@ def _prepare_next_tasks(
             )
             and checkpoint["channel_versions"].get(chan, null_version)
             > seen.get(chan, null_version)
-        ]:
+        ):
             channels_to_consume.update(triggers)
             try:
                 val = next(_proc_input(step, name, proc, managed, channels))
@@ -1906,8 +1954,14 @@ def _prepare_next_tasks(
 
             if for_execution:
                 if node := proc.get_node():
+                    metadata = {
+                        "langgraph_step": step,
+                        "langgraph_node": name,
+                        "langgraph_triggers": triggers,
+                        "langgraph_task_idx": len(tasks),
+                    }
+                    task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
                     writes = deque()
-                    triggers = sorted(triggers)
                     tasks.append(
                         PregelExecutableTask(
                             name,
@@ -1918,14 +1972,7 @@ def _prepare_next_tasks(
                                 merge_configs(
                                     config,
                                     proc.config,
-                                    {
-                                        "metadata": {
-                                            "langgraph_step": step,
-                                            "langgraph_node": name,
-                                            "langgraph_triggers": triggers,
-                                            "langgraph_task_idx": len(tasks),
-                                        }
-                                    },
+                                    {"metadata": metadata},
                                 ),
                                 run_name=name,
                                 callbacks=(
@@ -1948,6 +1995,7 @@ def _prepare_next_tasks(
                                 },
                             ),
                             triggers,
+                            task_id,
                         )
                     )
             else:
