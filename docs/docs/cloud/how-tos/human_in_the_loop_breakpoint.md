@@ -43,7 +43,7 @@ We can do this by adding `interrupt_before=["action"]`, which tells us to interr
 We can do this either when compiling the graph or when kicking off a run.
 Here we will do it when kicking of a run, if you would like to to do it at compile time you need to edit the python file where your graph is defined and add the `interrupt_before` parameter when you call `.compile`.
 
-First let's access our hosted Langgraph instance through the SDK:
+First let's access our hosted LangGraph instance through the SDK:
 
 And, now let's compile it with a breakpoint before the tool node:
 
