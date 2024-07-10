@@ -2,7 +2,13 @@ import asyncio
 import json
 from typing import Any, Callable, Dict, Literal, Optional, Sequence, Union
 
-from langchain_core.messages import AIMessage, AnyMessage, ToolCall, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    ToolCall,
+    ToolMessage,
+    TypedToolCall,
+)
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool
@@ -11,20 +17,11 @@ from langchain_core.tools import tool as create_tool
 from langgraph.utils import RunnableCallable
 
 
-def str_output(output: Any) -> str:
-    if isinstance(output, str):
-        return output
-    else:
-        try:
-            return json.dumps(output)
-        except Exception:
-            return str(output)
-
-
 class ToolNode(RunnableCallable):
-    """A node that runs the tools requested in the last AIMessage. It can be used
-    either in StateGraph with a "messages" key or in MessageGraph. If multiple
-    tool calls are requested, they will be run in parallel. The output will be
+    """A node that runs the tools called in the last AIMessage.
+
+    It can be used either in StateGraph with a "messages" key or in MessageGraph. If
+    multiple tool calls are requested, they will be run in parallel. The output will be
     a list of ToolMessages, one for each tool call.
 
     The `ToolNode` is roughly analogous to:
@@ -79,14 +76,13 @@ class ToolNode(RunnableCallable):
 
         def run_one(call: ToolCall):
             try:
-                output = self.tools_by_name[call["name"]].invoke(call["args"], config)
+                input = TypedToolCall(**call, type="tool_call")
+                return self.tools_by_name[call["name"]].invoke(input, config)
             except Exception as e:
                 if not self.handle_tool_errors:
                     raise e
-                output = f"Error: {repr(e)}\n Please fix your mistakes."
-            return ToolMessage(
-                content=str_output(output), name=call["name"], tool_call_id=call["id"]
-            )
+                content = f"Error: {repr(e)}\n Please fix your mistakes."
+                return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
 
         with get_executor_for_config(config) as executor:
             outputs = [*executor.map(run_one, message.tool_calls)]
@@ -112,16 +108,13 @@ class ToolNode(RunnableCallable):
 
         async def run_one(call: ToolCall):
             try:
-                output = await self.tools_by_name[call["name"]].ainvoke(
-                    call["args"], config
-                )
+                input = TypedToolCall(**call, type="tool_call")
+                return await self.tools_by_name[call["name"]].ainvoke(input, config)
             except Exception as e:
                 if not self.handle_tool_errors:
                     raise e
-                output = f"Error: {repr(e)}\n Please fix your mistakes."
-            return ToolMessage(
-                content=str_output(output), name=call["name"], tool_call_id=call["id"]
-            )
+                content = f"Error: {repr(e)}\n Please fix your mistakes."
+                return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
 
         outputs = await asyncio.gather(*(run_one(call) for call in message.tool_calls))
         if output_type == "list":
