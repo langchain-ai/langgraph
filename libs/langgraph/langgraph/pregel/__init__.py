@@ -761,7 +761,7 @@ class Pregel(
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
-            stream_mode: The mode to stream output, defaults to 'values'.
+            stream_mode: The mode to stream output, defaults to self.stream_mode.
                 Options are 'values', 'updates', and 'debug'.
                 values: Emit the current values of the state for each step.
                 updates: Emit only the updates to the state for each step.
@@ -782,7 +782,7 @@ class Pregel(
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
             >>> from langgraph.graph import StateGraph
-            >>> from libs.langgraph.langgraph.constants import START
+            >>> from langgraph.constants import START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -1204,6 +1204,73 @@ class Pregel(
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+        """Stream graph steps for a single input.
+
+        Args:
+            input: The input to the graph.
+            config: The configuration to use for the run.
+            stream_mode: The mode to stream output, defaults to self.stream_mode.
+                Options are 'values', 'updates', and 'debug'.
+                values: Emit the current values of the state for each step.
+                updates: Emit only the updates to the state for each step.
+                    Output is a dict with the node name as key and the updated values as value.
+                debug: Emit debug events for each step.
+            output_keys: The keys to stream, defaults to all non-context channels.
+            input_keys: The keys to use from the input, defaults to all input channels.
+            interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
+            interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
+            debug: Whether to print debug information during execution, defaults to False.
+
+        Yields:
+            The output of each step in the graph. The output shape depends on the stream_mode.
+
+        Examples:
+            Using different stream modes with a graph:
+            ```pycon
+            >>> import operator
+            >>> from typing_extensions import Annotated, TypedDict
+            >>> from langgraph.graph import StateGraph
+            >>> from langgraph.constants import START
+            ...
+            >>> class State(TypedDict):
+            ...     alist: Annotated[list, operator.add]
+            ...     another_list: Annotated[list, operator.add]
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", lambda _state: {"another_list": ["hi"]})
+            >>> builder.add_node("b", lambda _state: {"alist": ["there"]})
+            >>> builder.add_edge("a", "b")
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+            ```
+            With stream_mode="values":
+
+            ```pycon
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="values"']}, stream_mode="values"):
+            ...     print(event)
+            {'alist': ['Ex for stream_mode="values"'], 'another_list': []}
+            {'alist': ['Ex for stream_mode="values"'], 'another_list': ['hi']}
+            {'alist': ['Ex for stream_mode="values"', 'there'], 'another_list': ['hi']}
+            ```
+            With stream_mode="updates":
+
+            ```pycon
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="updates"']}, stream_mode="updates"):
+            ...     print(event)
+            {'a': {'another_list': ['hi']}}
+            {'b': {'alist': ['there']}}
+            ```
+            With stream_mode="debug":
+
+            ```pycon
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="debug"']}, stream_mode="debug"):
+            ...     print(event)
+            {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': []}, 'triggers': ['start:a']}}
+            {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
+            {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
+            {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
+            ```
+        """
         config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
