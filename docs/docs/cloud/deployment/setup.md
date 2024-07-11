@@ -101,6 +101,9 @@ Example `langgraph.json` file:
 
 Note that the variable name of the `CompiledGraph` appears at the end of the value of each subkey in the top-level `graphs` key (i.e. `:<variable_name>`).
 
+!!! warning "Configuration Location"
+    The LangGraph API configuration file must be located in a directory equal to or higher than all other Python files in the repository.
+
 Example file directory:
 
 ```bash
