@@ -22,6 +22,14 @@ from langchain_core.runnables.graph import Edge, Graph, Node, is_uuid
 from langchain_core.runnables.utils import accepts_config
 from typing_extensions import TypeGuard
 
+try:
+    from langchain_core.runnables.config import _set_config_context
+except ImportError:
+    # For forwards compatibility
+    def _set_config_context(context: RunnableConfig) -> None:  # type: ignore
+        """Set the context for the current thread."""
+        var_child_runnable_config.set(context)
+
 
 # Before Python 3.11 native StrEnum is not available
 class StrEnum(str, enum.Enum):
@@ -89,7 +97,7 @@ class RunnableCallable(Runnable):
         else:
             config = merge_configs(self.config, config)
             context = copy_context()
-            context.run(var_child_runnable_config.set, config)
+            context.run(_set_config_context, config)
             if accepts_config(self.func):
                 kwargs["config"] = config
             ret = context.run(self.func, input, **kwargs)
@@ -110,7 +118,7 @@ class RunnableCallable(Runnable):
         else:
             config = merge_configs(self.config, config)
             context = copy_context()
-            context.run(var_child_runnable_config.set, config)
+            context.run(_set_config_context, config)
             if accepts_config(self.afunc):
                 kwargs["config"] = config
             if sys.version_info >= (3, 11):

@@ -63,7 +63,7 @@ There are many occasions where the graph cannot run completely autonomously. For
 
 ### Double Texting
 
-Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), Langgraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how-tos/index.md#double-texting). These options are:
+Many times users might interact with your graph in unintended ways. For instance, a user may send one message and before the graph has finished running send a second message. To solve this issue of "double-texting" (i.e. prompting the graph a second time before the first run has finished), LangGraph has provided four different solutions, all of which are covered in the [Double Texting how-tos](../how-tos/index.md#double-texting). These options are:
 
 - `reject`: This is the simplest option, this just rejects any follow up runs and does not allow double texting. See the [how-to guide](../how-tos/reject_concurrent.md) for configuring the reject double text option.
 - `enqueue`: This is a relatively simple option which continues the first run until it completes the whole run, then sends the new input as a separate run. See the [how-to guide](../how-tos/enqueue_concurrent.md) for configuring the enqueue double text option.
@@ -101,3 +101,7 @@ The LangGraph Cloud offers several features to support secure and robost deploym
 ### Authentication
 
 LangGraph applications deployed to LangGraph Cloud are automatically configured with LangSmith authentication. In order to call the API, a valid <a href="https://docs.smith.langchain.com/how_to_guides/setup/create_account_api_key#api-keys" target="_blank">LangSmith API key</a> is required.
+
+### Local Testing
+
+Before deploying your app in production to LangGraph Cloud, you may wish to test out your graph locally in order to ensure that everything is running as expected. Luckily, LangGraph makes this easy for you through use of the LangGraph CLI. Read more in this [how-to guide](../deployment/test_locally.md) or look at the [CLI reference](../reference/cli.md) to learn more.

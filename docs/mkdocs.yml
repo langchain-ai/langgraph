@@ -148,9 +148,11 @@ nav:
           - Stream full state: how-tos/stream-values.ipynb
           - Stream state updates: how-tos/stream-updates.ipynb
           - Stream LLM tokens: how-tos/streaming-tokens.ipynb
+          - Stream LLM tokens without LangChain models: how-tos/streaming-tokens-without-langchain.ipynb
           - Stream arbitrarily nested content: how-tos/streaming-content.ipynb
           - Configure multiple streaming modes: how-tos/stream-multiple.ipynb
           - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
+          - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
           - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
       - Other:
           - Run graph asynchronously: how-tos/async.ipynb
@@ -183,6 +185,7 @@ nav:
           - Deployment:
               - Setup App: "cloud/deployment/setup.md"
               - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
+              - Test App Locally: "cloud/deployment/test_locally.md"
               - Deploy to Cloud: "cloud/deployment/cloud.md"
               - Self-Host: "cloud/deployment/self_hosted.md"
           - Streaming:
@@ -215,7 +218,9 @@ nav:
               - Configure Agents: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
               - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
               - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
-      - Conceptual Guides: "cloud/concepts/index.md"
+      - Conceptual Guides:
+          - API Concepts: "cloud/concepts/api.md"
+          - Cloud Concepts: "cloud/concepts/cloud.md"
       - Reference:
           - API: "cloud/reference/api/api_ref.md"
           - SDK:
