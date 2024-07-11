@@ -1,14 +1,7 @@
 import asyncio
-import json
 from typing import Any, Callable, Dict, Literal, Optional, Sequence, Union
 
-from langchain_core.messages import (
-    AIMessage,
-    AnyMessage,
-    ToolCall,
-    ToolMessage,
-    TypedToolCall,
-)
+from langchain_core.messages import AIMessage, AnyMessage, ToolCall, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool
@@ -76,7 +69,7 @@ class ToolNode(RunnableCallable):
 
         def run_one(call: ToolCall):
             try:
-                input = TypedToolCall(**call, type="tool_call")
+                input = {**call, **{"type": "tool_call"}}
                 return self.tools_by_name[call["name"]].invoke(input, config)
             except Exception as e:
                 if not self.handle_tool_errors:
@@ -108,7 +101,7 @@ class ToolNode(RunnableCallable):
 
         async def run_one(call: ToolCall):
             try:
-                input = TypedToolCall(**call, type="tool_call")
+                input = {**call, **{"type": "tool_call"}}
                 return await self.tools_by_name[call["name"]].ainvoke(input, config)
             except Exception as e:
                 if not self.handle_tool_errors:
