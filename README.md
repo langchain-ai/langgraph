@@ -57,8 +57,6 @@ export LANGSMITH_API_KEY=lsv2_sk_...
 ```
 
 ```python
-from typing import Annotated, Literal, TypedDict
-
 from langchain_core.messages import HumanMessage
 from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
