@@ -74,7 +74,7 @@ In order to do this we can first install the LangGraph CLI
 pip install langgraph-cli
 ```
 
-We can then test our API server locally. This requires access to LangGraph closed beta. In order to run the server locally, you will need to add your `LANGCHAIN_API_KEY` to the .env file so we can validate you have access to LangGraph closed beta.
+We can then test our API server locally. This requires access to LangGraph closed beta. In order to run the server locally, you will need to add your `LANGSMITH_API_KEY` to the .env file so we can validate you have access to LangGraph closed beta.
 
 ```shell
 langgraph up
@@ -193,7 +193,7 @@ Before using, you need to get the URL of your LangGraph deployment. You can find
 You also need to make sure you have set up your API key properly so you can authenticate with LangGraph Cloud.
 
 ```shell
-export LANGCHAIN_API_KEY=...
+export LANGSMITH_API_KEY=...
 ```
 
 The first thing to do when using the SDK is to setup our client, access our assistant, and create a thread to execute a run on:
