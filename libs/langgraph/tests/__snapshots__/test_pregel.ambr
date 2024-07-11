@@ -288,9 +288,10 @@
         "type": "runnable",
         "data": {
           "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableBinding"
           ],
           "name": "tools"
         }
@@ -332,6 +333,24 @@
   '''
 # ---
 # name: test_conditional_graph.2
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__[__start__]:::startclass;
+  	__end__[__end__]:::endclass;
+  	agent([agent]):::otherclass;
+  	tools([tools]):::otherclass;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. continue .-> tools;
+  	agent -. exit .-> __end__;
+  	classDef startclass fill:#ffdfba;
+  	classDef endclass fill:#baffc9;
+  	classDef otherclass fill:#fad7de;
+  
+  '''
+# ---
+# name: test_conditional_graph.3
   '''
   {
     "nodes": [
@@ -469,19 +488,19 @@
   }
   '''
 # ---
-# name: test_conditional_graph.3
+# name: test_conditional_graph.4
   '''
   graph TD;
-  	PromptTemplate --> FakeStreamingListLLM;
-  	FakeStreamingListLLM --> Lambda_agent_parser_;
-  	Parallel_agent_outcome_Input --> PromptTemplate;
-  	Lambda_agent_parser_ --> Parallel_agent_outcome_Output;
-  	Parallel_agent_outcome_Input --> Passthrough;
-  	Passthrough --> Parallel_agent_outcome_Output;
-  	__start__ --> Parallel_agent_outcome_Input;
-  	tools --> Parallel_agent_outcome_Input;
-  	Parallel_agent_outcome_Output -. continue .-> tools;
-  	Parallel_agent_outcome_Output -. exit .-> __end__;
+  	6989fad8f3cc40a297b6cf542eeec013 --> 296c325879ec459394cc9c96f8624443;
+  	296c325879ec459394cc9c96f8624443 --> 2f7427305f274a30adb63c63bd224535;
+  	b88ff757612444ea8964ef1094025b0a --> 6989fad8f3cc40a297b6cf542eeec013;
+  	2f7427305f274a30adb63c63bd224535 --> 5ae9d630bcba443eb4196e5f23a8674e;
+  	b88ff757612444ea8964ef1094025b0a --> 608e571dff2f4b42b3bce468583afe09;
+  	608e571dff2f4b42b3bce468583afe09 --> 5ae9d630bcba443eb4196e5f23a8674e;
+  	__start__ --> b88ff757612444ea8964ef1094025b0a;
+  	tools --> b88ff757612444ea8964ef1094025b0a;
+  	5ae9d630bcba443eb4196e5f23a8674e -. continue .-> tools;
+  	5ae9d630bcba443eb4196e5f23a8674e -. exit .-> __end__;
   
   '''
 # ---
