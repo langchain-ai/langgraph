@@ -761,7 +761,7 @@ class Pregel(
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
-            stream_mode: The mode to stream output, defaults to 'values'.
+            stream_mode: The mode to stream output, defaults to self.stream_mode.
                 Options are 'values', 'updates', and 'debug'.
                 values: Emit the current values of the state for each step.
                 updates: Emit only the updates to the state for each step.
