@@ -782,7 +782,7 @@ class Pregel(
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
             >>> from langgraph.graph import StateGraph
-            >>> from libs.langgraph.langgraph.constants import START
+            >>> from langgraph.constants import START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -1230,7 +1230,7 @@ class Pregel(
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
             >>> from langgraph.graph import StateGraph
-            >>> from libs.langgraph.langgraph.constants import START
+            >>> from langgraph.constants import START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
