@@ -490,10 +490,7 @@ class CompiledGraph(Pregel):
                     start_nodes[key] = n
                     end_nodes[key] = n
             else:
-                n = graph.add_node(
-                    node.with_config(metadata=metadata) if metadata else node,
-                    key,
-                )
+                n = graph.add_node(node, key, metadata=metadata)
                 start_nodes[key] = n
                 end_nodes[key] = n
         for start, end in sorted(self.builder._all_edges):
