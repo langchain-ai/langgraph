@@ -1,7 +1,7 @@
 import asyncio
 from collections import defaultdict
 from functools import partial
-from typing import Any, AsyncIterator, Dict, Iterator, Optional
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
@@ -53,6 +53,7 @@ class MemorySaver(BaseCheckpointSaver):
     ) -> None:
         super().__init__(serde=serde)
         self.storage = defaultdict(dict)
+        self.writes = defaultdict(list)
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the in-memory storage.
@@ -72,19 +73,27 @@ class MemorySaver(BaseCheckpointSaver):
         if ts := config["configurable"].get("thread_ts"):
             if saved := self.storage[thread_id].get(ts):
                 checkpoint, metadata = saved
+                writes = self.writes[(thread_id, ts)]
                 return CheckpointTuple(
                     config=config,
                     checkpoint=self.serde.loads(checkpoint),
                     metadata=self.serde.loads(metadata),
+                    pending_writes=[
+                        (id, c, self.serde.loads(v)) for id, c, v in writes
+                    ],
                 )
         else:
             if checkpoints := self.storage[thread_id]:
                 ts = max(checkpoints.keys())
                 checkpoint, metadata = checkpoints[ts]
+                writes = self.writes[(thread_id, ts)]
                 return CheckpointTuple(
                     config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                     checkpoint=self.serde.loads(checkpoint),
                     metadata=self.serde.loads(metadata),
+                    pending_writes=[
+                        (id, c, self.serde.loads(v)) for id, c, v in writes
+                    ],
                 )
 
     def list(
@@ -168,6 +177,30 @@ class MemorySaver(BaseCheckpointSaver):
             }
         }
 
+    def put_writes(
+        self,
+        config: RunnableConfig,
+        writes: List[Tuple[str, Any]],
+        task_id: str,
+    ) -> RunnableConfig:
+        """Save a list of writes to the in-memory storage.
+
+        This method saves a list of writes to the in-memory storage. The writes are associated
+        with the provided config.
+
+        Args:
+            config (RunnableConfig): The config to associate with the writes.
+            writes (list[tuple[str, Any]]): The writes to save.
+
+        Returns:
+            RunnableConfig: The updated config containing the saved writes' timestamp.
+        """
+        thread_id = config["configurable"]["thread_id"]
+        ts = config["configurable"]["thread_ts"]
+        self.writes[(thread_id, ts)].extend(
+            [(task_id, c, self.serde.dumps(v)) for c, v in writes]
+        )
+
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Asynchronous version of get_tuple.
 
@@ -223,4 +256,14 @@ class MemorySaver(BaseCheckpointSaver):
     ) -> RunnableConfig:
         return await asyncio.get_running_loop().run_in_executor(
             None, self.put, config, checkpoint, metadata
+        )
+
+    async def aput_writes(
+        self,
+        config: RunnableConfig,
+        writes: List[Tuple[str, Any]],
+        task_id: str,
+    ) -> RunnableConfig:
+        return await asyncio.get_running_loop().run_in_executor(
+            None, self.put_writes, config, writes, task_id
         )
