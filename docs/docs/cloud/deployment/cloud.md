@@ -45,8 +45,33 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
         1. Update the value of existing secrets or environment variables.
 1. Select `Submit`. After a few seconds, the `New Revision` modal will close and the new revision will be queued for deployment.
 
-## Asynchronous Deployment
+## View Build and Deployment Logs
 
-New [deployments](#create-new-deployment) and [revisions](#create-new-revision) are provisioned and deployed asynchronously. They are not deployed immediately after submission. Currently, deployment can take up to several minutes.
+Build and deployment logs are available for each revision.
 
-The `Deployment` view continually updates the status of pending revisions.
+Starting from the `Deployment` view...
+
+1. Select the desired revision from the `Revisions` table. A panel slides open from the right-hand side and the `Build` tab is selected by default, which displays build logs for the revision.
+1. In the panel, select the `Deploy` tab to view deployment logs for the revision.
+1. Within the `Deploy` tab, adjust the date/time range picker as needed. By default, the date/time range picker is set to the `Last 15 minutes`.
+
+## Interrupt Revision
+
+Interrupting a revision will stop deployment of the revision.
+
+!!! warning "Undefined Behavior"
+    Interrupted revisions have undefined behavior. This is only useful if you need to deploy a new revision and you already have a revision "stuck" in progress. In the future, this feature may be removed.
+
+Starting from the `Deployment` view...
+
+1. Select the menu icon (three dots) on the right-hand side of the row for the desired revision from the `Revisions` table.
+1. Select `Interrupt` from the menu.
+1. A modal will appear. Review the confirmation message. Select `Interrupt revision`.
+
+## Delete Deployment
+
+Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>...
+
+1. In the left-hand navigation panel, select `Deployments`. The `Deployments` view contains a list of existing LangGraph Cloud deployments.
+1. Select the menu icon (three dots) on the right-hand side of the row for the desired deployment and select `Delete`.
+1. A `Confirmation` modal will appear. Select `Delete`.

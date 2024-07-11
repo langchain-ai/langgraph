@@ -218,7 +218,9 @@ nav:
               - Configure Agents: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
               - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
               - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
-      - Conceptual Guides: "cloud/concepts/index.md"
+      - Conceptual Guides:
+          - API Concepts: "cloud/concepts/api.md"
+          - Cloud Concepts: "cloud/concepts/cloud.md"
       - Reference:
           - API: "cloud/reference/api/api_ref.md"
           - SDK:

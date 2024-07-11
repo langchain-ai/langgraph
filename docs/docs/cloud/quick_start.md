@@ -186,9 +186,7 @@ Once you have tested that your hosted graph works as expected using LangGraph St
 
 First, make sure you have the SDK installed by calling `pip install langgraph_sdk`.
 
-Before using, you need to get the URL of your LangGraph deployment. You can find this on the auto generated documentation page here:
-
-![Base URL of LangGraph deployment](./deployment/img/base_url.png)
+Before using, you need to get the URL of your LangGraph deployment. You can find this in the `Deployment` view. Click the URL to copy it to the clipboard.
 
 You also need to make sure you have set up your API key properly so you can authenticate with LangGraph Cloud.
 
