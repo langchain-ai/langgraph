@@ -1799,7 +1799,7 @@ def _should_interrupt(
     # defaultdicts are mutated on access :( so we need to copy
     seen = checkpoint["versions_seen"].copy()[INTERRUPT]
     return (
-        # interrupt if any of snapshopt_channels has been updated since last interrupt
+        # interrupt if any channel has been updated since last interrupt
         any(
             version > seen.get(chan, null_version)
             for chan, version in checkpoint["channel_versions"].items()
