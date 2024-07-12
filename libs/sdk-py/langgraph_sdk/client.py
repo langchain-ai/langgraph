@@ -29,6 +29,7 @@ from langgraph_sdk.schema import (
     GraphSchema,
     Metadata,
     MultitaskStrategy,
+    OnConflictBehavior,
     Run,
     StreamMode,
     Thread,
@@ -344,6 +345,7 @@ class ThreadsClient:
         *,
         metadata: Metadata = None,
         thread_id: Optional[str] = None,
+        if_exists: Optional[OnConflictBehavior] = None,
     ) -> Thread:
         """Create a new thread."""
         payload: Dict[str, Any] = {}
@@ -351,6 +353,8 @@ class ThreadsClient:
             payload["thread_id"] = thread_id
         if metadata:
             payload["metadata"] = metadata
+        if if_exists:
+            payload["if_exists"] = if_exists
         return await self.http.post("/threads", json=payload)
 
     async def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:
