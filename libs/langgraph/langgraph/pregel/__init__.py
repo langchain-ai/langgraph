@@ -987,7 +987,7 @@ class Pregel(
                 else:
                     # no input is taken as signal to proceed past previous interrupt
                     checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.stream_channels_list:
+                    for k in channels:
                         if k in checkpoint["channel_versions"]:
                             version = checkpoint["channel_versions"][k]
                             checkpoint["versions_seen"][INTERRUPT][k] = version
@@ -1444,7 +1444,7 @@ class Pregel(
                 else:
                     # no input is taken as signal to proceed past previous interrupt
                     checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.stream_channels_list:
+                    for k in channels:
                         if k in checkpoint["channel_versions"]:
                             version = checkpoint["channel_versions"][k]
                             checkpoint["versions_seen"][INTERRUPT][k] = version
@@ -1799,11 +1799,10 @@ def _should_interrupt(
     # defaultdicts are mutated on access :( so we need to copy
     seen = checkpoint["versions_seen"].copy()[INTERRUPT]
     return (
-        # interrupt if any of snapshopt_channels has been updated since last interrupt
+        # interrupt if any channel has been updated since last interrupt
         any(
-            checkpoint["channel_versions"].get(chan, null_version)
-            > seen.get(chan, null_version)
-            for chan in snapshot_channels
+            version > seen.get(chan, null_version)
+            for chan, version in checkpoint["channel_versions"].items()
         )
         # and any triggered node is in interrupt_nodes list
         and any(
