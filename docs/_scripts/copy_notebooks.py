@@ -88,7 +88,6 @@ _HIDE = set(
         "dynamically-returning-directly.ipynb",
         "force-calling-a-tool-first.ipynb",
         "managing-agent-steps.ipynb",
-        "pass-run-time-values-to-tools.ipynb",
         "respond-in-format.ipynb",
         "quickstart.ipynb",
         "human-in-the-loop.ipynb",
