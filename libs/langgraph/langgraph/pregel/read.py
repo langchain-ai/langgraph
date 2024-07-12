@@ -151,6 +151,7 @@ class PregelNode(RunnableBindingBase):
         mapper: Optional[Callable[[Any], Any]] = None,
         writers: Optional[list[Runnable]] = None,
         tags: Optional[list[str]] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         kwargs: Optional[Mapping[str, Any]] = None,
         config: Optional[RunnableConfig] = None,
@@ -163,7 +164,9 @@ class PregelNode(RunnableBindingBase):
             writers=writers or [],
             bound=bound or DEFAULT_BOUND,
             kwargs=kwargs or {},
-            config=merge_configs(config, {"tags": tags or []}),
+            config=merge_configs(
+                config, {"tags": tags or [], "metadata": metadata or {}}
+            ),
             **other_kwargs,
         )
 

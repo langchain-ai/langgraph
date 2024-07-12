@@ -1460,7 +1460,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     workflow = Graph()
 
     workflow.add_node("agent", agent)
-    workflow.add_node("tools", execute_tools)
+    workflow.add_node("tools", execute_tools, metadata={"version": 2, "variant": "b"})
 
     workflow.set_entry_point("agent")
 
@@ -1474,6 +1474,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
 
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    assert app.get_graph().draw_mermaid() == snapshot
     assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
     assert app.get_graph(xray=True).draw_mermaid(with_styles=False) == snapshot
 

@@ -28,7 +28,15 @@ from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.constants import TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
-from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
+from langgraph.graph.graph import (
+    END,
+    START,
+    Branch,
+    CompiledGraph,
+    Graph,
+    NodeSpec,
+    Send,
+)
 from langgraph.managed.base import ManagedValue, is_managed_value
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All
@@ -332,7 +340,7 @@ class CompiledStateGraph(CompiledGraph):
     ) -> type[BaseModel]:
         return self.get_output_schema(config)
 
-    def attach_node(self, key: str, node: Optional[Runnable]) -> None:
+    def attach_node(self, key: str, node: Optional[NodeSpec]) -> None:
         state_keys = list(self.builder.channels)
 
         def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
@@ -399,7 +407,8 @@ class CompiledStateGraph(CompiledGraph):
                         require_at_least_one_of=state_keys,
                     ),
                 ],
-            ).pipe(node)
+                metadata=node.metadata,
+            ).pipe(node.runnable)
 
     def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
         if isinstance(starts, str):
