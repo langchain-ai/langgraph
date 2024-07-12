@@ -134,7 +134,7 @@ def print_step_tasks(step: int, next_tasks: list[PregelExecutableTask]) -> None:
     print(
         f"{get_colored_text(f'[{step}:tasks]', color='blue')} "
         + get_bolded_text(
-            f"Starting step {step} with {n_tasks} task{'s' if n_tasks > 1 else ''}:\n"
+            f"Starting step {step} with {n_tasks} task{'s' if n_tasks != 1 else ''}:\n"
         )
         + "\n".join(
             f"- {get_colored_text(name, 'green')} -> {pformat(val)}"
@@ -153,7 +153,7 @@ def print_step_writes(
     print(
         f"{get_colored_text(f'[{step}:writes]', color='blue')} "
         + get_bolded_text(
-            f"Finished step {step} with writes to {len(by_channel)} channel{'s' if len(by_channel) > 1 else ''}:\n"
+            f"Finished step {step} with writes to {len(by_channel)} channel{'s' if len(by_channel) != 1 else ''}:\n"
         )
         + "\n".join(
             f"- {get_colored_text(name, 'yellow')} -> {', '.join(pformat(v) for v in vals)}"
