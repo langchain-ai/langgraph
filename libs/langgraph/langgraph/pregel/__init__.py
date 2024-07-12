@@ -1802,7 +1802,7 @@ def _should_interrupt(
         # interrupt if any of snapshopt_channels has been updated since last interrupt
         any(
             checkpoint["channel_versions"].get(chan, null_version)
-            > seen.get(chan, null_version)
+            >= seen.get(chan, null_version)
             for chan in snapshot_channels
         )
         # and any triggered node is in interrupt_nodes list
