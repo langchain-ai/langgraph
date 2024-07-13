@@ -14,7 +14,9 @@ By composing `Nodes` and `Edges`, you can create complex, looping workflows that
 
 In short: _nodes do the work. edges tell what to do next_.
 
-LangGraph's underlying graph algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a general program. When a `Node` completes, it sends a message along one or more edges to other node(s). These nodes run their functions, pass the resulting messages to the next set of nodes, and on and on it goes. Inspired by [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/), the program proceeds in discrete "super-steps" that are all executed conceptually in parallel. Whenever the graph is run, all the nodes start in an `inactive` state. Whenever an incoming edge (or "channel") receives a new message (state), the node becomes `active`, runs the function, and responds with updates. At the end of each superstep, each node votes to `halt` by marking itself as `inactive` if it has no more incoming messages. The graph terminates when all nodes are `inactive` and when no messages are in transit.
+LangGraph's underlying graph algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a general program. When a Node completes its operation, it sends messages along one or more edges to other node(s). These recipient nodes then execute their functions, pass the resulting messages to the next set of nodes, and the process continues. Inspired by Google's [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) system, the program proceeds in discrete "super-steps."
+
+A super-step can be considered a single iteration over the graph nodes. Nodes that run in parallel are part of the same super-step, while nodes that run sequentially belong to separate super-steps. At the start of graph execution, all nodes begin in an `inactive` state. A node becomes `active` when it receives a new message (state) on any of its incoming edges (or "channels"). The active node then runs its function and responds with updates. At the end of each super-step, nodes with no incoming messages vote to `halt` by marking themselves as `inactive`. The graph execution terminates when all nodes are `inactive` and no messages are in transit.
 
 ### StateGraph
 
@@ -232,11 +234,9 @@ graph.add_conditional_edges("node_a", continue_to_jokes)
 
 ## Checkpointer
 
-One of the main benefits of LangGraph is that it comes backed by a persistence layer. This is accomplished via [checkpointers][basecheckpointsaver].
+LangGraph has a built-in persistence layer, implemented through [checkpointers][basecheckpointsaver]. When you use a checkpointer with a graph, you can interact with the state of that graph. When you use a checkpointer with a graph, you can interact with and manage the graph's state. The checkpointer saves a _checkpoint_ of the graph state at every super-step, enabling several powerful capabilities:
 
-Checkpointers can be used to save a _checkpoint_ of the state of a graph after all steps of the graph. This allows for several things.
-
-First, it allows for [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop), as it allows humans to inspect, interrupt, and approve steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
+First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve steps.Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
 
 Second, it allows for ["memory"](agentic_concepts.md#memory) between interactions. You can use checkpointers to create threads and save the state of a thread after a graph executes. In the case of repeated human interactions (like conversations) any follow up messages can be sent to that checkpoint, which will retain its memory of previous ones.
 
@@ -244,8 +244,7 @@ See [this guide](../how-tos/persistence.ipynb) for how to add a checkpointer to 
 
 ## Threads
 
-When using a checkpointer, you must specify a `thread_id` or `thread_ts` when running the graph.
-Threads are used to checkpoint multiple different runs. This can be used to enable a multi-tenant chat applications.
+Threads enable the checkpointing of multiple different runs, making them essential for multi-tenant chat applications and other scenarios where maintaining separate states is necessary. A thread is a unique ID assigned to a series of checkpoints saved by a checkpointer. When using a checkpointer, you must specify a `thread_id` or `thread_ts` when running the graph.
 
 `thread_id` is simply the ID of a thread. This is always required
 
@@ -262,14 +261,7 @@ See [this guide](../how-tos/persistence.ipynb) for how to use threads.
 
 ## Checkpointer state
 
-When you use a checkpointer with a graph, you can interact with the state of that graph.
-This usually done when enabling different human-in-the-loop interaction patterns.
-Each time you run the graph, the checkpointer creates several checkpoints every time a
-node or set of nodes finishes running.
-The most recent checkpoint is the current state of the thread.
-When interacting with the checkpointer state, you must specify a [thread identifier](#threads).
-
-Each checkpoint has two properties:
+ When interacting with the checkpointer state, you must specify a [thread identifier](#threads).Each checkpoint saved by the checkpointer has two properties:
 
 - **values**: This is the value of the state at this point in time.
 - **next**: This is a tuple of the nodes to execute next in the graph.

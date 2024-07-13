@@ -4,7 +4,17 @@ import asyncio
 import logging
 import os
 import sys
-from typing import Any, AsyncIterator, Dict, List, NamedTuple, Optional, Union, overload
+from typing import (
+    Any,
+    AsyncIterator,
+    Dict,
+    List,
+    NamedTuple,
+    Optional,
+    TypedDict,
+    Union,
+    overload,
+)
 
 import httpx
 import httpx_sse
@@ -27,6 +37,21 @@ from langgraph_sdk.schema import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+class RunCreate(TypedDict):
+    """Payload for creating a background run."""
+
+    thread_id: Optional[str]
+    assistant_id: str
+    input: Optional[dict]
+    metadata: Optional[dict]
+    config: Optional[Config]
+    checkpoint_id: Optional[str]
+    interrupt_before: Optional[list[str]]
+    interrupt_after: Optional[list[str]]
+    webhook: Optional[str]
+    multitask_strategy: Optional[MultitaskStrategy]
 
 
 def get_client(
@@ -560,6 +585,15 @@ class RunsClient:
             return await self.http.post(f"/threads/{thread_id}/runs", json=payload)
         else:
             return await self.http.post("/runs", json=payload)
+
+    async def create_batch(self, payloads: list[RunCreate]) -> list[Run]:
+        """Create a batch of background runs."""
+
+        def filter_payload(payload: RunCreate):
+            return {k: v for k, v in payload.items() if v is not None}
+
+        payloads = [filter_payload(payload) for payload in payloads]
+        return await self.http.post("/runs/batch", json=payloads)
 
     @overload
     async def wait(

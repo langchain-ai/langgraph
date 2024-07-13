@@ -83,6 +83,31 @@ langgraph build [OPTIONS]
 | `-c, --config FILE` | `langgraph.json` | Path to configuration file declaring dependencies, graphs and environment variables. |
 | `--help` | | Display command documentation. |
 
+### `up`
+Start langgraph API server. For local testing, requires a LangSmith API key with access to LangGraph Cloud closed beta. Requires a license key for production use.
+
+**Usage**
+```
+langgraph up [OPTIONS]
+```
+
+**Options**
+
+| Option | Default | Description |
+| ------ | ------- | ----------- |
+| `--wait` | | Wait for services to start before returning. Implies --detach |
+| `--postgres-uri TEXT` | Local database | Postgres URI to use for the database. |
+| `--watch` | | Restart on file changes |
+| `--debugger-base-url TEXT` | `http://127.0.0.1:[PORT]` | URL used by the debugger to access LangGraph API. |
+| `--debugger-port INTEGER` | | Pull the debugger image locally and serve the UI on specified port |
+| `--verbose` | | Show more output from the server logs. |
+| `-c, --config FILE` | `langgraph.json` | Path to configuration file declaring dependencies, graphs and environment variables. |
+| `-d, --docker-compose FILE` | | Path to docker-compose.yml file with additional services to launch. |
+| `-p, --port INTEGER` | `8123` | Port to expose. Example: `langgraph test --port 8000` |
+| `--pull / --no-pull` | `pull` | Pull latest images. Use --no-pull for running the server with locally-built images. Example: `langgraph up --no-pull` |
+| `--recreate / --no-recreate` | `no-recreate` | Recreate containers even if their configuration and image haven't changed |
+| `--help` | | Display command documentation. | 
+
 ### `test`
 Test your LangGraph in the cloud. The only function you can call from the SDK after testing your graph is `client.runs.stream(thread_id=None, ...)`
 

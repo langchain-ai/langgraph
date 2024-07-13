@@ -78,10 +78,11 @@ def add_messages(left: Messages, right: Messages) -> Messages:
     # merge
     left_idx_by_id = {m.id: i for i, m in enumerate(left)}
     merged = left.copy()
+    ids_to_remove = set()
     for m in right:
         if (existing_idx := left_idx_by_id.get(m.id)) is not None:
             if isinstance(m, RemoveMessage):
-                del merged[existing_idx]
+                ids_to_remove.add(m.id)
             else:
                 merged[existing_idx] = m
         else:
@@ -91,6 +92,7 @@ def add_messages(left: Messages, right: Messages) -> Messages:
                 )
 
             merged.append(m)
+    merged = [m for m in merged if m.id not in ids_to_remove]
     return merged
 
 

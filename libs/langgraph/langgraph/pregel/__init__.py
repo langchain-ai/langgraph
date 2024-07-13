@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
+import json
 import time
 from collections import defaultdict, deque
 from functools import partial
@@ -23,6 +24,7 @@ from typing import (
     get_type_hints,
     overload,
 )
+from uuid import UUID, uuid5
 
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.globals import get_debug
@@ -442,7 +444,7 @@ class Pregel(
             and signature(self.checkpointer.list).parameters.get("filter") is None
         ):
             raise ValueError("Checkpointer does not support filtering")
-        for config, checkpoint, metadata, parent_config in self.checkpointer.list(
+        for config, checkpoint, metadata, parent_config, _ in self.checkpointer.list(
             config, before=before, limit=limit, filter=filter
         ):
             with ChannelsManager(
@@ -489,6 +491,7 @@ class Pregel(
             checkpoint,
             metadata,
             parent_config,
+            _,
         ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             async with AsyncChannelsManager(
                 self.channels, checkpoint, config
@@ -565,6 +568,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
             task.proc.invoke(
@@ -653,6 +657,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
             await task.proc.ainvoke(
@@ -756,7 +761,7 @@ class Pregel(
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
-            stream_mode: The mode to stream output, defaults to 'values'.
+            stream_mode: The mode to stream output, defaults to self.stream_mode.
                 Options are 'values', 'updates', and 'debug'.
                 values: Emit the current values of the state for each step.
                 updates: Emit only the updates to the state for each step.
@@ -777,7 +782,7 @@ class Pregel(
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
             >>> from langgraph.graph import StateGraph
-            >>> from libs.langgraph.langgraph.constants import START
+            >>> from langgraph.constants import START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -879,6 +884,23 @@ class Pregel(
                 self.managed_values_dict, config, self
             ) as managed:
 
+                def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
+                    if self.checkpointer is not None:
+                        bg.append(
+                            executor.submit(
+                                self.checkpointer.put_writes,
+                                {
+                                    **checkpoint_config,
+                                    "configurable": {
+                                        **checkpoint_config["configurable"],
+                                        "thread_ts": checkpoint["id"],
+                                    },
+                                },
+                                writes,
+                                task_id,
+                            )
+                        )
+
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
                     nonlocal checkpoint, checkpoint_config, channels
 
@@ -963,10 +985,9 @@ class Pregel(
                     # increment start to 0
                     start += 1
                 else:
-                    # if received no input, take that as signal to proceed
-                    # past previous interrupt, if any
+                    # no input is taken as signal to proceed past previous interrupt
                     checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.stream_channels_list:
+                    for k in channels:
                         if k in checkpoint["channel_versions"]:
                             version = checkpoint["channel_versions"][k]
                             checkpoint["versions_seen"][INTERRUPT][k] = version
@@ -993,6 +1014,15 @@ class Pregel(
                             else _increment
                         ),
                     )
+
+                    # assign pending writes to tasks
+                    if saved and saved.pending_writes:
+                        for task in next_tasks:
+                            task.writes.extend(
+                                (c, v)
+                                for tid, c, v in saved.pending_writes
+                                if tid == task.id
+                            )
 
                     # if no more tasks, we're done
                     if not next_tasks:
@@ -1027,12 +1057,15 @@ class Pregel(
                     futures = {
                         executor.submit(run_with_retry, task, self.retry_policy): task
                         for task in next_tasks
+                        if not task.writes
                     }
                     end_time = (
                         self.step_timeout + time.monotonic()
                         if self.step_timeout
                         else None
                     )
+                    if not futures:
+                        done, inflight = set(), set()
                     while futures:
                         done, inflight = concurrent.futures.wait(
                             futures,
@@ -1050,6 +1083,10 @@ class Pregel(
                                 # exception will be handled in panic_or_proceed
                                 futures.clear()
                             else:
+                                # save task writes to checkpointer, unless this
+                                # is the single or last task in this step
+                                if futures:
+                                    put_writes(task.id, task.writes)
                                 # yield updates output for the finished task
                                 if "updates" in stream_modes:
                                     yield from _with_mode(
@@ -1076,7 +1113,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _ in next_tasks:
+                    for _, _, _, writes, _, _, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     if debug:
@@ -1167,6 +1204,73 @@ class Pregel(
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+        """Stream graph steps for a single input.
+
+        Args:
+            input: The input to the graph.
+            config: The configuration to use for the run.
+            stream_mode: The mode to stream output, defaults to self.stream_mode.
+                Options are 'values', 'updates', and 'debug'.
+                values: Emit the current values of the state for each step.
+                updates: Emit only the updates to the state for each step.
+                    Output is a dict with the node name as key and the updated values as value.
+                debug: Emit debug events for each step.
+            output_keys: The keys to stream, defaults to all non-context channels.
+            input_keys: The keys to use from the input, defaults to all input channels.
+            interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
+            interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
+            debug: Whether to print debug information during execution, defaults to False.
+
+        Yields:
+            The output of each step in the graph. The output shape depends on the stream_mode.
+
+        Examples:
+            Using different stream modes with a graph:
+            ```pycon
+            >>> import operator
+            >>> from typing_extensions import Annotated, TypedDict
+            >>> from langgraph.graph import StateGraph
+            >>> from langgraph.constants import START
+            ...
+            >>> class State(TypedDict):
+            ...     alist: Annotated[list, operator.add]
+            ...     another_list: Annotated[list, operator.add]
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", lambda _state: {"another_list": ["hi"]})
+            >>> builder.add_node("b", lambda _state: {"alist": ["there"]})
+            >>> builder.add_edge("a", "b")
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+            ```
+            With stream_mode="values":
+
+            ```pycon
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="values"']}, stream_mode="values"):
+            ...     print(event)
+            {'alist': ['Ex for stream_mode="values"'], 'another_list': []}
+            {'alist': ['Ex for stream_mode="values"'], 'another_list': ['hi']}
+            {'alist': ['Ex for stream_mode="values"', 'there'], 'another_list': ['hi']}
+            ```
+            With stream_mode="updates":
+
+            ```pycon
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="updates"']}, stream_mode="updates"):
+            ...     print(event)
+            {'a': {'another_list': ['hi']}}
+            {'b': {'alist': ['there']}}
+            ```
+            With stream_mode="debug":
+
+            ```pycon
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="debug"']}, stream_mode="debug"):
+            ...     print(event)
+            {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': []}, 'triggers': ['start:a']}}
+            {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
+            {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
+            {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
+            ```
+        """
         config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
@@ -1239,6 +1343,24 @@ class Pregel(
             ) as channels, AsyncManagedValuesManager(
                 self.managed_values_dict, config, self
             ) as managed:
+
+                def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
+                    if self.checkpointer is not None:
+                        bg.append(
+                            asyncio.create_task(
+                                self.checkpointer.aput_writes(
+                                    {
+                                        **checkpoint_config,
+                                        "configurable": {
+                                            **checkpoint_config["configurable"],
+                                            "thread_ts": checkpoint["id"],
+                                        },
+                                    },
+                                    writes,
+                                    task_id,
+                                )
+                            )
+                        )
 
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
                     nonlocal checkpoint, checkpoint_config, channels
@@ -1320,10 +1442,9 @@ class Pregel(
                     # increment start to 0
                     start += 1
                 else:
-                    # if received no input, take that as signal to proceed
-                    # past previous interrupt, if any
+                    # no input is taken as signal to proceed past previous interrupt
                     checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.stream_channels_list:
+                    for k in channels:
                         if k in checkpoint["channel_versions"]:
                             version = checkpoint["channel_versions"][k]
                             checkpoint["versions_seen"][INTERRUPT][k] = version
@@ -1350,6 +1471,15 @@ class Pregel(
                             else _increment
                         ),
                     )
+
+                    # assign pending writes to tasks
+                    if saved and saved.pending_writes:
+                        for task in next_tasks:
+                            task.writes.extend(
+                                (c, v)
+                                for tid, c, v in saved.pending_writes
+                                if tid == task.id
+                            )
 
                     # if no more tasks, we're done
                     if not next_tasks:
@@ -1387,10 +1517,13 @@ class Pregel(
                             arun_with_retry(task, self.retry_policy, do_stream)
                         ): task
                         for task in next_tasks
+                        if not task.writes
                     }
                     end_time = (
                         self.step_timeout + loop.time() if self.step_timeout else None
                     )
+                    if not futures:
+                        done, inflight = set(), set()
                     while futures:
                         done, inflight = await asyncio.wait(
                             futures,
@@ -1406,6 +1539,10 @@ class Pregel(
                                 # exception will be handle in panic_or_proceed
                                 futures.clear()
                             else:
+                                # save task writes to checkpointer, unless this
+                                # is the single or last task in this step
+                                if futures:
+                                    put_writes(task.id, task.writes)
                                 # yield updates output for the finished task
                                 if "updates" in stream_modes:
                                     for chunk in _with_mode(
@@ -1434,7 +1571,7 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _ in next_tasks:
+                    for _, _, _, writes, _, _, _ in next_tasks:
                         pending_writes.extend(writes)
 
                     if debug:
@@ -1662,16 +1799,15 @@ def _should_interrupt(
     # defaultdicts are mutated on access :( so we need to copy
     seen = checkpoint["versions_seen"].copy()[INTERRUPT]
     return (
-        # interrupt if any of snapshopt_channels has been updated since last interrupt
+        # interrupt if any channel has been updated since last interrupt
         any(
-            checkpoint["channel_versions"].get(chan, null_version)
-            > seen.get(chan, null_version)
-            for chan in snapshot_channels
+            version > seen.get(chan, null_version)
+            for chan, version in checkpoint["channel_versions"].items()
         )
         # and any triggered node is in interrupt_nodes list
         and any(
             node
-            for node, _, _, _, config, _ in tasks
+            for node, _, _, _, config, _, _ in tasks
             if (
                 (not config or TAG_HIDDEN not in config.get("tags"))
                 if interrupt_nodes == "*"
@@ -1825,6 +1961,14 @@ def _prepare_next_tasks(
             continue
         if for_execution:
             if node := processes[packet.node].get_node():
+                triggers = [TASKS]
+                metadata = {
+                    "langgraph_step": step,
+                    "langgraph_node": packet.node,
+                    "langgraph_triggers": triggers,
+                    "langgraph_task_idx": len(tasks),
+                }
+                task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
                 writes = deque()
                 tasks.append(
                     PregelExecutableTask(
@@ -1836,14 +1980,7 @@ def _prepare_next_tasks(
                             merge_configs(
                                 config,
                                 processes[packet.node].config,
-                                {
-                                    "metadata": {
-                                        "langgraph_step": step,
-                                        "langgraph_node": packet.node,
-                                        "langgraph_triggers": [TASKS],
-                                        "langgraph_task_idx": len(tasks),
-                                    }
-                                },
+                                {"metadata": metadata},
                             ),
                             run_name=packet.node,
                             callbacks=(
@@ -1857,11 +1994,12 @@ def _prepare_next_tasks(
                                     _local_write, writes.extend, processes, channels
                                 ),
                                 CONFIG_KEY_READ: partial(
-                                    _local_read, checkpoint, channels, tasks, config
+                                    _local_read, checkpoint, channels, writes, config
                                 ),
                             },
                         ),
-                        [TASKS],
+                        triggers,
+                        task_id,
                     )
                 )
         else:
@@ -1879,7 +2017,7 @@ def _prepare_next_tasks(
     for name, proc in processes.items():
         seen = checkpoint["versions_seen"][name]
         # If any of the channels read by this process were updated
-        if triggers := [
+        if triggers := sorted(
             chan
             for chan in proc.triggers
             if not isinstance(
@@ -1887,7 +2025,7 @@ def _prepare_next_tasks(
             )
             and checkpoint["channel_versions"].get(chan, null_version)
             > seen.get(chan, null_version)
-        ]:
+        ):
             channels_to_consume.update(triggers)
             try:
                 val = next(_proc_input(step, name, proc, managed, channels))
@@ -1906,8 +2044,14 @@ def _prepare_next_tasks(
 
             if for_execution:
                 if node := proc.get_node():
+                    metadata = {
+                        "langgraph_step": step,
+                        "langgraph_node": name,
+                        "langgraph_triggers": triggers,
+                        "langgraph_task_idx": len(tasks),
+                    }
+                    task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
                     writes = deque()
-                    triggers = sorted(triggers)
                     tasks.append(
                         PregelExecutableTask(
                             name,
@@ -1918,14 +2062,7 @@ def _prepare_next_tasks(
                                 merge_configs(
                                     config,
                                     proc.config,
-                                    {
-                                        "metadata": {
-                                            "langgraph_step": step,
-                                            "langgraph_node": name,
-                                            "langgraph_triggers": triggers,
-                                            "langgraph_task_idx": len(tasks),
-                                        }
-                                    },
+                                    {"metadata": metadata},
                                 ),
                                 run_name=name,
                                 callbacks=(
@@ -1948,6 +2085,7 @@ def _prepare_next_tasks(
                                 },
                             ),
                             triggers,
+                            task_id,
                         )
                     )
             else:

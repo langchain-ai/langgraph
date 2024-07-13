@@ -66,7 +66,7 @@ def map_debug_tasks(
     step: int, tasks: list[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
     ts = datetime.now(timezone.utc).isoformat()
-    for name, input, _, _, config, triggers in tasks:
+    for name, input, _, _, config, triggers, _ in tasks:
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
@@ -91,7 +91,7 @@ def map_debug_task_results(
     stream_channels_list: Sequence[str],
 ) -> Iterator[DebugOutputTaskResult]:
     ts = datetime.now(timezone.utc).isoformat()
-    for name, _, _, writes, config, _ in tasks:
+    for name, _, _, writes, config, _, _ in tasks:
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
@@ -134,11 +134,11 @@ def print_step_tasks(step: int, next_tasks: list[PregelExecutableTask]) -> None:
     print(
         f"{get_colored_text(f'[{step}:tasks]', color='blue')} "
         + get_bolded_text(
-            f"Starting step {step} with {n_tasks} task{'s' if n_tasks > 1 else ''}:\n"
+            f"Starting step {step} with {n_tasks} task{'s' if n_tasks != 1 else ''}:\n"
         )
         + "\n".join(
             f"- {get_colored_text(name, 'green')} -> {pformat(val)}"
-            for name, val, _, _, _, _ in next_tasks
+            for name, val, _, _, _, _, _ in next_tasks
         )
     )
 
@@ -153,7 +153,7 @@ def print_step_writes(
     print(
         f"{get_colored_text(f'[{step}:writes]', color='blue')} "
         + get_bolded_text(
-            f"Finished step {step} with writes to {len(by_channel)} channel{'s' if len(by_channel) > 1 else ''}:\n"
+            f"Finished step {step} with writes to {len(by_channel)} channel{'s' if len(by_channel) != 1 else ''}:\n"
         )
         + "\n".join(
             f"- {get_colored_text(name, 'yellow')} -> {', '.join(pformat(v) for v in vals)}"

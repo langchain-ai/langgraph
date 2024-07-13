@@ -1,10 +1,10 @@
 # How to Replay and Branch from Prior States
 
-With Langgraph Cloud you have the ability to return to any of your prior states and either re-run the graph to reproduce issues noticed during testing, or branch out in a different way from what was originally done in the prior states. In this guide we will show a quick example of how to rerun past states and how to branch off from previous states as well.
+With LangGraph Cloud you have the ability to return to any of your prior states and either re-run the graph to reproduce issues noticed during testing, or branch out in a different way from what was originally done in the prior states. In this guide we will show a quick example of how to rerun past states and how to branch off from previous states as well.
 
 ## Setup
 
-We are not going to show the full code for the graph we are hosting, but you can see it [here](https://langchain-ai.github.io/langgraph/how-tos/human_in_the_loop/time-travel/#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
+We are not going to show the full code for the graph we are hosting, but you can see it [here](../../how-tos/human_in_the_loop/time-travel.ipynb#build-the-agent) if you want to. Once this graph is hosted, we are ready to invoke it and wait for user input. 
 
 ### SDK initialization
 

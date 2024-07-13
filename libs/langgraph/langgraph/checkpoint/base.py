@@ -10,6 +10,7 @@ from typing import (
     Literal,
     NamedTuple,
     Optional,
+    Tuple,
     TypedDict,
     TypeVar,
     Union,
@@ -117,6 +118,7 @@ class CheckpointTuple(NamedTuple):
     checkpoint: Checkpoint
     metadata: CheckpointMetadata
     parent_config: Optional[RunnableConfig] = None
+    pending_writes: Optional[List[Tuple[str, str, Any]]] = None
 
 
 CheckpointThreadId = ConfigurableFieldSpec(
@@ -177,6 +179,16 @@ class BaseCheckpointSaver(ABC):
     ) -> RunnableConfig:
         raise NotImplementedError
 
+    def put_writes(
+        self,
+        config: RunnableConfig,
+        writes: List[Tuple[str, Any]],
+        task_id: str,
+    ) -> None:
+        raise NotImplementedError(
+            "This method was added in langgraph 0.1.7. Please update your checkpointer to implement it."
+        )
+
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         if value := await self.aget_tuple(config):
             return value.checkpoint
@@ -202,6 +214,16 @@ class BaseCheckpointSaver(ABC):
         metadata: CheckpointMetadata,
     ) -> RunnableConfig:
         raise NotImplementedError
+
+    async def aput_writes(
+        self,
+        config: RunnableConfig,
+        writes: List[Tuple[str, Any]],
+        task_id: str,
+    ) -> None:
+        raise NotImplementedError(
+            "This method was added in langgraph 0.1.7. Please update your checkpointer to implement it."
+        )
 
     def get_next_version(self, current: Optional[V], channel: BaseChannel) -> V:
         """Get the next version of a channel. Default is to use int versions, incrementing by 1. If you override, you can use str/int/float versions,
