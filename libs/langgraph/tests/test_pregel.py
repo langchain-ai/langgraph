@@ -3143,6 +3143,7 @@ Some examples of past conversations:
                         "name": "search_api",
                         "args": {"query": "query"},
                         "id": "tool_call123",
+                        "type": "tool_call",
                     }
                 ],
             ),
@@ -3193,6 +3194,7 @@ Some examples of past conversations:
                         "name": "search_api",
                         "args": {"query": "query"},
                         "id": "tool_call123",
+                        "type": "tool_call",
                     }
                 ],
             ),
@@ -3252,6 +3254,7 @@ Some examples of past conversations:
                             "name": "search_api",
                             "args": {"query": "query"},
                             "id": "tool_call123",
+                            "type": "tool_call",
                         }
                     ],
                 ),
