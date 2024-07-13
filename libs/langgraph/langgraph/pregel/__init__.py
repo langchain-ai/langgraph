@@ -555,6 +555,8 @@ class Pregel(
                     as_node = last_seen_by_node[-1][1]
         if as_node is None:
             raise InvalidUpdateError("Ambiguous update, specify as_node")
+        if as_node not in self.nodes:
+            raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels
         with ChannelsManager(self.channels, checkpoint, config) as channels:
             # create task to run all writers of the chosen node
@@ -644,6 +646,8 @@ class Pregel(
                     as_node = last_seen_by_node[-1][1]
         if as_node is None:
             raise InvalidUpdateError("Ambiguous update, specify as_node")
+        if as_node not in self.nodes:
+            raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels, acting as the chosen node
         async with AsyncChannelsManager(self.channels, checkpoint, config) as channels:
             # create task to run all writers of the chosen node
