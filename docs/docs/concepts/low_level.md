@@ -180,7 +180,7 @@ graph.add_edge("node_a", "node_b")
 If you want to **optionally** route to 1 or more edges (or optionally terminate), you can use the [add_conditional_edges][langgraph.graph.StateGraph.add_conditional_edges] method. This method accepts the name of a node and a "routing function" to call after that node is executed:
 
 ```python
-graph.add_edge("node_a", routing_function)
+graph.add_conditional_edges("node_a", routing_function)
 ```
 
 Similar to nodes, the `routing_function` accept the current `state` of the graph and return a value.
