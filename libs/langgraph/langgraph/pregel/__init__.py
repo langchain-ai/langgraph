@@ -206,6 +206,10 @@ StreamMode = Literal["values", "updates", "debug"]
 """
 
 
+class GraphInterrupt(Exception):
+    pass
+
+
 class Pregel(
     RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
 ):
@@ -739,6 +743,14 @@ class Pregel(
         if config is not None and config.get("configurable", {}).get(CONFIG_KEY_READ):
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
+        if config is not None and config.get("configurable", {}).get(
+            CONFIG_KEY_CHECKPOINT
+        ):
+            checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
+                CONFIG_KEY_CHECKPOINT
+            ]
+        else:
+            checkpointer = self.checkpointer
         return (
             debug,
             stream_mode,
@@ -746,6 +758,7 @@ class Pregel(
             output_keys,
             interrupt_before,
             interrupt_after,
+            checkpointer,
         )
 
     def stream(
@@ -828,6 +841,7 @@ class Pregel(
             ```
         """
         config = ensure_config(config)
+        iamnested = config.get("configurable", {}).get(CONFIG_KEY_READ)
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
             dumpd(self),
@@ -851,6 +865,7 @@ class Pregel(
                 output_keys,
                 interrupt_before,
                 interrupt_after,
+                checkpointer,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -863,7 +878,7 @@ class Pregel(
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
-            saved = self.checkpointer.get_tuple(config) if self.checkpointer else None
+            saved = checkpointer.get_tuple(config) if checkpointer else None
             checkpoint = saved.checkpoint if saved else empty_checkpoint()
 
             # merge configurable fields with previous checkpoint config
@@ -889,10 +904,10 @@ class Pregel(
             ) as managed:
 
                 def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
-                    if self.checkpointer is not None:
+                    if checkpointer is not None:
                         bg.append(
                             executor.submit(
-                                self.checkpointer.put_writes,
+                                checkpointer.put_writes,
                                 {
                                     **checkpoint_config,
                                     "configurable": {
@@ -908,7 +923,7 @@ class Pregel(
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
                     nonlocal checkpoint, checkpoint_config, channels
 
-                    if self.checkpointer is None:
+                    if checkpointer is None:
                         return
                     if debug:
                         print_step_checkpoint(
@@ -922,7 +937,7 @@ class Pregel(
                     # save it, without blocking
                     bg.append(
                         executor.submit(
-                            self.checkpointer.put,
+                            checkpointer.put,
                             checkpoint_config,
                             copy_checkpoint(checkpoint),
                             metadata,
@@ -962,8 +977,8 @@ class Pregel(
                         -1,
                         for_execution=True,
                         get_next_version=(
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
+                            checkpointer.get_next_version
+                            if checkpointer
                             else _increment
                         ),
                     )
@@ -972,11 +987,7 @@ class Pregel(
                         checkpoint,
                         channels,
                         input_writes,
-                        (
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
+                        (checkpointer.get_next_version if checkpointer else _increment),
                     )
                     # save input checkpoint
                     yield from put_checkpoint(
@@ -1013,8 +1024,8 @@ class Pregel(
                         for_execution=True,
                         manager=run_manager,
                         get_next_version=(
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
+                            checkpointer.get_next_version
+                            if checkpointer
                             else _increment
                         ),
                     )
@@ -1042,7 +1053,10 @@ class Pregel(
                         self.stream_channels_list,
                         next_tasks,
                     ):
-                        break
+                        if iamnested:
+                            raise GraphInterrupt()
+                        else:
+                            break
                     else:
                         checkpoint = next_checkpoint
 
@@ -1111,7 +1125,13 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    _panic_or_proceed(done, inflight, step)
+                    if iamnested:
+                        _panic_or_proceed(done, inflight, step)
+                    else:
+                        try:
+                            _panic_or_proceed(done, inflight, step)
+                        except GraphInterrupt:
+                            break
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
 
@@ -1169,7 +1189,10 @@ class Pregel(
                         self.stream_channels_list,
                         next_tasks,
                     ):
-                        break
+                        if iamnested:
+                            raise GraphInterrupt()
+                        else:
+                            break
                 else:
                     raise GraphRecursionError(
                         f"Recursion limit of {config['recursion_limit']} reached"
@@ -1973,6 +1996,8 @@ def _prepare_next_tasks(
                     "langgraph_task_idx": len(tasks),
                 }
                 task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
+                # in Send we can't checkpoint nested graphs
+                # as they could be running in parallel
                 writes = deque()
                 tasks.append(
                     PregelExecutableTask(
@@ -2055,6 +2080,12 @@ def _prepare_next_tasks(
                         "langgraph_task_idx": len(tasks),
                     }
                     task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
+                    if parent_thread_id := config.get("configurable", {}).get(
+                        "thread_id"
+                    ):
+                        thread_id: Optional[str] = f"{parent_thread_id}-{name}"
+                    else:
+                        thread_id = None
                     writes = deque()
                     tasks.append(
                         PregelExecutableTask(
@@ -2086,6 +2117,7 @@ def _prepare_next_tasks(
                                         writes,
                                         config,
                                     ),
+                                    "thread_id": thread_id,
                                 },
                             ),
                             triggers,
