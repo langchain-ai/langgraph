@@ -465,9 +465,16 @@ class CompiledGraph(Pregel):
         start_nodes: dict[str, DrawableNode] = {
             START: graph.add_node(self.get_input_schema(config), START)
         }
-        end_nodes: dict[str, DrawableNode] = {
-            END: graph.add_node(self.get_output_schema(config), END)
-        }
+        end_nodes: dict[str, DrawableNode] = {}
+
+        def add_edge(
+            start: str, end: str, label: Optional[str] = None, conditional: bool = False
+        ) -> None:
+            if end == END and END not in end_nodes:
+                end_nodes[END] = graph.add_node(self.get_output_schema(config), END)
+            return graph.add_edge(
+                start_nodes[start], end_nodes[end], label, conditional
+            )
 
         for key, (node, metadata) in self.builder.nodes.items():
             if xray:
@@ -494,7 +501,7 @@ class CompiledGraph(Pregel):
                 start_nodes[key] = n
                 end_nodes[key] = n
         for start, end in sorted(self.builder._all_edges):
-            graph.add_edge(start_nodes[start], end_nodes[end])
+            add_edge(start, end)
         for start, branches in self.builder.branches.items():
             default_ends = {
                 **{k: k for k in self.builder.nodes if k != start},
@@ -508,13 +515,13 @@ class CompiledGraph(Pregel):
                 else:
                     ends = default_ends
                 for label, end in ends.items():
-                    graph.add_edge(
-                        start_nodes[start],
-                        end_nodes[end],
+                    add_edge(
+                        start,
+                        end,
                         label if label != end else None,
                         conditional=True,
                     )
                     if branch.then is not None:
-                        graph.add_edge(start_nodes[end], end_nodes[branch.then])
+                        add_edge(end, branch.then)
 
         return graph
