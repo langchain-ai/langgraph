@@ -190,7 +190,7 @@ def create_react_agent(
             - SystemMessage: this is added to the beginning of the list of messages.
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages.
             - Callable: This function should take in a list of messages and the output is then passed to the language model.
-            - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
+            - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
         checkpointer: An optional checkpoint saver object. This is useful for persisting
             the state of the graph (e.g., as chat memory).
         interrupt_before: An optional list of node names to interrupt before.
@@ -408,6 +408,12 @@ def create_react_agent(
         ```
     """
 
+    if agent_state is not None:
+        if missing_keys := {"messages", "is_last_step"} - set(
+            agent_state.__annotations__
+        ):
+            raise ValueError(f"Missing required key(s) {missing_keys} in agent_state")
+
     if isinstance(tools, ToolExecutor):
         tool_classes = tools.tools
     else:
@@ -442,9 +448,7 @@ def create_react_agent(
             lambda state: messages_modifier(state["messages"])
         )
     elif isinstance(messages_modifier, Runnable):
-        messages_modifier_runnable = RunnableLambda(
-            lambda state: messages_modifier.invoke(state["messages"])
-        )
+        messages_modifier_runnable = messages_modifier
     else:
         raise ValueError(
             f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
