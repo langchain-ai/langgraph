@@ -1948,6 +1948,7 @@ def _prepare_next_tasks(
     for_execution: Literal[False],
     get_next_version: Literal[None] = None,
     manager: Literal[None] = None,
+    checkpointer: Literal[None] = None,
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
 
@@ -1963,6 +1964,7 @@ def _prepare_next_tasks(
     for_execution: Literal[True],
     get_next_version: Callable[[int, BaseChannel], int],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
+    checkpointer: Optional[BaseCheckpointSaver],
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
     ...
 
@@ -1978,6 +1980,7 @@ def _prepare_next_tasks(
     for_execution: bool,
     get_next_version: Union[None, Callable[[int, BaseChannel], int]] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
+    checkpointer: Optional[BaseCheckpointSaver] = None,
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
@@ -2117,6 +2120,7 @@ def _prepare_next_tasks(
                                         writes,
                                         config,
                                     ),
+                                    CONFIG_KEY_CHECKPOINTER: checkpointer,
                                     "thread_id": thread_id,
                                 },
                             ),
