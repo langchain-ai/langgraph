@@ -16,11 +16,11 @@
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__([__start__]):::first
-  	__end__([__end__]):::last
   	prepare(prepare)
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
   	finish(finish)
+  	__end__([__end__]):::last
   	__start__ --> prepare;
   	finish --> __end__;
   	prepare -.-> tool_two_slow;
@@ -49,11 +49,6 @@
         "data": "__start__"
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
         "id": "left",
         "type": "runnable",
         "data": {
@@ -76,6 +71,11 @@
           ],
           "name": "right"
         }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
       }
     ],
     "edges": [
@@ -130,11 +130,6 @@
         "data": "__start__"
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
         "id": "left",
         "type": "runnable",
         "data": {
@@ -157,6 +152,11 @@
           ],
           "name": "right"
         }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
       }
     ],
     "edges": [
@@ -211,11 +211,6 @@
         "data": "__start__"
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
         "id": "get_weather",
         "type": "runnable",
         "data": {
@@ -226,6 +221,11 @@
           ],
           "name": "get_weather"
         }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
       }
     ],
     "edges": [
@@ -266,11 +266,6 @@
         "data": "__start__"
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
         "id": "agent",
         "type": "runnable",
         "data": {
@@ -298,6 +293,11 @@
           "version": 2,
           "variant": "b"
         }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
       }
     ],
     "edges": [
@@ -340,10 +340,10 @@
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__([__start__]):::first
-  	__end__([__end__]):::last
   	agent(agent)
   	tools(tools<hr/><small><em>version = 2
   variant = b</em></small>)
+  	__end__([__end__]):::last
   	__start__ --> agent;
   	tools --> agent;
   	agent -. &nbspcontinue&nbsp .-> tools;
@@ -364,22 +364,17 @@
         "data": "__start__"
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
-        "id": 2,
+        "id": 1,
         "type": "schema",
         "data": "Parallel<agent_outcome>Input"
       },
       {
-        "id": 3,
+        "id": 2,
         "type": "schema",
         "data": "Parallel<agent_outcome>Output"
       },
       {
-        "id": 4,
+        "id": 3,
         "type": "runnable",
         "data": {
           "id": [
@@ -392,7 +387,7 @@
         }
       },
       {
-        "id": 5,
+        "id": 4,
         "type": "runnable",
         "data": {
           "id": [
@@ -405,7 +400,7 @@
         }
       },
       {
-        "id": 6,
+        "id": 5,
         "type": "runnable",
         "data": {
           "id": [
@@ -418,7 +413,7 @@
         }
       },
       {
-        "id": 7,
+        "id": 6,
         "type": "runnable",
         "data": {
           "id": [
@@ -441,49 +436,54 @@
           ],
           "name": "tools"
         }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
       }
     ],
     "edges": [
+      {
+        "source": 3,
+        "target": 4
+      },
       {
         "source": 4,
         "target": 5
       },
       {
+        "source": 1,
+        "target": 3
+      },
+      {
         "source": 5,
+        "target": 2
+      },
+      {
+        "source": 1,
         "target": 6
       },
       {
-        "source": 2,
-        "target": 4
-      },
-      {
         "source": 6,
-        "target": 3
-      },
-      {
-        "source": 2,
-        "target": 7
-      },
-      {
-        "source": 7,
-        "target": 3
+        "target": 2
       },
       {
         "source": "__start__",
-        "target": 2
+        "target": 1
       },
       {
         "source": "tools",
-        "target": 2
+        "target": 1
       },
       {
-        "source": 3,
+        "source": 2,
         "target": "tools",
         "data": "continue",
         "conditional": true
       },
       {
-        "source": 3,
+        "source": 2,
         "target": "__end__",
         "data": "exit",
         "conditional": true
@@ -524,11 +524,6 @@
         "data": "__start__"
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
         "id": "agent",
         "type": "runnable",
         "data": {
@@ -552,6 +547,11 @@
           ],
           "name": "tools"
         }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
       }
     ],
     "edges": [
@@ -644,11 +644,6 @@
         "data": "__start__"
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
         "id": "agent",
         "type": "runnable",
         "data": {
@@ -672,6 +667,11 @@
           ],
           "name": "tools"
         }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
       }
     ],
     "edges": [
@@ -723,9 +723,9 @@
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__([__start__]):::first
-  	__end__([__end__]):::last
   	inner(inner)
   	side(side)
+  	__end__([__end__]):::last
   	__start__ --> inner;
   	inner --> side;
   	side --> __end__;
@@ -791,11 +791,6 @@
         'type': 'schema',
       }),
       dict({
-        'data': '__end__',
-        'id': '__end__',
-        'type': 'schema',
-      }),
-      dict({
         'data': dict({
           'id': list([
             'langgraph',
@@ -810,11 +805,6 @@
       dict({
         'data': 'tool_two:__start__',
         'id': 'tool_two:__start__',
-        'type': 'schema',
-      }),
-      dict({
-        'data': 'tool_two:__end__',
-        'id': 'tool_two:__end__',
         'type': 'schema',
       }),
       dict({
@@ -842,6 +832,11 @@
         'type': 'runnable',
       }),
       dict({
+        'data': 'tool_two:__end__',
+        'id': 'tool_two:__end__',
+        'type': 'schema',
+      }),
+      dict({
         'data': dict({
           'id': list([
             'langgraph',
@@ -853,6 +848,11 @@
         'id': 'tool_three',
         'type': 'runnable',
       }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
     ]),
   })
 # ---
@@ -861,13 +861,13 @@
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__([__start__]):::first
-  	__end__([__end__]):::last
   	tool_one(tool_one)
   	tool_two___start__(__start__)
-  	tool_two___end__(__end__)
   	tool_two_tool_two_slow(tool_two_slow)
   	tool_two_tool_two_fast(tool_two_fast)
+  	tool_two___end__(__end__)
   	tool_three(tool_three)
+  	__end__([__end__]):::last
   	subgraph tool_two
   	tool_two___start__ -.-> tool_two_tool_two_slow;
   	tool_two_tool_two_slow --> tool_two___end__;
@@ -902,11 +902,6 @@
         "data": "__start__"
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
         "id": "agent",
         "type": "runnable",
         "data": {
@@ -931,6 +926,11 @@
           ],
           "name": "tools"
         }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
       }
     ],
     "edges": [
@@ -984,11 +984,6 @@
         "data": "__start__"
       },
       {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      },
-      {
         "id": "agent",
         "type": "runnable",
         "data": {
@@ -1013,6 +1008,11 @@
           ],
           "name": "tools"
         }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
       }
     ],
     "edges": [
@@ -1082,9 +1082,9 @@
   %%{init: {'flowchart': {'curve': 'linear'}}}%%
   graph TD;
   	__start__([__start__]):::first
-  	__end__([__end__]):::last
   	tool_two_slow(tool_two_slow)
   	tool_two_fast(tool_two_fast)
+  	__end__([__end__]):::last
   	__start__ -.-> tool_two_slow;
   	tool_two_slow --> __end__;
   	__start__ -.-> tool_two_fast;
