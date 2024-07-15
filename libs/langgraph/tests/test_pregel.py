@@ -3155,7 +3155,7 @@ Some examples of past conversations:
             ),
             AIMessage(content="answer", id=AnyStr()),
         ]
-        assert app.invoke(
+        actual = app.invoke(
             {"messages": "what is weather in sf"},
             {
                 "configurable": {
@@ -3163,7 +3163,9 @@ Some examples of past conversations:
                     "expected_examples": [],
                 },
             },
-        ) == {"messages": first_messages}
+        )
+        expected = {"messages": first_messages}
+        assert actual == expected
 
         # get first checkpoint
         chkpnt_tuple_1 = saver.get_tuple({"configurable": {"thread_id": "1"}})
