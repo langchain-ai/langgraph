@@ -167,6 +167,7 @@ def create_function_calling_executor(
 def create_react_agent(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool]],
+    agent_state: Optional[AgentState] = None,
     messages_modifier: Optional[Union[SystemMessage, str, Callable, Runnable]] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     interrupt_before: Optional[Sequence[str]] = None,
@@ -178,6 +179,9 @@ def create_react_agent(
     Args:
         model: The `LangChain` chat model that supports tool calling.
         tools: A list of tools or a ToolExecutor instance.
+        agent_state: An optional state schema that defines graph state.
+            Must have `messages` and `is_last_step` keys.
+            Defaults to `AgentState` that defines those two keys.
         messages_modifier: An optional
             messages modifier. This applies to messages BEFORE they are passed into the LLM.
 
@@ -423,26 +427,37 @@ def create_react_agent(
 
     # Add the message modifier, if exists
     if messages_modifier is None:
-        model_runnable = model
+        messages_modifier_runnable = RunnableLambda(lambda state: state["messages"])
     elif isinstance(messages_modifier, str):
         _system_message: BaseMessage = SystemMessage(content=messages_modifier)
-        model_runnable = (lambda messages: [_system_message] + messages) | model
+        messages_modifier_runnable = RunnableLambda(
+            lambda state: [_system_message] + state["messages"]
+        )
     elif isinstance(messages_modifier, SystemMessage):
-        model_runnable = (lambda messages: [messages_modifier] + messages) | model
-    elif isinstance(messages_modifier, (Callable, Runnable)):
-        model_runnable = messages_modifier | model
+        messages_modifier_runnable = RunnableLambda(
+            lambda state: [messages_modifier] + state["messages"]
+        )
+    elif isinstance(messages_modifier, Callable):
+        messages_modifier_runnable = RunnableLambda(
+            lambda state: messages_modifier(state["messages"])
+        )
+    elif isinstance(messages_modifier, Runnable):
+        messages_modifier_runnable = RunnableLambda(
+            lambda state: messages_modifier.invoke(state["messages"])
+        )
     else:
         raise ValueError(
             f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
         )
+
+    model_runnable = messages_modifier_runnable | model
 
     # Define the function that calls the model
     def call_model(
         state: AgentState,
         config: RunnableConfig,
     ):
-        messages = state["messages"]
-        response = model_runnable.invoke(messages, config)
+        response = model_runnable.invoke(state, config)
         if state["is_last_step"] and response.tool_calls:
             return {
                 "messages": [
@@ -456,8 +471,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(state: AgentState, config: RunnableConfig):
-        messages = state["messages"]
-        response = await model_runnable.ainvoke(messages, config)
+        response = await model_runnable.ainvoke(state, config)
         if state["is_last_step"] and response.tool_calls:
             return {
                 "messages": [
@@ -471,7 +485,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     # Define a new graph
-    workflow = StateGraph(AgentState)
+    workflow = StateGraph(agent_state or AgentState)
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
