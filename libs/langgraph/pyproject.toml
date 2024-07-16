@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-langchain-core = ">=0.2.15,<0.3"
+langchain-core = ">=0.2.19,<0.3"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -61,7 +61,7 @@ omit = ["tests/*"]
 [tool.pytest-watcher]
 now = true
 delay = 0.1
-runner_args = ["-x", "--ff", "-vv", "--snapshot-update"]
+runner_args = ["--ff", "-vv", "--snapshot-update"]
 patterns = ["*.py"]
 
 [build-system]
