@@ -196,6 +196,10 @@ class Graph:
 
         Returns:
             None
+
+        Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
+            or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
+
         """  # noqa: E501
         if self.compiled:
             logger.warning(
