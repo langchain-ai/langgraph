@@ -10,7 +10,7 @@ Install the proper packages:
 pip install langgraph-cli
 ```
 
-Ensure you have an API key, which you can create from the LangSmith UI (Settings > API Keys). After you have saved the key to a safe place, place the following line in your `.env` file:
+Ensure you have an API key, which you can create from the LangSmith UI (Settings > API Keys). This is required to authenticate that you have LangGraph Cloud access. After you have saved the key to a safe place, place the following line in your `.env` file:
 
 ```python
 LANGCHAIN_API_KEY = *********
