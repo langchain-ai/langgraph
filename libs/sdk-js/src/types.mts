@@ -2,6 +2,7 @@ import { Config, Metadata } from "./schema.js";
 
 export type StreamMode = "values" | "messages" | "updates" | "events" | "debug";
 export type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
+export type OnConflictBehavior = "raise" | "do_nothing";
 export type StreamEvent =
   | "events"
   | "metadata"
