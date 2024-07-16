@@ -180,29 +180,31 @@ def create_function_calling_executor(
     return workflow.compile()
 
 
-def get_model_runnable_from_state_modifier(
-    state_modifier: Optional[StateModifier], model: LanguageModelLike
-) -> Runnable:
+def _get_state_modifier_runnable(state_modifier: Optional[StateModifier]) -> Runnable:
     if state_modifier is None:
-        model_runnable = (lambda state: state["messages"]) | model
+        state_modifier_runnable = RunnableLambda(lambda state: state["messages"])
     elif isinstance(state_modifier, str):
         _system_message: BaseMessage = SystemMessage(content=state_modifier)
-        model_runnable = (lambda state: [_system_message] + state["messages"]) | model
+        state_modifier_runnable = RunnableLambda(
+            lambda state: [_system_message] + state["messages"]
+        )
     elif isinstance(state_modifier, SystemMessage):
-        model_runnable = (lambda state: [state_modifier] + state["messages"]) | model
+        state_modifier_runnable = RunnableLambda(
+            lambda state: [state_modifier] + state["messages"]
+        )
     elif isinstance(state_modifier, types.FunctionType):
-        model_runnable = (lambda state: state_modifier(state)) | model
+        state_modifier_runnable = RunnableLambda(state_modifier)
     elif isinstance(state_modifier, Runnable):
-        model_runnable = state_modifier | model
+        state_modifier_runnable = state_modifier
     else:
         raise ValueError(
             f"Got unexpected type for `state_modifier`: {type(state_modifier)}"
         )
 
-    return model_runnable
+    return state_modifier_runnable
 
 
-def convert_messages_modifier_to_state_modifier(
+def _convert_messages_modifier_to_state_modifier(
     messages_modifier: MessagesModifier,
 ) -> StateModifier:
     state_modifier: StateModifier
@@ -220,6 +222,22 @@ def convert_messages_modifier_to_state_modifier(
     raise ValueError(
         f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
     )
+
+
+def _get_model_preprocessing_runnable(
+    state_modifier: Optional[StateModifier],
+    messages_modifier: Optional[MessagesModifier],
+):
+    # Add the state or message modifier, if exists
+    if state_modifier is not None and messages_modifier is not None:
+        raise ValueError(
+            "Expected value for either state_modifier or messages_modifier, got values for both"
+        )
+
+    if state_modifier is None and messages_modifier is not None:
+        state_modifier = _convert_messages_modifier_to_state_modifier(messages_modifier)
+
+    return _get_state_modifier_runnable(state_modifier)
 
 
 @deprecated_parameter("messages_modifier", "0.1.8", "state_modifier", removal="0.2.0")
@@ -500,18 +518,9 @@ def create_react_agent(
         else:
             return "continue"
 
-    # Add the state or message modifier, if exists
-    if state_modifier is not None and messages_modifier is not None:
-        raise ValueError(
-            "Expected value for either state_modifier or messages_modifier, got values for both"
-        )
-    elif state_modifier is not None and messages_modifier is None:
-        model_runnable = get_model_runnable_from_state_modifier(state_modifier, model)
-    elif state_modifier is None and messages_modifier is not None:
-        state_modifier = convert_messages_modifier_to_state_modifier(messages_modifier)
-        model_runnable = get_model_runnable_from_state_modifier(state_modifier, model)
-    else:
-        model_runnable = get_model_runnable_from_state_modifier(None, model)
+    model_runnable = (
+        _get_model_preprocessing_runnable(state_modifier, messages_modifier) | model
+    )
 
     # Define the function that calls the model
     def call_model(
