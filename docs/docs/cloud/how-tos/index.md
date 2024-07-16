@@ -11,10 +11,12 @@ Welcome to the LangGraph Cloud how-to guides! These guides provide practical, st
 
 LangGraph Cloud gives you best in class observability, testing, and hosting services. Read more about them in these how to guides:
 
-- [How to set up app for deployment](../deployment/setup.md)
+- [How to set up app for deployment (requirements.txt)](../deployment/setup.md)
+- [How to set up app for deployment (pyproject.toml)](../deployment/setup_pyproject.md)
+- [How to test locally](../deployment/test_locally.md)
 - [How to deploy to LangGraph cloud](../deployment/cloud.md)
 - [How to self-host](../deployment/self_hosted.md)
-- [How to test locally](../deployment/test_locally.md)
+
 
 ## Streaming
 
