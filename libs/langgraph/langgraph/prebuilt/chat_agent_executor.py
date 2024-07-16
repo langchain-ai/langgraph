@@ -262,7 +262,7 @@ def _get_model_preprocessing_runnable(
     return _get_state_modifier_runnable(state_modifier)
 
 
-@deprecated_parameter("messages_modifier", "0.1.8", "state_modifier", removal="0.2.0")
+@deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.2.0")
 def create_react_agent(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool]],
@@ -292,6 +292,8 @@ def create_react_agent(
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages.
             - Callable: This function should take in a list of messages and the output is then passed to the language model.
             - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
+        !!! Warning
+            `messages_modifier` parameter is deprecated as of version 0.1.9 and will be removed in 0.2.0
         state_modifier: An optional
             state modifier. This takes full graph state BEFORE the LLM is called and prepares the input to LLM.
 
