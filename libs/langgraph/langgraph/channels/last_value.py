@@ -14,6 +14,9 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
     def __init__(self, typ: Type[Value]) -> None:
         self.typ = typ
 
+    def __eq__(self, value: object) -> bool:
+        return isinstance(value, LastValue)
+
     @property
     def ValueType(self) -> Type[Value]:
         """The type of the value stored in the channel."""

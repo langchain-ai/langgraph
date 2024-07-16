@@ -55,6 +55,12 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
         except Exception:
             pass
 
+    def __eq__(self, value: object) -> bool:
+        return (
+            isinstance(value, BinaryOperatorAggregate)
+            and value.operator == self.operator
+        )
+
     @property
     def ValueType(self) -> Type[Value]:
         """The type of the value stored in the channel."""

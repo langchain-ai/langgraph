@@ -389,6 +389,66 @@ async def test_cancel_graph_astream_events_v2(
             await checkpointer.__aexit__(None, None, None)
 
 
+async def test_node_schemas() -> None:
+    from langchain_core.messages import HumanMessage
+
+    class State(TypedDict):
+        hello: str
+        bye: str
+        messages: Annotated[list[str], add_messages]
+
+    class StateForA(TypedDict):
+        hello: str
+        messages: Annotated[list[str], add_messages]
+
+    async def node_a(state: StateForA) -> State:
+        assert state == {
+            "hello": "there",
+            "messages": [HumanMessage(content="hello", id=AnyStr())],
+        }
+
+    class StateForB(TypedDict):
+        bye: str
+        now: int
+
+    async def node_b(state: StateForB) -> StateForB:
+        assert state == {
+            "bye": "world",
+            "now": None,
+        }
+        return {
+            "now": 123,
+            "hello": "again",  # ignored because not in output schema
+        }
+
+    class StateForC(TypedDict):
+        hello: str
+        now: int
+
+    async def node_c(state: StateForC) -> StateForC:
+        assert state == {
+            "hello": "there",
+            "now": 123,
+        }
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_c)
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("b", "c")
+    graph = builder.compile()
+
+    assert await graph.ainvoke(
+        {"hello": "there", "bye": "world", "messages": "hello"}
+    ) == {
+        "hello": "there",
+        "bye": "world",
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
     chain = Channel.subscribe_to("input") | add_one | Channel.write_to("output")
