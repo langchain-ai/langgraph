@@ -45,8 +45,10 @@ class AgentState(TypedDict):
     is_last_step: IsLastStep
 
 
-StateSchemaTypeVar = TypeVar("StateSchemaTypeVar", bound=AgentState)
-StateSchemaType = Type[StateSchemaTypeVar]
+StateSchema = TypeVar("StateSchema", bound=AgentState)
+StateSchemaType = Type[StateSchema]
+
+STATE_MODIFIER_RUNNABLE_NAME = "StateModifier"
 
 MessagesModifier = Union[
     SystemMessage,
@@ -58,8 +60,8 @@ MessagesModifier = Union[
 StateModifier = Union[
     SystemMessage,
     str,
-    Callable[[StateSchemaType], Sequence[BaseMessage]],
-    Runnable[StateSchemaType, Sequence[BaseMessage]],
+    Callable[[StateSchema], Sequence[BaseMessage]],
+    Runnable[StateSchema, Sequence[BaseMessage]],
 ]
 
 
@@ -196,18 +198,24 @@ def create_function_calling_executor(
 def _get_state_modifier_runnable(state_modifier: Optional[StateModifier]) -> Runnable:
     state_modifier_runnable: Runnable
     if state_modifier is None:
-        state_modifier_runnable = RunnableLambda(lambda state: state["messages"])
+        state_modifier_runnable = RunnableLambda(
+            lambda state: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
+        )
     elif isinstance(state_modifier, str):
         _system_message: BaseMessage = SystemMessage(content=state_modifier)
         state_modifier_runnable = RunnableLambda(
-            lambda state: [_system_message] + state["messages"]
+            lambda state: [_system_message] + state["messages"],
+            name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif isinstance(state_modifier, SystemMessage):
         state_modifier_runnable = RunnableLambda(
-            lambda state: [state_modifier] + state["messages"]
+            lambda state: [state_modifier] + state["messages"],
+            name=STATE_MODIFIER_RUNNABLE_NAME,
         )
     elif callable(state_modifier):
-        state_modifier_runnable = RunnableLambda(state_modifier)
+        state_modifier_runnable = RunnableLambda(
+            state_modifier, name=STATE_MODIFIER_RUNNABLE_NAME
+        )
     elif isinstance(state_modifier, Runnable):
         state_modifier_runnable = state_modifier
     else:
