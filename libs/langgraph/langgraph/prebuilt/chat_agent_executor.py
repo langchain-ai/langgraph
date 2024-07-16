@@ -1,6 +1,16 @@
 import json
 import types
-from typing import Annotated, Callable, Optional, Sequence, TypedDict, Union
+from typing import (
+    Annotated,
+    Callable,
+    Literal,
+    Optional,
+    Sequence,
+    Type,
+    TypedDict,
+    TypeVar,
+    Union,
+)
 
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import (
@@ -35,6 +45,9 @@ class AgentState(TypedDict):
     is_last_step: IsLastStep
 
 
+StateSchemaTypeVar = TypeVar("StateSchemaTypeVar", bound=AgentState)
+StateSchemaType = Type[StateSchemaTypeVar]
+
 MessagesModifier = Union[
     SystemMessage,
     str,
@@ -45,8 +58,8 @@ MessagesModifier = Union[
 StateModifier = Union[
     SystemMessage,
     str,
-    Callable[[AgentState], Sequence[BaseMessage]],
-    Runnable[AgentState, Sequence[BaseMessage]],
+    Callable[[StateSchemaType], Sequence[BaseMessage]],
+    Runnable[StateSchemaType, Sequence[BaseMessage]],
 ]
 
 
@@ -181,6 +194,7 @@ def create_function_calling_executor(
 
 
 def _get_state_modifier_runnable(state_modifier: Optional[StateModifier]) -> Runnable:
+    state_modifier_runnable: Runnable
     if state_modifier is None:
         state_modifier_runnable = RunnableLambda(lambda state: state["messages"])
     elif isinstance(state_modifier, str):
@@ -192,7 +206,7 @@ def _get_state_modifier_runnable(state_modifier: Optional[StateModifier]) -> Run
         state_modifier_runnable = RunnableLambda(
             lambda state: [state_modifier] + state["messages"]
         )
-    elif isinstance(state_modifier, types.FunctionType):
+    elif callable(state_modifier):
         state_modifier_runnable = RunnableLambda(state_modifier)
     elif isinstance(state_modifier, Runnable):
         state_modifier_runnable = state_modifier
@@ -227,7 +241,7 @@ def _convert_messages_modifier_to_state_modifier(
 def _get_model_preprocessing_runnable(
     state_modifier: Optional[StateModifier],
     messages_modifier: Optional[MessagesModifier],
-):
+) -> Runnable:
     # Add the state or message modifier, if exists
     if state_modifier is not None and messages_modifier is not None:
         raise ValueError(
@@ -244,7 +258,8 @@ def _get_model_preprocessing_runnable(
 def create_react_agent(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool]],
-    agent_state: Optional[AgentState] = None,
+    *,
+    state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
     state_modifier: Optional[StateModifier] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
@@ -257,7 +272,7 @@ def create_react_agent(
     Args:
         model: The `LangChain` chat model that supports tool calling.
         tools: A list of tools or a ToolExecutor instance.
-        agent_state: An optional state schema that defines graph state.
+        state_schema: An optional state schema that defines graph state.
             Must have `messages` and `is_last_step` keys.
             Defaults to `AgentState` that defines those two keys.
         messages_modifier: An optional
@@ -405,11 +420,11 @@ def create_react_agent(
         ...     ("placeholder", "{messages}"),
         ...     ("user", "Remember, always be polite!"),
         ... ])
-        >>> def modify_state(state: AgentState):
+        >>> def modify_state_messages(state: AgentState):
         ...     # You can do more complex modifications here
         ...     return prompt.invoke({"messages": state["messages"]})
         >>>
-        >>> graph = create_react_agent(model, tools, state_modifier=modify_state)
+        >>> graph = create_react_agent(model, tools, state_modifier=modify_state_messages)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -435,7 +450,7 @@ def create_react_agent(
         ...     messages: Annotated[list[BaseMessage], add_messages]
         ...     is_last_step: str
         >>>
-        >>> graph = create_react_agent(model, tools, agent_state=CustomState, state_modifier=prompt)
+        >>> graph = create_react_agent(model, tools, state_schema=CustomState, state_modifier=prompt)
         >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -521,11 +536,11 @@ def create_react_agent(
         ```
     """
 
-    if agent_state is not None:
+    if state_schema is not None:
         if missing_keys := {"messages", "is_last_step"} - set(
-            agent_state.__annotations__
+            state_schema.__annotations__
         ):
-            raise ValueError(f"Missing required key(s) {missing_keys} in agent_state")
+            raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
 
     if isinstance(tools, ToolExecutor):
         tool_classes = tools.tools
@@ -580,7 +595,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     # Define a new graph
-    workflow = StateGraph(agent_state or AgentState)
+    workflow = StateGraph(state_schema or AgentState)
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
