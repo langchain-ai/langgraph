@@ -11,6 +11,8 @@ StreamMode = Literal["values", "messages", "updates", "events", "debug"]
 
 MultitaskStrategy = Literal["reject", "interrupt", "rollback", "enqueue"]
 
+OnConflictBehavior = Literal["raise", "do_nothing"]
+
 All = Literal["*"]
 
 
