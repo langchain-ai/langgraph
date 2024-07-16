@@ -3,7 +3,6 @@ import types
 from typing import (
     Annotated,
     Callable,
-    Literal,
     Optional,
     Sequence,
     Type,
