@@ -11,7 +11,7 @@ After you have your app setup, [start the API server](https://langchain-ai.githu
 
 ## Access Studio
 
-Once you have succesfully started the API server, you can access the studio by going to the following URL: `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123` (see warning above if using Safari).
+Once you have successfully started the API server, you can access the studio by going to the following URL: `https://smith.langchain.com/studio/?baseUrl=http://127.0.0.1:8123` (see warning above if using Safari).
 
 If everything is working correctly you should see the studio show up looking something like this (with your graph diagram on the left hand side):
 
