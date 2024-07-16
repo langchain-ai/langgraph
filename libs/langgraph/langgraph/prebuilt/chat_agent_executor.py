@@ -1,4 +1,5 @@
 import json
+import types
 from typing import Annotated, Callable, Optional, Sequence, TypedDict, Union
 
 from langchain_core.language_models import LanguageModelLike
@@ -21,8 +22,6 @@ from langgraph.managed import IsLastStep
 from langgraph.prebuilt.tool_executor import ToolExecutor, ToolInvocation
 from langgraph.prebuilt.tool_node import ToolNode
 
-Modifier = Union[SystemMessage, str, Callable, Runnable]
-
 
 # We create the AgentState that we will pass around
 # This simply involves a list of messages
@@ -34,6 +33,21 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
     is_last_step: IsLastStep
+
+
+MessagesModifier = Union[
+    SystemMessage,
+    str,
+    Callable[[Sequence[BaseMessage]], Sequence[BaseMessage]],
+    Runnable[Sequence[BaseMessage], Sequence[BaseMessage]],
+]
+
+StateModifier = Union[
+    SystemMessage,
+    str,
+    Callable[[AgentState], Sequence[BaseMessage]],
+    Runnable[AgentState, Sequence[BaseMessage]],
+]
 
 
 @deprecated("0.0.44", "create_react_agent", removal="0.2.0")
@@ -166,28 +180,8 @@ def create_function_calling_executor(
     return workflow.compile()
 
 
-def get_model_runnable_from_messages_modifier(
-    messages_modifier: Optional[Modifier], model: LanguageModelLike
-) -> Runnable:
-    if messages_modifier is None:
-        model_runnable = model
-    elif isinstance(messages_modifier, str):
-        _system_message: BaseMessage = SystemMessage(content=messages_modifier)
-        model_runnable = (lambda messages: [_system_message] + messages) | model
-    elif isinstance(messages_modifier, SystemMessage):
-        model_runnable = (lambda messages: [messages_modifier] + messages) | model
-    elif isinstance(messages_modifier, (Callable, Runnable)):
-        model_runnable = messages_modifier | model
-    else:
-        raise ValueError(
-            f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
-        )
-
-    return model_runnable
-
-
 def get_model_runnable_from_state_modifier(
-    state_modifier: Optional[Modifier], model: LanguageModelLike
+    state_modifier: Optional[StateModifier], model: LanguageModelLike
 ) -> Runnable:
     if state_modifier is None:
         model_runnable = (lambda state: state["messages"]) | model
@@ -196,7 +190,7 @@ def get_model_runnable_from_state_modifier(
         model_runnable = (lambda state: [_system_message] + state["messages"]) | model
     elif isinstance(state_modifier, SystemMessage):
         model_runnable = (lambda state: [state_modifier] + state["messages"]) | model
-    elif isinstance(state_modifier, Callable):
+    elif isinstance(state_modifier, types.FunctionType):
         model_runnable = (lambda state: state_modifier(state)) | model
     elif isinstance(state_modifier, Runnable):
         model_runnable = state_modifier | model
@@ -208,13 +202,33 @@ def get_model_runnable_from_state_modifier(
     return model_runnable
 
 
+def convert_messages_modifier_to_state_modifier(
+    messages_modifier: MessagesModifier,
+) -> StateModifier:
+    state_modifier: StateModifier
+    if isinstance(messages_modifier, (str, SystemMessage)):
+        return messages_modifier
+    elif isinstance(messages_modifier, types.FunctionType):
+
+        def state_modifier(state: AgentState) -> Sequence[BaseMessage]:
+            return messages_modifier(state["messages"])
+
+        return state_modifier
+    elif isinstance(messages_modifier, Runnable):
+        state_modifier = (lambda state: state["messages"]) | messages_modifier
+        return state_modifier
+    raise ValueError(
+        f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
+    )
+
+
 @deprecated_parameter("messages_modifier", "0.1.8", "state_modifier", removal="0.2.0")
 def create_react_agent(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool]],
     agent_state: Optional[AgentState] = None,
-    messages_modifier: Optional[Union[SystemMessage, str, Callable, Runnable]] = None,
-    state_modifier: Optional[Union[SystemMessage, str, Callable, Runnable]] = None,
+    messages_modifier: Optional[MessagesModifier] = None,
+    state_modifier: Optional[StateModifier] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     interrupt_before: Optional[Sequence[str]] = None,
     interrupt_after: Optional[Sequence[str]] = None,
@@ -238,7 +252,7 @@ def create_react_agent(
             - Callable: This function should take in a list of messages and the output is then passed to the language model.
             - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
         state_modifier: An optional
-            state modifier. This takes full graph state BEFORE the LLM is called and prepares input the input to LLM.
+            state modifier. This takes full graph state BEFORE the LLM is called and prepares the input to LLM.
 
             Can take a few different forms:
 
@@ -494,9 +508,8 @@ def create_react_agent(
     elif state_modifier is not None and messages_modifier is None:
         model_runnable = get_model_runnable_from_state_modifier(state_modifier, model)
     elif state_modifier is None and messages_modifier is not None:
-        model_runnable = get_model_runnable_from_messages_modifier(
-            messages_modifier, model
-        )
+        state_modifier = convert_messages_modifier_to_state_modifier(messages_modifier)
+        model_runnable = get_model_runnable_from_state_modifier(state_modifier, model)
     else:
         model_runnable = get_model_runnable_from_state_modifier(None, model)
 
@@ -505,11 +518,7 @@ def create_react_agent(
         state: AgentState,
         config: RunnableConfig,
     ):
-        if messages_modifier is not None:
-            # for backwards compatibility
-            response = model_runnable.invoke(state["messages"], config)
-        else:
-            response = model_runnable.invoke(state, config)
+        response = model_runnable.invoke(state, config)
         if state["is_last_step"] and response.tool_calls:
             return {
                 "messages": [
@@ -523,11 +532,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(state: AgentState, config: RunnableConfig):
-        if messages_modifier is not None:
-            # for backwards compatibility
-            response = await model_runnable.ainvoke(state["messages"], config)
-        else:
-            response = await model_runnable.ainvoke(state, config)
+        response = await model_runnable.ainvoke(state, config)
         if state["is_last_step"] and response.tool_calls:
             return {
                 "messages": [
