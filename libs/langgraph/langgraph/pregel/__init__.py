@@ -71,6 +71,7 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
+    CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_SEND,
     INTERRUPT,
@@ -78,7 +79,7 @@ from langgraph.constants import (
     TASKS,
     Send,
 )
-from langgraph.errors import GraphRecursionError, InvalidUpdateError
+from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValueMapping,
@@ -204,10 +205,6 @@ StreamMode = Literal["values", "updates", "debug"]
     that were returned by the node(s) **after** each step.
 - 'debug': Emit debug events for each step.
 """
-
-
-class GraphInterrupt(Exception):
-    pass
 
 
 class Pregel(
@@ -744,10 +741,10 @@ class Pregel(
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
         if config is not None and config.get("configurable", {}).get(
-            CONFIG_KEY_CHECKPOINT
+            CONFIG_KEY_CHECKPOINTER
         ):
             checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
-                CONFIG_KEY_CHECKPOINT
+                CONFIG_KEY_CHECKPOINTER
             ]
         else:
             checkpointer = self.checkpointer
@@ -841,7 +838,7 @@ class Pregel(
             ```
         """
         config = ensure_config(config)
-        iamnested = config.get("configurable", {}).get(CONFIG_KEY_READ)
+        is_subgraph = config.get("configurable", {}).get(CONFIG_KEY_READ) is not None
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
             dumpd(self),
@@ -892,6 +889,12 @@ class Pregel(
                         **saved.config["configurable"],
                     },
                 }
+
+            # if we're in a subgraph and have a saved checkpoint,
+            # this means we're continuing from an interrupt so we override
+            # input to indicate it (by setting it to None)
+            if is_subgraph and saved:
+                input = None
 
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
@@ -981,6 +984,7 @@ class Pregel(
                             if checkpointer
                             else _increment
                         ),
+                        checkpointer=checkpointer,
                     )
                     # apply input writes
                     _apply_writes(
@@ -1028,6 +1032,7 @@ class Pregel(
                             if checkpointer
                             else _increment
                         ),
+                        checkpointer=checkpointer,
                     )
 
                     # assign pending writes to tasks
@@ -1053,7 +1058,7 @@ class Pregel(
                         self.stream_channels_list,
                         next_tasks,
                     ):
-                        if iamnested:
+                        if is_subgraph:
                             raise GraphInterrupt()
                         else:
                             break
@@ -1125,13 +1130,13 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    if iamnested:
+                    # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
+                    exceptions_to_handle = () if is_subgraph else (GraphInterrupt,)
+                    try:
                         _panic_or_proceed(done, inflight, step)
-                    else:
-                        try:
-                            _panic_or_proceed(done, inflight, step)
-                        except GraphInterrupt:
-                            break
+                    except exceptions_to_handle:
+                        break
+
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
 
@@ -1150,11 +1155,7 @@ class Pregel(
                         checkpoint,
                         channels,
                         pending_writes,
-                        (
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
+                        (checkpointer.get_next_version if checkpointer else _increment),
                     )
 
                     # yield values output
@@ -1189,7 +1190,7 @@ class Pregel(
                         self.stream_channels_list,
                         next_tasks,
                     ):
-                        if iamnested:
+                        if is_subgraph:
                             raise GraphInterrupt()
                         else:
                             break
@@ -1299,6 +1300,7 @@ class Pregel(
             ```
         """
         config = ensure_config(config)
+        is_subgraph = config.get("configurable", {}).get(CONFIG_KEY_READ) is not None
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
             dumpd(self),
@@ -1332,6 +1334,7 @@ class Pregel(
                 output_keys,
                 interrupt_before,
                 interrupt_after,
+                checkpointer,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -1344,11 +1347,7 @@ class Pregel(
             # copy nodes to ignore mutations during execution
             processes = {**self.nodes}
             # get checkpoint from saver, or create an empty one
-            saved = (
-                await self.checkpointer.aget_tuple(config)
-                if self.checkpointer
-                else None
-            )
+            saved = await checkpointer.aget_tuple(config) if checkpointer else None
             checkpoint = saved.checkpoint if saved else empty_checkpoint()
 
             # merge configurable fields with previous checkpoint config
@@ -1364,6 +1363,12 @@ class Pregel(
                 }
 
             start = saved.metadata.get("step", -2) + 1 if saved else -1
+            # if we're in a subgraph and have a saved checkpoint,
+            # this means we're continuing from an interrupt so we override
+            # input to indicate it (by setting it to None)
+            if is_subgraph and saved:
+                input = None
+
             # create channels from checkpoint
             async with AsyncChannelsManager(
                 self.channels, checkpoint, config
@@ -1372,10 +1377,10 @@ class Pregel(
             ) as managed:
 
                 def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
-                    if self.checkpointer is not None:
+                    if checkpointer is not None:
                         bg.append(
                             asyncio.create_task(
-                                self.checkpointer.aput_writes(
+                                checkpointer.aput_writes(
                                     {
                                         **checkpoint_config,
                                         "configurable": {
@@ -1392,7 +1397,7 @@ class Pregel(
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
                     nonlocal checkpoint, checkpoint_config, channels
 
-                    if self.checkpointer is None:
+                    if checkpointer is None:
                         return
                     if debug:
                         print_step_checkpoint(
@@ -1406,7 +1411,7 @@ class Pregel(
                     # save it, without blocking
                     bg.append(
                         asyncio.create_task(
-                            self.checkpointer.aput(
+                            checkpointer.aput(
                                 checkpoint_config, copy_checkpoint(checkpoint), metadata
                             )
                         )
@@ -1445,21 +1450,18 @@ class Pregel(
                         -1,
                         for_execution=True,
                         get_next_version=(
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
+                            checkpointer.get_next_version
+                            if checkpointer
                             else _increment
                         ),
+                        checkpointer=checkpointer,
                     )
                     # apply input writes
                     _apply_writes(
                         checkpoint,
                         channels,
                         input_writes,
-                        (
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
+                        (checkpointer.get_next_version if checkpointer else _increment),
                     )
                     # save input checkpoint
                     for chunk in put_checkpoint(
@@ -1493,10 +1495,11 @@ class Pregel(
                         for_execution=True,
                         manager=run_manager,
                         get_next_version=(
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
+                            checkpointer.get_next_version
+                            if checkpointer
                             else _increment
                         ),
+                        checkpointer=checkpointer,
                     )
 
                     # assign pending writes to tasks
@@ -1611,11 +1614,7 @@ class Pregel(
                         checkpoint,
                         channels,
                         pending_writes,
-                        (
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
+                        (checkpointer.get_next_version if checkpointer else _increment),
                     )
 
                     # yield current values

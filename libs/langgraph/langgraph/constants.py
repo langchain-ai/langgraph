@@ -2,6 +2,7 @@ from typing import Any
 
 CONFIG_KEY_SEND = "__pregel_send"
 CONFIG_KEY_READ = "__pregel_read"
+CONFIG_KEY_CHECKPOINTER = "__checkpointer"
 INTERRUPT = "__interrupt__"
 TASKS = "__pregel_tasks"
 RESERVED = {INTERRUPT, TASKS, CONFIG_KEY_SEND, CONFIG_KEY_READ}
