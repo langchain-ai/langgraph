@@ -373,7 +373,7 @@ def create_react_agent(
 
         ```pycon
         >>> system_prompt = "You are a helpful bot named Fred."
-        >>> graph = create_react_agent(model, tools, messages_modifier=system_prompt)
+        >>> graph = create_react_agent(model, tools, state_modifier=system_prompt)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -405,12 +405,38 @@ def create_react_agent(
         ...     ("placeholder", "{messages}"),
         ...     ("user", "Remember, always be polite!"),
         ... ])
-        >>> def modify_messages(messages: list):
+        >>> def modify_state(state: AgentState):
         ...     # You can do more complex modifications here
-        ...     return prompt.invoke({"messages": messages})
+        ...     return prompt.invoke({"messages": state["messages"]})
         >>>
-        >>> graph = create_react_agent(model, tools, messages_modifier=modify_messages)
+        >>> graph = create_react_agent(model, tools, state_modifier=modify_state)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
+        >>> for s in graph.stream(inputs, stream_mode="values"):
+        ...     message = s["messages"][-1]
+        ...     if isinstance(message, tuple):
+        ...         print(message)
+        ...     else:
+        ...         message.pretty_print()
+        ```
+
+        Add complex prompt with custom graph state:
+
+        ```pycon
+        >>> from typing import TypedDict
+        >>> prompt = ChatPromptTemplate.from_messages(
+        ...     [
+        ...         ("system", "Today is {today}"),
+        ...         ("placeholder", "{messages}"),
+        ...     ]
+        ... )
+        >>>
+        >>> class CustomState(TypedDict):
+        ...     today: str
+        ...     messages: Annotated[list[BaseMessage], add_messages]
+        ...     is_last_step: str
+        >>>
+        >>> graph = create_react_agent(model, tools, agent_state=CustomState, state_modifier=prompt)
+        >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
         ...     if isinstance(message, tuple):
@@ -518,9 +544,8 @@ def create_react_agent(
         else:
             return "continue"
 
-    model_runnable = (
-        _get_model_preprocessing_runnable(state_modifier, messages_modifier) | model
-    )
+    preprocessor = _get_model_preprocessing_runnable(state_modifier, messages_modifier)
+    model_runnable = preprocessor | model
 
     # Define the function that calls the model
     def call_model(
