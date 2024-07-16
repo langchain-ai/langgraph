@@ -14,6 +14,7 @@ LangGraph Cloud gives you best in class observability, testing, and hosting serv
 - [How to set up app for deployment](../deployment/setup.md)
 - [How to deploy to LangGraph cloud](../deployment/cloud.md)
 - [How to self-host](../deployment/self_hosted.md)
+- [How to test locally](../deployment/test_locally.md)
 
 ## Streaming
 

@@ -10,6 +10,12 @@ Install the proper packages:
 pip install langgraph-cli
 ```
 
+Ensure you have the following line in your `.env` file:
+
+```python
+LANGCHAIN_API_KEY = *********
+```
+
 ## Start the API server
 
 Once you have downloaded the CLI, you can run the following command to start the API server for local testing:
