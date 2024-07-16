@@ -19,6 +19,7 @@ import {
   RunsWaitPayload,
   StreamEvent,
   CronsCreatePayload,
+  OnConflictBehavior,
 } from "./types.mjs";
 
 interface ClientConfig {
@@ -323,10 +324,16 @@ class ThreadsClient extends BaseClient {
      * Metadata for the thread.
      */
     metadata?: Metadata;
+    threadId?: string;
+    ifExists?: OnConflictBehavior;
   }): Promise<Thread> {
     return this.fetch<Thread>(`/threads`, {
       method: "POST",
-      json: { metadata: payload?.metadata },
+      json: {
+        metadata: payload?.metadata,
+        thread_id: payload?.threadId,
+        if_exists: payload?.ifExists,
+      },
     });
   }
 
