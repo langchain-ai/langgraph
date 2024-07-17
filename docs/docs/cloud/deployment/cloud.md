@@ -2,9 +2,10 @@
 
 LangGraph Cloud is available within <a href="https://www.langchain.com/langsmith" target="_blank">LangSmith</a>. To deploy a LangGraph Cloud API, navigate to the <a href="https://smith.langchain.com/" target="_blank">LangSmith UI</a>.
 
-## Setup GitHub Repository
+## Prerequisites
 
-LangGraph Cloud applications are deployed from GitHub repositories. Configure and upload a LangGraph Cloud application to a GitHub repository in order to deploy it to LangGraph Cloud.
+1. LangGraph Cloud applications are deployed from GitHub repositories. Configure and upload a LangGraph Cloud application to a GitHub repository in order to deploy it to LangGraph Cloud.
+1. [Verify that the LangGraph API runs locally](test_locally.md). If the API does not build and run successfully (i.e. `langgraph up`), deploying to LangGraph Cloud will fail as well.
 
 ## Create New Deployment
 
