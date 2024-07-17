@@ -5910,6 +5910,256 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert times_called == 1
 
 
+async def test_nested_graph_interrupts() -> None:
+    class InnerState(TypedDict):
+        my_key: str
+        my_other_key: str
+
+    async def inner_1(state: InnerState):
+        return {"my_key": state["my_key"] + " here", "my_other_key": state["my_key"]}
+
+    async def inner_2(state: InnerState):
+        return {
+            "my_key": state["my_key"] + " and there",
+            "my_other_key": state["my_key"],
+        }
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: str
+
+    async def outer_1(state: State):
+        return {"my_key": "hi " + state["my_key"]}
+
+    async def outer_2(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("outer_1", outer_1)
+    graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
+    graph.add_node("outer_2", outer_2)
+    graph.set_entry_point("outer_1")
+    graph.add_edge("outer_1", "inner")
+    graph.add_edge("inner", "outer_2")
+    graph.set_finish_point("outer_2")
+
+    checkpointer = MemorySaver()
+    app = graph.compile(checkpointer=checkpointer)
+
+    # test invoke w/ nested interrupt
+    config = {"configurable": {"thread_id": "1"}}
+    assert await app.ainvoke({"my_key": "my value"}, config, debug=True) == {
+        "my_key": "hi my value",
+    }
+
+    assert await app.ainvoke(None, config, debug=True) == {
+        "my_key": "hi my value here and there and back again",
+    }
+
+    # test stream updates w/ nested interrupt
+    config = {"configurable": {"thread_id": "2"}}
+    assert [c async for c in app.astream({"my_key": "my value"}, config)] == [
+        {"outer_1": {"my_key": "hi my value"}},
+    ]
+    assert [c async for c in app.astream(None, config)] == [
+        {"inner": {"my_key": "hi my value here and there"}},
+        {"outer_2": {"my_key": "hi my value here and there and back again"}},
+    ]
+
+    # test stream values w/ nested interrupt
+    config = {"configurable": {"thread_id": "3"}}
+    assert [
+        c
+        async for c in app.astream({"my_key": "my value"}, config, stream_mode="values")
+    ] == [
+        {
+            "my_key": "my value",
+        },
+        {
+            "my_key": "hi my value",
+        },
+    ]
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "hi my value here and there",
+        },
+        {
+            "my_key": "hi my value here and there and back again",
+        },
+    ]
+
+    # test interrupts BEFORE the node w/ interrupts
+    app = graph.compile(checkpointer=checkpointer, interrupt_before=["inner"])
+    config = {"configurable": {"thread_id": "4"}}
+    assert [
+        c
+        async for c in app.astream({"my_key": "my value"}, config, stream_mode="values")
+    ] == [
+        {
+            "my_key": "my value",
+        },
+        {
+            "my_key": "hi my value",
+        },
+    ]
+    # while we're waiting for the node w/ interrupt inside to finish
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == []
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "hi my value here and there",
+        },
+        {
+            "my_key": "hi my value here and there and back again",
+        },
+    ]
+
+    # test interrupts AFTER the node w/ interrupts
+    app = graph.compile(checkpointer=checkpointer, interrupt_after=["inner"])
+    config = {"configurable": {"thread_id": "5"}}
+    assert [
+        c
+        async for c in app.astream({"my_key": "my value"}, config, stream_mode="values")
+    ] == [
+        {
+            "my_key": "my value",
+        },
+        {
+            "my_key": "hi my value",
+        },
+    ]
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "hi my value here and there",
+        },
+    ]
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "hi my value here and there and back again",
+        },
+    ]
+
+
+async def test_nested_graph_interrupts_parallel() -> None:
+    class InnerState(TypedDict):
+        my_key: Annotated[str, operator.add]
+        my_other_key: str
+
+    async def inner_1(state: InnerState):
+        return {"my_key": "got here", "my_other_key": state["my_key"]}
+
+    async def inner_2(state: InnerState):
+        return {
+            "my_key": " and there",
+            "my_other_key": state["my_key"],
+        }
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+
+    async def outer_1(state: State):
+        return {"my_key": " and parallel"}
+
+    async def outer_2(state: State):
+        return {"my_key": " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
+    graph.add_node("outer_1", outer_1)
+    graph.add_node("outer_2", outer_2)
+
+    graph.add_edge(START, "inner")
+    graph.add_edge(START, "outer_1")
+    graph.add_edge(["inner", "outer_1"], "outer_2")
+    graph.set_finish_point("outer_2")
+
+    checkpointer = MemorySaver()
+    app = graph.compile(checkpointer=checkpointer)
+
+    # test invoke w/ nested interrupt
+    config = {"configurable": {"thread_id": "1"}}
+    assert await app.ainvoke({"my_key": ""}, config, debug=True) == {
+        "my_key": "",
+    }
+
+    assert await app.ainvoke(None, config, debug=True) == {
+        "my_key": "got here and there and parallel and back again",
+    }
+
+    # test stream updates w/ nested interrupt
+    config = {"configurable": {"thread_id": "2"}}
+    assert [c async for c in app.astream({"my_key": ""}, config)] == [
+        # we got to parallel node first
+        {"outer_1": {"my_key": " and parallel"}},
+    ]
+    assert [c async for c in app.astream(None, config)] == [
+        {"inner": {"my_key": "got here and there"}},
+        {"outer_2": {"my_key": " and back again"}},
+    ]
+
+    # test stream values w/ nested interrupt
+    config = {"configurable": {"thread_id": "3"}}
+    assert [
+        c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
+    ] == [
+        {
+            "my_key": "",
+        },
+    ]
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "got here and there and parallel",
+        },
+        {
+            "my_key": "got here and there and parallel and back again",
+        },
+    ]
+
+    # test interrupts BEFORE the parallel node
+    app = graph.compile(checkpointer=checkpointer, interrupt_before=["outer_1"])
+    config = {"configurable": {"thread_id": "4"}}
+    assert [
+        c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
+    ] == [{"my_key": ""}]
+    # while we're waiting for the node w/ interrupt inside to finish
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == []
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "got here and there and parallel",
+        },
+        {
+            "my_key": "got here and there and parallel and back again",
+        },
+    ]
+
+    # test interrupts AFTER the parallel node
+    app = graph.compile(checkpointer=checkpointer, interrupt_after=["outer_1"])
+    config = {"configurable": {"thread_id": "5"}}
+    assert [
+        c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
+    ] == [{"my_key": ""}]
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": "got here and there and parallel"},
+    ]
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "got here and there and parallel and back again",
+        },
+    ]
+
+
 async def test_checkpoint_metadata() -> None:
     """This test verifies that a run's configurable fields are merged with the
     previous checkpoint config for each step in the run.

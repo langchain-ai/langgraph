@@ -1525,7 +1525,10 @@ class Pregel(
                         self.stream_channels_list,
                         next_tasks,
                     ):
-                        break
+                        if is_subgraph:
+                            raise GraphInterrupt()
+                        else:
+                            break
                     else:
                         checkpoint = next_checkpoint
 
@@ -1595,7 +1598,13 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    _panic_or_proceed(done, inflight, step)
+                    # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
+                    exceptions_to_handle = () if is_subgraph else (GraphInterrupt,)
+                    try:
+                        _panic_or_proceed(done, inflight, step)
+                    except exceptions_to_handle:
+                        break
+
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
 
@@ -1651,7 +1660,10 @@ class Pregel(
                         self.stream_channels_list,
                         next_tasks,
                     ):
-                        break
+                        if is_subgraph:
+                            raise GraphInterrupt()
+                        else:
+                            break
                 else:
                     raise GraphRecursionError(
                         f"Recursion limit of {config['recursion_limit']} reached"
