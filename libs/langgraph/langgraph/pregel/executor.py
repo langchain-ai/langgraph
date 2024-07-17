@@ -9,13 +9,13 @@ from typing import (
     Callable,
     Iterator,
     Optional,
-    ParamSpec,
     Protocol,
     TypeVar,
 )
 
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
+from typing_extensions import ParamSpec
 
 P = ParamSpec("P")
 T = TypeVar("T")
