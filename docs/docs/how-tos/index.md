@@ -28,6 +28,7 @@ LangGraph makes it easy to persist state across graph runs. The guide below show
 - [How to create a custom checkpointer using Postgres](persistence_postgres.ipynb)
 - [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
+- [How to create a custom checkpointer using Firestore](persistence_firestore.ipynb)
 
 ## Human in the Loop
 

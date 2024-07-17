@@ -35,6 +35,7 @@ _MANUAL = {
         "persistence_postgres.ipynb",
         "persistence_mongodb.ipynb",
         "persistence_redis.ipynb",
+        "persistence_firestore.ipynb",
         "visualization.ipynb",
         "state-model.ipynb",
         "subgraph.ipynb",
