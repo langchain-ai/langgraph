@@ -41,6 +41,8 @@ def default_retry_on(exc: Exception) -> bool:
 
 
 class RetryPolicy(NamedTuple):
+    """Configuration for retrying nodes."""
+
     initial_interval: float = 0.5
     """Amount of time that must elapse before the first retry occurs. In seconds."""
     backoff_factor: float = 2.0
