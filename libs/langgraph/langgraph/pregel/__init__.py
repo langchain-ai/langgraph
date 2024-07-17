@@ -1554,7 +1554,7 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    _panic_or_proceed(done, inflight, step)
+                    _panic_or_proceed(done, inflight, step, asyncio.TimeoutError)
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
 
@@ -1744,6 +1744,7 @@ def _panic_or_proceed(
     done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     inflight: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     step: int,
+    timeout_exc_cls: Type[TimeoutError] = TimeoutError,
 ) -> None:
     while done:
         # if any task failed
@@ -1760,7 +1761,7 @@ def _panic_or_proceed(
             # cancel all pending tasks
             inflight.pop().cancel()
         # raise timeout error
-        raise TimeoutError(f"Timed out at step {step}")
+        raise timeout_exc_cls(f"Timed out at step {step}")
 
 
 def _should_interrupt(
