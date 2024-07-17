@@ -1744,7 +1744,7 @@ def _panic_or_proceed(
     done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     inflight: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     step: int,
-    timeout_exc_cls: Type[TimeoutError] = TimeoutError,
+    timeout_exc_cls: Type[Exception] = TimeoutError,
 ) -> None:
     while done:
         # if any task failed
