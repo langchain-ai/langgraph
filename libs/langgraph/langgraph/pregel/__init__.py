@@ -1028,6 +1028,11 @@ class Pregel(
                         ),
                         checkpointer=checkpointer,
                         should_continue_from_interrupt=input is None,
+                        interrupted_before_nodes=(
+                            saved.metadata.get("interrupted_before_nodes")
+                            if saved and not is_subgraph
+                            else None
+                        ),
                     )
 
                     # assign pending writes to tasks
@@ -1047,7 +1052,7 @@ class Pregel(
                             break
 
                     # before execution, check if we should interrupt
-                    if _should_interrupt(
+                    if interrupted_nodes := _should_interrupt(
                         checkpoint,
                         interrupt_before,
                         self.stream_channels_list,
@@ -1056,8 +1061,25 @@ class Pregel(
                         if is_subgraph:
                             raise GraphInterrupt()
                         else:
+                            bg.append(
+                                executor.submit(
+                                    checkpointer.put,
+                                    checkpoint_config,
+                                    copy_checkpoint(checkpoint),
+                                    {"interrupted_before_nodes": interrupted_nodes},
+                                )
+                            )
                             break
                     else:
+                        if saved and saved.metadata.get("interrupted_before_nodes"):
+                            bg.append(
+                                executor.submit(
+                                    checkpointer.put,
+                                    checkpoint_config,
+                                    copy_checkpoint(checkpoint),
+                                    {"interrupted_before_nodes": None},
+                                )
+                            )
                         checkpoint = next_checkpoint
 
                     if debug:
@@ -1491,6 +1513,11 @@ class Pregel(
                         ),
                         checkpointer=checkpointer,
                         should_continue_from_interrupt=input is None,
+                        interrupted_before_nodes=(
+                            saved.metadata.get("interrupted_before_nodes")
+                            if saved and not is_subgraph
+                            else None
+                        ),
                     )
 
                     # assign pending writes to tasks
@@ -1510,7 +1537,7 @@ class Pregel(
                             break
 
                     # before execution, check if we should interrupt
-                    if _should_interrupt(
+                    if interrupted_nodes := _should_interrupt(
                         checkpoint,
                         interrupt_before,
                         self.stream_channels_list,
@@ -1519,8 +1546,27 @@ class Pregel(
                         if is_subgraph:
                             raise GraphInterrupt()
                         else:
+                            bg.append(
+                                asyncio.create_task(
+                                    checkpointer.aput(
+                                        checkpoint_config,
+                                        copy_checkpoint(checkpoint),
+                                        {"interrupted_before_nodes": interrupted_nodes},
+                                    )
+                                )
+                            )
                             break
                     else:
+                        if saved and saved.metadata.get("interrupted_before_nodes"):
+                            bg.append(
+                                asyncio.create_task(
+                                    checkpointer.aput(
+                                        checkpoint_config,
+                                        copy_checkpoint(checkpoint),
+                                        {"interrupted_before_nodes": None},
+                                    )
+                                )
+                            )
                         checkpoint = next_checkpoint
 
                     if debug:
@@ -1822,28 +1868,29 @@ def _should_interrupt(
     interrupt_nodes: Union[All, Sequence[str]],
     snapshot_channels: Sequence[str],
     tasks: list[PregelExecutableTask],
-) -> bool:
+) -> Sequence[str]:
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()
     # defaultdicts are mutated on access :( so we need to copy
     seen = checkpoint["versions_seen"].copy()[INTERRUPT]
-    return (
-        # interrupt if any channel has been updated since last interrupt
-        any(
-            version > seen.get(chan, null_version)
-            for chan, version in checkpoint["channel_versions"].items()
+    interrupted_nodes = []
+    # interrupt if any channel has been updated since last interrupt, otherwise return
+    if not any(
+        version > seen.get(chan, null_version)
+        for chan, version in checkpoint["channel_versions"].items()
+    ):
+        return []
+    # interrupt any triggered node that is in interrupt_nodes list
+    interrupted_nodes = [
+        node
+        for node, _, _, _, config, _, _ in tasks
+        if (
+            (not config or TAG_HIDDEN not in config.get("tags"))
+            if interrupt_nodes == "*"
+            else node in interrupt_nodes
         )
-        # and any triggered node is in interrupt_nodes list
-        and any(
-            node
-            for node, _, _, _, config, _, _ in tasks
-            if (
-                (not config or TAG_HIDDEN not in config.get("tags"))
-                if interrupt_nodes == "*"
-                else node in interrupt_nodes
-            )
-        )
-    )
+    ]
+    return interrupted_nodes
 
 
 def _local_read(
@@ -1952,6 +1999,7 @@ def _prepare_next_tasks(
     manager: Literal[None] = None,
     checkpointer: Literal[None] = None,
     should_continue_from_interrupt: Literal[False] = False,
+    interrupted_before_nodes: Literal[None] = None,
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
 
@@ -1969,6 +2017,7 @@ def _prepare_next_tasks(
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
     checkpointer: Optional[BaseCheckpointSaver],
     should_continue_from_interrupt: bool,
+    interrupted_before_nodes: Optional[Sequence[str]],
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
     ...
 
@@ -1986,6 +2035,7 @@ def _prepare_next_tasks(
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     should_continue_from_interrupt: bool = False,
+    interrupted_before_nodes: Optional[Sequence[str]] = None,
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
@@ -2064,6 +2114,11 @@ def _prepare_next_tasks(
             > seen.get(chan, null_version)
         ):
             channels_to_consume.update(triggers)
+            was_previously_interrupted = (
+                name in interrupted_before_nodes
+                if interrupted_before_nodes is not None
+                else False
+            )
             try:
                 val = next(
                     _proc_input(
@@ -2072,7 +2127,11 @@ def _prepare_next_tasks(
                         proc,
                         managed,
                         channels,
-                        should_continue_from_interrupt,
+                        # ensure that for subgraphs we set value to None only
+                        # if parent graph also received input None AND we haven't
+                        # previously interrupted before subgraph Node
+                        not was_previously_interrupted
+                        and should_continue_from_interrupt,
                     )
                 )
             except StopIteration:

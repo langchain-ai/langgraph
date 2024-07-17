@@ -7510,27 +7510,27 @@ def test_nested_graph_interrupts() -> None:
         },
     ]
 
-    # # test interrupts BEFORE the node w/ interrupts
-    # app = graph.compile(checkpointer=checkpointer, interrupt_before=["inner"])
-    # config = {"configurable": {"thread_id": "4"}}
-    # assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
-    #     {
-    #         "my_key": "my value",
-    #     },
-    #     {
-    #         "my_key": "hi my value",
-    #     },
-    # ]
-    # # while we're waiting for the node w/ interrupt inside to finish
-    # assert [*app.stream(None, config, stream_mode="values")] == []
-    # assert [*app.stream(None, config, stream_mode="values")] == [
-    #     {
-    #         "my_key": "hi my value here and there",
-    #     },
-    #     {
-    #         "my_key": "hi my value here and there and back again",
-    #     },
-    # ]
+    # test interrupts BEFORE the node w/ interrupts
+    app = graph.compile(checkpointer=checkpointer, interrupt_before=["inner"])
+    config = {"configurable": {"thread_id": "4"}}
+    assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
+        {
+            "my_key": "my value",
+        },
+        {
+            "my_key": "hi my value",
+        },
+    ]
+    # while we're waiting for the node w/ interrupt inside to finish
+    assert [*app.stream(None, config, stream_mode="values")] == []
+    assert [*app.stream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "hi my value here and there",
+        },
+        {
+            "my_key": "hi my value here and there and back again",
+        },
+    ]
 
     # test interrupts AFTER the node w/ interrupts
     app = graph.compile(checkpointer=checkpointer, interrupt_after=["inner"])
@@ -7635,22 +7635,22 @@ def test_nested_graph_interrupts_parallel() -> None:
         },
     ]
 
-    # # test interrupts BEFORE the parallel node
-    # app = graph.compile(checkpointer=checkpointer, interrupt_before=["outer_1"])
-    # config = {"configurable": {"thread_id": "4"}}
-    # assert [*app.stream({"my_key": ""}, config, stream_mode="values")] == [
-    #     {"my_key": ""}
-    # ]
-    # # while we're waiting for the node w/ interrupt inside to finish
-    # assert [*app.stream(None, config, stream_mode="values")] == []
-    # assert [*app.stream(None, config, stream_mode="values")] == [
-    #     {
-    #         "my_key": "got here and there and parallel",
-    #     },
-    #     {
-    #         "my_key": "got here and there and parallel and back again",
-    #     },
-    # ]
+    # test interrupts BEFORE the parallel node
+    app = graph.compile(checkpointer=checkpointer, interrupt_before=["outer_1"])
+    config = {"configurable": {"thread_id": "4"}}
+    assert [*app.stream({"my_key": ""}, config, stream_mode="values")] == [
+        {"my_key": ""}
+    ]
+    # while we're waiting for the node w/ interrupt inside to finish
+    assert [*app.stream(None, config, stream_mode="values")] == []
+    assert [*app.stream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "got here and there and parallel",
+        },
+        {
+            "my_key": "got here and there and parallel and back again",
+        },
+    ]
 
     # test interrupts AFTER the parallel node
     app = graph.compile(checkpointer=checkpointer, interrupt_after=["outer_1"])
