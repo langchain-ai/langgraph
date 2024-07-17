@@ -890,12 +890,6 @@ class Pregel(
                     },
                 }
 
-            # if we're in a subgraph and have a saved checkpoint,
-            # this means we're continuing from an interrupt so we override
-            # input to indicate it (by setting it to None)
-            if is_subgraph and saved:
-                input = None
-
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
             with ChannelsManager(
@@ -1033,6 +1027,7 @@ class Pregel(
                             else _increment
                         ),
                         checkpointer=checkpointer,
+                        should_continue_from_interrupt=input is None,
                     )
 
                     # assign pending writes to tasks
@@ -1363,11 +1358,6 @@ class Pregel(
                 }
 
             start = saved.metadata.get("step", -2) + 1 if saved else -1
-            # if we're in a subgraph and have a saved checkpoint,
-            # this means we're continuing from an interrupt so we override
-            # input to indicate it (by setting it to None)
-            if is_subgraph and saved:
-                input = None
 
             # create channels from checkpoint
             async with AsyncChannelsManager(
@@ -1500,6 +1490,7 @@ class Pregel(
                             else _increment
                         ),
                         checkpointer=checkpointer,
+                        should_continue_from_interrupt=input is None,
                     )
 
                     # assign pending writes to tasks
@@ -1960,6 +1951,7 @@ def _prepare_next_tasks(
     get_next_version: Literal[None] = None,
     manager: Literal[None] = None,
     checkpointer: Literal[None] = None,
+    should_continue_from_interrupt: Literal[False] = False,
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
 
@@ -1976,6 +1968,7 @@ def _prepare_next_tasks(
     get_next_version: Callable[[int, BaseChannel], int],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
     checkpointer: Optional[BaseCheckpointSaver],
+    should_continue_from_interrupt: bool,
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
     ...
 
@@ -1992,6 +1985,7 @@ def _prepare_next_tasks(
     get_next_version: Union[None, Callable[[int, BaseChannel], int]] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
+    should_continue_from_interrupt: bool = False,
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
@@ -2071,7 +2065,16 @@ def _prepare_next_tasks(
         ):
             channels_to_consume.update(triggers)
             try:
-                val = next(_proc_input(step, name, proc, managed, channels))
+                val = next(
+                    _proc_input(
+                        step,
+                        name,
+                        proc,
+                        managed,
+                        channels,
+                        should_continue_from_interrupt,
+                    )
+                )
             except StopIteration:
                 continue
 
@@ -2156,13 +2159,25 @@ def _prepare_next_tasks(
     return checkpoint, tasks
 
 
+def _is_subgraph_proc(proc: PregelNode) -> bool:
+    node = proc.get_node()
+    if not isinstance(node, RunnableSequence):
+        return False
+
+    return isinstance(node.steps[0], Pregel)
+
+
 def _proc_input(
     step: int,
     name: str,
     proc: PregelNode,
     managed: ManagedValueMapping,
     channels: Mapping[str, BaseChannel],
+    should_continue_from_interrupt: bool = False,
 ) -> Iterator[Any]:
+    if _is_subgraph_proc(proc) and should_continue_from_interrupt:
+        yield None
+
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
     if isinstance(proc.channels, dict):
