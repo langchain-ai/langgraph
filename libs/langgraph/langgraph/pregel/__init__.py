@@ -570,6 +570,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
@@ -661,6 +662,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
@@ -1112,8 +1114,8 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _, _ in next_tasks:
-                        pending_writes.extend(writes)
+                    for task in next_tasks:
+                        pending_writes.extend(task.writes)
 
                     if debug:
                         print_step_writes(
@@ -1560,8 +1562,8 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _, _ in next_tasks:
-                        pending_writes.extend(writes)
+                    for task in next_tasks:
+                        pending_writes.extend(task.writes)
 
                     if debug:
                         print_step_writes(
@@ -1782,12 +1784,12 @@ def _should_interrupt(
         )
         # and any triggered node is in interrupt_nodes list
         and any(
-            node
-            for node, _, _, _, config, _, _ in tasks
+            task.name
+            for task in tasks
             if (
-                (not config or TAG_HIDDEN not in config.get("tags"))
+                (not task.config or TAG_HIDDEN not in task.config.get("tags"))
                 if interrupt_nodes == "*"
-                else node in interrupt_nodes
+                else task.name in interrupt_nodes
             )
         )
     )
@@ -1936,7 +1938,8 @@ def _prepare_next_tasks(
             logger.warn(f"Ignoring invalid packet type {type(packet)} in pending sends")
             continue
         if for_execution:
-            if node := processes[packet.node].get_node():
+            proc = processes[packet.node]
+            if node := proc.get_node():
                 triggers = [TASKS]
                 metadata = {
                     "langgraph_step": step,
@@ -1975,6 +1978,7 @@ def _prepare_next_tasks(
                             },
                         ),
                         triggers,
+                        proc.retry_policy,
                         task_id,
                     )
                 )
@@ -2061,6 +2065,7 @@ def _prepare_next_tasks(
                                 },
                             ),
                             triggers,
+                            proc.retry_policy,
                             task_id,
                         )
                     )
