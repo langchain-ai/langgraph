@@ -117,10 +117,10 @@ class AsyncBackgroundExecutor(AsyncContextManager):
 
     async def __aexit__(
         self,
-        exc_type: type[BaseException] | None,
-        exc_value: BaseException | None,
-        traceback: TracebackType | None,
-    ) -> bool | None:
+        exc_type: Optional[type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> Optional[bool]:
         for task, cancel in self.tasks.items():
             if cancel:
                 task.cancel(self.sentinel)
