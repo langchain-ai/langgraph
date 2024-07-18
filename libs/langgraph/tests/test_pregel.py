@@ -6887,7 +6887,6 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
         },
     )
 
-    print("yo")
     assert [c for c in app_w_interrupt.stream(None, config, debug=1)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4,doc5"}},
     ]
