@@ -257,6 +257,7 @@ class AssistantsClient:
         *,
         metadata: Metadata = None,
         assistant_id: Optional[str] = None,
+        if_exists: Optional[OnConflictBehavior] = None
     ) -> Assistant:
         """Create a new assistant."""
         payload: Dict[str, Any] = {
@@ -268,6 +269,8 @@ class AssistantsClient:
             payload["metadata"] = metadata
         if assistant_id:
             payload["assistant_id"] = assistant_id
+        if if_exists:
+            payload["if_exists"] = if_exists
         return await self.http.post("/assistants", json=payload)
 
     async def update(
