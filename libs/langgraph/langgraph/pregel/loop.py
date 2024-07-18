@@ -9,12 +9,12 @@ from typing import (
     Literal,
     Mapping,
     Optional,
-    Self,
     Sequence,
     Type,
 )
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.manager import ChannelsManager, create_checkpoint
