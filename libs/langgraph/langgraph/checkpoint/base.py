@@ -52,9 +52,6 @@ class CheckpointMetadata(TypedDict, total=False):
     The score can be used to mark a checkpoint as "good".
     """
 
-    interrupted_before_nodes: Optional[List[str]]
-    """Nodes that were most recently interrupted using "interrupt_before"."""
-
 
 class Checkpoint(TypedDict):
     """State snapshot at a given point in time."""

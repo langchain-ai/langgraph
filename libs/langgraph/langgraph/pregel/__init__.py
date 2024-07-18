@@ -71,8 +71,8 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINTER,
-    CONFIG_KEY_RESUMING,
     CONFIG_KEY_READ,
+    CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     INTERRUPT,
     TAG_HIDDEN,
@@ -306,7 +306,13 @@ class Pregel(
                 )
             )
             # these are provided by the Pregel class
-            if spec.id not in [CONFIG_KEY_READ, CONFIG_KEY_SEND]
+            if spec.id
+            not in [
+                CONFIG_KEY_READ,
+                CONFIG_KEY_SEND,
+                CONFIG_KEY_CHECKPOINTER,
+                CONFIG_KEY_RESUMING,
+            ]
         ]
 
     @property
@@ -958,8 +964,27 @@ class Pregel(
                             ),
                         )
 
+                if is_subgraph and not checkpoint["channel_values"]:
+                    # if we're in a subgraph and haven't run anything yet
+                    # we receive input values and start execution (i.e. not resuming)
+                    is_resuming = False
+                else:
+                    # otherwise, no input is taken as signal to proceed past previous interrupt
+                    # first check if we already received no input in parent graph, and if not check for empty input
+                    is_resuming = (
+                        config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
+                        or input is None
+                    )
+
+                # proceed past previous checkpoint
+                if is_resuming:
+                    checkpoint = copy_checkpoint(checkpoint)
+                    for k in channels:
+                        if k in checkpoint["channel_versions"]:
+                            version = checkpoint["channel_versions"][k]
+                            checkpoint["versions_seen"][INTERRUPT][k] = version
                 # map inputs to channel updates
-                if input_writes := deque(map_input(input_keys, input)):
+                elif input_writes := deque(map_input(input_keys, input)):
                     # discard any unfinished tasks from previous checkpoint
                     checkpoint, _ = _prepare_next_tasks(
                         checkpoint,
@@ -994,12 +1019,7 @@ class Pregel(
                     # increment start to 0
                     start += 1
                 else:
-                    # no input is taken as signal to proceed past previous interrupt
-                    checkpoint = copy_checkpoint(checkpoint)
-                    for k in channels:
-                        if k in checkpoint["channel_versions"]:
-                            version = checkpoint["channel_versions"][k]
-                            checkpoint["versions_seen"][INTERRUPT][k] = version
+                    raise ValueError("Received no input")
 
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -1023,6 +1043,7 @@ class Pregel(
                             else _increment
                         ),
                         checkpointer=checkpointer,
+                        is_resuming=is_resuming,
                     )
 
                     # assign pending writes to tasks
@@ -1195,6 +1216,9 @@ class Pregel(
 
                 # set final channel values as run output
                 run_manager.on_chain_end(read_channels(channels, output_keys))
+        except GraphInterrupt as e:
+            run_manager.on_chain_end(e)
+            raise
         except BaseException as e:
             run_manager.on_chain_error(e)
             raise
@@ -1408,8 +1432,27 @@ class Pregel(
                             ),
                         )
 
+                if is_subgraph and not checkpoint["channel_values"]:
+                    # if we're in a subgraph and haven't run anything yet
+                    # we receive input values and start execution (i.e. not resuming)
+                    is_resuming = False
+                else:
+                    # otherwise, no input is taken as signal to proceed past previous interrupt
+                    # first check if we already received no input in parent graph, and if not check for empty input
+                    is_resuming = (
+                        config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
+                        or input is None
+                    )
+
+                # proceed past previous checkpoint
+                if is_resuming:
+                    checkpoint = copy_checkpoint(checkpoint)
+                    for k in channels:
+                        if k in checkpoint["channel_versions"]:
+                            version = checkpoint["channel_versions"][k]
+                            checkpoint["versions_seen"][INTERRUPT][k] = version
                 # map inputs to channel updates
-                if input_writes := deque(map_input(input_keys, input)):
+                elif input_writes := deque(map_input(input_keys, input)):
                     # discard any unfinished tasks from previous checkpoint
                     checkpoint, _ = _prepare_next_tasks(
                         checkpoint,
@@ -1441,12 +1484,7 @@ class Pregel(
                     # increment start to 0
                     start += 1
                 else:
-                    # no input is taken as signal to proceed past previous interrupt
-                    checkpoint = copy_checkpoint(checkpoint)
-                    for k in channels:
-                        if k in checkpoint["channel_versions"]:
-                            version = checkpoint["channel_versions"][k]
-                            checkpoint["versions_seen"][INTERRUPT][k] = version
+                    raise ValueError("Received no input")
 
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -1470,6 +1508,7 @@ class Pregel(
                             else _increment
                         ),
                         checkpointer=checkpointer,
+                        is_resuming=is_resuming,
                     )
 
                     # assign pending writes to tasks
@@ -1650,6 +1689,9 @@ class Pregel(
 
                 # set final channel values as run output
                 await run_manager.on_chain_end(read_channels(channels, output_keys))
+        except GraphInterrupt as e:
+            await asyncio.shield(run_manager.on_chain_end(e))
+            raise
         except BaseException as e:
             await asyncio.shield(run_manager.on_chain_error(e))
             raise
@@ -1795,13 +1837,13 @@ def _should_interrupt(
     interrupt_nodes: Union[All, Sequence[str]],
     snapshot_channels: Sequence[str],
     tasks: list[PregelExecutableTask],
-) -> Sequence[str]:
+) -> bool:
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()
     # defaultdicts are mutated on access :( so we need to copy
     seen = checkpoint["versions_seen"].copy()[INTERRUPT]
     return (
-        # interrupt if any channel has been updated since last interrupt, otherwise return
+        # interrupt if any channel has been updated since last interrupt
         any(
             version > seen.get(chan, null_version)
             for chan, version in checkpoint["channel_versions"].items()
@@ -1924,8 +1966,7 @@ def _prepare_next_tasks(
     get_next_version: Literal[None] = None,
     manager: Literal[None] = None,
     checkpointer: Literal[None] = None,
-    interrupted_before_nodes: Literal[None] = None,
-    is_resuming: Literal[False] = False
+    is_resuming: Literal[False] = False,
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
 
@@ -1942,8 +1983,7 @@ def _prepare_next_tasks(
     get_next_version: Callable[[int, BaseChannel], int],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
     checkpointer: Optional[BaseCheckpointSaver],
-    interrupted_before_nodes: Optional[Sequence[str]],
-    is_resuming: bool = False
+    is_resuming: bool = False,
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
     ...
 
@@ -1960,7 +2000,7 @@ def _prepare_next_tasks(
     get_next_version: Union[None, Callable[[int, BaseChannel], int]] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
-    is_resuming: bool = False
+    is_resuming: bool = False,
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
@@ -2137,25 +2177,13 @@ def _prepare_next_tasks(
     return checkpoint, tasks
 
 
-def _is_subgraph_proc(proc: PregelNode) -> bool:
-    node = proc.get_node()
-    if not isinstance(node, RunnableSequence):
-        return False
-
-    return isinstance(node.steps[0], Pregel)
-
-
 def _proc_input(
     step: int,
     name: str,
     proc: PregelNode,
     managed: ManagedValueMapping,
     channels: Mapping[str, BaseChannel],
-    should_continue_from_interrupt: bool = False,
 ) -> Iterator[Any]:
-    if _is_subgraph_proc(proc) and should_continue_from_interrupt:
-        yield None
-
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
     if isinstance(proc.channels, dict):

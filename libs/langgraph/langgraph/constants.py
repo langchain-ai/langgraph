@@ -2,11 +2,18 @@ from typing import Any
 
 CONFIG_KEY_SEND = "__pregel_send"
 CONFIG_KEY_READ = "__pregel_read"
-CONFIG_KEY_CHECKPOINTER = "__checkpointer"
-CONFIG_KEY_RESUMING = "__resuming"
+CONFIG_KEY_CHECKPOINTER = "__pregel_checkpointer"
+CONFIG_KEY_RESUMING = "__pregel_resuming"
 INTERRUPT = "__interrupt__"
 TASKS = "__pregel_tasks"
-RESERVED = {INTERRUPT, TASKS, CONFIG_KEY_SEND, CONFIG_KEY_READ}
+RESERVED = {
+    INTERRUPT,
+    TASKS,
+    CONFIG_KEY_SEND,
+    CONFIG_KEY_READ,
+    CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_RESUMING,
+}
 TAG_HIDDEN = "langsmith:hidden"
 
 START = "__start__"
