@@ -480,7 +480,8 @@ class CompiledGraph(Pregel):
                 start_nodes[start], end_nodes[end], label, conditional
             )
 
-        for key, (node, metadata) in self.builder.nodes.items():
+        for key, n in self.builder.nodes.items():
+            node = n.runnable
             if xray:
                 subgraph = (
                     node.get_graph(
@@ -501,7 +502,7 @@ class CompiledGraph(Pregel):
                     start_nodes[key] = n
                     end_nodes[key] = n
             else:
-                n = graph.add_node(node, key, metadata=metadata)
+                n = graph.add_node(node, key, metadata=n.metadata)
                 start_nodes[key] = n
                 end_nodes[key] = n
         for start, end in sorted(self.builder._all_edges):

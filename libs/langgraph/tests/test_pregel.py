@@ -232,6 +232,85 @@ def test_checkpoint_errors() -> None:
         graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
 
 
+def test_node_schemas_custom_output() -> None:
+    from langchain_core.messages import HumanMessage
+
+    class State(TypedDict):
+        hello: str
+        bye: str
+        messages: Annotated[list[str], add_messages]
+
+    class Output(TypedDict):
+        messages: list[str]
+
+    class StateForA(TypedDict):
+        hello: str
+        messages: Annotated[list[str], add_messages]
+
+    def node_a(state: StateForA) -> State:
+        assert state == {
+            "hello": "there",
+            "messages": [HumanMessage(content="hello", id=AnyStr())],
+        }
+
+    class StateForB(TypedDict):
+        bye: str
+        now: int
+
+    def node_b(state: StateForB):
+        assert state == {
+            "bye": "world",
+            "now": None,
+        }
+        return {
+            "now": 123,
+            "hello": "again",
+        }
+
+    class StateForC(TypedDict):
+        hello: str
+        now: int
+
+    def node_c(state: StateForC) -> StateForC:
+        assert state == {
+            "hello": "again",
+            "now": 123,
+        }
+
+    builder = StateGraph(State, output=Output)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_c)
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("b", "c")
+    graph = builder.compile()
+
+    assert graph.invoke({"hello": "there", "bye": "world", "messages": "hello"}) == {
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+    builder = StateGraph(input=State, output=Output)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_c)
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("b", "c")
+    graph = builder.compile()
+
+    assert graph.invoke(
+        {
+            "hello": "there",
+            "bye": "world",
+            "messages": "hello",
+            "now": 345,  # ignored because not in input schema
+        }
+    ) == {
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+
 def test_reducer_before_first_node() -> None:
     from langchain_core.messages import HumanMessage
 
@@ -2241,6 +2320,10 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
         session: Annotated[httpx.Client, Context(httpx.Client)]
 
+    class ToolState(TypedDict, total=False):
+        agent_outcome: Union[AgentAction, AgentFinish]
+        session: Annotated[httpx.Client, Context(httpx.Client)]
+
     # Assemble the tools
     @tool()
     def search_api(query: str) -> str:
@@ -2279,9 +2362,11 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     agent = prompt | llm | agent_parser
 
     # Define tool execution logic
-    def execute_tools(data: AgentState) -> dict:
+    def execute_tools(data: ToolState) -> dict:
         # check session in data
         assert isinstance(data["session"], httpx.Client)
+        assert "input" not in data
+        assert "intermediate_steps" not in data
         # execute the tool
         agent_action: AgentAction = data.pop("agent_outcome")
         observation = {t.name: t for t in tools}[agent_action.tool].invoke(
@@ -2303,7 +2388,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     workflow = StateGraph(AgentState)
 
     workflow.add_node("agent", agent)
-    workflow.add_node("tools", execute_tools)
+    workflow.add_node("tools", execute_tools, input=ToolState)
 
     workflow.set_entry_point("agent")
 
