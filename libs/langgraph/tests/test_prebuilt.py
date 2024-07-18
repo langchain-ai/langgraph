@@ -65,48 +65,93 @@ def test_no_modifier():
     assert response == expected_response
 
 
+def test_passing_two_modifiers():
+    model = FakeToolCallingModel()
+    with pytest.raises(ValueError):
+        create_react_agent(model, [], messages_modifier="Foo", state_modifier="Bar")
+
+
 def test_system_message_modifier():
     model = FakeToolCallingModel()
     messages_modifier = SystemMessage(content="Foo")
-    agent = create_react_agent(model, [], messages_modifier=messages_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Foo-hi?", id="0")]}
-    assert response == expected_response
+    agent_1 = create_react_agent(model, [], messages_modifier=messages_modifier)
+    agent_2 = create_react_agent(model, [], state_modifier=messages_modifier)
+    for agent in [agent_1, agent_2]:
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Foo-hi?", id="0")]
+        }
+        assert response == expected_response
 
 
 def test_system_message_string_modifier():
     model = FakeToolCallingModel()
     messages_modifier = "Foo"
-    agent = create_react_agent(model, [], messages_modifier=messages_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Foo-hi?", id="0")]}
-    assert response == expected_response
+    agent_1 = create_react_agent(model, [], messages_modifier=messages_modifier)
+    agent_2 = create_react_agent(model, [], state_modifier=messages_modifier)
+    for agent in [agent_1, agent_2]:
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Foo-hi?", id="0")]
+        }
+        assert response == expected_response
 
 
-def test_callable_modifier():
+def test_callable_messages_modifier():
     model = FakeToolCallingModel()
 
     def messages_modifier(messages):
-        return [HumanMessage(content="Bar")]
+        modified_message = f"Bar {messages[-1].content}"
+        return [HumanMessage(content=modified_message)]
 
     agent = create_react_agent(model, [], messages_modifier=messages_modifier)
     inputs = [HumanMessage("hi?")]
     response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Bar", id="0")]}
+    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
     assert response == expected_response
 
 
-def test_runnable_modifier():
+def test_callable_state_modifier():
     model = FakeToolCallingModel()
 
-    messages_modifier = RunnableLambda(lambda x: [HumanMessage(content="Baz")])
+    def state_modifier(state):
+        modified_message = f"Bar {state['messages'][-1].content}"
+        return [HumanMessage(content=modified_message)]
+
+    agent = create_react_agent(model, [], state_modifier=state_modifier)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
+    assert response == expected_response
+
+
+def test_runnable_messages_modifier():
+    model = FakeToolCallingModel()
+
+    messages_modifier = RunnableLambda(
+        lambda messages: [HumanMessage(content=f"Baz {messages[-1].content}")]
+    )
 
     agent = create_react_agent(model, [], messages_modifier=messages_modifier)
     inputs = [HumanMessage("hi?")]
     response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Baz", id="0")]}
+    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
+    assert response == expected_response
+
+
+def test_runnable_state_modifier():
+    model = FakeToolCallingModel()
+
+    state_modifier = RunnableLambda(
+        lambda state: [HumanMessage(content=f"Baz {state['messages'][-1].content}")]
+    )
+
+    agent = create_react_agent(model, [], state_modifier=state_modifier)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
     assert response == expected_response
 
 
@@ -207,6 +252,31 @@ async def test_tool_node():
                 ]
             }
         )
+
+    # incorrect tool name
+    result_incorrect_name = ToolNode([tool1, tool2]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool3",
+                            "args": {"some_val": 1, "some_other_val": "foo"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+    tool_message: ToolMessage = result_incorrect_name["messages"][-1]
+    assert tool_message.type == "tool"
+    assert (
+        tool_message.content
+        == "Error: tool3 is not a valid tool, try one of [tool1, tool2]."
+    )
+    assert tool_message.tool_call_id == "some 0"
 
 
 def my_function(some_val: int, some_other_val: str) -> str:

@@ -232,8 +232,7 @@ RUN set -ex && \\
                 '[tool.setuptools.package-data]' \\
                 '"*" = ["**/*"]'; do \\
         echo "$line" >> /deps/__outer_{fullpath.name}/pyproject.toml; \\
-    done
-"""
+    done"""
         for fullpath, (relpath, destpath) in local_deps.faux_pkgs.items()
     )
     local_pkgs_str = os.linesep.join(
@@ -241,19 +240,24 @@ RUN set -ex && \\
         for fullpath, relpath in local_deps.real_pkgs.items()
     )
 
+    installs = f"{os.linesep}{os.linesep}".join(
+        filter(
+            None,
+            [
+                pip_config_file_str,
+                pip_pkgs_str,
+                pip_reqs_str,
+                local_pkgs_str,
+                faux_pkgs_str,
+            ],
+        )
+    )
+
     return f"""FROM {base_image}:{config['python_version']}
 
 {os.linesep.join(config["dockerfile_lines"])}
 
-{pip_config_file_str}
-
-{pip_pkgs_str}
-
-{pip_reqs_str}
-
-{local_pkgs_str}
-
-{faux_pkgs_str}
+{installs}
 
 RUN {pip_install} -e /deps/*
 

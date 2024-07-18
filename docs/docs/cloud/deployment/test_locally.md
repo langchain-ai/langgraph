@@ -2,6 +2,8 @@
 
 This guide assumes you have a LangGraph app correctly set up with a proper configuration file and a corresponding compiled graph, and that you have a proper LangChain API key.
 
+Testing locally ensures that there are no errors or conflicts with Python dependencies and confirms that the configuration file is specified correctly.
+
 ## Setup
 
 Install the proper packages:

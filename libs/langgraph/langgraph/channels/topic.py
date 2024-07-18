@@ -41,6 +41,13 @@ class Topic(
         self.seen = set[Value]()
         self.values = list[Value]()
 
+    def __eq__(self, value: object) -> bool:
+        return (
+            isinstance(value, Topic)
+            and value.unique == self.unique
+            and value.accumulate == self.accumulate
+        )
+
     @property
     def ValueType(self) -> Any:
         """The type of the value stored in the channel."""

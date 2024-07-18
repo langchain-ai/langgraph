@@ -190,7 +190,7 @@ By default, the return value `routing_function` is used as the name of the node 
 You can optionally provide a dictionary that maps the `routing_function`'s output to the name of the next node.
 
 ```python
-graph.add_edge("node_a", routing_function, {True: "node_b", False: "node_c"})
+graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
 ```
 
 ### Entry Point

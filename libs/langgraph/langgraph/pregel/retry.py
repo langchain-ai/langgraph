@@ -2,59 +2,11 @@ import asyncio
 import logging
 import random
 import time
-from typing import Callable, NamedTuple, Optional, Union
+from typing import Optional
 
-import httpx
-import requests
-
-from langgraph.pregel.types import PregelExecutableTask
+from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
 
 logger = logging.getLogger(__name__)
-
-
-def default_retry_on(exc: Exception) -> bool:
-    if isinstance(exc, ConnectionError):
-        return True
-    if isinstance(
-        exc,
-        (
-            ValueError,
-            TypeError,
-            ArithmeticError,
-            ImportError,
-            LookupError,
-            NameError,
-            SyntaxError,
-            RuntimeError,
-            ReferenceError,
-            StopIteration,
-            StopAsyncIteration,
-            OSError,
-        ),
-    ):
-        return False
-    if isinstance(exc, httpx.HTTPStatusError):
-        return 500 <= exc.response.status_code < 600
-    if isinstance(exc, requests.HTTPError):
-        return 500 <= exc.response.status_code < 600 if exc.response else True
-    return True
-
-
-class RetryPolicy(NamedTuple):
-    initial_interval: float = 0.5
-    """Amount of time that must elapse before the first retry occurs. In seconds."""
-    backoff_factor: float = 2.0
-    """Multiplier by which the interval increases after each retry."""
-    max_interval: float = 128.0
-    """Maximum amount of time that may elapse between retries. In seconds."""
-    max_attempts: int = 10
-    """Maximum number of attempts to make before giving up, including the first."""
-    jitter: bool = True
-    """Whether to add random jitter to the interval between retries."""
-    retry_on: Union[
-        tuple[Exception, ...], Callable[[Exception], bool]
-    ] = default_retry_on
-    """List of exceptions that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
 def run_with_retry(
@@ -62,6 +14,7 @@ def run_with_retry(
     retry_policy: Optional[RetryPolicy],
 ) -> None:
     """Run a task with retries."""
+    retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     while True:
@@ -106,6 +59,7 @@ async def arun_with_retry(
     stream: bool = False,
 ) -> None:
     """Run a task asynchronously with retries."""
+    retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     while True:

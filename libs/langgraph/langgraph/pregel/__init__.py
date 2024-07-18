@@ -41,7 +41,6 @@ from langchain_core.runnables.config import (
     ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
-    get_executor_for_config,
     merge_configs,
     patch_config,
 )
@@ -72,6 +71,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_RESUMING,
     CONFIG_KEY_READ,
     CONFIG_KEY_SEND,
     INTERRUPT,
@@ -95,6 +95,7 @@ from langgraph.pregel.debug import (
     print_step_tasks,
     print_step_writes,
 )
+from langgraph.pregel.executor import AsyncBackgroundExecutor, BackgroundExecutor
 from langgraph.pregel.io import (
     map_input,
     map_output_updates,
@@ -571,6 +572,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
@@ -662,6 +664,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
@@ -847,7 +850,6 @@ class Pregel(
             run_id=config.get("run_id"),
         )
         try:
-            bg: list[concurrent.futures.Future] = []
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
             if self.checkpointer and not config.get("configurable"):
@@ -892,29 +894,25 @@ class Pregel(
 
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
-            with ChannelsManager(
+            with BackgroundExecutor(config) as submit, ChannelsManager(
                 self.channels, checkpoint, config
-            ) as channels, get_executor_for_config(
-                config
-            ) as executor, ManagedValuesManager(
+            ) as channels, ManagedValuesManager(
                 self.managed_values_dict, config, self
             ) as managed:
 
                 def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
                     if checkpointer is not None:
-                        bg.append(
-                            executor.submit(
-                                checkpointer.put_writes,
-                                {
-                                    **checkpoint_config,
-                                    "configurable": {
-                                        **checkpoint_config["configurable"],
-                                        "thread_ts": checkpoint["id"],
-                                    },
+                        submit(
+                            checkpointer.put_writes,
+                            {
+                                **checkpoint_config,
+                                "configurable": {
+                                    **checkpoint_config["configurable"],
+                                    "thread_ts": checkpoint["id"],
                                 },
-                                writes,
-                                task_id,
-                            )
+                            },
+                            writes,
+                            task_id,
                         )
 
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
@@ -932,13 +930,11 @@ class Pregel(
                         checkpoint, channels, metadata["step"]
                     )
                     # save it, without blocking
-                    bg.append(
-                        executor.submit(
-                            checkpointer.put,
-                            checkpoint_config,
-                            copy_checkpoint(checkpoint),
-                            metadata,
-                        )
+                    submit(
+                        checkpointer.put,
+                        checkpoint_config,
+                        copy_checkpoint(checkpoint),
+                        metadata,
                     )
                     # update checkpoint config
                     checkpoint_config = {
@@ -1027,12 +1023,6 @@ class Pregel(
                             else _increment
                         ),
                         checkpointer=checkpointer,
-                        should_continue_from_interrupt=input is None,
-                        interrupted_before_nodes=(
-                            saved.metadata.get("interrupted_before_nodes")
-                            if saved and not is_subgraph
-                            else None
-                        ),
                     )
 
                     # assign pending writes to tasks
@@ -1052,7 +1042,7 @@ class Pregel(
                             break
 
                     # before execution, check if we should interrupt
-                    if interrupted_nodes := _should_interrupt(
+                    if _should_interrupt(
                         checkpoint,
                         interrupt_before,
                         self.stream_channels_list,
@@ -1061,25 +1051,8 @@ class Pregel(
                         if is_subgraph:
                             raise GraphInterrupt()
                         else:
-                            bg.append(
-                                executor.submit(
-                                    checkpointer.put,
-                                    checkpoint_config,
-                                    copy_checkpoint(checkpoint),
-                                    {"interrupted_before_nodes": interrupted_nodes},
-                                )
-                            )
                             break
                     else:
-                        if saved and saved.metadata.get("interrupted_before_nodes"):
-                            bg.append(
-                                executor.submit(
-                                    checkpointer.put,
-                                    checkpoint_config,
-                                    copy_checkpoint(checkpoint),
-                                    {"interrupted_before_nodes": None},
-                                )
-                            )
                         checkpoint = next_checkpoint
 
                     if debug:
@@ -1095,7 +1068,7 @@ class Pregel(
                     # each task is independent from all other concurrent tasks
                     # yield updates/debug output as each task finishes
                     futures = {
-                        executor.submit(run_with_retry, task, self.retry_policy): task
+                        submit(run_with_retry, task, self.retry_policy): task
                         for task in next_tasks
                         if not task.writes
                     }
@@ -1116,6 +1089,8 @@ class Pregel(
                                 else None
                             ),
                         )
+                        if not done:
+                            break  # timed out
                         for fut in done:
                             task = futures.pop(fut)
                             if fut.exception() is not None:
@@ -1159,8 +1134,8 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _, _ in next_tasks:
-                        pending_writes.extend(writes)
+                    for task in next_tasks:
+                        pending_writes.extend(task.writes)
 
                     if debug:
                         print_step_writes(
@@ -1223,19 +1198,6 @@ class Pregel(
         except BaseException as e:
             run_manager.on_chain_error(e)
             raise
-        finally:
-            # cancel any pending tasks when generator is interrupted
-            try:
-                for task in futures:
-                    task.cancel()
-            except NameError:
-                pass
-            # wait for all background tasks to finish
-            done, _ = concurrent.futures.wait(
-                bg, return_when=concurrent.futures.ALL_COMPLETED
-            )
-            for task in done:
-                task.result()
 
     async def astream(
         self,
@@ -1336,7 +1298,6 @@ class Pregel(
         )
         try:
             loop = asyncio.get_event_loop()
-            bg: list[asyncio.Task] = []
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
             if self.checkpointer and not config.get("configurable"):
@@ -1382,7 +1343,7 @@ class Pregel(
             start = saved.metadata.get("step", -2) + 1 if saved else -1
 
             # create channels from checkpoint
-            async with AsyncChannelsManager(
+            async with AsyncBackgroundExecutor() as submit, AsyncChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, AsyncManagedValuesManager(
                 self.managed_values_dict, config, self
@@ -1390,20 +1351,17 @@ class Pregel(
 
                 def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
                     if checkpointer is not None:
-                        bg.append(
-                            asyncio.create_task(
-                                checkpointer.aput_writes(
-                                    {
-                                        **checkpoint_config,
-                                        "configurable": {
-                                            **checkpoint_config["configurable"],
-                                            "thread_ts": checkpoint["id"],
-                                        },
-                                    },
-                                    writes,
-                                    task_id,
-                                )
-                            )
+                        submit(
+                            checkpointer.aput_writes,
+                            {
+                                **checkpoint_config,
+                                "configurable": {
+                                    **checkpoint_config["configurable"],
+                                    "thread_ts": checkpoint["id"],
+                                },
+                            },
+                            writes,
+                            task_id,
                         )
 
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
@@ -1421,13 +1379,13 @@ class Pregel(
                         checkpoint, channels, metadata["step"]
                     )
                     # save it, without blocking
-                    bg.append(
-                        asyncio.create_task(
-                            checkpointer.aput(
-                                checkpoint_config, copy_checkpoint(checkpoint), metadata
-                            )
-                        )
+                    submit(
+                        checkpointer.aput,
+                        checkpoint_config,
+                        copy_checkpoint(checkpoint),
+                        metadata,
                     )
+
                     # update checkpoint config
                     checkpoint_config = {
                         **checkpoint_config,
@@ -1512,12 +1470,6 @@ class Pregel(
                             else _increment
                         ),
                         checkpointer=checkpointer,
-                        should_continue_from_interrupt=input is None,
-                        interrupted_before_nodes=(
-                            saved.metadata.get("interrupted_before_nodes")
-                            if saved and not is_subgraph
-                            else None
-                        ),
                     )
 
                     # assign pending writes to tasks
@@ -1537,7 +1489,7 @@ class Pregel(
                             break
 
                     # before execution, check if we should interrupt
-                    if interrupted_nodes := _should_interrupt(
+                    if _should_interrupt(
                         checkpoint,
                         interrupt_before,
                         self.stream_channels_list,
@@ -1546,27 +1498,8 @@ class Pregel(
                         if is_subgraph:
                             raise GraphInterrupt()
                         else:
-                            bg.append(
-                                asyncio.create_task(
-                                    checkpointer.aput(
-                                        checkpoint_config,
-                                        copy_checkpoint(checkpoint),
-                                        {"interrupted_before_nodes": interrupted_nodes},
-                                    )
-                                )
-                            )
                             break
                     else:
-                        if saved and saved.metadata.get("interrupted_before_nodes"):
-                            bg.append(
-                                asyncio.create_task(
-                                    checkpointer.aput(
-                                        checkpoint_config,
-                                        copy_checkpoint(checkpoint),
-                                        {"interrupted_before_nodes": None},
-                                    )
-                                )
-                            )
                         checkpoint = next_checkpoint
 
                     if debug:
@@ -1583,8 +1516,13 @@ class Pregel(
                     # each task is independent from all other concurrent tasks
                     # yield updates/debug output as each task finishes
                     futures = {
-                        asyncio.create_task(
-                            arun_with_retry(task, self.retry_policy, do_stream)
+                        submit(
+                            arun_with_retry,
+                            task,
+                            self.retry_policy,
+                            do_stream,
+                            __name__=task.name,
+                            __cancel_on_exit__=True,
                         ): task
                         for task in next_tasks
                         if not task.writes
@@ -1602,6 +1540,8 @@ class Pregel(
                                 max(0, end_time - loop.time()) if end_time else None
                             ),
                         )
+                        if not done:
+                            break  # timed out
                         for fut in done:
                             task = futures.pop(fut)
                             if fut.exception() is not None:
@@ -1647,8 +1587,8 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _, _ in next_tasks:
-                        pending_writes.extend(writes)
+                    for task in next_tasks:
+                        pending_writes.extend(task.writes)
 
                     if debug:
                         print_step_writes(
@@ -1711,22 +1651,8 @@ class Pregel(
                 # set final channel values as run output
                 await run_manager.on_chain_end(read_channels(channels, output_keys))
         except BaseException as e:
-            await run_manager.on_chain_error(e)
+            await asyncio.shield(run_manager.on_chain_error(e))
             raise
-        finally:
-            # cancel any pending tasks when generator is interrupted
-            try:
-                for task in futures:
-                    task.cancel()
-                    bg.append(task)
-            except NameError:
-                pass
-            # wait for all background tasks to finish
-            fut = asyncio.gather(*bg)
-            # mark the exception as retrieved
-            fut.add_done_callback(_mark_cancelled_as_seen)
-            # wait for the future to finish, shielded from cancellation
-            await asyncio.shield(fut)
 
     def invoke(
         self,
@@ -1844,6 +1770,7 @@ def _panic_or_proceed(
     done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     inflight: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     step: int,
+    timeout_exc_cls: Type[Exception] = TimeoutError,
 ) -> None:
     while done:
         # if any task failed
@@ -1860,7 +1787,7 @@ def _panic_or_proceed(
             # cancel all pending tasks
             inflight.pop().cancel()
         # raise timeout error
-        raise TimeoutError(f"Timed out at step {step}")
+        raise timeout_exc_cls(f"Timed out at step {step}")
 
 
 def _should_interrupt(
@@ -1873,24 +1800,23 @@ def _should_interrupt(
     null_version = version_type()
     # defaultdicts are mutated on access :( so we need to copy
     seen = checkpoint["versions_seen"].copy()[INTERRUPT]
-    interrupted_nodes = []
-    # interrupt if any channel has been updated since last interrupt, otherwise return
-    if not any(
-        version > seen.get(chan, null_version)
-        for chan, version in checkpoint["channel_versions"].items()
-    ):
-        return []
-    # interrupt any triggered node that is in interrupt_nodes list
-    interrupted_nodes = [
-        node
-        for node, _, _, _, config, _, _ in tasks
-        if (
-            (not config or TAG_HIDDEN not in config.get("tags"))
-            if interrupt_nodes == "*"
-            else node in interrupt_nodes
+    return (
+        # interrupt if any channel has been updated since last interrupt, otherwise return
+        any(
+            version > seen.get(chan, null_version)
+            for chan, version in checkpoint["channel_versions"].items()
         )
-    ]
-    return interrupted_nodes
+        # and any triggered node is in interrupt_nodes list
+        and any(
+            task.name
+            for task in tasks
+            if (
+                (not task.config or TAG_HIDDEN not in task.config.get("tags"))
+                if interrupt_nodes == "*"
+                else task.name in interrupt_nodes
+            )
+        )
+    )
 
 
 def _local_read(
@@ -1998,8 +1924,8 @@ def _prepare_next_tasks(
     get_next_version: Literal[None] = None,
     manager: Literal[None] = None,
     checkpointer: Literal[None] = None,
-    should_continue_from_interrupt: Literal[False] = False,
     interrupted_before_nodes: Literal[None] = None,
+    is_resuming: Literal[False] = False
 ) -> tuple[Checkpoint, list[PregelTaskDescription]]:
     ...
 
@@ -2016,8 +1942,8 @@ def _prepare_next_tasks(
     get_next_version: Callable[[int, BaseChannel], int],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
     checkpointer: Optional[BaseCheckpointSaver],
-    should_continue_from_interrupt: bool,
     interrupted_before_nodes: Optional[Sequence[str]],
+    is_resuming: bool = False
 ) -> tuple[Checkpoint, list[PregelExecutableTask]]:
     ...
 
@@ -2034,8 +1960,7 @@ def _prepare_next_tasks(
     get_next_version: Union[None, Callable[[int, BaseChannel], int]] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
-    should_continue_from_interrupt: bool = False,
-    interrupted_before_nodes: Optional[Sequence[str]] = None,
+    is_resuming: bool = False
 ) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
     checkpoint = copy_checkpoint(checkpoint)
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
@@ -2045,7 +1970,8 @@ def _prepare_next_tasks(
             logger.warn(f"Ignoring invalid packet type {type(packet)} in pending sends")
             continue
         if for_execution:
-            if node := processes[packet.node].get_node():
+            proc = processes[packet.node]
+            if node := proc.get_node():
                 triggers = [TASKS]
                 metadata = {
                     "langgraph_step": step,
@@ -2086,6 +2012,7 @@ def _prepare_next_tasks(
                             },
                         ),
                         triggers,
+                        proc.retry_policy,
                         task_id,
                     )
                 )
@@ -2114,11 +2041,6 @@ def _prepare_next_tasks(
             > seen.get(chan, null_version)
         ):
             channels_to_consume.update(triggers)
-            was_previously_interrupted = (
-                name in interrupted_before_nodes
-                if interrupted_before_nodes is not None
-                else False
-            )
             try:
                 val = next(
                     _proc_input(
@@ -2127,11 +2049,6 @@ def _prepare_next_tasks(
                         proc,
                         managed,
                         channels,
-                        # ensure that for subgraphs we set value to None only
-                        # if parent graph also received input None AND we haven't
-                        # previously interrupted before subgraph Node
-                        not was_previously_interrupted
-                        and should_continue_from_interrupt,
                     )
                 )
             except StopIteration:
@@ -2194,10 +2111,12 @@ def _prepare_next_tasks(
                                         config,
                                     ),
                                     CONFIG_KEY_CHECKPOINTER: checkpointer,
+                                    CONFIG_KEY_RESUMING: is_resuming,
                                     "thread_id": thread_id,
                                 },
                             ),
                             triggers,
+                            proc.retry_policy,
                             task_id,
                         )
                     )
@@ -2288,10 +2207,3 @@ def _with_mode(mode: StreamMode, on: bool, iter: Iterator[Any]) -> Iterator[Any]
             yield (mode, chunk)
     else:
         yield from iter
-
-
-def _mark_cancelled_as_seen(fut: concurrent.futures.Future) -> None:
-    try:
-        fut.exception()
-    except (asyncio.CancelledError, concurrent.futures.CancelledError):
-        pass

@@ -144,6 +144,19 @@ CheckpointThreadTs = ConfigurableFieldSpec(
 
 
 class BaseCheckpointSaver(ABC):
+    """Base class for creating a graph checkpointer.
+
+    Checkpointers allow LangGraph agents to persist their state
+    within and across multiple interactions.
+
+    Attributes:
+        serde (SerializerProtocol): Serializer for encoding/decoding checkpoints.
+
+    Note:
+        When creating a custom checkpoint saver, consider implementing async
+        versions to avoid blocking the main thread.
+    """
+
     serde: SerializerProtocol = JsonPlusSerializer()
 
     def __init__(
@@ -155,13 +168,37 @@ class BaseCheckpointSaver(ABC):
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
+        """Define the configuration options for the checkpoint saver.
+
+        Returns:
+            list[ConfigurableFieldSpec]: List of configuration field specs.
+        """
         return [CheckpointThreadId, CheckpointThreadTs]
 
     def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
+        """Fetch a checkpoint using the given configuration.
+
+        Args:
+            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+
+        Returns:
+            Optional[Checkpoint]: The requested checkpoint, or None if not found.
+        """
         if value := self.get_tuple(config):
             return value.checkpoint
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Fetch a checkpoint tuple using the given configuration.
+
+        Args:
+            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+
+        Returns:
+            Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
         raise NotImplementedError
 
     def list(
@@ -172,6 +209,20 @@ class BaseCheckpointSaver(ABC):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
+        """List checkpoints that match the given criteria.
+
+        Args:
+            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria.
+            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
+            limit (Optional[int]): Maximum number of checkpoints to return.
+
+        Returns:
+            Iterator[CheckpointTuple]: Iterator of matching checkpoint tuples.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
         raise NotImplementedError
 
     def put(
@@ -180,6 +231,19 @@ class BaseCheckpointSaver(ABC):
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
     ) -> RunnableConfig:
+        """Store a checkpoint with its configuration and metadata.
+
+        Args:
+            config (RunnableConfig): Configuration for the checkpoint.
+            checkpoint (Checkpoint): The checkpoint to store.
+            metadata (CheckpointMetadata): Additional metadata for the checkpoint.
+
+        Returns:
+            RunnableConfig: Updated configuration after storing the checkpoint.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
         raise NotImplementedError
 
     def put_writes(
@@ -188,18 +252,42 @@ class BaseCheckpointSaver(ABC):
         writes: List[Tuple[str, Any]],
         task_id: str,
     ) -> None:
+        """Store intermediate writes linked to a checkpoint.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            writes (List[Tuple[str, Any]]): List of writes to store.
+            task_id (str): Identifier for the task creating the writes.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
         raise NotImplementedError(
-            "This method was added in langgraph 0.1.7. Please update your checkpointer to implement it."
+            "This method was added in langgraph 0.1.7. Please update your checkpoint saver to implement it."
         )
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
+        """
+        Asynchronously fetch a checkpoint using the given configuration.
+
+        Args:
+            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+        """
         if value := await self.aget_tuple(config):
             return value.checkpoint
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Asynchronously fetch a checkpoint tuple using the given configuration.
+
+        Args:
+            config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+
+        Returns:
+            Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
+        """
         raise NotImplementedError
 
-    def alist(
+    async def alist(
         self,
         config: Optional[RunnableConfig],
         *,
@@ -207,6 +295,17 @@ class BaseCheckpointSaver(ABC):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
+        """Asynchronously list checkpoints that match the given criteria.
+
+        Args:
+            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria.
+            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
+            limit (Optional[int]): Maximum number of checkpoints to return.
+
+        Returns:
+            AsyncIterator[CheckpointTuple]: Async iterator of matching checkpoint tuples.
+        """
         raise NotImplementedError
         yield
 
@@ -216,6 +315,16 @@ class BaseCheckpointSaver(ABC):
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
     ) -> RunnableConfig:
+        """Asynchronously store a checkpoint with its configuration and metadata.
+
+        Args:
+            config (RunnableConfig): Configuration for the checkpoint.
+            checkpoint (Checkpoint): The checkpoint to store.
+            metadata (CheckpointMetadata): Additional metadata for the checkpoint.
+
+        Returns:
+            RunnableConfig: Updated configuration after storing the checkpoint.
+        """
         raise NotImplementedError
 
     async def aput_writes(
@@ -224,11 +333,31 @@ class BaseCheckpointSaver(ABC):
         writes: List[Tuple[str, Any]],
         task_id: str,
     ) -> None:
+        """Asynchronously store intermediate writes linked to a checkpoint.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            writes (List[Tuple[str, Any]]): List of writes to store.
+            task_id (str): Identifier for the task creating the writes.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
+        """
         raise NotImplementedError(
-            "This method was added in langgraph 0.1.7. Please update your checkpointer to implement it."
+            "This method was added in langgraph 0.1.7. Please update your checkpoint saver to implement it."
         )
 
     def get_next_version(self, current: Optional[V], channel: BaseChannel) -> V:
-        """Get the next version of a channel. Default is to use int versions, incrementing by 1. If you override, you can use str/int/float versions,
-        as long as they are monotonically increasing."""
+        """Generate the next version ID for a channel.
+
+        Default is to use integer versions, incrementing by 1. If you override, you can use str/int/float versions,
+        as long as they are monotonically increasing.
+
+        Args:
+            current (Optional[V]): The current version identifier (int, float, or str).
+            channel (BaseChannel): The channel being versioned.
+
+        Returns:
+            V: The next version identifier, which must be increasing.
+        """
         return current + 1 if current is not None else 1
