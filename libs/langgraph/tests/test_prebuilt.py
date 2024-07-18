@@ -229,7 +229,7 @@ async def test_tool_node():
     assert tool_message.type == "tool"
     assert (
         tool_message.content
-        == f"Error: tool3 is not a valid tool, try one of [tool1, tool2]."
+        == "Error: tool3 is not a valid tool, try one of [tool1, tool2]."
     )
     assert tool_message.tool_call_id == "some 0"
 
