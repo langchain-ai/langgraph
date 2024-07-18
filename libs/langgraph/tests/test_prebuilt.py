@@ -253,6 +253,31 @@ async def test_tool_node():
             }
         )
 
+    # incorrect tool name
+    result_incorrect_name = ToolNode([tool1, tool2]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool3",
+                            "args": {"some_val": 1, "some_other_val": "foo"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+    tool_message: ToolMessage = result_incorrect_name["messages"][-1]
+    assert tool_message.type == "tool"
+    assert (
+        tool_message.content
+        == "Error: tool3 is not a valid tool, try one of [tool1, tool2]."
+    )
+    assert tool_message.tool_call_id == "some 0"
+
 
 def my_function(some_val: int, some_other_val: str) -> str:
     return f"{some_val} - {some_other_val}"
