@@ -152,12 +152,14 @@ nav:
           - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
           - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
           - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
+      - Tool calling:
+          - Call tools using ToolNode: how-tos/tool-calling.ipynb
+          - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
       - Other:
           - Run graph asynchronously: how-tos/async.ipynb
           - Visualize your graph: how-tos/visualization.ipynb
           - Add runtime configuration: how-tos/configuration.ipynb
           - Pass runtime values to tools: how-tos/pass-run-time-values-to-tools.ipynb
-          - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
           - Use Pydantic model as state: how-tos/state-model.ipynb
           - Use a context object in state: how-tos/state-context-key.ipynb
       - Prebuilt ReAct Agent:

@@ -9,6 +9,11 @@ from langchain_core.tools import tool as create_tool
 
 from langgraph.utils import RunnableCallable
 
+INVALID_TOOL_NAME_ERROR_TEMPLATE = (
+    "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
+)
+TOOL_CALL_ERROR_TEMPLATE = "Error: {error}\n Please fix your mistakes."
+
 
 class ToolNode(RunnableCallable):
     """A node that runs the tools called in the last AIMessage.
@@ -68,13 +73,22 @@ class ToolNode(RunnableCallable):
             raise ValueError("Last message is not an AIMessage")
 
         def run_one(call: ToolCall):
+            if (requested_tool := call["name"]) not in self.tools_by_name:
+                content = INVALID_TOOL_NAME_ERROR_TEMPLATE.format(
+                    requested_tool=requested_tool,
+                    available_tools=", ".join(self.tools_by_name.keys()),
+                )
+                return ToolMessage(
+                    content, name=requested_tool, tool_call_id=call["id"]
+                )
+
             try:
                 input = {**call, **{"type": "tool_call"}}
                 return self.tools_by_name[call["name"]].invoke(input, config)
             except Exception as e:
                 if not self.handle_tool_errors:
                     raise e
-                content = f"Error: {repr(e)}\n Please fix your mistakes."
+                content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
                 return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
 
         with get_executor_for_config(config) as executor:
@@ -100,13 +114,22 @@ class ToolNode(RunnableCallable):
             raise ValueError("Last message is not an AIMessage")
 
         async def run_one(call: ToolCall):
+            if (requested_tool := call["name"]) not in self.tools_by_name:
+                content = INVALID_TOOL_NAME_ERROR_TEMPLATE.format(
+                    requested_tool=requested_tool,
+                    available_tools=", ".join(self.tools_by_name.keys()),
+                )
+                return ToolMessage(
+                    content, name=requested_tool, tool_call_id=call["id"]
+                )
+
             try:
                 input = {**call, **{"type": "tool_call"}}
                 return await self.tools_by_name[call["name"]].ainvoke(input, config)
             except Exception as e:
                 if not self.handle_tool_errors:
                     raise e
-                content = f"Error: {repr(e)}\n Please fix your mistakes."
+                content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
                 return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
 
         outputs = await asyncio.gather(*(run_one(call) for call in message.tool_calls))
