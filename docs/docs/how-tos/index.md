@@ -58,13 +58,13 @@ These guides show how to use different streaming modes.
 
 - [How to call tools using ToolNode](tool-calling.ipynb)
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
+- [How to pass graph state to tools](pass-run-time-values-to-tools.ipynb)
 
 ## Other
 
 - [How to run graph asynchronously](async.ipynb)
 - [How to visualize your graph](visualization.ipynb)
 - [How to add runtime configuration to your graph](configuration.ipynb)
-- [How to pass runtime values to tools](pass-run-time-values-to-tools.ipynb)
 - [How to use a Pydantic model as your state](state-model.ipynb)
 - [How to use a context object in state](state-context-key.ipynb)
 
