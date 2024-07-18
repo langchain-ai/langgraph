@@ -389,7 +389,7 @@ async def test_cancel_graph_astream_events_v2(
             await checkpointer.__aexit__(None, None, None)
 
 
-async def test_node_schemas() -> None:
+async def test_node_schemas_custom_output() -> None:
     from langchain_core.messages import HumanMessage
 
     class State(TypedDict):
@@ -397,11 +397,14 @@ async def test_node_schemas() -> None:
         bye: str
         messages: Annotated[list[str], add_messages]
 
+    class Output(TypedDict):
+        messages: list[str]
+
     class StateForA(TypedDict):
         hello: str
         messages: Annotated[list[str], add_messages]
 
-    async def node_a(state: StateForA) -> State:
+    async def node_a(state: StateForA):
         assert state == {
             "hello": "there",
             "messages": [HumanMessage(content="hello", id=AnyStr())],
@@ -411,27 +414,27 @@ async def test_node_schemas() -> None:
         bye: str
         now: int
 
-    async def node_b(state: StateForB) -> StateForB:
+    async def node_b(state: StateForB):
         assert state == {
             "bye": "world",
             "now": None,
         }
         return {
             "now": 123,
-            "hello": "again",  # ignored because not in output schema
+            "hello": "again",
         }
 
     class StateForC(TypedDict):
         hello: str
         now: int
 
-    async def node_c(state: StateForC) -> StateForC:
+    async def node_c(state: StateForC):
         assert state == {
-            "hello": "there",
+            "hello": "again",
             "now": 123,
         }
 
-    builder = StateGraph(State)
+    builder = StateGraph(State, output=Output)
     builder.add_node("a", node_a)
     builder.add_node("b", node_b)
     builder.add_node("c", node_c)
@@ -443,8 +446,26 @@ async def test_node_schemas() -> None:
     assert await graph.ainvoke(
         {"hello": "there", "bye": "world", "messages": "hello"}
     ) == {
-        "hello": "there",
-        "bye": "world",
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+    builder = StateGraph(input=State, output=Output)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_c)
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("b", "c")
+    graph = builder.compile()
+
+    assert await graph.ainvoke(
+        {
+            "hello": "there",
+            "bye": "world",
+            "messages": "hello",
+            "now": 345,  # ignored because not in input schema
+        }
+    ) == {
         "messages": [HumanMessage(content="hello", id=AnyStr())],
     }
 

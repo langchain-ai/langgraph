@@ -232,13 +232,16 @@ def test_checkpoint_errors() -> None:
         graph.invoke("", {"configurable": {"thread_id": "thread-1"}})
 
 
-def test_node_schemas() -> None:
+def test_node_schemas_custom_output() -> None:
     from langchain_core.messages import HumanMessage
 
     class State(TypedDict):
         hello: str
         bye: str
         messages: Annotated[list[str], add_messages]
+
+    class Output(TypedDict):
+        messages: list[str]
 
     class StateForA(TypedDict):
         hello: str
@@ -254,14 +257,14 @@ def test_node_schemas() -> None:
         bye: str
         now: int
 
-    def node_b(state: StateForB) -> StateForB:
+    def node_b(state: StateForB):
         assert state == {
             "bye": "world",
             "now": None,
         }
         return {
             "now": 123,
-            "hello": "again",  # ignored because not in output schema
+            "hello": "again",
         }
 
     class StateForC(TypedDict):
@@ -270,11 +273,11 @@ def test_node_schemas() -> None:
 
     def node_c(state: StateForC) -> StateForC:
         assert state == {
-            "hello": "there",
+            "hello": "again",
             "now": 123,
         }
 
-    builder = StateGraph(State)
+    builder = StateGraph(State, output=Output)
     builder.add_node("a", node_a)
     builder.add_node("b", node_b)
     builder.add_node("c", node_c)
@@ -284,8 +287,26 @@ def test_node_schemas() -> None:
     graph = builder.compile()
 
     assert graph.invoke({"hello": "there", "bye": "world", "messages": "hello"}) == {
-        "hello": "there",
-        "bye": "world",
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+    builder = StateGraph(input=State, output=Output)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_c)
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("b", "c")
+    graph = builder.compile()
+
+    assert graph.invoke(
+        {
+            "hello": "there",
+            "bye": "world",
+            "messages": "hello",
+            "now": 345,  # ignored because not in input schema
+        }
+    ) == {
         "messages": [HumanMessage(content="hello", id=AnyStr())],
     }
 

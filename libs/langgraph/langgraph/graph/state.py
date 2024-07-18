@@ -65,7 +65,6 @@ class StateNodeSpec(NamedTuple):
     runnable: Runnable
     metadata: dict[str, Any]
     input: Type[Any]
-    output: Type[Any]
 
 
 class StateGraph(Graph):
@@ -136,6 +135,7 @@ class StateGraph(Graph):
         if state_schema is None:
             if input is None or output is None:
                 raise ValueError("Must provide state_schema or input and output")
+            state_schema = input
         else:
             if input is None:
                 input = state_schema
@@ -167,10 +167,12 @@ class StateGraph(Graph):
             for key, channel in channels.items():
                 if key in self.channels:
                     if self.channels[key] != channel:
-                        print(self.channels[key], channel)
-                        raise ValueError(
-                            f"Channel '{key}' already exists with a different type"
-                        )
+                        if isinstance(channel, LastValue):
+                            pass
+                        else:
+                            raise ValueError(
+                                f"Channel '{key}' already exists with a different type"
+                            )
                 else:
                     self.channels[key] = channel
             for key, managed in managed.items():
@@ -193,7 +195,6 @@ class StateGraph(Graph):
         *,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
-        output: Optional[Type[Any]] = None,
     ) -> None:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -217,7 +218,6 @@ class StateGraph(Graph):
         *,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
-        output: Optional[Type[Any]] = None,
     ) -> None:
         """Adds a new node to the state graph.
 
@@ -240,7 +240,6 @@ class StateGraph(Graph):
         *,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
-        output: Optional[Type[Any]] = None,
     ) -> None:
         """Adds a new node to the state graph.
 
@@ -249,6 +248,8 @@ class StateGraph(Graph):
         Args:
             node (Union[str, RunnableLike)]: The function or runnable this node will run.
             action (Optional[RunnableLike]): The action associated with the node. (default: None)
+            metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
+            input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
         Raises:
             ValueError: If the key is already being used as a state key.
 
@@ -313,21 +314,14 @@ class StateGraph(Graph):
                     input_hint = hints[list(hints.keys())[0]]
                     if isinstance(input_hint, type) and get_type_hints(input_hint):
                         input = input_hint
-                if output is None:
-                    output_hint = hints.get("return", Any)
-                    if isinstance(output_hint, type) and get_type_hints(output_hint):
-                        output = output_hint
         except TypeError:
             pass
         if input is not None:
             self._add_schema(input)
-        if output is not None:
-            self._add_schema(output)
         self.nodes[node] = StateNodeSpec(
             coerce_to_runnable(action, name=node, trace=False),
             metadata,
             input=input or self.schema,
-            output=output or self.schema,
         )
 
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
@@ -482,24 +476,17 @@ class CompiledStateGraph(CompiledGraph):
 
     def attach_node(self, key: str, node: Optional[StateNodeSpec]) -> None:
         if key == START:
-            input_schema = self.builder.input
+            output_keys = [
+                k
+                for k, v in self.builder.schemas[self.builder.input].items()
+                if not isinstance(v, Context) and not is_managed_value(v)
+            ]
         else:
-            input_schema = node.input if node else self.builder.schema
-        input_values = {
-            k: v if is_managed_value(v) else k
-            for k, v in self.builder.schemas[input_schema].items()
-        }
-        is_single_input = len(input_values) == 1 and "__root__" in input_values
+            output_keys = list(self.builder.channels)
 
-        output_keys = [
-            k
-            for k, v in self.builder.schemas[
-                node.output if node else self.builder.schema
-            ].items()
-            if not is_managed_value(v)
-        ]
-
-        def _get_state_key(input: dict, config: RunnableConfig, *, key: str) -> Any:
+        def _get_state_key(
+            input: Union[None, dict, Any], config: RunnableConfig, *, key: str
+        ) -> Any:
             if input is None:
                 return SKIP_WRITE
             elif isinstance(input, dict):
@@ -540,6 +527,13 @@ class CompiledStateGraph(CompiledGraph):
                 ],
             )
         else:
+            input_schema = node.input if node else self.builder.schema
+            input_values = {
+                k: v if is_managed_value(v) else k
+                for k, v in self.builder.schemas[input_schema].items()
+            }
+            is_single_input = len(input_values) == 1 and "__root__" in input_values
+
             self.channels[key] = EphemeralValue(Any, guard=False)
             self.nodes[key] = PregelNode(
                 triggers=[],
