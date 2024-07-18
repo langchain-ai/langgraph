@@ -1617,7 +1617,7 @@ class Pregel(
                     # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
                     exceptions_to_handle = () if is_subgraph else (GraphInterrupt,)
                     try:
-                        _panic_or_proceed(done, inflight, step)
+                        _panic_or_proceed(done, inflight, step, asyncio.TimeoutError)
                     except exceptions_to_handle:
                         break
 
