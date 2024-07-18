@@ -1072,21 +1072,21 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
                 self.calls = 0
 
         one = AwhileMaker(0.2, {"value": 2})
-        two = AwhileMaker(0.6, ValueError("I'm not good"))
+        two = AwhileMaker(0.6, ConnectionError("I'm not good"))
         builder = StateGraph(State)
         builder.add_node("one", one)
-        builder.add_node("two", two)
+        builder.add_node("two", two, retry=RetryPolicy(max_attempts=2))
         builder.add_edge(START, "one")
         builder.add_edge(START, "two")
         graph = builder.compile(checkpointer=checkpointer)
 
         thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
-        with pytest.raises(ValueError, match="I'm not good"):
+        with pytest.raises(ConnectionError, match="I'm not good"):
             graph.invoke({"value": 1}, thread1)
 
         # both nodes should have been called once
         assert one.calls == 1
-        assert two.calls == 1
+        assert two.calls == 2  # two attempts
 
         # latest checkpoint should be before nodes "one", "two"
         state = graph.get_state(thread1)
@@ -1105,13 +1105,13 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         assert checkpoint.pending_writes[0][0] == checkpoint.pending_writes[1][0]
 
         # resume execution
-        with pytest.raises(ValueError, match="I'm not good"):
+        with pytest.raises(ConnectionError, match="I'm not good"):
             graph.invoke(None, thread1)
 
         # node "one" succeeded previously, so shouldn't be called again
         assert one.calls == 1
         # node "two" should have been called once again
-        assert two.calls == 2
+        assert two.calls == 4  # two attempts before + two attempts now
 
         # confirm no new checkpoints saved
         state_two = graph.get_state(thread1)

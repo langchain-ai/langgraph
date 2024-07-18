@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Any, Callable, Literal, NamedTuple, Optional, Union
+from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
@@ -46,14 +46,14 @@ class RetryPolicy(NamedTuple):
     """Multiplier by which the interval increases after each retry."""
     max_interval: float = 128.0
     """Maximum amount of time that may elapse between retries. In seconds."""
-    max_attempts: int = 10
+    max_attempts: int = 3
     """Maximum number of attempts to make before giving up, including the first."""
     jitter: bool = True
     """Whether to add random jitter to the interval between retries."""
     retry_on: Union[
-        tuple[Exception, ...], Callable[[Exception], bool]
+        Type[Exception], tuple[Type[Exception], ...], Callable[[Exception], bool]
     ] = default_retry_on
-    """List of exceptions that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
+    """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
 class PregelTaskDescription(NamedTuple):

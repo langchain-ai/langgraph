@@ -42,7 +42,7 @@ from langgraph.graph.graph import (
 )
 from langgraph.managed.base import ManagedValue, is_managed_value
 from langgraph.pregel.read import ChannelRead, PregelNode
-from langgraph.pregel.types import All
+from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.utils import RunnableCallable, coerce_to_runnable
 
@@ -65,6 +65,7 @@ class StateNodeSpec(NamedTuple):
     runnable: Runnable
     metadata: dict[str, Any]
     input: Type[Any]
+    retry_policy: Optional[RetryPolicy]
 
 
 class StateGraph(Graph):
@@ -195,6 +196,7 @@ class StateGraph(Graph):
         *,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
+        retry: Optional[RetryPolicy] = None,
     ) -> None:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -218,6 +220,7 @@ class StateGraph(Graph):
         *,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
+        retry: Optional[RetryPolicy] = None,
     ) -> None:
         """Adds a new node to the state graph.
 
@@ -240,6 +243,7 @@ class StateGraph(Graph):
         *,
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
+        retry: Optional[RetryPolicy] = None,
     ) -> None:
         """Adds a new node to the state graph.
 
@@ -322,6 +326,7 @@ class StateGraph(Graph):
             coerce_to_runnable(action, name=node, trace=False),
             metadata,
             input=input or self.schema,
+            retry_policy=retry,
         )
 
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
@@ -552,6 +557,7 @@ class CompiledStateGraph(CompiledGraph):
                     ),
                 ],
                 metadata=node.metadata,
+                retry_policy=node.retry_policy,
             ).pipe(node.runnable)
 
     def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
