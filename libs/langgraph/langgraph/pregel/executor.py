@@ -17,6 +17,8 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from typing_extensions import ParamSpec
 
+from langgraph.errors import GraphInterrupt
+
 P = ParamSpec("P")
 T = TypeVar("T")
 
@@ -41,6 +43,8 @@ def BackgroundExecutor(config: RunnableConfig) -> Iterator[Submit]:
         def done(task: concurrent.futures.Future) -> None:
             try:
                 task.result()
+            except GraphInterrupt:
+                tasks.pop(task)
             except BaseException:
                 pass
             else:
@@ -96,6 +100,8 @@ class AsyncBackgroundExecutor(AsyncContextManager):
     def done(self, task: asyncio.Task) -> None:
         try:
             task.result()
+        except GraphInterrupt:
+            self.tasks.pop(task)
         except BaseException:
             pass
         else:
