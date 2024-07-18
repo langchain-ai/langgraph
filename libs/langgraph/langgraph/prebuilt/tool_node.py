@@ -4,7 +4,7 @@ from typing import Any, Callable, Dict, Literal, Optional, Sequence, Union
 from langchain_core.messages import AIMessage, AnyMessage, ToolCall, ToolMessage
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
-from langchain_core.tools import BaseTool
+from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 
 from langgraph.utils import RunnableCallable
@@ -194,3 +194,8 @@ def tools_condition(
     if hasattr(ai_message, "tool_calls") and len(ai_message.tool_calls) > 0:
         return "tools"
     return "__end__"
+
+
+class InjectedState(InjectedToolArg):
+    def __init__(self, field: Optional[str] = None) -> None:
+        self.field = field
