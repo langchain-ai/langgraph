@@ -38,6 +38,7 @@ _MANUAL = {
         "subgraph.ipynb",
         "force-calling-a-tool-first.ipynb",
         "pass-run-time-values-to-tools.ipynb",
+        "tool-calling.ipynb",
         "tool-calling-errors.ipynb",
         "dynamic-returning-direct.ipynb",
         "managing-agent-steps.ipynb",
