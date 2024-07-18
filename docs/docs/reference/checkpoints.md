@@ -9,7 +9,11 @@ You can [compile][langgraph.graph.MessageGraph.compile] any LangGraph workflow w
 
 ### Checkpoint
 
-::: langgraph.checkpoint.Checkpoint
+::: langgraph.checkpoint.base.Checkpoint
+
+### CheckpointMetadata
+
+::: langgraph.checkpoint.base.CheckpointMetadata
 
 ### BaseCheckpointSaver
 
