@@ -139,7 +139,6 @@ class PregelLoop(ContextManager):
         interrupt_after: Optional[Sequence[str]] = None,
         interrupt_before: Optional[Sequence[str]] = None,
     ) -> bool:
-        print("tick", self.status, self.step)
         if self.status != "pending":
             raise RuntimeError(f"Cannot tick when status is {self.status}")
         if self.input is not INPUT_DONE:
