@@ -452,6 +452,21 @@ def build(
         _build(runner, set, config, config_json, platform, base_image, pull, tag)
 
 
+@OPT_CONFIG
+@click.argument("save_path", type=click.Path(resolve_path=True))
+@cli.command(help="Generate a Dockerfile for langgraph API server")
+@log_command
+def dockerfile(save_path: pathlib.Path, config: pathlib.Path):
+    with open(config) as f:
+        config_json = langgraph_cli.config.validate_config(json.load(f))
+    with open(save_path, "w") as f:
+        f.write(
+            langgraph_cli.config.config_to_docker(
+                config, config_json, "langchain/langgraph-api"
+            )
+        )
+
+
 def prepare_args_and_stdin(
     *,
     capabilities: DockerCapabilities,
