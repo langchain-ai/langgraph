@@ -849,38 +849,34 @@ class Pregel(
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
-                    interrupt_before=interrupt_before, interrupt_after=interrupt_after
+                    output_keys=output_keys,
+                    interrupt_before=interrupt_before,
+                    interrupt_after=interrupt_after,
                 ):
-                    # print debug output
+                    # debug flag
                     if self.debug:
                         print_step_checkpoint(
                             loop.checkpoint_metadata,
                             loop.channels,
                             self.stream_channels_list,
                         )
-                    # emit debug output
-                    if self.checkpointer and "debug" in stream_modes:
-                        yield from _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_checkpoint(
-                                loop.checkpoint_metadata["step"],
-                                loop.config,
-                                loop.channels,
-                                self.stream_channels_asis,
-                                loop.checkpoint_metadata,
-                            ),
-                        )
-
+                    # emit output
+                    while loop.stream:
+                        mode, payload = loop.stream.popleft()
+                        if mode in stream_modes:
+                            if isinstance(stream_mode, list):
+                                yield (mode, payload)
+                            else:
+                                yield payload
+                    # debug flag
                     if debug:
-                        print_step_tasks(loop.checkpoint_metadata["step"], loop.tasks)
+                        print_step_tasks(loop.step, loop.tasks)
+                    # TODO move to tick() ?
                     if "debug" in stream_modes:
                         yield from _with_mode(
                             "debug",
                             isinstance(stream_mode, list),
-                            map_debug_tasks(
-                                loop.checkpoint_metadata["step"], loop.tasks
-                            ),
+                            map_debug_tasks(loop.step, loop.tasks),
                         )
 
                     # execute tasks, and wait for one to fail or all to finish.
@@ -931,7 +927,7 @@ class Pregel(
                                         "debug",
                                         isinstance(stream_mode, list),
                                         map_debug_task_results(
-                                            loop.checkpoint_metadata["step"],
+                                            loop.step,
                                             [task],
                                             self.stream_channels_list,
                                         ),
@@ -941,38 +937,31 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    _panic_or_proceed(done, inflight, loop.checkpoint_metadata["step"])
+                    _panic_or_proceed(done, inflight, loop.step)
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
-
-                    # combine pending writes from all tasks
-                    pending_writes = deque[tuple[str, Any]]()
-                    for task in loop.tasks:
-                        pending_writes.extend(task.writes)
-
+                    # debug flag
                     if debug:
                         print_step_writes(
-                            loop.checkpoint_metadata["step"],
-                            pending_writes,
+                            loop.step,
+                            [w for t in loop.tasks for w in t.writes],
                             self.stream_channels_list,
                         )
-
-                    # yield values output
-                    if "values" in stream_modes:
-                        yield from _with_mode(
-                            "values",
-                            isinstance(stream_mode, list),
-                            map_output_values(
-                                output_keys, pending_writes, loop.channels
-                            ),
-                        )
+                # emit output
+                while loop.stream:
+                    mode, payload = loop.stream.popleft()
+                    if mode in stream_modes:
+                        if isinstance(stream_mode, list):
+                            yield (mode, payload)
+                        else:
+                            yield payload
+                # handle exit
                 if loop.status == "out_of_steps":
                     raise GraphRecursionError(
-                        f"Recursion limit of {config['recursion_limit']} reached"
+                        f"Recursion limit of {config['recursion_limit']} reached "
                         "without hitting a stop condition. You can increase the "
                         "limit by setting the `recursion_limit` config key."
                     )
-
                 # set final channel values as run output
                 run_manager.on_chain_end(read_channels(loop.channels, output_keys))
         except BaseException as e:
@@ -1142,6 +1131,7 @@ class Pregel(
                         )
 
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
+                    print(metadata)
                     nonlocal checkpoint, checkpoint_config, channels
 
                     if self.checkpointer is None:
@@ -1268,12 +1258,7 @@ class Pregel(
                             break
 
                     # before execution, check if we should interrupt
-                    if should_interrupt(
-                        checkpoint,
-                        interrupt_before,
-                        self.stream_channels_list,
-                        next_tasks,
-                    ):
+                    if should_interrupt(checkpoint, interrupt_before, next_tasks):
                         break
                     else:
                         checkpoint = next_checkpoint
@@ -1405,12 +1390,7 @@ class Pregel(
                         yield chunk
 
                     # after execution, check if we should interrupt
-                    if should_interrupt(
-                        checkpoint,
-                        interrupt_after,
-                        self.stream_channels_list,
-                        next_tasks,
-                    ):
+                    if should_interrupt(checkpoint, interrupt_after, next_tasks):
                         break
                 else:
                     raise GraphRecursionError(

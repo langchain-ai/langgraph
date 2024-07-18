@@ -4735,6 +4735,18 @@ async def test_start_branch_then() -> None:
             "my_key": "value",
             "market": "DE",
         }
+        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+            {
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+            },
+            {
+                "source": "input",
+                "step": -1,
+                "writes": {"my_key": "value", "market": "DE"},
+            },
+        ]
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value", "market": "DE"},
             next=("tool_two_slow",),

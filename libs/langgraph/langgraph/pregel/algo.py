@@ -44,7 +44,6 @@ from langgraph.pregel.types import All, PregelExecutableTask, PregelTaskDescript
 def should_interrupt(
     checkpoint: Checkpoint,
     interrupt_nodes: Union[All, Sequence[str]],
-    snapshot_channels: Sequence[str],
     tasks: list[PregelExecutableTask],
 ) -> bool:
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))

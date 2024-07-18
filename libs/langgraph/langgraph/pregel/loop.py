@@ -4,13 +4,17 @@ from types import TracebackType
 from typing import (
     TYPE_CHECKING,
     Any,
+    Callable,
     ContextManager,
     List,
     Literal,
     Mapping,
     Optional,
     Sequence,
+    Tuple,
     Type,
+    TypeVar,
+    Union,
 )
 
 from langchain_core.runnables import RunnableConfig
@@ -35,31 +39,39 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
     should_interrupt,
 )
+from langgraph.pregel.debug import map_debug_checkpoint
 from langgraph.pregel.executor import BackgroundExecutor, Submit
-from langgraph.pregel.io import map_input
+from langgraph.pregel.io import map_input, map_output_updates, map_output_values, single
 from langgraph.pregel.types import PregelExecutableTask
 
 if TYPE_CHECKING:
     from langgraph.pregel import Pregel
 
 
+V = TypeVar("V")
 INPUT_DONE = object()
 
 
 class PregelLoop(ContextManager):
+    input: Optional[Any]
     config: RunnableConfig
-    checkpoint: Checkpoint
-    checkpoint_metadata: CheckpointMetadata
-    checkpoint_pending_writes: Optional[List[PendingWrite]]
+    checkpointer: Optional[BaseCheckpointSaver]
+    get_next_version: Callable[[Optional[V]], V]
+    graph: "Pregel"
 
     submit: Submit
     channels: Mapping[str, BaseChannel]
     managed: ManagedValueMapping
+    checkpoint: Checkpoint
+    checkpoint_config: RunnableConfig
+    checkpoint_metadata: CheckpointMetadata
+    checkpoint_pending_writes: Optional[List[PendingWrite]]
 
     status: Literal[
         "pending", "done", "interrupt_before", "interrupt_after", "out_of_steps"
     ]
     tasks: Sequence[PregelExecutableTask]
+    stream: deque[Tuple[str, Any]]
 
     def __init__(
         self,
@@ -69,6 +81,7 @@ class PregelLoop(ContextManager):
         checkpointer: Optional[BaseCheckpointSaver],
         graph: "Pregel",
     ) -> None:
+        self.stream = deque()
         self.stack = ExitStack()
         self.input = input
         self.config = config
@@ -84,7 +97,7 @@ class PregelLoop(ContextManager):
         saved = (
             self.checkpointer.get_tuple(self.config) if self.checkpointer else None
         ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])
-        self.config = {
+        self.checkpoint_config = {
             **self.config,
             **saved.config,
             "configurable": {
@@ -106,6 +119,7 @@ class PregelLoop(ContextManager):
             )
         )
         self.status = "pending"
+        self.step = self.checkpoint_metadata["step"] + 1
 
         return self
 
@@ -121,10 +135,11 @@ class PregelLoop(ContextManager):
     def tick(
         self,
         *,
+        output_keys: Union[str, Sequence[str]] = None,
         interrupt_after: Optional[Sequence[str]] = None,
         interrupt_before: Optional[Sequence[str]] = None,
     ) -> bool:
-        print("ticking", self.status, self.checkpoint_metadata["step"])
+        print("tick", self.status, self.step)
         if self.status != "pending":
             raise RuntimeError(f"Cannot tick when status is {self.status}")
         if self.input is not INPUT_DONE:
@@ -132,42 +147,57 @@ class PregelLoop(ContextManager):
         elif len({tid for tid, _, _ in self.checkpoint_pending_writes}) == len(
             self.tasks
         ):
+            # assign writes to tasks, apply them in order
+            grouped: dict[str, list[tuple[str, Any]]] = {}
+            for tid, k, v in self.checkpoint_pending_writes:
+                grouped.setdefault(tid, []).append((k, v))
+            writes = [(k, v) for t in self.tasks for k, v in grouped.get(t.id, [])]
             # all tasks have finished
             apply_writes(
                 self.checkpoint,
                 self.channels,
-                ((k, v) for _, k, v in self.checkpoint_pending_writes),
+                writes,
                 self.get_next_version,
+            )
+            # produce values output
+            self.stream.extend(
+                ("values", v)
+                for v in map_output_values(output_keys, writes, self.channels)
             )
             # clear pending writes
             self.checkpoint_pending_writes.clear()
             # save checkpoint
-            self.put_checkpoint({"source": "loop", "writes": None})  # TODO
+            self.put_checkpoint(
+                {
+                    "source": "loop",
+                    "writes": single(
+                        map_output_updates(output_keys, self.tasks)
+                        if self.graph.stream_mode == "updates"
+                        else map_output_values(output_keys, writes, self.channels)
+                    ),
+                }
+            )
             # after execution, check if we should interrupt
-            if should_interrupt(
-                self.checkpoint,
-                interrupt_after,
-                self.graph.stream_channels_list,
-                self.tasks,
-            ):
+            if should_interrupt(self.checkpoint, interrupt_after, self.tasks):
                 self.status = "interrupt_after"
                 return False
         else:
             return False
 
         # check if iteration limit is reached
-        if self.checkpoint_metadata["step"] >= self.config["recursion_limit"]:
+        if self.step > self.config["recursion_limit"]:
             self.status = "out_of_steps"
             return False
 
         # prepare next tasks
+        prev_checkpoint = self.checkpoint
         self.checkpoint, self.tasks = prepare_next_tasks(
             self.checkpoint,
             self.graph.nodes,
             self.channels,
             self.managed,
             self.config,
-            self.checkpoint_metadata["step"],
+            self.step,
             for_execution=True,
             get_next_version=self.get_next_version,
         )
@@ -180,21 +210,14 @@ class PregelLoop(ContextManager):
         # TODO how to make this work for both
         # - online case: we should schedule remaining tasks
         # - offline case: we should just bail, as other tasks were scheduled before
-        # assign pending writes to tasks
-        # if self.checkpoint_pending_writes:
-        #     # if there are pending writes from a previous loop, apply them
-        #     for tid, k, v in self.checkpoint_pending_writes:
-        #         if task := next((t for t in self.tasks if t.id == tid), None):
-        #             task.writes.append((k, v))
-        #     if
+        # if there are pending writes from a previous loop, apply them
+        if self.checkpoint_pending_writes:
+            for tid, k, v in self.checkpoint_pending_writes:
+                if task := next((t for t in self.tasks if t.id == tid), None):
+                    task.writes.append((k, v))
 
         # before execution, check if we should interrupt
-        if should_interrupt(
-            self.checkpoint,
-            interrupt_before,
-            self.graph.stream_channels_list,
-            self.tasks,
-        ):
+        if should_interrupt(prev_checkpoint, interrupt_before, self.tasks):
             self.status = "interrupt_before"
             return False
 
@@ -210,9 +233,10 @@ class PregelLoop(ContextManager):
                 self.channels,
                 self.managed,
                 self.config,
-                -1,
+                self.step,
                 for_execution=True,
                 get_next_version=self.get_next_version,
+                # TODO missing run_manager
             )
             # apply input writes
             apply_writes(
@@ -239,9 +263,9 @@ class PregelLoop(ContextManager):
             self.submit(
                 self.checkpointer.put_writes,
                 {
-                    **self.config,
+                    **self.checkpoint_config,
                     "configurable": {
-                        **self.config["configurable"],
+                        **self.checkpoint_config["configurable"],
                         "thread_ts": self.checkpoint["id"],
                     },
                 },
@@ -253,30 +277,39 @@ class PregelLoop(ContextManager):
         self,
         metadata: CheckpointMetadata,
     ) -> None:
-        # increment step
-        self.checkpoint_metadata = {
-            **metadata,
-            "step": self.checkpoint_metadata["step"] + 1,
-        }
+        # assign step
+        metadata["step"] = self.step
         # bail if no checkpointer
-        if self.checkpointer is None:
-            return
-        # create new checkpoint
-        self.checkpoint = create_checkpoint(
-            self.checkpoint, self.channels, self.checkpoint_metadata["step"]
-        )
-        # save it, without blocking
-        self.submit(
-            self.checkpointer.put,
-            self.config,
-            copy_checkpoint(self.checkpoint),
-            self.checkpoint_metadata,
-        )
-        # update checkpoint config
-        self.config = {
-            **self.config,
-            "configurable": {
-                **self.config["configurable"],
-                "thread_ts": self.checkpoint["id"],
-            },
-        }
+        if self.checkpointer is not None:
+            # create new checkpoint
+            self.checkpoint_metadata = metadata
+            self.checkpoint = create_checkpoint(
+                self.checkpoint, self.channels, self.step
+            )
+            # save it, without blocking
+            self.submit(
+                self.checkpointer.put,
+                self.checkpoint_config,
+                copy_checkpoint(self.checkpoint),
+                self.checkpoint_metadata,
+            )
+            self.checkpoint_config = {
+                **self.checkpoint_config,
+                "configurable": {
+                    **self.checkpoint_config["configurable"],
+                    "thread_ts": self.checkpoint["id"],
+                },
+            }
+            # produce debug output
+            self.stream.extend(
+                ("debug", v)
+                for v in map_debug_checkpoint(
+                    self.step,
+                    self.checkpoint_config,
+                    self.channels,
+                    self.graph.stream_channels_asis,
+                    self.checkpoint_metadata,
+                )
+            )
+        # increment step
+        self.step += 1

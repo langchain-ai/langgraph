@@ -70,6 +70,8 @@ def map_debug_tasks(
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
+        print("map_debug_tasks", json.dumps((name, step, config["metadata"])))
+
         yield {
             "type": "task",
             "timestamp": ts,
@@ -94,6 +96,8 @@ def map_debug_task_results(
     for name, _, _, writes, config, _, _, _ in tasks:
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
+
+        print("map_debug_tasks_r", json.dumps((name, step, config["metadata"])))
 
         yield {
             "type": "task_result",
