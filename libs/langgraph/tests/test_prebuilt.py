@@ -60,7 +60,7 @@ def test_no_modifier():
     model = FakeToolCallingModel()
     agent = create_react_agent(model, [])
     inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
+    response = agent.invoke({"messages": inputs}, debug=True)
     expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
     assert response == expected_response
 

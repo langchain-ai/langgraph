@@ -520,8 +520,6 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert app.invoke(2) == 4
 
-    assert app.invoke(2, input_keys="inbox") == 3
-
     with pytest.raises(GraphRecursionError):
         app.invoke(2, {"recursion_limit": 1})
 

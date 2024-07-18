@@ -25,6 +25,7 @@ from langgraph.serde.base import SerializerProtocol
 from langgraph.serde.jsonplus import JsonPlusSerializer
 
 V = TypeVar("V", int, float, str)
+PendingWrite = Tuple[str, str, Any]
 
 
 # Marked as total=False to allow for future expansion.
@@ -118,7 +119,7 @@ class CheckpointTuple(NamedTuple):
     checkpoint: Checkpoint
     metadata: CheckpointMetadata
     parent_config: Optional[RunnableConfig] = None
-    pending_writes: Optional[List[Tuple[str, str, Any]]] = None
+    pending_writes: Optional[List[PendingWrite]] = None
 
 
 CheckpointThreadId = ConfigurableFieldSpec(

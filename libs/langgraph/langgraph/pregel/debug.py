@@ -110,7 +110,7 @@ def map_debug_task_results(
 
 
 def map_debug_checkpoint(
-    step: int,
+    step: int,  # TODO remove arg, it's in metadata
     config: RunnableConfig,
     channels: Mapping[str, BaseChannel],
     stream_channels: Union[str, Sequence[str]],
