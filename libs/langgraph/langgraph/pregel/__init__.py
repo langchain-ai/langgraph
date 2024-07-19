@@ -966,17 +966,13 @@ class Pregel(
                             ),
                         )
 
-                if is_subgraph and not checkpoint["channel_values"]:
-                    # if we're in a subgraph and haven't run anything yet
-                    # we receive input values and start execution (i.e. not resuming)
-                    is_resuming = False
-                else:
-                    # otherwise, no input is taken as signal to proceed past previous interrupt
-                    # first check if we already received no input in parent graph, and if not check for empty input
-                    is_resuming = (
-                        config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
-                        or input is None
-                    )
+                # resuming from previous checkpoint requires
+                # - finding a previous checkpoint
+                # - receiving None input (outer graph) or RESUMING flag (subgraph)
+                is_resuming = bool(checkpoint["channel_versions"]) and bool(
+                    config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
+                    or input is None
+                )
 
                 # proceed past previous checkpoint
                 if is_resuming:
@@ -1434,17 +1430,13 @@ class Pregel(
                             ),
                         )
 
-                if is_subgraph and not checkpoint["channel_values"]:
-                    # if we're in a subgraph and haven't run anything yet
-                    # we receive input values and start execution (i.e. not resuming)
-                    is_resuming = False
-                else:
-                    # otherwise, no input is taken as signal to proceed past previous interrupt
-                    # first check if we already received no input in parent graph, and if not check for empty input
-                    is_resuming = (
-                        config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
-                        or input is None
-                    )
+                # resuming from previous checkpoint requires
+                # - finding a previous checkpoint
+                # - receiving None input (outer graph) or RESUMING flag (subgraph)
+                is_resuming = bool(checkpoint["channel_versions"]) and bool(
+                    config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
+                    or input is None
+                )
 
                 # proceed past previous checkpoint
                 if is_resuming:
