@@ -6006,7 +6006,18 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert times_called == 1
 
 
-async def test_nested_graph_interrupts() -> None:
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        AsyncSqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+async def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
     class InnerState(TypedDict):
         my_key: str
         my_other_key: str
@@ -6045,7 +6056,6 @@ async def test_nested_graph_interrupts() -> None:
     graph.add_edge("inner", "outer_2")
     graph.set_finish_point("outer_2")
 
-    checkpointer = MemorySaver()
     app = graph.compile(checkpointer=checkpointer)
 
     # test invoke w/ nested interrupt
@@ -6141,7 +6151,20 @@ async def test_nested_graph_interrupts() -> None:
     ]
 
 
-async def test_nested_graph_interrupts_parallel() -> None:
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        AsyncSqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+async def test_nested_graph_interrupts_parallel(
+    checkpointer: BaseCheckpointSaver,
+) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
         my_other_key: str
@@ -6181,7 +6204,6 @@ async def test_nested_graph_interrupts_parallel() -> None:
     graph.add_edge(["inner", "outer_1"], "outer_2")
     graph.set_finish_point("outer_2")
 
-    checkpointer = MemorySaver()
     app = graph.compile(checkpointer=checkpointer)
 
     # test invoke w/ nested interrupt
@@ -6252,6 +6274,109 @@ async def test_nested_graph_interrupts_parallel() -> None:
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
         {
             "my_key": "got here and there and parallel and back again",
+        },
+    ]
+
+
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        AsyncSqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+async def test_doubly_nested_graph_interrupts(
+    checkpointer: BaseCheckpointSaver,
+) -> None:
+    class State(TypedDict):
+        my_key: str
+
+    class ChildState(TypedDict):
+        my_key: str
+
+    class GrandChildState(TypedDict):
+        my_key: str
+
+    async def grandchild_1(state: ChildState):
+        return {"my_key": state["my_key"] + " here"}
+
+    async def grandchild_2(state: ChildState):
+        return {
+            "my_key": state["my_key"] + " and there",
+        }
+
+    grandchild = StateGraph(GrandChildState)
+    grandchild.add_node("grandchild_1", grandchild_1)
+    grandchild.add_node("grandchild_2", grandchild_2)
+    grandchild.add_edge("grandchild_1", "grandchild_2")
+    grandchild.set_entry_point("grandchild_1")
+    grandchild.set_finish_point("grandchild_2")
+
+    child = StateGraph(ChildState)
+    child.add_node("child_1", grandchild.compile(interrupt_before=["grandchild_2"]))
+    child.set_entry_point("child_1")
+    child.set_finish_point("child_1")
+
+    async def parent_1(state: State):
+        return {"my_key": "hi " + state["my_key"]}
+
+    async def parent_2(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("parent_1", parent_1)
+    graph.add_node("child", child.compile())
+    graph.add_node("parent_2", parent_2)
+    graph.set_entry_point("parent_1")
+    graph.add_edge("parent_1", "child")
+    graph.add_edge("child", "parent_2")
+    graph.set_finish_point("parent_2")
+
+    app = graph.compile(checkpointer=checkpointer)
+
+    # test invoke w/ nested interrupt
+    config = {"configurable": {"thread_id": "1"}}
+    assert await app.ainvoke({"my_key": "my value"}, config, debug=True) == {
+        "my_key": "hi my value",
+    }
+
+    assert await app.ainvoke(None, config, debug=True) == {
+        "my_key": "hi my value here and there and back again",
+    }
+
+    # test stream updates w/ nested interrupt
+    config = {"configurable": {"thread_id": "2"}}
+    assert [c async for c in app.astream({"my_key": "my value"}, config)] == [
+        {"parent_1": {"my_key": "hi my value"}},
+    ]
+    assert [c async for c in app.astream(None, config)] == [
+        {"child": {"my_key": "hi my value here and there"}},
+        {"parent_2": {"my_key": "hi my value here and there and back again"}},
+    ]
+
+    # test stream values w/ nested interrupt
+    config = {"configurable": {"thread_id": "3"}}
+    assert [
+        c
+        async for c in app.astream({"my_key": "my value"}, config, stream_mode="values")
+    ] == [
+        {
+            "my_key": "my value",
+        },
+        {
+            "my_key": "hi my value",
+        },
+    ]
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "hi my value here and there",
+        },
+        {
+            "my_key": "hi my value here and there and back again",
         },
     ]
 

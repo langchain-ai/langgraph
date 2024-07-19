@@ -7773,6 +7773,104 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
     ]
 
 
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        SqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+def test_doubly_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
+    class State(TypedDict):
+        my_key: str
+
+    class ChildState(TypedDict):
+        my_key: str
+
+    class GrandChildState(TypedDict):
+        my_key: str
+
+    def grandchild_1(state: ChildState):
+        return {"my_key": state["my_key"] + " here"}
+
+    def grandchild_2(state: ChildState):
+        return {
+            "my_key": state["my_key"] + " and there",
+        }
+
+    grandchild = StateGraph(GrandChildState)
+    grandchild.add_node("grandchild_1", grandchild_1)
+    grandchild.add_node("grandchild_2", grandchild_2)
+    grandchild.add_edge("grandchild_1", "grandchild_2")
+    grandchild.set_entry_point("grandchild_1")
+    grandchild.set_finish_point("grandchild_2")
+
+    child = StateGraph(ChildState)
+    child.add_node("child_1", grandchild.compile(interrupt_before=["grandchild_2"]))
+    child.set_entry_point("child_1")
+    child.set_finish_point("child_1")
+
+    def parent_1(state: State):
+        return {"my_key": "hi " + state["my_key"]}
+
+    def parent_2(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("parent_1", parent_1)
+    graph.add_node("child", child.compile())
+    graph.add_node("parent_2", parent_2)
+    graph.set_entry_point("parent_1")
+    graph.add_edge("parent_1", "child")
+    graph.add_edge("child", "parent_2")
+    graph.set_finish_point("parent_2")
+
+    app = graph.compile(checkpointer=checkpointer)
+
+    # test invoke w/ nested interrupt
+    config = {"configurable": {"thread_id": "1"}}
+    assert app.invoke({"my_key": "my value"}, config, debug=True) == {
+        "my_key": "hi my value",
+    }
+
+    assert app.invoke(None, config, debug=True) == {
+        "my_key": "hi my value here and there and back again",
+    }
+
+    # test stream updates w/ nested interrupt
+    config = {"configurable": {"thread_id": "2"}}
+    assert [*app.stream({"my_key": "my value"}, config)] == [
+        {"parent_1": {"my_key": "hi my value"}},
+    ]
+    assert [*app.stream(None, config)] == [
+        {"child": {"my_key": "hi my value here and there"}},
+        {"parent_2": {"my_key": "hi my value here and there and back again"}},
+    ]
+
+    # test stream values w/ nested interrupt
+    config = {"configurable": {"thread_id": "3"}}
+    assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
+        {
+            "my_key": "my value",
+        },
+        {
+            "my_key": "hi my value",
+        },
+    ]
+    assert [*app.stream(None, config, stream_mode="values")] == [
+        {
+            "my_key": "hi my value here and there",
+        },
+        {
+            "my_key": "hi my value here and there and back again",
+        },
+    ]
+
+
 def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
     class AgentState(TypedDict):
         hello: str
