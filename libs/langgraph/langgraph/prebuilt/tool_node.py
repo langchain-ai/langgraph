@@ -147,6 +147,8 @@ class ToolNode(RunnableCallable):
     def _inject_state(
         self, tool_call: ToolCall, input: Union[list[AnyMessage], dict[str, Any]]
     ) -> ToolCall:
+        if tool_call["name"] not in self.tools_by_name:
+            return tool_call
         state_args = _get_state_args(self.tools_by_name[tool_call["name"]])
         if state_args and not isinstance(input, dict):
             required_fields = list(state_args.values())
