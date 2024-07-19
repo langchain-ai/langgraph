@@ -736,6 +736,8 @@ class Pregel(
         Union[str, Sequence[str]],
         Optional[Sequence[str]],
         Optional[Sequence[str]],
+        Optional[BaseCheckpointSaver],
+        bool,
     ]:
         debug = debug if debug is not None else self.debug
         if output_keys is None:
