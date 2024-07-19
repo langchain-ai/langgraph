@@ -257,7 +257,7 @@ class AssistantsClient:
         *,
         metadata: Metadata = None,
         assistant_id: Optional[str] = None,
-        if_exists: Optional[OnConflictBehavior] = None
+        if_exists: Optional[OnConflictBehavior] = None,
     ) -> Assistant:
         """Create a new assistant."""
         payload: Dict[str, Any] = {
