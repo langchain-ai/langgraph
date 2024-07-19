@@ -1,2 +1,3 @@
 *.ipynb
 site/
+docs/tutorials/**/*.png
