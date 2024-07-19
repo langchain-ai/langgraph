@@ -61,6 +61,6 @@ def create_checkpoint(
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
         pending_sends=checkpoint.get("pending_sends", []),
-        # checkpoints are saved only at the end of a step, ie. no current tasks
+        # checkpoints are saved only at the end of a step, ie. when current tasks should be cleared
         current_tasks={},
     )
