@@ -946,6 +946,7 @@ class Pregel(
                     checkpoint = create_checkpoint(
                         checkpoint, channels, metadata["step"]
                     )
+                    # save it, without blocking
                     submit(
                         checkpointer.put,
                         checkpoint_config,
@@ -1374,7 +1375,6 @@ class Pregel(
                 }
 
             start = saved.metadata.get("step", -2) + 1 if saved else -1
-
             # create channels from checkpoint
             async with AsyncBackgroundExecutor() as submit, AsyncChannelsManager(
                 self.channels, checkpoint, config
