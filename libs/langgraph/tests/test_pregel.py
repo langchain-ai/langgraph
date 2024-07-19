@@ -7564,7 +7564,6 @@ def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
     graph.add_edge("inner", "outer_2")
     graph.set_finish_point("outer_2")
 
-    checkpointer = MemorySaver()
     app = graph.compile(checkpointer=checkpointer)
 
     # test invoke w/ nested interrupt
@@ -7702,7 +7701,6 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
     graph.add_edge(["inner", "outer_1"], "outer_2")
     graph.set_finish_point("outer_2")
 
-    checkpointer = MemorySaver()
     app = graph.compile(checkpointer=checkpointer)
 
     # test invoke w/ nested interrupt
