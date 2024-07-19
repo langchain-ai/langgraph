@@ -944,7 +944,6 @@ class Pregel(
                     checkpoint = create_checkpoint(
                         checkpoint, channels, metadata["step"]
                     )
-                    # save it, without blocking
                     submit(
                         checkpointer.put,
                         checkpoint_config,
@@ -1148,13 +1147,16 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    if is_subgraph:
+                    try:
                         _panic_or_proceed(done, inflight, step)
-                    else:
-                        # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
-                        try:
-                            _panic_or_proceed(done, inflight, step)
-                        except GraphInterrupt:
+                    # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
+                    except GraphInterrupt:
+                        yield from put_checkpoint({
+                            "source": "loop",
+                            "step": step,
+                            "writes": None
+                        })
+                        if not is_subgraph:
                             break
 
                     # don't keep futures around in memory longer than needed
@@ -1617,15 +1619,17 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    if is_subgraph:
+                    try:
                         _panic_or_proceed(done, inflight, step, asyncio.TimeoutError)
-                    else:
-                        # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
-                        try:
-                            _panic_or_proceed(
-                                done, inflight, step, asyncio.TimeoutError
-                            )
-                        except GraphInterrupt:
+                    # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
+                    except GraphInterrupt:
+                        for chunk in put_checkpoint({
+                            "source": "loop",
+                            "step": step,
+                            "writes": None
+                        }):
+                            yield chunk
+                        if not is_subgraph:
                             break
 
                     # don't keep futures around in memory longer than needed
