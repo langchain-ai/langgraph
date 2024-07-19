@@ -1,5 +1,15 @@
 import json
-from typing import Annotated, Callable, Optional, Sequence, TypedDict, Union
+import types
+from typing import (
+    Annotated,
+    Callable,
+    Optional,
+    Sequence,
+    Type,
+    TypedDict,
+    TypeVar,
+    Union,
+)
 
 from langchain_core.language_models import LanguageModelLike
 from langchain_core.messages import (
@@ -12,7 +22,7 @@ from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
-from langgraph._api.deprecation import deprecated
+from langgraph._api.deprecation import deprecated, deprecated_parameter
 from langgraph.checkpoint import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
@@ -32,6 +42,26 @@ class AgentState(TypedDict):
     messages: Annotated[Sequence[BaseMessage], add_messages]
 
     is_last_step: IsLastStep
+
+
+StateSchema = TypeVar("StateSchema", bound=AgentState)
+StateSchemaType = Type[StateSchema]
+
+STATE_MODIFIER_RUNNABLE_NAME = "StateModifier"
+
+MessagesModifier = Union[
+    SystemMessage,
+    str,
+    Callable[[Sequence[BaseMessage]], Sequence[BaseMessage]],
+    Runnable[Sequence[BaseMessage], Sequence[BaseMessage]],
+]
+
+StateModifier = Union[
+    SystemMessage,
+    str,
+    Callable[[StateSchema], Sequence[BaseMessage]],
+    Runnable[StateSchema, Sequence[BaseMessage]],
+]
 
 
 @deprecated("0.0.44", "create_react_agent", removal="0.2.0")
@@ -164,10 +194,81 @@ def create_function_calling_executor(
     return workflow.compile()
 
 
+def _get_state_modifier_runnable(state_modifier: Optional[StateModifier]) -> Runnable:
+    state_modifier_runnable: Runnable
+    if state_modifier is None:
+        state_modifier_runnable = RunnableLambda(
+            lambda state: state["messages"], name=STATE_MODIFIER_RUNNABLE_NAME
+        )
+    elif isinstance(state_modifier, str):
+        _system_message: BaseMessage = SystemMessage(content=state_modifier)
+        state_modifier_runnable = RunnableLambda(
+            lambda state: [_system_message] + state["messages"],
+            name=STATE_MODIFIER_RUNNABLE_NAME,
+        )
+    elif isinstance(state_modifier, SystemMessage):
+        state_modifier_runnable = RunnableLambda(
+            lambda state: [state_modifier] + state["messages"],
+            name=STATE_MODIFIER_RUNNABLE_NAME,
+        )
+    elif callable(state_modifier):
+        state_modifier_runnable = RunnableLambda(
+            state_modifier, name=STATE_MODIFIER_RUNNABLE_NAME
+        )
+    elif isinstance(state_modifier, Runnable):
+        state_modifier_runnable = state_modifier
+    else:
+        raise ValueError(
+            f"Got unexpected type for `state_modifier`: {type(state_modifier)}"
+        )
+
+    return state_modifier_runnable
+
+
+def _convert_messages_modifier_to_state_modifier(
+    messages_modifier: MessagesModifier,
+) -> StateModifier:
+    state_modifier: StateModifier
+    if isinstance(messages_modifier, (str, SystemMessage)):
+        return messages_modifier
+    elif isinstance(messages_modifier, types.FunctionType):
+
+        def state_modifier(state: AgentState) -> Sequence[BaseMessage]:
+            return messages_modifier(state["messages"])
+
+        return state_modifier
+    elif isinstance(messages_modifier, Runnable):
+        state_modifier = (lambda state: state["messages"]) | messages_modifier
+        return state_modifier
+    raise ValueError(
+        f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
+    )
+
+
+def _get_model_preprocessing_runnable(
+    state_modifier: Optional[StateModifier],
+    messages_modifier: Optional[MessagesModifier],
+) -> Runnable:
+    # Add the state or message modifier, if exists
+    if state_modifier is not None and messages_modifier is not None:
+        raise ValueError(
+            "Expected value for either state_modifier or messages_modifier, got values for both"
+        )
+
+    if state_modifier is None and messages_modifier is not None:
+        state_modifier = _convert_messages_modifier_to_state_modifier(messages_modifier)
+
+    return _get_state_modifier_runnable(state_modifier)
+
+
+@deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.2.0")
 def create_react_agent(
     model: LanguageModelLike,
     tools: Union[ToolExecutor, Sequence[BaseTool]],
-    messages_modifier: Optional[Union[SystemMessage, str, Callable, Runnable]] = None,
+    *,
+    state_schema: Optional[StateSchemaType] = None,
+    messages_modifier: Optional[MessagesModifier] = None,
+    state_modifier: Optional[StateModifier] = None,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     interrupt_before: Optional[Sequence[str]] = None,
     interrupt_after: Optional[Sequence[str]] = None,
@@ -178,6 +279,9 @@ def create_react_agent(
     Args:
         model: The `LangChain` chat model that supports tool calling.
         tools: A list of tools or a ToolExecutor instance.
+        state_schema: An optional state schema that defines graph state.
+            Must have `messages` and `is_last_step` keys.
+            Defaults to `AgentState` that defines those two keys.
         messages_modifier: An optional
             messages modifier. This applies to messages BEFORE they are passed into the LLM.
 
@@ -187,6 +291,17 @@ def create_react_agent(
             - str: This is converted to a SystemMessage and added to the beginning of the list of messages.
             - Callable: This function should take in a list of messages and the output is then passed to the language model.
             - Runnable: This runnable should take in a list of messages and the output is then passed to the language model.
+            !!! Warning
+                `messages_modifier` parameter is deprecated as of version 0.1.9 and will be removed in 0.2.0
+        state_modifier: An optional
+            state modifier. This takes full graph state BEFORE the LLM is called and prepares the input to LLM.
+
+            Can take a few different forms:
+
+            - SystemMessage: this is added to the beginning of the list of messages in state["messages"].
+            - str: This is converted to a SystemMessage and added to the beginning of the list of messages in state["messages"].
+            - Callable: This function should take in full graph state and the output is then passed to the language model.
+            - Runnable: This runnable should take in full graph state and the output is then passed to the language model.
         checkpointer: An optional checkpoint saver object. This is useful for persisting
             the state of the graph (e.g., as chat memory).
         interrupt_before: An optional list of node names to interrupt before.
@@ -282,7 +397,7 @@ def create_react_agent(
 
         ```pycon
         >>> system_prompt = "You are a helpful bot named Fred."
-        >>> graph = create_react_agent(model, tools, messages_modifier=system_prompt)
+        >>> graph = create_react_agent(model, tools, state_modifier=system_prompt)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
@@ -314,12 +429,38 @@ def create_react_agent(
         ...     ("placeholder", "{messages}"),
         ...     ("user", "Remember, always be polite!"),
         ... ])
-        >>> def modify_messages(messages: list):
+        >>> def modify_state_messages(state: AgentState):
         ...     # You can do more complex modifications here
-        ...     return prompt.invoke({"messages": messages})
+        ...     return prompt.invoke({"messages": state["messages"]})
         >>>
-        >>> graph = create_react_agent(model, tools, messages_modifier=modify_messages)
+        >>> graph = create_react_agent(model, tools, state_modifier=modify_state_messages)
         >>> inputs = {"messages": [("user", "What's your name? And what's the weather in SF?")]}
+        >>> for s in graph.stream(inputs, stream_mode="values"):
+        ...     message = s["messages"][-1]
+        ...     if isinstance(message, tuple):
+        ...         print(message)
+        ...     else:
+        ...         message.pretty_print()
+        ```
+
+        Add complex prompt with custom graph state:
+
+        ```pycon
+        >>> from typing import TypedDict
+        >>> prompt = ChatPromptTemplate.from_messages(
+        ...     [
+        ...         ("system", "Today is {today}"),
+        ...         ("placeholder", "{messages}"),
+        ...     ]
+        ... )
+        >>>
+        >>> class CustomState(TypedDict):
+        ...     today: str
+        ...     messages: Annotated[list[BaseMessage], add_messages]
+        ...     is_last_step: str
+        >>>
+        >>> graph = create_react_agent(model, tools, state_schema=CustomState, state_modifier=prompt)
+        >>> inputs = {"messages": [("user", "What's today's date? And what's the weather in SF?")], "today": "July 16, 2004"}
         >>> for s in graph.stream(inputs, stream_mode="values"):
         ...     message = s["messages"][-1]
         ...     if isinstance(message, tuple):
@@ -404,6 +545,12 @@ def create_react_agent(
         ```
     """
 
+    if state_schema is not None:
+        if missing_keys := {"messages", "is_last_step"} - set(
+            state_schema.__annotations__
+        ):
+            raise ValueError(f"Missing required key(s) {missing_keys} in state_schema")
+
     if isinstance(tools, ToolExecutor):
         tool_classes = tools.tools
     else:
@@ -421,28 +568,15 @@ def create_react_agent(
         else:
             return "continue"
 
-    # Add the message modifier, if exists
-    if messages_modifier is None:
-        model_runnable = model
-    elif isinstance(messages_modifier, str):
-        _system_message: BaseMessage = SystemMessage(content=messages_modifier)
-        model_runnable = (lambda messages: [_system_message] + messages) | model
-    elif isinstance(messages_modifier, SystemMessage):
-        model_runnable = (lambda messages: [messages_modifier] + messages) | model
-    elif isinstance(messages_modifier, (Callable, Runnable)):
-        model_runnable = messages_modifier | model
-    else:
-        raise ValueError(
-            f"Got unexpected type for `messages_modifier`: {type(messages_modifier)}"
-        )
+    preprocessor = _get_model_preprocessing_runnable(state_modifier, messages_modifier)
+    model_runnable = preprocessor | model
 
     # Define the function that calls the model
     def call_model(
         state: AgentState,
         config: RunnableConfig,
     ):
-        messages = state["messages"]
-        response = model_runnable.invoke(messages, config)
+        response = model_runnable.invoke(state, config)
         if state["is_last_step"] and response.tool_calls:
             return {
                 "messages": [
@@ -456,8 +590,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     async def acall_model(state: AgentState, config: RunnableConfig):
-        messages = state["messages"]
-        response = await model_runnable.ainvoke(messages, config)
+        response = await model_runnable.ainvoke(state, config)
         if state["is_last_step"] and response.tool_calls:
             return {
                 "messages": [
@@ -471,7 +604,7 @@ def create_react_agent(
         return {"messages": [response]}
 
     # Define a new graph
-    workflow = StateGraph(AgentState)
+    workflow = StateGraph(state_schema or AgentState)
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))

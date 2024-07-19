@@ -32,6 +32,9 @@ class DynamicBarrierValue(
         self.names = None
         self.seen = set()
 
+    def __eq__(self, value: object) -> bool:
+        return isinstance(value, DynamicBarrierValue) and value.names == self.names
+
     @property
     def ValueType(self) -> Type[Value]:
         """The type of the value stored in the channel."""

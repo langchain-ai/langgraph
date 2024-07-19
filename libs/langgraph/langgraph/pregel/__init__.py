@@ -41,7 +41,6 @@ from langchain_core.runnables.config import (
     ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
-    get_executor_for_config,
     merge_configs,
     patch_config,
 )
@@ -94,6 +93,7 @@ from langgraph.pregel.debug import (
     print_step_tasks,
     print_step_writes,
 )
+from langgraph.pregel.executor import AsyncBackgroundExecutor, BackgroundExecutor
 from langgraph.pregel.io import (
     map_input,
     map_output_updates,
@@ -570,6 +570,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
@@ -661,6 +662,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
@@ -836,7 +838,6 @@ class Pregel(
             run_id=config.get("run_id"),
         )
         try:
-            bg: list[concurrent.futures.Future] = []
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
             if self.checkpointer and not config.get("configurable"):
@@ -880,29 +881,25 @@ class Pregel(
 
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
-            with ChannelsManager(
+            with BackgroundExecutor(config) as submit, ChannelsManager(
                 self.channels, checkpoint, config
-            ) as channels, get_executor_for_config(
-                config
-            ) as executor, ManagedValuesManager(
+            ) as channels, ManagedValuesManager(
                 self.managed_values_dict, config, self
             ) as managed:
 
                 def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
                     if self.checkpointer is not None:
-                        bg.append(
-                            executor.submit(
-                                self.checkpointer.put_writes,
-                                {
-                                    **checkpoint_config,
-                                    "configurable": {
-                                        **checkpoint_config["configurable"],
-                                        "thread_ts": checkpoint["id"],
-                                    },
+                        submit(
+                            self.checkpointer.put_writes,
+                            {
+                                **checkpoint_config,
+                                "configurable": {
+                                    **checkpoint_config["configurable"],
+                                    "thread_ts": checkpoint["id"],
                                 },
-                                writes,
-                                task_id,
-                            )
+                            },
+                            writes,
+                            task_id,
                         )
 
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
@@ -920,13 +917,11 @@ class Pregel(
                         checkpoint, channels, metadata["step"]
                     )
                     # save it, without blocking
-                    bg.append(
-                        executor.submit(
-                            self.checkpointer.put,
-                            checkpoint_config,
-                            copy_checkpoint(checkpoint),
-                            metadata,
-                        )
+                    submit(
+                        self.checkpointer.put,
+                        checkpoint_config,
+                        copy_checkpoint(checkpoint),
+                        metadata,
                     )
                     # update checkpoint config
                     checkpoint_config = {
@@ -1059,7 +1054,7 @@ class Pregel(
                     # each task is independent from all other concurrent tasks
                     # yield updates/debug output as each task finishes
                     futures = {
-                        executor.submit(run_with_retry, task, self.retry_policy): task
+                        submit(run_with_retry, task, self.retry_policy): task
                         for task in next_tasks
                         if not task.writes
                     }
@@ -1080,6 +1075,8 @@ class Pregel(
                                 else None
                             ),
                         )
+                        if not done:
+                            break  # timed out
                         for fut in done:
                             task = futures.pop(fut)
                             if fut.exception() is not None:
@@ -1117,8 +1114,8 @@ class Pregel(
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _, _ in next_tasks:
-                        pending_writes.extend(writes)
+                    for task in next_tasks:
+                        pending_writes.extend(task.writes)
 
                     if debug:
                         print_step_writes(
@@ -1182,19 +1179,6 @@ class Pregel(
         except BaseException as e:
             run_manager.on_chain_error(e)
             raise
-        finally:
-            # cancel any pending tasks when generator is interrupted
-            try:
-                for task in futures:
-                    task.cancel()
-            except NameError:
-                pass
-            # wait for all background tasks to finish
-            done, _ = concurrent.futures.wait(
-                bg, return_when=concurrent.futures.ALL_COMPLETED
-            )
-            for task in done:
-                task.result()
 
     async def astream(
         self,
@@ -1294,7 +1278,6 @@ class Pregel(
         )
         try:
             loop = asyncio.get_event_loop()
-            bg: list[asyncio.Task] = []
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
             if self.checkpointer and not config.get("configurable"):
@@ -1342,7 +1325,7 @@ class Pregel(
 
             start = saved.metadata.get("step", -2) + 1 if saved else -1
             # create channels from checkpoint
-            async with AsyncChannelsManager(
+            async with AsyncBackgroundExecutor() as submit, AsyncChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, AsyncManagedValuesManager(
                 self.managed_values_dict, config, self
@@ -1350,20 +1333,17 @@ class Pregel(
 
                 def put_writes(task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
                     if self.checkpointer is not None:
-                        bg.append(
-                            asyncio.create_task(
-                                self.checkpointer.aput_writes(
-                                    {
-                                        **checkpoint_config,
-                                        "configurable": {
-                                            **checkpoint_config["configurable"],
-                                            "thread_ts": checkpoint["id"],
-                                        },
-                                    },
-                                    writes,
-                                    task_id,
-                                )
-                            )
+                        submit(
+                            self.checkpointer.aput_writes,
+                            {
+                                **checkpoint_config,
+                                "configurable": {
+                                    **checkpoint_config["configurable"],
+                                    "thread_ts": checkpoint["id"],
+                                },
+                            },
+                            writes,
+                            task_id,
                         )
 
                 def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
@@ -1381,13 +1361,13 @@ class Pregel(
                         checkpoint, channels, metadata["step"]
                     )
                     # save it, without blocking
-                    bg.append(
-                        asyncio.create_task(
-                            self.checkpointer.aput(
-                                checkpoint_config, copy_checkpoint(checkpoint), metadata
-                            )
-                        )
+                    submit(
+                        self.checkpointer.aput,
+                        checkpoint_config,
+                        copy_checkpoint(checkpoint),
+                        metadata,
                     )
+
                     # update checkpoint config
                     checkpoint_config = {
                         **checkpoint_config,
@@ -1517,8 +1497,13 @@ class Pregel(
                     # each task is independent from all other concurrent tasks
                     # yield updates/debug output as each task finishes
                     futures = {
-                        asyncio.create_task(
-                            arun_with_retry(task, self.retry_policy, do_stream)
+                        submit(
+                            arun_with_retry,
+                            task,
+                            self.retry_policy,
+                            do_stream,
+                            __name__=task.name,
+                            __cancel_on_exit__=True,
                         ): task
                         for task in next_tasks
                         if not task.writes
@@ -1536,6 +1521,8 @@ class Pregel(
                                 max(0, end_time - loop.time()) if end_time else None
                             ),
                         )
+                        if not done:
+                            break  # timed out
                         for fut in done:
                             task = futures.pop(fut)
                             if fut.exception() is not None:
@@ -1569,14 +1556,14 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    _panic_or_proceed(done, inflight, step)
+                    _panic_or_proceed(done, inflight, step, asyncio.TimeoutError)
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
 
                     # combine pending writes from all tasks
                     pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _, _ in next_tasks:
-                        pending_writes.extend(writes)
+                    for task in next_tasks:
+                        pending_writes.extend(task.writes)
 
                     if debug:
                         print_step_writes(
@@ -1640,22 +1627,8 @@ class Pregel(
                 # set final channel values as run output
                 await run_manager.on_chain_end(read_channels(channels, output_keys))
         except BaseException as e:
-            await run_manager.on_chain_error(e)
+            await asyncio.shield(run_manager.on_chain_error(e))
             raise
-        finally:
-            # cancel any pending tasks when generator is interrupted
-            try:
-                for task in futures:
-                    task.cancel()
-                    bg.append(task)
-            except NameError:
-                pass
-            # wait for all background tasks to finish
-            fut = asyncio.gather(*bg)
-            # mark the exception as retrieved
-            fut.add_done_callback(_mark_cancelled_as_seen)
-            # wait for the future to finish, shielded from cancellation
-            await asyncio.shield(fut)
 
     def invoke(
         self,
@@ -1773,6 +1746,7 @@ def _panic_or_proceed(
     done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     inflight: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     step: int,
+    timeout_exc_cls: Type[Exception] = TimeoutError,
 ) -> None:
     while done:
         # if any task failed
@@ -1789,7 +1763,7 @@ def _panic_or_proceed(
             # cancel all pending tasks
             inflight.pop().cancel()
         # raise timeout error
-        raise TimeoutError(f"Timed out at step {step}")
+        raise timeout_exc_cls(f"Timed out at step {step}")
 
 
 def _should_interrupt(
@@ -1810,12 +1784,12 @@ def _should_interrupt(
         )
         # and any triggered node is in interrupt_nodes list
         and any(
-            node
-            for node, _, _, _, config, _, _ in tasks
+            task.name
+            for task in tasks
             if (
-                (not config or TAG_HIDDEN not in config.get("tags"))
+                (not task.config or TAG_HIDDEN not in task.config.get("tags"))
                 if interrupt_nodes == "*"
-                else node in interrupt_nodes
+                else task.name in interrupt_nodes
             )
         )
     )
@@ -1964,7 +1938,8 @@ def _prepare_next_tasks(
             logger.warn(f"Ignoring invalid packet type {type(packet)} in pending sends")
             continue
         if for_execution:
-            if node := processes[packet.node].get_node():
+            proc = processes[packet.node]
+            if node := proc.get_node():
                 triggers = [TASKS]
                 metadata = {
                     "langgraph_step": step,
@@ -2003,6 +1978,7 @@ def _prepare_next_tasks(
                             },
                         ),
                         triggers,
+                        proc.retry_policy,
                         task_id,
                     )
                 )
@@ -2089,6 +2065,7 @@ def _prepare_next_tasks(
                                 },
                             ),
                             triggers,
+                            proc.retry_policy,
                             task_id,
                         )
                     )
@@ -2167,10 +2144,3 @@ def _with_mode(mode: StreamMode, on: bool, iter: Iterator[Any]) -> Iterator[Any]
             yield (mode, chunk)
     else:
         yield from iter
-
-
-def _mark_cancelled_as_seen(fut: concurrent.futures.Future) -> None:
-    try:
-        fut.exception()
-    except (asyncio.CancelledError, concurrent.futures.CancelledError):
-        pass

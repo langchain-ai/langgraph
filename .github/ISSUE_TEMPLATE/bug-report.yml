@@ -1,5 +1,5 @@
 name: "\U0001F41B Bug Report"
-description: Report a bug in LangChain. To report a security issue, please instead use the security option below. For questions, please use the GitHub Discussions.
+description: Report a bug in LangGraph. To report a security issue, please instead use the security option below. For questions, please use the GitHub Discussions.
 labels: ["02 Bug Report"]
 body:
   - type: markdown
@@ -15,11 +15,11 @@ body:
         Relevant links to check before filing a bug report to see if your issue has already been reported, fixed or
         if there's another way to solve your problem:
         
+        [LangGraph documentation](https://langchain-ai.github.io/langgraph/).
         [LangChain documentation with the integrated search](https://python.langchain.com/docs/get_started/introduction),
-        [API Reference](https://api.python.langchain.com/en/stable/),
-        [GitHub search](https://github.com/langchain-ai/langchain),
-        [LangChain Github Discussions](https://github.com/langchain-ai/langchain/discussions),
-        [LangChain Github Issues](https://github.com/langchain-ai/langchain/issues?q=is%3Aissue),
+        [GitHub search](https://github.com/langchain-ai/langgraph),
+        [LangChain Github Discussions](https://github.com/langchain-ai/langgraph/discussions),
+        [LangChain Github Issues](https://github.com/langchain-ai/langgraph/issues),
         [LangChain ChatBot](https://chat.langchain.com/)
   - type: checkboxes
     id: checks
@@ -54,13 +54,13 @@ body:
         * Avoid screenshots when possible, as they are hard to read and (more importantly) don't allow others to copy-and-paste your code.
 
       placeholder: |
-        from langchain_core.runnables import RunnableLambda
+        from langgraph.graph import StateGraph
 
         def bad_code(inputs) -> int:
           raise NotImplementedError('For demo purpose')
           
-          chain = RunnableLambda(bad_code)
-          chain.invoke('Hello!')
+        chain = StateGraph(list)
+        chain.invoke('Hello!')
       render: python
   - type: textarea
     id: error
@@ -82,7 +82,7 @@ body:
 
         Write a short description telling what you are doing, what you expect to happen, and what is currently happening.
       placeholder: |
-        * I'm trying to use the `langchain` library to do X.
+        * I'm trying to use the `langgraph` library to do X.
         * I expect to see Y.
         * Instead, it does Z.
     validations:
@@ -102,7 +102,7 @@ body:
         
         python -m langchain_core.sys_info
       placeholder: |
-        "pip freeze | grep langchain"
+        "pip freeze | grep langgraph"
         platform
         python version
         

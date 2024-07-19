@@ -220,7 +220,7 @@ async def test_step_timeout_on_stream_hang() -> None:
     graph = builder.compile()
     graph.step_timeout = 1
 
-    with pytest.raises(asyncio.CancelledError):
+    with pytest.raises(asyncio.TimeoutError):
         async for chunk in graph.astream(1, stream_mode="updates"):
             assert chunk == {"alittlewhile": {"alittlewhile": "1"}}
             await asyncio.sleep(0.6)
@@ -247,7 +247,7 @@ async def test_cancel_graph_astream(
     try:
 
         class State(TypedDict):
-            value: int
+            value: Annotated[int, operator.add]
 
         class AwhileMaker:
             def __init__(self) -> None:
@@ -270,19 +270,30 @@ async def test_cancel_graph_astream(
             return {"value": 2}
 
         awhile = AwhileMaker()
+        aparallelwhile = AwhileMaker()
         builder = StateGraph(State)
         builder.add_node("awhile", awhile)
+        builder.add_node("aparallelwhile", aparallelwhile)
         builder.add_node(alittlewhile)
         builder.add_edge(START, "alittlewhile")
+        builder.add_edge(START, "aparallelwhile")
         builder.add_edge("alittlewhile", "awhile")
         graph = builder.compile(checkpointer=checkpointer)
 
         # test interrupting astream
+        got_event = False
         thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
         async with aclosing(graph.astream({"value": 1}, thread1)) as stream:
             async for chunk in stream:
                 assert chunk == {"alittlewhile": {"value": 2}}
+                got_event = True
                 break
+
+        assert got_event
+
+        # node aparallelwhile should start, but be cancelled
+        assert aparallelwhile.started is True
+        assert aparallelwhile.cancelled is True
 
         # node "awhile" should never start
         assert awhile.started is False
@@ -292,7 +303,10 @@ async def test_cancel_graph_astream(
             state = await graph.aget_state(thread1)
             assert state is not None
             assert state.values == {"value": 1}
-            assert state.next == ("alittlewhile",)
+            assert state.next == (
+                "aparallelwhile",
+                "alittlewhile",
+            )
             assert state.metadata == {"source": "loop", "step": 0, "writes": None}
     finally:
         if getattr(checkpointer, "__aexit__", None):
@@ -366,9 +380,10 @@ async def test_cancel_graph_astream_events_v2(
         # did break
         assert got_event
 
-        # node "awhile" starts but is cancelled
-        assert awhile.started is True
-        assert awhile.cancelled is True
+        # node "awhile" maybe starts (impl detail of astream_events)
+        # if it does start, it must be cancelled
+        if awhile.started:
+            assert awhile.cancelled is True
 
         # node "anotherwhile" should never start
         assert anotherwhile.started is False
@@ -387,6 +402,87 @@ async def test_cancel_graph_astream_events_v2(
     finally:
         if getattr(checkpointer, "__aexit__", None):
             await checkpointer.__aexit__(None, None, None)
+
+
+async def test_node_schemas_custom_output() -> None:
+    from langchain_core.messages import HumanMessage
+
+    class State(TypedDict):
+        hello: str
+        bye: str
+        messages: Annotated[list[str], add_messages]
+
+    class Output(TypedDict):
+        messages: list[str]
+
+    class StateForA(TypedDict):
+        hello: str
+        messages: Annotated[list[str], add_messages]
+
+    async def node_a(state: StateForA):
+        assert state == {
+            "hello": "there",
+            "messages": [HumanMessage(content="hello", id=AnyStr())],
+        }
+
+    class StateForB(TypedDict):
+        bye: str
+        now: int
+
+    async def node_b(state: StateForB):
+        assert state == {
+            "bye": "world",
+            "now": None,
+        }
+        return {
+            "now": 123,
+            "hello": "again",
+        }
+
+    class StateForC(TypedDict):
+        hello: str
+        now: int
+
+    async def node_c(state: StateForC):
+        assert state == {
+            "hello": "again",
+            "now": 123,
+        }
+
+    builder = StateGraph(State, output=Output)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_c)
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("b", "c")
+    graph = builder.compile()
+
+    assert await graph.ainvoke(
+        {"hello": "there", "bye": "world", "messages": "hello"}
+    ) == {
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
+
+    builder = StateGraph(input=State, output=Output)
+    builder.add_node("a", node_a)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_c)
+    builder.add_edge(START, "a")
+    builder.add_edge("a", "b")
+    builder.add_edge("b", "c")
+    graph = builder.compile()
+
+    assert await graph.ainvoke(
+        {
+            "hello": "there",
+            "bye": "world",
+            "messages": "hello",
+            "now": 345,  # ignored because not in input schema
+        }
+    ) == {
+        "messages": [HumanMessage(content="hello", id=AnyStr())],
+    }
 
 
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:

@@ -15,6 +15,9 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
         self.typ = typ
         self.guard = guard
 
+    def __eq__(self, value: object) -> bool:
+        return isinstance(value, EphemeralValue) and value.guard == self.guard
+
     @property
     def ValueType(self) -> Type[Value]:
         """The type of the value stored in the channel."""
