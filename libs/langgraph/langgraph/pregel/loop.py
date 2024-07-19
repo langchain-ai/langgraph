@@ -196,7 +196,6 @@ class PregelLoop:
             for tid, k, v in self.checkpoint_pending_writes:
                 if task := next((t for t in self.tasks if t.id == tid), None):
                     task.writes.append((k, v))
-            # TODO clear checkpoint_pending_writes
 
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks):
