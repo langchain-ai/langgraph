@@ -746,7 +746,8 @@ class Pregel(
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        if config is not None and config.get("configurable", {}).get(CONFIG_KEY_READ):
+        is_subgraph = config and config.get("configurable", {}).get(CONFIG_KEY_READ)
+        if is_subgraph:
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
         if config is not None and config.get("configurable", {}).get(
@@ -765,6 +766,7 @@ class Pregel(
             interrupt_before,
             interrupt_after,
             checkpointer,
+            is_subgraph,
         )
 
     def stream(
@@ -847,7 +849,6 @@ class Pregel(
             ```
         """
         config = ensure_config(config)
-        is_subgraph = config.get("configurable", {}).get(CONFIG_KEY_READ) is not None
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
             dumpd(self),
@@ -871,6 +872,7 @@ class Pregel(
                 interrupt_before,
                 interrupt_after,
                 checkpointer,
+                is_subgraph,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -1303,7 +1305,6 @@ class Pregel(
             ```
         """
         config = ensure_config(config)
-        is_subgraph = config.get("configurable", {}).get(CONFIG_KEY_READ) is not None
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
             dumpd(self),
@@ -1337,6 +1338,7 @@ class Pregel(
                 interrupt_before,
                 interrupt_after,
                 checkpointer,
+                is_subgraph,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
