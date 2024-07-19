@@ -355,7 +355,7 @@ class Pregel(
         ) as channels, ManagedValuesManager(
             self.managed_values_dict, ensure_config(config), self
         ) as managed:
-            _, next_tasks = prepare_next_tasks(
+            next_tasks = prepare_next_tasks(
                 checkpoint,
                 self.nodes,
                 channels,
@@ -387,7 +387,7 @@ class Pregel(
         ) as channels, AsyncManagedValuesManager(
             self.managed_values_dict, ensure_config(config), self
         ) as managed:
-            _, next_tasks = prepare_next_tasks(
+            next_tasks = prepare_next_tasks(
                 checkpoint,
                 self.nodes,
                 channels,
@@ -429,7 +429,7 @@ class Pregel(
             ) as channels, ManagedValuesManager(
                 self.managed_values_dict, ensure_config(config), self
             ) as managed:
-                _, next_tasks = prepare_next_tasks(
+                next_tasks = prepare_next_tasks(
                     checkpoint,
                     self.nodes,
                     channels,
@@ -475,7 +475,7 @@ class Pregel(
             ) as channels, AsyncManagedValuesManager(
                 self.managed_values_dict, ensure_config(config), self
             ) as managed:
-                _, next_tasks = prepare_next_tasks(
+                next_tasks = prepare_next_tasks(
                     checkpoint,
                     self.nodes,
                     channels,
@@ -560,14 +560,14 @@ class Pregel(
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: task.writes.extend,
                         CONFIG_KEY_READ: partial(
-                            local_read, checkpoint, channels, task.writes, config
+                            local_read, checkpoint, channels, task, config
                         ),
                     },
                 ),
             )
             # apply to checkpoint and save
             apply_writes(
-                checkpoint, channels, task.writes, self.checkpointer.get_next_version
+                checkpoint, channels, [task], self.checkpointer.get_next_version
             )
             step = saved.metadata.get("step", -2) + 1 if saved else -1
 
@@ -652,14 +652,14 @@ class Pregel(
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: task.writes.extend,
                         CONFIG_KEY_READ: partial(
-                            local_read, checkpoint, channels, task.writes, config
+                            local_read, checkpoint, channels, task, config
                         ),
                     },
                 ),
             )
             # apply to checkpoint and save
             apply_writes(
-                checkpoint, channels, task.writes, self.checkpointer.get_next_version
+                checkpoint, channels, [task], self.checkpointer.get_next_version
             )
             step = saved.metadata.get("step", -2) + 1 if saved else -1
 
@@ -1145,7 +1145,6 @@ class Pregel(
                                 # exception will be handled in panic_or_proceed
                                 futures.clear()
                             else:
-                                print(loop.step, task.name, stream_modes)
                                 # save task writes to checkpointer
                                 loop.put_writes(task.id, task.writes)
                                 # yield updates output for the finished task

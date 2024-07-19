@@ -7,7 +7,9 @@ from typing import (
     Iterator,
     Literal,
     Mapping,
+    NamedTuple,
     Optional,
+    Protocol,
     Sequence,
     Union,
     overload,
@@ -29,6 +31,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_SEND,
     INTERRUPT,
+    RESERVED,
     TAG_HIDDEN,
     TASKS,
     Send,
@@ -41,6 +44,18 @@ from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All, PregelExecutableTask, PregelTaskDescription
 
 
+class WritesProtocol(Protocol):
+    name: str
+    writes: Sequence[tuple[str, Any]]
+    triggers: Sequence[str]
+
+
+class PregelTaskWrites(NamedTuple):
+    name: str
+    writes: Sequence[tuple[str, Any]]
+    triggers: Sequence[str]
+
+
 def should_interrupt(
     checkpoint: Checkpoint,
     interrupt_nodes: Union[All, Sequence[str]],
@@ -48,8 +63,7 @@ def should_interrupt(
 ) -> bool:
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()
-    # defaultdicts are mutated on access :( so we need to copy
-    seen = checkpoint["versions_seen"].copy()[INTERRUPT]
+    seen = checkpoint["versions_seen"].get(INTERRUPT, {})
     return (
         # interrupt if any channel has been updated since last interrupt
         any(
@@ -72,21 +86,21 @@ def should_interrupt(
 def local_read(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
-    writes: Sequence[tuple[str, Any]],
+    task: WritesProtocol,
     config: RunnableConfig,
     select: Union[list[str], str],
     fresh: bool = False,
 ) -> Union[dict[str, Any], Any]:
     if fresh:
-        checkpoint = create_checkpoint(checkpoint, channels, -1)
+        new_checkpoint = create_checkpoint(copy_checkpoint(checkpoint), channels, -1)
         context_channels = {k: v for k, v in channels.items() if isinstance(v, Context)}
         with ChannelsManager(
             {k: v for k, v in channels.items() if k not in context_channels},
-            checkpoint,
+            new_checkpoint,
             config,
         ) as channels:
             all_channels = {**channels, **context_channels}
-            apply_writes(copy_checkpoint(checkpoint), all_channels, writes, None)
+            apply_writes(new_checkpoint, all_channels, [task], None)
             return read_channels(all_channels, select)
     else:
         return read_channels(channels, select)
@@ -118,19 +132,46 @@ def increment(current: Optional[int], channel: BaseChannel) -> int:
 def apply_writes(
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
-    pending_writes: Sequence[tuple[str, Any]],
+    tasks: Sequence[WritesProtocol],
     get_next_version: Optional[Callable[[int, BaseChannel], int]],
 ) -> None:
+    # update seen versions
+    for task in tasks:
+        checkpoint["versions_seen"].setdefault(task.name, {}).update(
+            {
+                chan: checkpoint["channel_versions"][chan]
+                for chan in task.triggers
+                if chan in checkpoint["channel_versions"]
+            }
+        )
+
+    # Find the highest version of all channels
+    if checkpoint["channel_versions"]:
+        max_version = max(checkpoint["channel_versions"].values())
+    else:
+        max_version = None
+    # Consume all channels that were read
+    for chan in {
+        chan for task in tasks for chan in task.triggers if chan not in RESERVED
+    }:
+        if channels[chan].consume():
+            if get_next_version is not None:
+                checkpoint["channel_versions"][chan] = get_next_version(
+                    max_version, channels[chan]
+                )
+
+    # clear pending sends
     if checkpoint["pending_sends"]:
         checkpoint["pending_sends"].clear()
 
-    pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
     # Group writes by channel
-    for chan, val in pending_writes:
-        if chan == TASKS:
-            checkpoint["pending_sends"].append(val)
-        else:
-            pending_writes_by_channel[chan].append(val)
+    pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
+    for task in tasks:
+        for chan, val in task.writes:
+            if chan == TASKS:
+                checkpoint["pending_sends"].append(val)
+            else:
+                pending_writes_by_channel[chan].append(val)
 
     # Find the highest version of all channels
     if checkpoint["channel_versions"]:
@@ -138,8 +179,8 @@ def apply_writes(
     else:
         max_version = None
 
-    updated_channels: set[str] = set()
     # Apply writes to channels
+    updated_channels: set[str] = set()
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
             try:
@@ -153,6 +194,7 @@ def apply_writes(
                     max_version, channels[chan]
                 )
             updated_channels.add(chan)
+
     # Channels that weren't updated in this step are notified of a new step
     for chan in channels:
         if chan not in updated_channels:
@@ -171,9 +213,8 @@ def prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[False],
-    get_next_version: Literal[None] = None,
     manager: Literal[None] = None,
-) -> tuple[Checkpoint, list[PregelTaskDescription]]:
+) -> list[PregelTaskDescription]:
     ...
 
 
@@ -186,9 +227,8 @@ def prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[True],
-    get_next_version: Callable[[int, BaseChannel], int],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
-) -> tuple[Checkpoint, list[PregelExecutableTask]]:
+) -> list[PregelExecutableTask]:
     ...
 
 
@@ -201,10 +241,8 @@ def prepare_next_tasks(
     step: int,
     *,
     for_execution: bool,
-    get_next_version: Union[None, Callable[[int, BaseChannel], int]] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
-    checkpoint = copy_checkpoint(checkpoint)
+) -> Union[list[PregelTaskDescription], list[PregelExecutableTask]]:
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
     # Consume pending packets
     for packet in checkpoint["pending_sends"]:
@@ -247,7 +285,11 @@ def prepare_next_tasks(
                                     local_write, writes.extend, processes, channels
                                 ),
                                 CONFIG_KEY_READ: partial(
-                                    local_read, checkpoint, channels, writes, config
+                                    local_read,
+                                    checkpoint,
+                                    channels,
+                                    PregelTaskWrites(packet.node, writes, triggers),
+                                    config,
                                 ),
                             },
                         ),
@@ -258,18 +300,14 @@ def prepare_next_tasks(
                 )
         else:
             tasks.append(PregelTaskDescription(packet.node, packet.arg))
-    if for_execution:
-        checkpoint["pending_sends"].clear()
-    # Collect channels to consume
-    channels_to_consume = set()
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()
     if null_version is None:
-        return checkpoint, tasks
+        return tasks
     for name, proc in processes.items():
-        seen = checkpoint["versions_seen"][name]
+        seen = checkpoint["versions_seen"].get(name, {})
         # If any of the channels read by this process were updated
         if triggers := sorted(
             chan
@@ -280,21 +318,10 @@ def prepare_next_tasks(
             and checkpoint["channel_versions"].get(chan, null_version)
             > seen.get(chan, null_version)
         ):
-            channels_to_consume.update(triggers)
             try:
                 val = next(_proc_input(step, name, proc, managed, channels))
             except StopIteration:
                 continue
-
-            # update seen versions
-            if for_execution:
-                seen.update(
-                    {
-                        chan: checkpoint["channel_versions"][chan]
-                        for chan in proc.triggers
-                        if chan in checkpoint["channel_versions"]
-                    }
-                )
 
             if for_execution:
                 if node := proc.get_node():
@@ -333,7 +360,7 @@ def prepare_next_tasks(
                                         local_read,
                                         checkpoint,
                                         channels,
-                                        writes,
+                                        PregelTaskWrites(name, writes, triggers),
                                         config,
                                     ),
                                 },
@@ -345,19 +372,7 @@ def prepare_next_tasks(
                     )
             else:
                 tasks.append(PregelTaskDescription(name, val))
-    # Find the highest version of all channels
-    if checkpoint["channel_versions"]:
-        max_version = max(checkpoint["channel_versions"].values())
-    else:
-        max_version = None
-    # Consume all channels that were read
-    if for_execution:
-        for chan in channels_to_consume:
-            if channels[chan].consume():
-                checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version, channels[chan]
-                )
-    return checkpoint, tasks
+    return tasks
 
 
 def _proc_input(

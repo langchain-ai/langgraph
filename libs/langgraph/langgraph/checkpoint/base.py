@@ -1,5 +1,4 @@
 from abc import ABC
-from collections import defaultdict
 from datetime import datetime, timezone
 from typing import (
     Any,
@@ -79,7 +78,7 @@ class Checkpoint(TypedDict):
     The keys are channel names and the values are the logical time step
     at which the channel was last updated.
     """
-    versions_seen: defaultdict[str, dict[str, Union[str, int, float]]]
+    versions_seen: dict[str, dict[str, Union[str, int, float]]]
     """Map from node ID to map from channel name to version seen.
     
     This keeps track of the versions of the channels that each node has seen.
@@ -100,7 +99,7 @@ def empty_checkpoint() -> Checkpoint:
         ts=datetime.now(timezone.utc).isoformat(),
         channel_values={},
         channel_versions={},
-        versions_seen=defaultdict(dict),
+        versions_seen={},
         pending_sends=[],
         current_tasks={},
     )
@@ -113,10 +112,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         id=checkpoint["id"],
         channel_values=checkpoint["channel_values"].copy(),
         channel_versions=checkpoint["channel_versions"].copy(),
-        versions_seen=defaultdict(
-            dict,
-            {k: v.copy() for k, v in checkpoint["versions_seen"].items()},
-        ),
+        versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         pending_sends=checkpoint.get("pending_sends", []).copy(),
         current_tasks=checkpoint.get("current_tasks", {}).copy(),
     )

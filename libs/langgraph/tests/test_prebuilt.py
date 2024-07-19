@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Sequence, Type, Union
 
 import pytest
@@ -100,14 +99,11 @@ def test_no_modifier(checkpointer: Optional[BaseCheckpointSaver]):
                 "start:agent": 3,
                 "agent": 3,
             },
-            "versions_seen": defaultdict(
-                dict,
-                {
-                    "__start__": {"__start__": 1},
-                    "agent": {"start:agent": 2},
-                    "tools": {},
-                },
-            ),
+            "versions_seen": {
+                "__input__": {},
+                "__start__": {"__start__": 1},
+                "agent": {"start:agent": 2},
+            },
             "pending_sends": [],
             "current_tasks": {},
         }
@@ -159,14 +155,11 @@ async def test_no_modifier_async(checkpointer: Optional[BaseCheckpointSaver]):
                 "start:agent": 3,
                 "agent": 3,
             },
-            "versions_seen": defaultdict(
-                dict,
-                {
-                    "__start__": {"__start__": 1},
-                    "agent": {"start:agent": 2},
-                    "tools": {},
-                },
-            ),
+            "versions_seen": {
+                "__input__": {},
+                "__start__": {"__start__": 1},
+                "agent": {"start:agent": 2},
+            },
             "pending_sends": [],
             "current_tasks": {},
         }
