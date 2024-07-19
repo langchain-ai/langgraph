@@ -95,16 +95,14 @@ def map_debug_task_results(
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
-        # TODO: remove once core is updated
-        metadata = {
-            k: v for k, v in config["metadata"].items() if not k.startswith("__")
-        }
         yield {
             "type": "task_result",
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, metadata)))),
+                "id": str(
+                    uuid5(TASK_NAMESPACE, json.dumps((name, step, config["metadata"])))
+                ),
                 "name": name,
                 "result": [w for w in writes if w[0] in stream_channels_list],
             },

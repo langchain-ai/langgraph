@@ -7513,6 +7513,7 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
         {"side": {"my_key": "my value there and back again"}},
     ]
 
+
 @pytest.mark.parametrize(
     "checkpointer",
     [

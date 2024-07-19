@@ -79,7 +79,12 @@ from langgraph.constants import (
     TASKS,
     Send,
 )
-from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError, EmptyInputError
+from langgraph.errors import (
+    EmptyInputError,
+    GraphInterrupt,
+    GraphRecursionError,
+    InvalidUpdateError,
+)
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValueMapping,
