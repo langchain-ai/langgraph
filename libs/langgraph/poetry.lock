@@ -1760,13 +1760,13 @@ langchain-core = ">=0.2.2rc1,<0.3"
 
 [[package]]
 name = "langchain-core"
-version = "0.2.19"
+version = "0.2.22"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langchain_core-0.2.19-py3-none-any.whl", hash = "sha256:5b3cd34395be274c89e822c84f0e03c4da14168c177a83921c5b9414ac7a0651"},
-    {file = "langchain_core-0.2.19.tar.gz", hash = "sha256:13043a83e5c9ab58b9f5ce2a56896e7e88b752e8891b2958960a98e71801471e"},
+    {file = "langchain_core-0.2.22-py3-none-any.whl", hash = "sha256:7731a86440c0958b3186c003fb9b26b2d5a682a6344bda7bfb9174e2898f8b43"},
+    {file = "langchain_core-0.2.22.tar.gz", hash = "sha256:582d6f929a43b830139444e4124123cd415331ad62f25757b1406252958cdcac"},
 ]
 
 [package.dependencies]
