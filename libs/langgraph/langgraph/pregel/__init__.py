@@ -1222,7 +1222,7 @@ class Pregel(
                 # set final channel values as run output
                 run_manager.on_chain_end(read_channels(channels, output_keys))
         except GraphInterrupt as e:
-            run_manager.on_chain_end(e)
+            run_manager.on_chain_end(read_channels(channels, output_keys))
             raise
         except BaseException as e:
             run_manager.on_chain_error(e)
@@ -1693,7 +1693,7 @@ class Pregel(
                 # set final channel values as run output
                 await run_manager.on_chain_end(read_channels(channels, output_keys))
         except GraphInterrupt as e:
-            await asyncio.shield(run_manager.on_chain_end(e))
+            await asyncio.shield(run_manager.on_chain_end(read_channels(channels, output_keys)))
             raise
         except BaseException as e:
             await asyncio.shield(run_manager.on_chain_error(e))
