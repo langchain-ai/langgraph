@@ -34,3 +34,9 @@ class GraphInterrupt(Exception):
     """Raised when a subgraph is interrupted."""
 
     pass
+
+
+class EmptyInputError(Exception):
+    """Raised when graph receives an empty input."""
+
+    pass

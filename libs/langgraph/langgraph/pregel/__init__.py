@@ -79,7 +79,7 @@ from langgraph.constants import (
     TASKS,
     Send,
 )
-from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
+from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError, EmptyInputError
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValueMapping,
@@ -1017,7 +1017,7 @@ class Pregel(
                     # increment start to 0
                     start += 1
                 else:
-                    raise ValueError("Received no input")
+                    raise EmptyInputError("Received no input")
 
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -1056,7 +1056,7 @@ class Pregel(
                     # if no more tasks, we're done
                     if not next_tasks:
                         if step == start:
-                            raise ValueError("No tasks to run in graph.")
+                            raise EmptyInputError("No tasks to run in graph.")
                         else:
                             break
 
@@ -1141,12 +1141,14 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
-                    exceptions_to_handle = () if is_subgraph else (GraphInterrupt,)
-                    try:
+                    if is_subgraph:
                         _panic_or_proceed(done, inflight, step)
-                    except exceptions_to_handle:
-                        break
+                    else:
+                        # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
+                        try:
+                            _panic_or_proceed(done, inflight, step)
+                        except GraphInterrupt:
+                            break
 
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
@@ -1478,7 +1480,7 @@ class Pregel(
                     # increment start to 0
                     start += 1
                 else:
-                    raise ValueError("Received no input")
+                    raise EmptyInputError("Received no input")
 
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -1517,7 +1519,7 @@ class Pregel(
                     # if no more tasks, we're done
                     if not next_tasks:
                         if step == start:
-                            raise ValueError("No tasks to run in graph.")
+                            raise EmptyInputError("No tasks to run in graph.")
                         else:
                             break
 
@@ -1608,12 +1610,14 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
-                    exceptions_to_handle = () if is_subgraph else (GraphInterrupt,)
-                    try:
-                        _panic_or_proceed(done, inflight, step, asyncio.TimeoutError)
-                    except exceptions_to_handle:
-                        break
+                    if is_subgraph:
+                        _panic_or_proceed(done, inflight, step)
+                    else:
+                        # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
+                        try:
+                            _panic_or_proceed(done, inflight, step)
+                        except GraphInterrupt:
+                            break
 
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures

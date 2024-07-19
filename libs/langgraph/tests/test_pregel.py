@@ -7513,8 +7513,18 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
         {"side": {"my_key": "my value there and back again"}},
     ]
 
-
-def test_nested_graph_interrupts() -> None:
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        SqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
     class InnerState(TypedDict):
         my_key: str
         my_other_key: str
@@ -7640,7 +7650,18 @@ def test_nested_graph_interrupts() -> None:
     ]
 
 
-def test_nested_graph_interrupts_parallel() -> None:
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        SqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> None:
     class InnerState(TypedDict):
         my_key: Annotated[str, operator.add]
         my_other_key: str
