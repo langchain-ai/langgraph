@@ -64,4 +64,4 @@ from langgraph.prebuilt import InjectedState
 ```
 
 ::: langgraph.prebuilt.InjectedState
-    handler: pytohn
+    handler: python
