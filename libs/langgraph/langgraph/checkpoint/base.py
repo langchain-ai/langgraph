@@ -54,6 +54,10 @@ class CheckpointMetadata(TypedDict, total=False):
     """
 
 
+class TaskInfo(TypedDict):
+    status: Literal["scheduled", "success", "error"]
+
+
 class Checkpoint(TypedDict):
     """State snapshot at a given point in time."""
 
@@ -85,6 +89,8 @@ class Checkpoint(TypedDict):
     pending_sends: List[Send]
     """List of packets sent to nodes but not yet processed.
     Cleared by the next checkpoint."""
+    current_tasks: Dict[str, TaskInfo]
+    """Map from task ID to task info."""
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -96,6 +102,7 @@ def empty_checkpoint() -> Checkpoint:
         channel_versions={},
         versions_seen=defaultdict(dict),
         pending_sends=[],
+        current_tasks={},
     )
 
 
@@ -111,6 +118,7 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
             {k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         ),
         pending_sends=checkpoint.get("pending_sends", []).copy(),
+        current_tasks=checkpoint.get("current_tasks", {}).copy(),
     )
 
 

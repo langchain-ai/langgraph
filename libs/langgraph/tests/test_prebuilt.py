@@ -1,8 +1,6 @@
 from collections import defaultdict
 from typing import Any, Callable, Dict, List, Optional, Sequence, Type, Union
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.checkpoint.sqlite import SqliteSaver
 import pytest
 from langchain_core.callbacks import (
     CallbackManagerForLLMRun,
@@ -25,6 +23,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import (
     ToolNode,
     ValidationNode,
@@ -110,6 +109,7 @@ def test_no_modifier(checkpointer: Optional[BaseCheckpointSaver]):
                 },
             ),
             "pending_sends": [],
+            "current_tasks": {},
         }
         assert saved.metadata == {
             "source": "loop",
@@ -168,6 +168,7 @@ async def test_no_modifier_async(checkpointer: Optional[BaseCheckpointSaver]):
                 },
             ),
             "pending_sends": [],
+            "current_tasks": {},
         }
         assert saved.metadata == {
             "source": "loop",
