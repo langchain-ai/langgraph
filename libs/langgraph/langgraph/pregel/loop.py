@@ -73,10 +73,10 @@ class PregelLoop:
     checkpointer: Optional[BaseCheckpointSaver]
     checkpointer_get_next_version: Callable[[Optional[V]], V]
     checkpointer_put_writes: Optional[
-        Callable[[RunnableConfig, Sequence[tuple[str, Any]], str], ...]
+        Callable[[RunnableConfig, Sequence[tuple[str, Any]], str], Any]
     ]
     checkpointer_put: Optional[
-        Callable[[RunnableConfig, Checkpoint, CheckpointMetadata], ...]
+        Callable[[RunnableConfig, Checkpoint, CheckpointMetadata], Any]
     ]
     graph: "Pregel"
 
