@@ -7526,128 +7526,136 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     ],
 )
 def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
-    class InnerState(TypedDict):
-        my_key: str
-        my_other_key: str
+    try:
 
-    def inner_1(state: InnerState):
-        return {"my_key": state["my_key"] + " here", "my_other_key": state["my_key"]}
+        class InnerState(TypedDict):
+            my_key: str
+            my_other_key: str
 
-    def inner_2(state: InnerState):
-        return {
-            "my_key": state["my_key"] + " and there",
-            "my_other_key": state["my_key"],
+        def inner_1(state: InnerState):
+            return {
+                "my_key": state["my_key"] + " here",
+                "my_other_key": state["my_key"],
+            }
+
+        def inner_2(state: InnerState):
+            return {
+                "my_key": state["my_key"] + " and there",
+                "my_other_key": state["my_key"],
+            }
+
+        inner = StateGraph(InnerState)
+        inner.add_node("inner_1", inner_1)
+        inner.add_node("inner_2", inner_2)
+        inner.add_edge("inner_1", "inner_2")
+        inner.set_entry_point("inner_1")
+        inner.set_finish_point("inner_2")
+
+        class State(TypedDict):
+            my_key: str
+
+        def outer_1(state: State):
+            return {"my_key": "hi " + state["my_key"]}
+
+        def outer_2(state: State):
+            return {"my_key": state["my_key"] + " and back again"}
+
+        graph = StateGraph(State)
+        graph.add_node("outer_1", outer_1)
+        graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
+        graph.add_node("outer_2", outer_2)
+        graph.set_entry_point("outer_1")
+        graph.add_edge("outer_1", "inner")
+        graph.add_edge("inner", "outer_2")
+        graph.set_finish_point("outer_2")
+
+        app = graph.compile(checkpointer=checkpointer)
+
+        # test invoke w/ nested interrupt
+        config = {"configurable": {"thread_id": "1"}}
+        assert app.invoke({"my_key": "my value"}, config, debug=True) == {
+            "my_key": "hi my value",
         }
 
-    inner = StateGraph(InnerState)
-    inner.add_node("inner_1", inner_1)
-    inner.add_node("inner_2", inner_2)
-    inner.add_edge("inner_1", "inner_2")
-    inner.set_entry_point("inner_1")
-    inner.set_finish_point("inner_2")
-
-    class State(TypedDict):
-        my_key: str
-
-    def outer_1(state: State):
-        return {"my_key": "hi " + state["my_key"]}
-
-    def outer_2(state: State):
-        return {"my_key": state["my_key"] + " and back again"}
-
-    graph = StateGraph(State)
-    graph.add_node("outer_1", outer_1)
-    graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
-    graph.add_node("outer_2", outer_2)
-    graph.set_entry_point("outer_1")
-    graph.add_edge("outer_1", "inner")
-    graph.add_edge("inner", "outer_2")
-    graph.set_finish_point("outer_2")
-
-    app = graph.compile(checkpointer=checkpointer)
-
-    # test invoke w/ nested interrupt
-    config = {"configurable": {"thread_id": "1"}}
-    assert app.invoke({"my_key": "my value"}, config, debug=True) == {
-        "my_key": "hi my value",
-    }
-
-    assert app.invoke(None, config, debug=True) == {
-        "my_key": "hi my value here and there and back again",
-    }
-
-    # test stream updates w/ nested interrupt
-    config = {"configurable": {"thread_id": "2"}}
-    assert [*app.stream({"my_key": "my value"}, config)] == [
-        {"outer_1": {"my_key": "hi my value"}},
-    ]
-    assert [*app.stream(None, config)] == [
-        {"inner": {"my_key": "hi my value here and there"}},
-        {"outer_2": {"my_key": "hi my value here and there and back again"}},
-    ]
-
-    # test stream values w/ nested interrupt
-    config = {"configurable": {"thread_id": "3"}}
-    assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
-        {
-            "my_key": "my value",
-        },
-        {
-            "my_key": "hi my value",
-        },
-    ]
-    assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "hi my value here and there",
-        },
-        {
+        assert app.invoke(None, config, debug=True) == {
             "my_key": "hi my value here and there and back again",
-        },
-    ]
+        }
 
-    # test interrupts BEFORE the node w/ interrupts
-    app = graph.compile(checkpointer=checkpointer, interrupt_before=["inner"])
-    config = {"configurable": {"thread_id": "4"}}
-    assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
-        {
-            "my_key": "my value",
-        },
-        {
-            "my_key": "hi my value",
-        },
-    ]
-    # while we're waiting for the node w/ interrupt inside to finish
-    assert [*app.stream(None, config, stream_mode="values")] == []
-    assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "hi my value here and there",
-        },
-        {
-            "my_key": "hi my value here and there and back again",
-        },
-    ]
+        # test stream updates w/ nested interrupt
+        config = {"configurable": {"thread_id": "2"}}
+        assert [*app.stream({"my_key": "my value"}, config)] == [
+            {"outer_1": {"my_key": "hi my value"}},
+        ]
+        assert [*app.stream(None, config)] == [
+            {"inner": {"my_key": "hi my value here and there"}},
+            {"outer_2": {"my_key": "hi my value here and there and back again"}},
+        ]
 
-    # test interrupts AFTER the node w/ interrupts
-    app = graph.compile(checkpointer=checkpointer, interrupt_after=["inner"])
-    config = {"configurable": {"thread_id": "5"}}
-    assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
-        {
-            "my_key": "my value",
-        },
-        {
-            "my_key": "hi my value",
-        },
-    ]
-    assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "hi my value here and there",
-        },
-    ]
-    assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "hi my value here and there and back again",
-        },
-    ]
+        # test stream values w/ nested interrupt
+        config = {"configurable": {"thread_id": "3"}}
+        assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
+            {
+                "my_key": "my value",
+            },
+            {
+                "my_key": "hi my value",
+            },
+        ]
+        assert [*app.stream(None, config, stream_mode="values")] == [
+            {
+                "my_key": "hi my value here and there",
+            },
+            {
+                "my_key": "hi my value here and there and back again",
+            },
+        ]
+
+        # test interrupts BEFORE the node w/ interrupts
+        app = graph.compile(checkpointer=checkpointer, interrupt_before=["inner"])
+        config = {"configurable": {"thread_id": "4"}}
+        assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
+            {
+                "my_key": "my value",
+            },
+            {
+                "my_key": "hi my value",
+            },
+        ]
+        # while we're waiting for the node w/ interrupt inside to finish
+        assert [*app.stream(None, config, stream_mode="values")] == []
+        assert [*app.stream(None, config, stream_mode="values")] == [
+            {
+                "my_key": "hi my value here and there",
+            },
+            {
+                "my_key": "hi my value here and there and back again",
+            },
+        ]
+
+        # test interrupts AFTER the node w/ interrupts
+        app = graph.compile(checkpointer=checkpointer, interrupt_after=["inner"])
+        config = {"configurable": {"thread_id": "5"}}
+        assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
+            {
+                "my_key": "my value",
+            },
+            {
+                "my_key": "hi my value",
+            },
+        ]
+        assert [*app.stream(None, config, stream_mode="values")] == [
+            {
+                "my_key": "hi my value here and there",
+            },
+        ]
+        assert [*app.stream(None, config, stream_mode="values")] == [
+            {
+                "my_key": "hi my value here and there and back again",
+            },
+        ]
+    finally:
+        if hasattr(checkpointer, "__exit__"):
+            checkpointer.__exit__(None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -7662,115 +7670,120 @@ def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
     ],
 )
 def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> None:
-    class InnerState(TypedDict):
-        my_key: Annotated[str, operator.add]
-        my_other_key: str
+    try:
 
-    def inner_1(state: InnerState):
-        return {"my_key": "got here", "my_other_key": state["my_key"]}
+        class InnerState(TypedDict):
+            my_key: Annotated[str, operator.add]
+            my_other_key: str
 
-    def inner_2(state: InnerState):
-        return {
-            "my_key": " and there",
-            "my_other_key": state["my_key"],
+        def inner_1(state: InnerState):
+            return {"my_key": "got here", "my_other_key": state["my_key"]}
+
+        def inner_2(state: InnerState):
+            return {
+                "my_key": " and there",
+                "my_other_key": state["my_key"],
+            }
+
+        inner = StateGraph(InnerState)
+        inner.add_node("inner_1", inner_1)
+        inner.add_node("inner_2", inner_2)
+        inner.add_edge("inner_1", "inner_2")
+        inner.set_entry_point("inner_1")
+        inner.set_finish_point("inner_2")
+
+        class State(TypedDict):
+            my_key: Annotated[str, operator.add]
+
+        def outer_1(state: State):
+            return {"my_key": " and parallel"}
+
+        def outer_2(state: State):
+            return {"my_key": " and back again"}
+
+        graph = StateGraph(State)
+        graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
+        graph.add_node("outer_1", outer_1)
+        graph.add_node("outer_2", outer_2)
+
+        graph.add_edge(START, "inner")
+        graph.add_edge(START, "outer_1")
+        graph.add_edge(["inner", "outer_1"], "outer_2")
+        graph.set_finish_point("outer_2")
+
+        app = graph.compile(checkpointer=checkpointer)
+
+        # test invoke w/ nested interrupt
+        config = {"configurable": {"thread_id": "1"}}
+        assert app.invoke({"my_key": ""}, config, debug=True) == {
+            "my_key": "",
         }
 
-    inner = StateGraph(InnerState)
-    inner.add_node("inner_1", inner_1)
-    inner.add_node("inner_2", inner_2)
-    inner.add_edge("inner_1", "inner_2")
-    inner.set_entry_point("inner_1")
-    inner.set_finish_point("inner_2")
-
-    class State(TypedDict):
-        my_key: Annotated[str, operator.add]
-
-    def outer_1(state: State):
-        return {"my_key": " and parallel"}
-
-    def outer_2(state: State):
-        return {"my_key": " and back again"}
-
-    graph = StateGraph(State)
-    graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
-    graph.add_node("outer_1", outer_1)
-    graph.add_node("outer_2", outer_2)
-
-    graph.add_edge(START, "inner")
-    graph.add_edge(START, "outer_1")
-    graph.add_edge(["inner", "outer_1"], "outer_2")
-    graph.set_finish_point("outer_2")
-
-    app = graph.compile(checkpointer=checkpointer)
-
-    # test invoke w/ nested interrupt
-    config = {"configurable": {"thread_id": "1"}}
-    assert app.invoke({"my_key": ""}, config, debug=True) == {
-        "my_key": "",
-    }
-
-    assert app.invoke(None, config, debug=True) == {
-        "my_key": "got here and there and parallel and back again",
-    }
-
-    # test stream updates w/ nested interrupt
-    config = {"configurable": {"thread_id": "2"}}
-    assert [*app.stream({"my_key": ""}, config)] == [
-        # we got to parallel node first
-        {"outer_1": {"my_key": " and parallel"}},
-    ]
-    assert [*app.stream(None, config)] == [
-        {"inner": {"my_key": "got here and there"}},
-        {"outer_2": {"my_key": " and back again"}},
-    ]
-
-    # test stream values w/ nested interrupt
-    config = {"configurable": {"thread_id": "3"}}
-    assert [*app.stream({"my_key": ""}, config, stream_mode="values")] == [
-        {
-            "my_key": "",
-        },
-    ]
-    assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "got here and there and parallel",
-        },
-        {
+        assert app.invoke(None, config, debug=True) == {
             "my_key": "got here and there and parallel and back again",
-        },
-    ]
+        }
 
-    # test interrupts BEFORE the parallel node
-    app = graph.compile(checkpointer=checkpointer, interrupt_before=["outer_1"])
-    config = {"configurable": {"thread_id": "4"}}
-    assert [*app.stream({"my_key": ""}, config, stream_mode="values")] == [
-        {"my_key": ""}
-    ]
-    # while we're waiting for the node w/ interrupt inside to finish
-    assert [*app.stream(None, config, stream_mode="values")] == []
-    assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "got here and there and parallel",
-        },
-        {
-            "my_key": "got here and there and parallel and back again",
-        },
-    ]
+        # test stream updates w/ nested interrupt
+        config = {"configurable": {"thread_id": "2"}}
+        assert [*app.stream({"my_key": ""}, config)] == [
+            # we got to parallel node first
+            {"outer_1": {"my_key": " and parallel"}},
+        ]
+        assert [*app.stream(None, config)] == [
+            {"inner": {"my_key": "got here and there"}},
+            {"outer_2": {"my_key": " and back again"}},
+        ]
 
-    # test interrupts AFTER the parallel node
-    app = graph.compile(checkpointer=checkpointer, interrupt_after=["outer_1"])
-    config = {"configurable": {"thread_id": "5"}}
-    assert [*app.stream({"my_key": ""}, config, stream_mode="values")] == [
-        {"my_key": ""}
-    ]
-    assert [*app.stream(None, config, stream_mode="values")] == [
-        {"my_key": "got here and there and parallel"},
-    ]
-    assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "got here and there and parallel and back again",
-        },
-    ]
+        # test stream values w/ nested interrupt
+        config = {"configurable": {"thread_id": "3"}}
+        assert [*app.stream({"my_key": ""}, config, stream_mode="values")] == [
+            {
+                "my_key": "",
+            },
+        ]
+        assert [*app.stream(None, config, stream_mode="values")] == [
+            {
+                "my_key": "got here and there and parallel",
+            },
+            {
+                "my_key": "got here and there and parallel and back again",
+            },
+        ]
+
+        # test interrupts BEFORE the parallel node
+        app = graph.compile(checkpointer=checkpointer, interrupt_before=["outer_1"])
+        config = {"configurable": {"thread_id": "4"}}
+        assert [*app.stream({"my_key": ""}, config, stream_mode="values")] == [
+            {"my_key": ""}
+        ]
+        # while we're waiting for the node w/ interrupt inside to finish
+        assert [*app.stream(None, config, stream_mode="values")] == []
+        assert [*app.stream(None, config, stream_mode="values")] == [
+            {
+                "my_key": "got here and there and parallel",
+            },
+            {
+                "my_key": "got here and there and parallel and back again",
+            },
+        ]
+
+        # test interrupts AFTER the parallel node
+        app = graph.compile(checkpointer=checkpointer, interrupt_after=["outer_1"])
+        config = {"configurable": {"thread_id": "5"}}
+        assert [*app.stream({"my_key": ""}, config, stream_mode="values")] == [
+            {"my_key": ""}
+        ]
+        assert [*app.stream(None, config, stream_mode="values")] == [
+            {"my_key": "got here and there and parallel"},
+        ]
+        assert [*app.stream(None, config, stream_mode="values")] == [
+            {
+                "my_key": "got here and there and parallel and back again",
+            },
+        ]
+    finally:
+        if hasattr(checkpointer, "__exit__"):
+            checkpointer.__exit__(None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -7785,90 +7798,95 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
     ],
 )
 def test_doubly_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
-    class State(TypedDict):
-        my_key: str
+    try:
 
-    class ChildState(TypedDict):
-        my_key: str
+        class State(TypedDict):
+            my_key: str
 
-    class GrandChildState(TypedDict):
-        my_key: str
+        class ChildState(TypedDict):
+            my_key: str
 
-    def grandchild_1(state: ChildState):
-        return {"my_key": state["my_key"] + " here"}
+        class GrandChildState(TypedDict):
+            my_key: str
 
-    def grandchild_2(state: ChildState):
-        return {
-            "my_key": state["my_key"] + " and there",
+        def grandchild_1(state: ChildState):
+            return {"my_key": state["my_key"] + " here"}
+
+        def grandchild_2(state: ChildState):
+            return {
+                "my_key": state["my_key"] + " and there",
+            }
+
+        grandchild = StateGraph(GrandChildState)
+        grandchild.add_node("grandchild_1", grandchild_1)
+        grandchild.add_node("grandchild_2", grandchild_2)
+        grandchild.add_edge("grandchild_1", "grandchild_2")
+        grandchild.set_entry_point("grandchild_1")
+        grandchild.set_finish_point("grandchild_2")
+
+        child = StateGraph(ChildState)
+        child.add_node("child_1", grandchild.compile(interrupt_before=["grandchild_2"]))
+        child.set_entry_point("child_1")
+        child.set_finish_point("child_1")
+
+        def parent_1(state: State):
+            return {"my_key": "hi " + state["my_key"]}
+
+        def parent_2(state: State):
+            return {"my_key": state["my_key"] + " and back again"}
+
+        graph = StateGraph(State)
+        graph.add_node("parent_1", parent_1)
+        graph.add_node("child", child.compile())
+        graph.add_node("parent_2", parent_2)
+        graph.set_entry_point("parent_1")
+        graph.add_edge("parent_1", "child")
+        graph.add_edge("child", "parent_2")
+        graph.set_finish_point("parent_2")
+
+        app = graph.compile(checkpointer=checkpointer)
+
+        # test invoke w/ nested interrupt
+        config = {"configurable": {"thread_id": "1"}}
+        assert app.invoke({"my_key": "my value"}, config, debug=True) == {
+            "my_key": "hi my value",
         }
 
-    grandchild = StateGraph(GrandChildState)
-    grandchild.add_node("grandchild_1", grandchild_1)
-    grandchild.add_node("grandchild_2", grandchild_2)
-    grandchild.add_edge("grandchild_1", "grandchild_2")
-    grandchild.set_entry_point("grandchild_1")
-    grandchild.set_finish_point("grandchild_2")
-
-    child = StateGraph(ChildState)
-    child.add_node("child_1", grandchild.compile(interrupt_before=["grandchild_2"]))
-    child.set_entry_point("child_1")
-    child.set_finish_point("child_1")
-
-    def parent_1(state: State):
-        return {"my_key": "hi " + state["my_key"]}
-
-    def parent_2(state: State):
-        return {"my_key": state["my_key"] + " and back again"}
-
-    graph = StateGraph(State)
-    graph.add_node("parent_1", parent_1)
-    graph.add_node("child", child.compile())
-    graph.add_node("parent_2", parent_2)
-    graph.set_entry_point("parent_1")
-    graph.add_edge("parent_1", "child")
-    graph.add_edge("child", "parent_2")
-    graph.set_finish_point("parent_2")
-
-    app = graph.compile(checkpointer=checkpointer)
-
-    # test invoke w/ nested interrupt
-    config = {"configurable": {"thread_id": "1"}}
-    assert app.invoke({"my_key": "my value"}, config, debug=True) == {
-        "my_key": "hi my value",
-    }
-
-    assert app.invoke(None, config, debug=True) == {
-        "my_key": "hi my value here and there and back again",
-    }
-
-    # test stream updates w/ nested interrupt
-    config = {"configurable": {"thread_id": "2"}}
-    assert [*app.stream({"my_key": "my value"}, config)] == [
-        {"parent_1": {"my_key": "hi my value"}},
-    ]
-    assert [*app.stream(None, config)] == [
-        {"child": {"my_key": "hi my value here and there"}},
-        {"parent_2": {"my_key": "hi my value here and there and back again"}},
-    ]
-
-    # test stream values w/ nested interrupt
-    config = {"configurable": {"thread_id": "3"}}
-    assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
-        {
-            "my_key": "my value",
-        },
-        {
-            "my_key": "hi my value",
-        },
-    ]
-    assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "hi my value here and there",
-        },
-        {
+        assert app.invoke(None, config, debug=True) == {
             "my_key": "hi my value here and there and back again",
-        },
-    ]
+        }
+
+        # test stream updates w/ nested interrupt
+        config = {"configurable": {"thread_id": "2"}}
+        assert [*app.stream({"my_key": "my value"}, config)] == [
+            {"parent_1": {"my_key": "hi my value"}},
+        ]
+        assert [*app.stream(None, config)] == [
+            {"child": {"my_key": "hi my value here and there"}},
+            {"parent_2": {"my_key": "hi my value here and there and back again"}},
+        ]
+
+        # test stream values w/ nested interrupt
+        config = {"configurable": {"thread_id": "3"}}
+        assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
+            {
+                "my_key": "my value",
+            },
+            {
+                "my_key": "hi my value",
+            },
+        ]
+        assert [*app.stream(None, config, stream_mode="values")] == [
+            {
+                "my_key": "hi my value here and there",
+            },
+            {
+                "my_key": "hi my value here and there and back again",
+            },
+        ]
+    finally:
+        if hasattr(checkpointer, "__exit__"):
+            checkpointer.__exit__(None, None, None)
 
 
 def test_repeat_condition(snapshot: SnapshotAssertion) -> None:

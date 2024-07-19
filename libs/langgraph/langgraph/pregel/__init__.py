@@ -1150,16 +1150,21 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    if is_subgraph:
+                    # --
+                    # when receiving interrupt graph node, re-save checkpoint
+                    # this ensures that on resume the outer graph checkpoint
+                    # is newer than any inner graph checkpoint
+                    # --
+                    # if we're in the outer graph, catch interrupt and break
+                    try:
                         _panic_or_proceed(done, inflight, step)
-                    else:
-                        # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
-                        try:
-                            _panic_or_proceed(done, inflight, step)
-                        except GraphInterrupt:
-                            # yield from put_checkpoint(
-                            #     {"source": "loop", "step": step, "writes": None}
-                            # )
+                    except GraphInterrupt:
+                        # yield from put_checkpoint(
+                        #     {"source": "interrupt", "step": step, "writes": None}
+                        # )
+                        if is_subgraph:
+                            raise
+                        else:
                             break
 
                     # don't keep futures around in memory longer than needed
@@ -1621,19 +1626,21 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    if is_subgraph:
-                        _panic_or_proceed(done, inflight, step, asyncio.TimeoutError)
-                    else:
-                        # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
-                        try:
-                            _panic_or_proceed(
-                                done, inflight, step, asyncio.TimeoutError
-                            )
-                        except GraphInterrupt:
-                            # for chunk in put_checkpoint(
-                            #     {"source": "loop", "step": step, "writes": None}
-                            # ):
-                            #     yield chunk
+                    # --
+                    # when receiving interrupt graph node, re-save checkpoint
+                    # this ensures that on resume the outer graph checkpoint
+                    # is newer than any inner graph checkpoint
+                    # --
+                    # if we're in the outer graph, catch interrupt and break
+                    try:
+                        _panic_or_proceed(done, inflight, step)
+                    except GraphInterrupt:
+                        # yield from put_checkpoint(
+                        #     {"source": "interrupt", "step": step, "writes": None}
+                        # )
+                        if is_subgraph:
+                            raise
+                        else:
                             break
 
                     # don't keep futures around in memory longer than needed
