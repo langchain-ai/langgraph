@@ -2084,15 +2084,7 @@ def _prepare_next_tasks(
         ):
             channels_to_consume.update(triggers)
             try:
-                val = next(
-                    _proc_input(
-                        step,
-                        name,
-                        proc,
-                        managed,
-                        channels,
-                    )
-                )
+                val = next(_proc_input(step, name, proc, managed, channels))
             except StopIteration:
                 continue
 
