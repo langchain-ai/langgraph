@@ -751,7 +751,9 @@ class Pregel(
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        is_subgraph = config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None
+        is_subgraph = (
+            config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None
+        )
         if is_subgraph:
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
@@ -1620,7 +1622,9 @@ class Pregel(
                     else:
                         # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
                         try:
-                            _panic_or_proceed(done, inflight, step, asyncio.TimeoutError)
+                            _panic_or_proceed(
+                                done, inflight, step, asyncio.TimeoutError
+                            )
                         except GraphInterrupt:
                             break
 
