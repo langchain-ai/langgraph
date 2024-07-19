@@ -736,6 +736,8 @@ class Pregel(
         Union[str, Sequence[str]],
         Optional[Sequence[str]],
         Optional[Sequence[str]],
+        Optional[BaseCheckpointSaver],
+        bool,
     ]:
         debug = debug if debug is not None else self.debug
         if output_keys is None:
@@ -1151,11 +1153,9 @@ class Pregel(
                         _panic_or_proceed(done, inflight, step)
                     # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
                     except GraphInterrupt:
-                        yield from put_checkpoint({
-                            "source": "loop",
-                            "step": step,
-                            "writes": None
-                        })
+                        yield from put_checkpoint(
+                            {"source": "loop", "step": step, "writes": None}
+                        )
                         if not is_subgraph:
                             break
 
@@ -1623,11 +1623,9 @@ class Pregel(
                         _panic_or_proceed(done, inflight, step, asyncio.TimeoutError)
                     # NOTE: for subgraphs we'll raise GraphInterrupt exception on interrupt
                     except GraphInterrupt:
-                        for chunk in put_checkpoint({
-                            "source": "loop",
-                            "step": step,
-                            "writes": None
-                        }):
+                        for chunk in put_checkpoint(
+                            {"source": "loop", "step": step, "writes": None}
+                        ):
                             yield chunk
                         if not is_subgraph:
                             break
