@@ -375,7 +375,7 @@ def test_tool_node_inject_state() -> None:
         }
         msg = AIMessage("hi?", tool_calls=[tool_call])
         result = node.invoke({"messages": [msg], "foo": "bar"})
-        tool_message: ToolMessage = result["messages"][-1]
+        tool_message = result["messages"][-1]
         assert tool_message.content == "bar"
 
         if tool_name == "tool3":
@@ -384,6 +384,13 @@ def test_tool_node_inject_state() -> None:
 
             with pytest.raises(ValueError):
                 node.invoke([msg])
+        else:
+            tool_message = node.invoke({"messages": [msg], "notfoo": "bar"})[
+                "messages"
+            ][-1]
+            assert "KeyError" in tool_message.content
+            tool_message = node.invoke([msg])[-1]
+            assert "KeyError" in tool_message.content
 
     tool_call = {
         "name": "tool4",
