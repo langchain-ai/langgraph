@@ -744,7 +744,6 @@ class Pregel(
                     Output is a dict with the node name as key and the updated values as value.
                 debug: Emit debug events for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
-            input_keys: The keys to use from the input, defaults to all input channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             debug: Whether to print debug information during execution, defaults to False.
