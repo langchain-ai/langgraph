@@ -6,7 +6,6 @@ from contextvars import copy_context
 from types import TracebackType
 from typing import (
     AsyncContextManager,
-    Awaitable,
     Callable,
     Iterator,
     Optional,
@@ -17,6 +16,8 @@ from typing import (
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_executor_for_config
 from typing_extensions import ParamSpec
+
+from langgraph.errors import GraphInterrupt
 
 P = ParamSpec("P")
 T = TypeVar("T")
@@ -42,6 +43,10 @@ def BackgroundExecutor(config: RunnableConfig) -> Iterator[Submit]:
         def done(task: concurrent.futures.Future) -> None:
             try:
                 task.result()
+            except GraphInterrupt:
+                # This exception is an interruption signal, not an error
+                # so we don't want to re-raise it on exit
+                tasks.pop(task)
             except BaseException:
                 pass
             else:
@@ -79,7 +84,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
 
     def submit(
         self,
-        fn: Callable[P, Awaitable[T]],
+        fn: Callable[P, T],
         *args: P.args,
         __name__: Optional[str] = None,
         __cancel_on_exit__: bool = False,
@@ -97,12 +102,16 @@ class AsyncBackgroundExecutor(AsyncContextManager):
     def done(self, task: asyncio.Task) -> None:
         try:
             task.result()
+        except GraphInterrupt:
+            # This exception is an interruption signal, not an error
+            # so we don't want to re-raise it on exit
+            self.tasks.pop(task)
         except BaseException:
             pass
         else:
             self.tasks.pop(task)
 
-    async def __aenter__(self) -> "submit":
+    async def __aenter__(self) -> Submit:
         return self.submit
 
     async def exit(self) -> None:

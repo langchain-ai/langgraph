@@ -38,7 +38,8 @@ from langgraph.checkpoint.base import (
     copy_checkpoint,
     empty_checkpoint,
 )
-from langgraph.constants import INPUT, INTERRUPT
+from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_RESUMING, INPUT, INTERRUPT
+from langgraph.errors import EmptyInputError, GraphInterrupt
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValueMapping,
@@ -66,6 +67,7 @@ if TYPE_CHECKING:
 
 V = TypeVar("V")
 INPUT_DONE = object()
+INPUT_RESUMING = object()
 
 
 class PregelLoop:
@@ -95,6 +97,7 @@ class PregelLoop:
     ]
     tasks: Sequence[PregelExecutableTask]
     stream: deque[Tuple[str, Any]]
+    is_nested: bool
 
     # public
 
@@ -133,7 +136,7 @@ class PregelLoop:
         if self.status != "pending":
             raise RuntimeError("Cannot tick when status is no longer 'pending'")
 
-        if self.input is not INPUT_DONE:
+        if self.input not in (INPUT_DONE, INPUT_RESUMING):
             self._first()
         elif all(task.writes for task in self.tasks):
             writes = [w for t in self.tasks for w in t.writes]
@@ -165,7 +168,10 @@ class PregelLoop:
             # after execution, check if we should interrupt
             if should_interrupt(self.checkpoint, interrupt_after, self.tasks):
                 self.status = "interrupt_after"
-                return False
+                if self.is_nested:
+                    raise GraphInterrupt(self)
+                else:
+                    return False
         else:
             return False
 
@@ -184,6 +190,8 @@ class PregelLoop:
             self.step,
             for_execution=True,
             manager=manager,
+            checkpointer=self.checkpointer,
+            is_resuming=self.input is INPUT_RESUMING,
         )
 
         # if no more tasks, we're done
@@ -204,7 +212,10 @@ class PregelLoop:
         # before execution, check if we should interrupt
         if should_interrupt(self.checkpoint, interrupt_before, self.tasks):
             self.status = "interrupt_before"
-            return False
+            if self.is_nested:
+                raise GraphInterrupt(self)
+            else:
+                return False
 
         # produce debug output
         self.stream.extend(("debug", v) for v in map_debug_tasks(self.step, self.tasks))
@@ -214,8 +225,23 @@ class PregelLoop:
     # private
 
     def _first(self) -> None:
+        # resuming from previous checkpoint requires
+        # - finding a previous checkpoint
+        # - receiving None input (outer graph) or RESUMING flag (subgraph)
+        is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
+            self.config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
+            or self.input is None
+        )
+
+        # proceed past previous checkpoint
+        if is_resuming:
+            self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
+            for k in self.channels:
+                if k in self.checkpoint["channel_versions"]:
+                    version = self.checkpoint["channel_versions"][k]
+                    self.checkpoint["versions_seen"][INTERRUPT][k] = version
         # map inputs to channel updates
-        if input_writes := deque(map_input(self.graph.input_channels, self.input)):
+        elif input_writes := deque(map_input(self.graph.input_channels, self.input)):
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
@@ -236,14 +262,9 @@ class PregelLoop:
             # save input checkpoint
             self._put_checkpoint({"source": "input", "writes": self.input})
         else:
-            # no input is taken as signal to proceed past previous interrupt
-            self.checkpoint["versions_seen"].setdefault(INTERRUPT, {})
-            for k in self.channels:
-                if k in self.checkpoint["channel_versions"]:
-                    version = self.checkpoint["channel_versions"][k]
-                    self.checkpoint["versions_seen"][INTERRUPT][k] = version
+            raise EmptyInputError(f"Received no input for {self.graph.input_channels}")
         # done with input
-        self.input = INPUT_DONE
+        self.input = INPUT_RESUMING if is_resuming else INPUT_DONE
 
     def _put_checkpoint(
         self,
@@ -313,6 +334,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
     # context manager
 
     def __enter__(self) -> Self:
+        self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
         saved = (
             self.checkpointer.get_tuple(self.config) if self.checkpointer else None
         ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])
@@ -348,6 +370,20 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
+        # handle interrupt
+        if exc_type is GraphInterrupt:
+            if exc_value.args[0] is self:
+                # interrupt raised by this loop
+                exc_value.args = (object(),)
+            else:
+                # interrupt raised by a nested loop, save interrupt checkpoint
+                self._put_checkpoint({"source": "interrupt"})
+            if not self.is_nested:
+                # in outer graph, catch interrupt
+                del self.graph
+                return True and self.stack.__exit__(None, None, None)
+
+        # unwind stack
         del self.graph
         return self.stack.__exit__(exc_type, exc_value, traceback)
 
@@ -380,6 +416,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
     # context manager
 
     async def __aenter__(self) -> Self:
+        self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
         saved = (
             await self.checkpointer.aget_tuple(self.config)
             if self.checkpointer
@@ -417,6 +454,22 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
+        # handle interrupt
+        if exc_type is GraphInterrupt:
+            if exc_value.args[0] is self:
+                # interrupt raised by this loop
+                exc_value.args = (object(),)
+            else:
+                # interrupt raised by a nested loop, save interrupt checkpoint
+                self._put_checkpoint({"source": "interrupt"})
+            if not self.is_nested:
+                # in outer graph, catch interrupt
+                del self.graph
+                return True and await asyncio.shield(
+                    self.stack.__aexit__(None, None, None)
+                )
+
+        # unwind stack
         del self.graph
         return await asyncio.shield(
             self.stack.__aexit__(exc_type, exc_value, traceback)
