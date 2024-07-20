@@ -465,7 +465,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             if not self.is_nested:
                 # in outer graph, catch interrupt
                 del self.graph
-                return True and await asyncio.shield(
+                return True or await asyncio.shield(
                     self.stack.__aexit__(None, None, None)
                 )
 
