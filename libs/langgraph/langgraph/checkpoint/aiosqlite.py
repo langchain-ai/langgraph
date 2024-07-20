@@ -46,22 +46,29 @@ def not_implemented_sync_method(func: T) -> T:
 class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     """An asynchronous checkpoint saver that stores checkpoints in a SQLite database.
 
+    This class provides an asynchronous interface for saving and retrieving checkpoints
+    using a SQLite database. It's designed for use in asynchronous environments and
+    offers better performance for I/O-bound operations compared to synchronous alternatives.
+
+    Attributes:
+        conn (aiosqlite.Connection): The asynchronous SQLite database connection.
+        serde (SerializerProtocol): The serializer used for encoding/decoding checkpoints.
+
     Tip:
         Requires the [aiosqlite](https://pypi.org/project/aiosqlite/) package.
         Install it with `pip install aiosqlite`.
 
-    Note:
-        While this class does support asynchronous checkpointing, it is not recommended
-        for production workloads, due to limitations in SQLite's write performance. For
-        production workloads, consider using a more robust database like PostgreSQL.
+    Warning:
+        While this class supports asynchronous checkpointing, it is not recommended
+        for production workloads due to limitations in SQLite's write performance.
+        For production use, consider a more robust database like PostgreSQL.
 
-    !!! Important
+    !!! Important:
         Remember to **close the database connection** after executing your code,
         otherwise, you may see the graph "hang" after execution (since the program
         will not exit until the connection is closed).
 
-        The easiest way to do this is to use the `async with` statement, as shown in the
-        examples below.
+        The easiest way is to use the `async with` statement as shown in the examples.
 
         ```python
         async with AsyncSqliteSaver.from_conn_string("checkpoints.sqlite") as saver:
@@ -71,11 +78,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             async for event in graph.astream_events(..., config, version="v1"):
                 print(event)
         ```
-
-    Args:
-        conn (aiosqlite.Connection): The asynchronous SQLite database connection.
-        serde (Optional[SerializerProtocol]): The serializer to use for serializing and deserializing checkpoints. Defaults to JsonPlusSerializerCompat.
-
     Examples:
         Usage within a StateGraph:
         ```pycon
@@ -306,15 +308,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         """List checkpoints from the database asynchronously.
 
         This method retrieves a list of checkpoint tuples from the SQLite database based
-        on the provided config. The checkpoints are ordered by timestamp in descending order.
+        on the provided criteria.
 
         Args:
-            config (RunnableConfig): The config to use for listing the checkpoints.
-            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
-            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
+            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
+            limit (Optional[int]): Maximum number of checkpoints to return.
 
         Yields:
-            AsyncIterator[CheckpointTuple]: An asynchronous iterator of checkpoint tuples.
+            AsyncIterator[CheckpointTuple]: An asynchronous iterator of matching checkpoint tuples.
         """
         await self.setup()
         where, param_values = search_where(config, filter, before)
@@ -356,6 +359,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         Args:
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
+            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
@@ -385,6 +389,15 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
+        """Store intermediate writes linked to a checkpoint asynchronously.
+
+        This method saves intermediate writes associated with a checkpoint to the database.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
+            task_id (str): Identifier for the task creating the writes.
+        """
         await self.setup()
         async with self.conn.executemany(
             "INSERT OR REPLACE INTO writes (thread_id, thread_ts, task_id, idx, channel, value) VALUES (?, ?, ?, ?, ?, ?)",

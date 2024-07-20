@@ -27,8 +27,9 @@ from langgraph.serde.jsonplus import JsonPlusSerializer
 V = TypeVar("V", int, float, str)
 
 
-# Marked as total=False to allow for future expansion.
 class CheckpointMetadata(TypedDict, total=False):
+    """Metadata associated with a checkpoint."""
+
     source: Literal["input", "loop", "update"]
     """The source of the checkpoint.
     - "input": The checkpoint was created from an input to invoke/stream/batch.
@@ -114,6 +115,8 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
 
 
 class CheckpointTuple(NamedTuple):
+    """A tuple containing a checkpoint and its associated data."""
+
     config: RunnableConfig
     checkpoint: Checkpoint
     metadata: CheckpointMetadata
@@ -264,11 +267,13 @@ class BaseCheckpointSaver(ABC):
         )
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
-        """
-        Asynchronously fetch a checkpoint using the given configuration.
+        """Asynchronously fetch a checkpoint using the given configuration.
 
         Args:
             config (RunnableConfig): Configuration specifying which checkpoint to retrieve.
+
+        Returns:
+            Optional[Checkpoint]: The requested checkpoint, or None if not found.
         """
         if value := await self.aget_tuple(config):
             return value.checkpoint
@@ -281,6 +286,9 @@ class BaseCheckpointSaver(ABC):
 
         Returns:
             Optional[CheckpointTuple]: The requested checkpoint tuple, or None if not found.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
         """
         raise NotImplementedError
 
@@ -296,12 +304,15 @@ class BaseCheckpointSaver(ABC):
 
         Args:
             config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
-            filter (Optional[Dict[str, Any]]): Additional filtering criteria.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
             before (Optional[RunnableConfig]): List checkpoints created before this configuration.
             limit (Optional[int]): Maximum number of checkpoints to return.
 
         Returns:
             AsyncIterator[CheckpointTuple]: Async iterator of matching checkpoint tuples.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
         """
         raise NotImplementedError
         yield
@@ -321,6 +332,9 @@ class BaseCheckpointSaver(ABC):
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
+
+        Raises:
+            NotImplementedError: Implement this method in your custom checkpoint saver.
         """
         raise NotImplementedError
 
