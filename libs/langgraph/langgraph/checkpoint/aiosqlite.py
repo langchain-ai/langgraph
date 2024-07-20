@@ -63,7 +63,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         for production workloads due to limitations in SQLite's write performance.
         For production use, consider a more robust database like PostgreSQL.
 
-    !!! Important:
+    Tip:
         Remember to **close the database connection** after executing your code,
         otherwise, you may see the graph "hang" after execution (since the program
         will not exit until the connection is closed).
@@ -78,8 +78,10 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             async for event in graph.astream_events(..., config, version="v1"):
                 print(event)
         ```
+
     Examples:
-        Usage within a StateGraph:
+        Usage within StateGraph:
+
         ```pycon
         >>> import asyncio
         >>> import aiosqlite
@@ -97,8 +99,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         >>> asyncio.run(coro)
         Output: 2
         ```
-
         Raw usage:
+
         ```pycon
         >>> import asyncio
         >>> import aiosqlite
@@ -308,7 +310,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         """List checkpoints from the database asynchronously.
 
         This method retrieves a list of checkpoint tuples from the SQLite database based
-        on the provided criteria.
+        on the provided config. The checkpoints are ordered by timestamp in descending order.
 
         Args:
             config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.

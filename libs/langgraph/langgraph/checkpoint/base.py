@@ -27,6 +27,7 @@ from langgraph.serde.jsonplus import JsonPlusSerializer
 V = TypeVar("V", int, float, str)
 
 
+# Marked as total=False to allow for future expansion.
 class CheckpointMetadata(TypedDict, total=False):
     """Metadata associated with a checkpoint."""
 
