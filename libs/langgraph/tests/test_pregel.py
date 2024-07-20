@@ -520,10 +520,8 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert app.invoke(2) == 4
 
-    assert app.invoke(2, input_keys="inbox") == 3
-
     with pytest.raises(GraphRecursionError):
-        app.invoke(2, {"recursion_limit": 1})
+        app.invoke(2, {"recursion_limit": 1}, debug=1)
 
     graph = Graph()
     graph.add_node("add_one", add_one)
@@ -535,7 +533,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert gapp.invoke(2) == 4
 
-    for step, values in enumerate(gapp.stream(2), start=1):
+    for step, values in enumerate(gapp.stream(2, debug=1), start=1):
         if step == 1:
             assert values == {
                 "add_one": 3,
@@ -6168,6 +6166,18 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             "my_key": "value ⛰️",
             "market": "DE",
         }
+        assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
+            {
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+            },
+            {
+                "source": "input",
+                "step": -1,
+                "writes": {"my_key": "value ⛰️", "market": "DE"},
+            },
+        ]
         assert tool_two.get_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
             next=("tool_two_slow",),
@@ -6877,7 +6887,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
         },
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
+    assert [c for c in app_w_interrupt.stream(None, config, debug=1)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4,doc5"}},
     ]
 
