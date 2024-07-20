@@ -381,7 +381,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             if not self.is_nested:
                 # in outer graph, catch interrupt
                 del self.graph
-                return True and self.stack.__exit__(None, None, None)
+                return True or self.stack.__exit__(None, None, None)
 
         # unwind stack
         del self.graph
