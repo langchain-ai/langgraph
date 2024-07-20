@@ -18,12 +18,10 @@ You can [compile][langgraph.graph.MessageGraph.compile] any LangGraph workflow w
 ### BaseCheckpointSaver
 
 ::: langgraph.checkpoint.base.BaseCheckpointSaver
-handler: python
 
 ### SerializerProtocol
 
 ::: langgraph.checkpoint.SerializerProtocol
-handler: python
 
 ## Implementations
 
@@ -32,12 +30,10 @@ LangGraph also natively provides the following checkpoint implementations.
 ### MemorySaver
 
 ::: langgraph.checkpoint.memory.MemorySaver
-handler: python
 
 ### AsyncSqliteSaver
 
 ::: langgraph.checkpoint.aiosqlite.AsyncSqliteSaver
-handler: python
 
 ### SqliteSaver
 

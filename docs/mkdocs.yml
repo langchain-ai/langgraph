@@ -163,6 +163,7 @@ nav:
           - Add runtime configuration: how-tos/configuration.ipynb
           - Use Pydantic model as state: how-tos/state-model.ipynb
           - Use a context object in state: how-tos/state-context-key.ipynb
+          - Add node retries: how-tos/node-retries.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb

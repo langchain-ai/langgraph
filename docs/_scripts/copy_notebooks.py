@@ -56,6 +56,7 @@ _MANUAL = {
         "human_in_the_loop/time-travel.ipynb",
         "human_in_the_loop/edit-graph-state.ipynb",
         "human_in_the_loop/wait-user-input.ipynb",
+        "node-retries.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",

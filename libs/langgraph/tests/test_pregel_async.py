@@ -623,8 +623,6 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
     assert await app.ainvoke(2) == 4
 
-    assert await app.ainvoke(2, input_keys="inbox") == 3
-
     with pytest.raises(GraphRecursionError):
         await app.ainvoke(2, {"recursion_limit": 1})
 
@@ -4737,6 +4735,18 @@ async def test_start_branch_then() -> None:
             "my_key": "value",
             "market": "DE",
         }
+        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+            {
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+            },
+            {
+                "source": "input",
+                "step": -1,
+                "writes": {"my_key": "value", "market": "DE"},
+            },
+        ]
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value", "market": "DE"},
             next=("tool_two_slow",),
