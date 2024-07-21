@@ -56,3 +56,12 @@ from langgraph.prebuilt import ValidationNode
 ```
 
 ::: langgraph.prebuilt.ValidationNode
+
+## InjectedState
+
+```python
+from langgraph.prebuilt import InjectedState
+```
+
+::: langgraph.prebuilt.InjectedState
+    handler: python
