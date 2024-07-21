@@ -131,21 +131,42 @@ async def monitor_stream(
     if collect:
         ba = bytearray()
 
-    def handle(line: bytes):
+    def handle(line: bytes, overrun: bool):
         nonlocal on_line
         nonlocal display
 
+        if display:
+            sys.stdout.buffer.write(line)
+        if overrun:
+            return
         if collect:
             ba.extend(line)
-        if display:
-            sys.stdout.write(line.decode())
         if on_line:
             if on_line(line.decode()):
                 on_line = None
                 display = True
 
-    async for line in stream:
-        await asyncio.to_thread(handle, line)
+    """Adpated from asyncio.StreamReader.readline() to handle LimitOverrunError."""
+    sep = b"\n"
+    seplen = len(sep)
+    while True:
+        try:
+            line = await stream.readuntil(sep)
+            overrun = False
+        except asyncio.IncompleteReadError as e:
+            line = e.partial
+            overrun = False
+        except asyncio.LimitOverrunError as e:
+            if stream._buffer.startswith(sep, e.consumed):
+                line = stream._buffer[: e.consumed + seplen]
+            else:
+                line = stream._buffer.clear()
+            overrun = True
+            stream._maybe_resume_transport()
+        await asyncio.to_thread(handle, line, overrun)
+        if line == b"":
+            break
+
     if collect:
         return ba
     else:
