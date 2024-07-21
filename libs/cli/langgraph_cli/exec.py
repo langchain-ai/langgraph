@@ -146,7 +146,7 @@ async def monitor_stream(
                 on_line = None
                 display = True
 
-    """Adpated from asyncio.StreamReader.readline() to handle LimitOverrunError."""
+    """Adapted from asyncio.StreamReader.readline() to handle LimitOverrunError."""
     sep = b"\n"
     seplen = len(sep)
     while True:
