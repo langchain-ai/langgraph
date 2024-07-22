@@ -1,4 +1,5 @@
 import asyncio
+import concurrent.futures
 from collections import deque
 from contextlib import AsyncExitStack, ExitStack
 from types import TracebackType
@@ -269,7 +270,7 @@ class PregelLoop:
     def _put_checkpoint(
         self,
         metadata: CheckpointMetadata,
-    ) -> None:
+    ) -> concurrent.futures.Future:
         # assign step
         metadata["step"] = self.step
         # bail if no checkpointer
@@ -280,7 +281,7 @@ class PregelLoop:
                 self.checkpoint, self.channels, self.step
             )
             # save it, without blocking
-            self.submit(
+            fut = self.submit(
                 self.checkpointer_put,
                 self.checkpoint_config,
                 copy_checkpoint(self.checkpoint),
@@ -304,8 +305,12 @@ class PregelLoop:
                     self.checkpoint_metadata,
                 )
             )
+        else:
+            fut = concurrent.futures.Future()
+            fut.set_result(None)
         # increment step
         self.step += 1
+        return fut
 
 
 class SyncPregelLoop(PregelLoop, ContextManager):
@@ -377,7 +382,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
                 exc_value.args = (object(),)
             else:
                 # interrupt raised by a nested loop, save interrupt checkpoint
-                self._put_checkpoint({"source": "interrupt"})
+                self._put_checkpoint({"source": "interrupt"}).result()
             if not self.is_nested:
                 # in outer graph, catch interrupt
                 del self.graph
