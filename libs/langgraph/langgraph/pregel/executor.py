@@ -1,13 +1,13 @@
 import asyncio
 import concurrent.futures
 import sys
-from contextlib import contextmanager
+from contextlib import ExitStack
 from contextvars import copy_context
 from types import TracebackType
 from typing import (
     AsyncContextManager,
     Callable,
-    Iterator,
+    ContextManager,
     Optional,
     Protocol,
     TypeVar,
@@ -35,45 +35,63 @@ class Submit(Protocol[P, T]):
         ...
 
 
-@contextmanager
-def BackgroundExecutor(config: RunnableConfig) -> Iterator[Submit]:
-    tasks: dict[concurrent.futures.Future, bool] = {}
-    with get_executor_for_config(config) as executor:
+class BackgroundExecutor(ContextManager):
+    def __init__(self, config: RunnableConfig) -> None:
+        self.stack = ExitStack()
+        self.executor = self.stack.enter_context(get_executor_for_config(config))
+        self.tasks: dict[concurrent.futures.Future, bool] = {}
 
-        def done(task: concurrent.futures.Future) -> None:
+    def submit(
+        self,
+        fn: Callable[P, T],
+        *args: P.args,
+        __name__: Optional[str] = None,  # currently not used in sync version
+        __cancel_on_exit__: bool = False,
+        **kwargs: P.kwargs,
+    ) -> concurrent.futures.Future[T]:
+        task = self.executor.submit(fn, *args, **kwargs)
+        self.tasks[task] = __cancel_on_exit__
+        task.add_done_callback(self.done)
+        return task
+
+    def done(self, task: concurrent.futures.Future) -> None:
+        try:
+            task.result()
+        except GraphInterrupt:
+            # This exception is an interruption signal, not an error
+            # so we don't want to re-raise it on exit
+            self.tasks.pop(task)
+        except BaseException:
+            pass
+        else:
+            self.tasks.pop(task)
+
+    def __enter__(self) -> "submit":
+        return self.submit
+
+    def __exit__(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> Optional[bool]:
+        # cancel all tasks that should be cancelled
+        for task, cancel in self.tasks.items():
+            if cancel:
+                task.cancel()
+        # wait for all tasks to finish
+        concurrent.futures.wait({t for t in self.tasks if not t.done()})
+        # shutdown the executor
+        self.stack.__exit__(exc_type, exc_value, traceback)
+        # raise caught exception
+        if exc_type is not None:
+            raise exc_value
+        # re-raise the first exception that occurred in a task
+        for task in self.tasks:
             try:
                 task.result()
-            except GraphInterrupt:
-                # This exception is an interruption signal, not an error
-                # so we don't want to re-raise it on exit
-                tasks.pop(task)
-            except BaseException:
+            except concurrent.futures.CancelledError:
                 pass
-            else:
-                tasks.pop(task)
-
-        def submit(
-            fn: Callable[P, T],
-            *args: P.args,
-            __name__: Optional[str] = None,  # currently not used in sync version
-            __cancel_on_exit__: bool = False,
-            **kwargs: P.kwargs,
-        ) -> concurrent.futures.Future:
-            task = executor.submit(fn, *args, **kwargs)
-            tasks[task] = __cancel_on_exit__
-            task.add_done_callback(done)
-            return task
-
-        try:
-            yield submit
-        finally:
-            for task, cancel in tasks.items():
-                if cancel:
-                    task.cancel()
-            # executor waits for all tasks to finish on exit
-    for task in tasks:
-        # the first task to have raised an exception will be re-raised here
-        task.result()
 
 
 class AsyncBackgroundExecutor(AsyncContextManager):
@@ -131,6 +149,8 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
+        # we cannot use `await` outside of asyncio.shield, as this code can run
+        # after owning task is cancelled, so pulling async logic to separate method
         for task, cancel in self.tasks.items():
             if cancel:
                 task.cancel(self.sentinel)
