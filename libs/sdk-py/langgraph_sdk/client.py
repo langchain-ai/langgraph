@@ -392,6 +392,10 @@ class ThreadsClient:
             json=payload,
         )
 
+    async def copy(self, thread_id: str) -> None:
+        """Copy a thread."""
+        return await self.http.post(f"/threads/{thread_id}/copy", json=None)
+
     async def get_state(
         self, thread_id: str, checkpoint_id: Optional[str] = None
     ) -> ThreadState:
