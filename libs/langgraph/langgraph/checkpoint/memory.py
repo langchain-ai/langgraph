@@ -72,7 +72,8 @@ class MemorySaver(BaseCheckpointSaver):
         thread_id = config["configurable"]["thread_id"]
         if thread_ts := config["configurable"].get("thread_ts"):
             if checkpoints := self.storage[thread_id]:
-                ts = max(key for key in checkpoints.keys() if key <= thread_ts)
+                matching_keys = [key for key in checkpoints.keys() if key <= thread_ts]
+                ts = max(matching_keys) if matching_keys else None
                 if saved := self.storage[thread_id].get(ts):
                     checkpoint, metadata = saved
                     writes = self.writes[(thread_id, ts)]
