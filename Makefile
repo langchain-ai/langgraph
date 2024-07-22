@@ -1,7 +1,7 @@
 .PHONY: build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc
 
 build-typedoc: 
-	cd libs/sdk-js && yarn typedoc
+	cd libs/sdk-js && yarn && yarn typedoc
 	cd libs/sdk-js && yarn add --dev concat-md
 	cd libs/sdk-js && yarn --silent concat-md --decrease-title-levels --ignore=js_ts_sdk_ref.md --start-title-level-at 2 docs > ../../docs/docs/cloud/reference/sdk/js_ts_sdk_ref.md 2>/dev/null
 	#  Add links to the monorepo
