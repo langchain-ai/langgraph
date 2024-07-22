@@ -107,7 +107,7 @@ class BaseClient {
   }
 }
 
-class CronsClient extends BaseClient {
+export class CronsClient extends BaseClient {
   /**
    *
    * @param threadId The ID of the thread.
@@ -195,7 +195,7 @@ class CronsClient extends BaseClient {
   }
 }
 
-class AssistantsClient extends BaseClient {
+export class AssistantsClient extends BaseClient {
   /**
    * Get an assistant by ID.
    *
@@ -302,7 +302,7 @@ class AssistantsClient extends BaseClient {
   }
 }
 
-class ThreadsClient extends BaseClient {
+export class ThreadsClient extends BaseClient {
   /**
    * Get a thread by ID.
    *
@@ -496,7 +496,7 @@ class ThreadsClient extends BaseClient {
   }
 }
 
-class RunsClient extends BaseClient {
+export class RunsClient extends BaseClient {
   stream(
     threadId: null,
     assistantId: string,

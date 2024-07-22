@@ -1,6 +1,14 @@
-.PHONY: build-docs serve-docs serve-clean-docs clean-docs codespell
+.PHONY: build-docs serve-docs serve-clean-docs clean-docs codespell build-typedoc
 
-build-docs:
+build-typedoc: 
+	cd libs/sdk-js && yarn typedoc
+	cd libs/sdk-js && yarn add --dev concat-md
+	cd libs/sdk-js && yarn --silent concat-md --decrease-title-levels --ignore=js_ts_sdk_ref.md --start-title-level-at 2 docs > ../../docs/docs/cloud/reference/sdk/js_ts_sdk_ref.md 2>/dev/null
+	#  Add links to the monorepo
+	sed -i '' '1,10s/@langchain\/langgraph-sdk/[@langchain\/langgraph-sdk](https:\/\/github.com\/langchain-ai\/langgraph\/tree\/main\/libs\/sdk-js)/g' docs/docs/cloud/reference/sdk/js_ts_sdk_ref.md
+
+
+build-docs: build-typedoc
 	poetry run python docs/_scripts/copy_notebooks.py
 	poetry run python -m mkdocs build --clean -f docs/mkdocs.yml --strict
 
@@ -8,7 +16,7 @@ serve-clean-docs: clean-docs
 	poetry run python docs/_scripts/copy_notebooks.py
 	poetry run python -m mkdocs serve -c -f docs/mkdocs.yml --strict -w ./libs/langgraph
 
-serve-docs:
+serve-docs: build-typedoc
 	poetry run python docs/_scripts/copy_notebooks.py
 	poetry run python -m mkdocs serve -f docs/mkdocs.yml -w ./libs/langgraph --dirty
 
