@@ -119,7 +119,9 @@ class MemorySaver(BaseCheckpointSaver):
         """
         thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
         for thread_id in thread_ids:
-            for ts, (checkpoint, metadata_b) in self.storage[thread_id].items():
+            for ts, (checkpoint, metadata_b) in sorted(
+                self.storage[thread_id].items(), key=lambda x: x[0], reverse=True
+            ):
                 # filter by thread_ts
                 if before and ts >= before["configurable"]["thread_ts"]:
                     continue
