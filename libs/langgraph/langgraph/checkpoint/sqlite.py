@@ -245,7 +245,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             # find the latest checkpoint for the thread_id
             if config["configurable"].get("thread_ts"):
                 cur.execute(
-                    "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts <= ? ORDER BY thread_ts DESC LIMIT 1",
+                    "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
                     (
                         str(config["configurable"]["thread_id"]),
                         str(config["configurable"]["thread_ts"]),

@@ -44,7 +44,7 @@ class MemorySaver(BaseCheckpointSaver):
             asyncio.run(coro)  # Output: 2
     """
 
-    storage: defaultdict[str, dict[str, tuple[bytes, bytes]]]
+    storage: defaultdict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]
 
     def __init__(
         self,
@@ -70,25 +70,30 @@ class MemorySaver(BaseCheckpointSaver):
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         thread_id = config["configurable"]["thread_id"]
-        if thread_ts := config["configurable"].get("thread_ts"):
-            if checkpoints := self.storage[thread_id]:
-                matching_keys = [key for key in checkpoints.keys() if key <= thread_ts]
-                ts = max(matching_keys) if matching_keys else None
-                if saved := self.storage[thread_id].get(ts):
-                    checkpoint, metadata = saved
-                    writes = self.writes[(thread_id, ts)]
-                    return CheckpointTuple(
-                        config=config,
-                        checkpoint=self.serde.loads(checkpoint),
-                        metadata=self.serde.loads(metadata),
-                        pending_writes=[
-                            (id, c, self.serde.loads(v)) for id, c, v in writes
-                        ],
-                    )
+        if ts := config["configurable"].get("thread_ts"):
+            if saved := self.storage[thread_id].get(ts):
+                checkpoint, metadata, parent_ts = saved
+                writes = self.writes[(thread_id, ts)]
+                return CheckpointTuple(
+                    config=config,
+                    checkpoint=self.serde.loads(checkpoint),
+                    metadata=self.serde.loads(metadata),
+                    pending_writes=[
+                        (id, c, self.serde.loads(v)) for id, c, v in writes
+                    ],
+                    parent_config={
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "thread_ts": parent_ts,
+                        }
+                    }
+                    if parent_ts
+                    else None,
+                )
         else:
             if checkpoints := self.storage[thread_id]:
                 ts = max(checkpoints.keys())
-                checkpoint, metadata = checkpoints[ts]
+                checkpoint, metadata, parent_ts = checkpoints[ts]
                 writes = self.writes[(thread_id, ts)]
                 return CheckpointTuple(
                     config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
@@ -97,6 +102,14 @@ class MemorySaver(BaseCheckpointSaver):
                     pending_writes=[
                         (id, c, self.serde.loads(v)) for id, c, v in writes
                     ],
+                    parent_config={
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "thread_ts": parent_ts,
+                        }
+                    }
+                    if parent_ts
+                    else None,
                 )
 
     def list(
@@ -122,7 +135,7 @@ class MemorySaver(BaseCheckpointSaver):
         """
         thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
         for thread_id in thread_ids:
-            for ts, (checkpoint, metadata_b) in sorted(
+            for ts, (checkpoint, metadata_b, parent_ts) in sorted(
                 self.storage[thread_id].items(), key=lambda x: x[0], reverse=True
             ):
                 # filter by thread_ts
@@ -147,6 +160,14 @@ class MemorySaver(BaseCheckpointSaver):
                     config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                     checkpoint=self.serde.loads(checkpoint),
                     metadata=metadata,
+                    parent_config={
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "thread_ts": parent_ts,
+                        }
+                    }
+                    if parent_ts
+                    else None,
                 )
 
     def put(
@@ -172,6 +193,7 @@ class MemorySaver(BaseCheckpointSaver):
                 checkpoint["id"]: (
                     self.serde.dumps(checkpoint),
                     self.serde.dumps(metadata),
+                    config["configurable"].get("thread_ts"),  # parent
                 )
             }
         )

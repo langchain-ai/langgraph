@@ -1,5 +1,4 @@
 import asyncio
-import concurrent.futures
 from collections import deque
 from contextlib import AsyncExitStack, ExitStack
 from types import TracebackType
@@ -69,6 +68,7 @@ if TYPE_CHECKING:
 V = TypeVar("V")
 INPUT_DONE = object()
 INPUT_RESUMING = object()
+EMPTY_LIST = []
 
 
 class PregelLoop:
@@ -126,9 +126,9 @@ class PregelLoop:
     def tick(
         self,
         *,
-        output_keys: Union[str, Sequence[str]] = None,
-        interrupt_after: Optional[Sequence[str]] = None,
-        interrupt_before: Optional[Sequence[str]] = None,
+        output_keys: Union[str, Sequence[str]] = EMPTY_LIST,
+        interrupt_after: Sequence[str] = EMPTY_LIST,
+        interrupt_before: Sequence[str] = EMPTY_LIST,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
@@ -208,7 +208,12 @@ class PregelLoop:
 
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks):
-            return self.tick()
+            return self.tick(
+                output_keys=output_keys,
+                interrupt_after=interrupt_after,
+                interrupt_before=interrupt_before,
+                manager=manager,
+            )
 
         # before execution, check if we should interrupt
         if should_interrupt(self.checkpoint, interrupt_before, self.tasks):
@@ -267,10 +272,7 @@ class PregelLoop:
         # done with input
         self.input = INPUT_RESUMING if is_resuming else INPUT_DONE
 
-    def _put_checkpoint(
-        self,
-        metadata: CheckpointMetadata,
-    ) -> concurrent.futures.Future:
+    def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # assign step
         metadata["step"] = self.step
         # bail if no checkpointer
@@ -278,10 +280,17 @@ class PregelLoop:
             # create new checkpoint
             self.checkpoint_metadata = metadata
             self.checkpoint = create_checkpoint(
-                self.checkpoint, self.channels, self.step
+                self.checkpoint,
+                self.channels,
+                self.step,
+                # child graphs keep at most one checkpoint per parent checkpoint
+                # this is achieved by writing child checkpoints as progress is made
+                # (so that error recovery / resuming from interrupt don't lose work)
+                # but doing so always with an id equal to that of the parent checkpoint
+                id=self.config["configurable"]["thread_ts"] if self.is_nested else None,
             )
             # save it, without blocking
-            fut = self.submit(
+            self.submit(
                 self.checkpointer_put,
                 self.checkpoint_config,
                 copy_checkpoint(self.checkpoint),
@@ -305,12 +314,8 @@ class PregelLoop:
                     self.checkpoint_metadata,
                 )
             )
-        else:
-            fut = concurrent.futures.Future()
-            fut.set_result(None)
         # increment step
         self.step += 1
-        return fut
 
 
 class SyncPregelLoop(PregelLoop, ContextManager):
@@ -380,9 +385,6 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             if exc_value.args[0] is self:
                 # interrupt raised by this loop
                 exc_value.args = (object(),)
-            else:
-                # interrupt raised by a nested loop, save interrupt checkpoint
-                self._put_checkpoint({"source": "interrupt"}).result()
             if not self.is_nested:
                 # in outer graph, catch interrupt
                 del self.graph
@@ -464,9 +466,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             if exc_value.args[0] is self:
                 # interrupt raised by this loop
                 exc_value.args = (object(),)
-            else:
-                # interrupt raised by a nested loop, save interrupt checkpoint
-                self._put_checkpoint({"source": "interrupt"})
             if not self.is_nested:
                 # in outer graph, catch interrupt
                 del self.graph
