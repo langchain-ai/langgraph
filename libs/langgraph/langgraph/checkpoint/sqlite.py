@@ -309,6 +309,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
 
         Args:
             config (RunnableConfig): The config to use for listing the checkpoints.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata. Defaults to None.
             before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
             limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
 
@@ -410,6 +411,15 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         writes: Sequence[Tuple[str, Any]],
         task_id: str,
     ) -> None:
+        """Store intermediate writes linked to a checkpoint.
+
+        This method saves intermediate writes associated with a checkpoint to the SQLite database.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
+            task_id (str): Identifier for the task creating the writes.
+        """
         with self.lock, self.cursor() as cur:
             cur.executemany(
                 "INSERT OR REPLACE INTO writes (thread_id, thread_ts, task_id, idx, channel, value) VALUES (?, ?, ?, ?, ?, ?)",
@@ -467,6 +477,17 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         raise NotImplementedError(_AIO_ERROR_MSG)
 
     def get_next_version(self, current: Optional[str], channel: BaseChannel) -> str:
+        """Generate the next version ID for a channel.
+
+        This method creates a new version identifier for a channel based on its current version.
+
+        Args:
+            current (Optional[str]): The current version identifier of the channel.
+            channel (BaseChannel): The channel being versioned.
+
+        Returns:
+            str: The next version identifier, which is guaranteed to be monotonically increasing.
+        """
         if current is None:
             current_v = 0
         else:

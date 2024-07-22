@@ -257,6 +257,7 @@ class PregelLoop:
                 self.config,
                 self.step,
                 for_execution=True,
+                manager=None,
             )
             # apply input writes
             apply_writes(

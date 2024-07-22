@@ -123,15 +123,16 @@ class MemorySaver(BaseCheckpointSaver):
         """List checkpoints from the in-memory storage.
 
         This method retrieves a list of checkpoint tuples from the in-memory storage based
-        on the provided config. The checkpoints are ordered by timestamp in insertion order.
+        on the provided criteria.
 
         Args:
-            config (RunnableConfig): The config to use for listing the checkpoints.
-            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
-            limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
+            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
+            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
+            limit (Optional[int]): Maximum number of checkpoints to return.
 
         Yields:
-            Iterator[CheckpointTuple]: An iterator of checkpoint tuples.
+            Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
         """
         thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
         for thread_id in thread_ids:
@@ -184,6 +185,7 @@ class MemorySaver(BaseCheckpointSaver):
         Args:
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
+            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
@@ -218,6 +220,7 @@ class MemorySaver(BaseCheckpointSaver):
         Args:
             config (RunnableConfig): The config to associate with the writes.
             writes (list[tuple[str, Any]]): The writes to save.
+            task_id (str): Identifier for the task creating the writes.
 
         Returns:
             RunnableConfig: The updated config containing the saved writes' timestamp.
@@ -281,6 +284,16 @@ class MemorySaver(BaseCheckpointSaver):
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
     ) -> RunnableConfig:
+        """Asynchronous version of put.
+
+        Args:
+            config (RunnableConfig): The config to associate with the checkpoint.
+            checkpoint (Checkpoint): The checkpoint to save.
+            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+
+        Returns:
+            RunnableConfig: The updated config containing the saved checkpoint's timestamp.
+        """
         return await asyncio.get_running_loop().run_in_executor(
             None, self.put, config, checkpoint, metadata
         )
@@ -291,6 +304,16 @@ class MemorySaver(BaseCheckpointSaver):
         writes: List[Tuple[str, Any]],
         task_id: str,
     ) -> RunnableConfig:
+        """Asynchronous version of put_writes.
+
+        This method is an asynchronous wrapper around put_writes that runs the synchronous
+        method in a separate thread using asyncio.
+
+        Args:
+            config (RunnableConfig): The config to associate with the writes.
+            writes (List[Tuple[str, Any]]): The writes to save, each as a (channel, value) pair.
+            task_id (str): Identifier for the task creating the writes.
+        """
         return await asyncio.get_running_loop().run_in_executor(
             None, self.put_writes, config, writes, task_id
         )

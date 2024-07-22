@@ -1,15 +1,11 @@
-from typing import Any, Callable, Dict, List, Optional, Sequence, Type, Union
+from typing import Annotated, Any, Callable, Dict, List, Optional, Sequence, Type, Union
 
 import pytest
-from langchain_core.callbacks import (
-    CallbackManagerForLLMRun,
-)
-from langchain_core.language_models import (
-    BaseChatModel,
-    LanguageModelInput,
-)
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import (
     AIMessage,
+    AnyMessage,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -23,11 +19,8 @@ from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.prebuilt import (
-    ToolNode,
-    ValidationNode,
-    create_react_agent,
-)
+from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
+from langgraph.prebuilt.tool_node import InjectedState
 from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
 
@@ -453,3 +446,69 @@ async def test_validation_node(tool_schema: Any, use_message_key: bool):
     if use_message_key:
         result_sync = result_sync["messages"]
     check_results(result_sync)
+
+
+def test_tool_node_inject_state() -> None:
+    def tool1(some_val: int, state: Annotated[dict, InjectedState]) -> str:
+        """Tool 1 docstring."""
+        return state["foo"]
+
+    def tool2(some_val: int, state: Annotated[dict, InjectedState()]) -> str:
+        """Tool 1 docstring."""
+        return state["foo"]
+
+    def tool3(
+        some_val: int,
+        foo: Annotated[str, InjectedState("foo")],
+        msgs: Annotated[List[AnyMessage], InjectedState("messages")],
+    ) -> str:
+        """Tool 1 docstring."""
+        return foo
+
+    def tool4(
+        some_val: int, msgs: Annotated[List[AnyMessage], InjectedState("messages")]
+    ) -> str:
+        """Tool 1 docstring."""
+        return msgs[0].content
+
+    node = ToolNode([tool1, tool2, tool3, tool4])
+    for tool_name in ("tool1", "tool2", "tool3"):
+        tool_call = {
+            "name": tool_name,
+            "args": {"some_val": 1},
+            "id": "some 0",
+            "type": "tool_call",
+        }
+        msg = AIMessage("hi?", tool_calls=[tool_call])
+        result = node.invoke({"messages": [msg], "foo": "bar"})
+        tool_message = result["messages"][-1]
+        assert tool_message.content == "bar"
+
+        if tool_name == "tool3":
+            with pytest.raises(KeyError):
+                node.invoke({"messages": [msg], "notfoo": "bar"})
+
+            with pytest.raises(ValueError):
+                node.invoke([msg])
+        else:
+            tool_message = node.invoke({"messages": [msg], "notfoo": "bar"})[
+                "messages"
+            ][-1]
+            assert "KeyError" in tool_message.content
+            tool_message = node.invoke([msg])[-1]
+            assert "KeyError" in tool_message.content
+
+    tool_call = {
+        "name": "tool4",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg]})
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "hi?"
+
+    result = node.invoke([msg])
+    tool_message = result[-1]
+    assert tool_message.content == "hi?"

@@ -2,7 +2,7 @@
     "python_version": "3.12",
     "pip_config_file": "pipconfig.txt",
     "dockerfile_lines": [
-        "ARG meow"
+        "ARG meow=woof"
     ],
     "dependencies": [
         "langchain_openai",

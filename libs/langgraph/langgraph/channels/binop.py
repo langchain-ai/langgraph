@@ -56,9 +56,11 @@ class BinaryOperatorAggregate(Generic[Value], BaseChannel[Value, Value, Value]):
             pass
 
     def __eq__(self, value: object) -> bool:
-        return (
-            isinstance(value, BinaryOperatorAggregate)
-            and value.operator == self.operator
+        return isinstance(value, BinaryOperatorAggregate) and (
+            value.operator is self.operator
+            if value.operator.__name__ != "<lambda>"
+            and self.operator.__name__ != "<lambda>"
+            else True
         )
 
     @property

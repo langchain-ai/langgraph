@@ -1,11 +1,11 @@
 
 <a name="readmemd"></a>
 
-**@langchain/langgraph-sdk** • **Docs**
+**[@langchain/langgraph-sdk](https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-js)** • **Docs**
 
 ***
 
-## @langchain/langgraph-sdk
+## [@langchain/langgraph-sdk](https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-js)
 
 ### Modules
 
