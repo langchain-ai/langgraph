@@ -70,18 +70,20 @@ class MemorySaver(BaseCheckpointSaver):
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         thread_id = config["configurable"]["thread_id"]
-        if ts := config["configurable"].get("thread_ts"):
-            if saved := self.storage[thread_id].get(ts):
-                checkpoint, metadata = saved
-                writes = self.writes[(thread_id, ts)]
-                return CheckpointTuple(
-                    config=config,
-                    checkpoint=self.serde.loads(checkpoint),
-                    metadata=self.serde.loads(metadata),
-                    pending_writes=[
-                        (id, c, self.serde.loads(v)) for id, c, v in writes
-                    ],
-                )
+        if thread_ts := config["configurable"].get("thread_ts"):
+            if checkpoints := self.storage[thread_id]:
+                ts = max(key for key in checkpoints.keys() if key <= thread_ts)
+                if saved := self.storage[thread_id].get(ts):
+                    checkpoint, metadata = saved
+                    writes = self.writes[(thread_id, ts)]
+                    return CheckpointTuple(
+                        config=config,
+                        checkpoint=self.serde.loads(checkpoint),
+                        metadata=self.serde.loads(metadata),
+                        pending_writes=[
+                            (id, c, self.serde.loads(v)) for id, c, v in writes
+                        ],
+                    )
         else:
             if checkpoints := self.storage[thread_id]:
                 ts = max(checkpoints.keys())
