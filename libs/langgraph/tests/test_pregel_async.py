@@ -6196,6 +6196,7 @@ async def test_nested_graph_interrupts_parallel(
             my_other_key: str
 
         async def inner_1(state: InnerState):
+            await asyncio.sleep(0.1)
             return {"my_key": "got here", "my_other_key": state["my_key"]}
 
         async def inner_2(state: InnerState):
