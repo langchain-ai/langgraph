@@ -254,6 +254,7 @@ class StateGraph(Graph):
             action (Optional[RunnableLike]): The action associated with the node. (default: None)
             metadata (Optional[dict[str, Any]]): The metadata associated with the node. (default: None)
             input (Optional[Type[Any]]): The input schema for the node. (default: the graph's input schema)
+            retry (Optional[RetryPolicy]): The policy for retrying the node. (default: None)
         Raises:
             ValueError: If the key is already being used as a state key.
 

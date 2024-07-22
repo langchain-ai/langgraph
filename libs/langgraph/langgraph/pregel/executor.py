@@ -6,6 +6,7 @@ from contextvars import copy_context
 from types import TracebackType
 from typing import (
     AsyncContextManager,
+    Awaitable,
     Callable,
     Iterator,
     Optional,
@@ -78,7 +79,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
 
     def submit(
         self,
-        fn: Callable[P, T],
+        fn: Callable[P, Awaitable[T]],
         *args: P.args,
         __name__: Optional[str] = None,
         __cancel_on_exit__: bool = False,
@@ -101,7 +102,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         else:
             self.tasks.pop(task)
 
-    async def __aenter__(self) -> Submit:
+    async def __aenter__(self) -> "submit":
         return self.submit
 
     async def exit(self) -> None:

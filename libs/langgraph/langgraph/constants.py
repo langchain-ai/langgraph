@@ -1,10 +1,11 @@
 from typing import Any
 
+INPUT = "__input__"
 CONFIG_KEY_SEND = "__pregel_send"
 CONFIG_KEY_READ = "__pregel_read"
 INTERRUPT = "__interrupt__"
 TASKS = "__pregel_tasks"
-RESERVED = {INTERRUPT, TASKS, CONFIG_KEY_SEND, CONFIG_KEY_READ}
+RESERVED = {INTERRUPT, TASKS, CONFIG_KEY_SEND, CONFIG_KEY_READ, INPUT}
 TAG_HIDDEN = "langsmith:hidden"
 
 START = "__start__"
