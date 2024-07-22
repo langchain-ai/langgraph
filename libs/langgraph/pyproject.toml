@@ -32,6 +32,7 @@ langchain-openai = ">=0.1.2"
 langchain-anthropic = ">=0.1.8"
 dataclasses-json = "^0.6.7"
 pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
+pytest-repeat = "^0.9.3"
 
 [tool.poetry.group.dev]
 optional = true
@@ -62,7 +63,7 @@ omit = ["tests/*"]
 [tool.pytest-watcher]
 now = true
 delay = 0.1
-runner_args = ["-x", "--ff", "-v", "-n", "auto", "--dist", "worksteal", "--snapshot-update", "--tb", "short"]
+runner_args = ["--ff", "-v", "-n", "auto", "--dist", "worksteal", "--snapshot-update", "--tb", "short"]
 patterns = ["*.py"]
 
 [build-system]

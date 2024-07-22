@@ -8,6 +8,7 @@ from typing import (
     Any,
     AsyncGenerator,
     AsyncIterator,
+    Callable,
     Dict,
     Generator,
     List,
@@ -61,7 +62,6 @@ from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
 )
-from tests.utils import assert_state_history_equal
 
 
 async def test_checkpoint_errors() -> None:
@@ -724,9 +724,8 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
     assert snapshot.next == ()
 
     # list history
-    assert [
-        c async for c in app.aget_state_history({"configurable": {"thread_id": 1}})
-    ] == [
+    thread1 = {"configurable": {"thread_id": 1}}
+    assert [c async for c in app.aget_state_history(thread1)] == [
         StateSnapshot(
             values={"inbox": 4, "output": 5, "input": 3},
             next=(),
@@ -738,7 +737,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             },
             metadata={"source": "loop", "step": 6, "writes": 5},
             created_at=AnyStr(),
-            parent_config=None,
+            parent_config=[c async for c in app.checkpointer.alist(thread1)][1].config,
         ),
         StateSnapshot(
             values={"inbox": 4, "output": 4, "input": 3},
@@ -751,7 +750,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             },
             metadata={"source": "loop", "step": 5, "writes": None},
             created_at=AnyStr(),
-            parent_config=None,
+            parent_config=[c async for c in app.checkpointer.alist(thread1)][2].config,
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 3},
@@ -764,7 +763,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             },
             metadata={"source": "input", "step": 4, "writes": 3},
             created_at=AnyStr(),
-            parent_config=None,
+            parent_config=[c async for c in app.checkpointer.alist(thread1)][3].config,
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 20},
@@ -777,7 +776,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             },
             metadata={"source": "loop", "step": 3, "writes": None},
             created_at=AnyStr(),
-            parent_config=None,
+            parent_config=[c async for c in app.checkpointer.alist(thread1)][4].config,
         ),
         StateSnapshot(
             values={"inbox": 3, "output": 4, "input": 20},
@@ -790,7 +789,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             },
             metadata={"source": "input", "step": 2, "writes": 20},
             created_at=AnyStr(),
-            parent_config=None,
+            parent_config=[c async for c in app.checkpointer.alist(thread1)][5].config,
         ),
         StateSnapshot(
             values={"inbox": 3, "output": 4, "input": 2},
@@ -803,7 +802,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             },
             metadata={"source": "loop", "step": 1, "writes": 4},
             created_at=AnyStr(),
-            parent_config=None,
+            parent_config=[c async for c in app.checkpointer.alist(thread1)][6].config,
         ),
         StateSnapshot(
             values={"inbox": 3, "input": 2},
@@ -816,7 +815,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             },
             metadata={"source": "loop", "step": 0, "writes": None},
             created_at=AnyStr(),
-            parent_config=None,
+            parent_config=[c async for c in app.checkpointer.alist(thread1)][7].config,
         ),
         StateSnapshot(
             values={"input": 2},
@@ -1937,6 +1936,9 @@ async def test_conditional_graph() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -1981,6 +1983,9 @@ async def test_conditional_graph() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2090,6 +2095,9 @@ async def test_conditional_graph() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     # test state get/update methods with interrupt_before
@@ -2145,6 +2153,9 @@ async def test_conditional_graph() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -2189,6 +2200,9 @@ async def test_conditional_graph() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2298,6 +2312,9 @@ async def test_conditional_graph() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     # test re-invoke to continue with interrupt_before
@@ -2353,6 +2370,9 @@ async def test_conditional_graph() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2712,6 +2732,9 @@ async def test_conditional_graph_state() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -2753,6 +2776,9 @@ async def test_conditional_graph_state() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2826,6 +2852,9 @@ async def test_conditional_graph_state() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     # test state get/update methods with interrupt_before
@@ -2878,6 +2907,9 @@ async def test_conditional_graph_state() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -2919,6 +2951,9 @@ async def test_conditional_graph_state() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -2992,6 +3027,9 @@ async def test_conditional_graph_state() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
 
@@ -3876,6 +3914,9 @@ async def test_state_graph_packets() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     # modify ai message
@@ -3928,6 +3969,9 @@ async def test_state_graph_packets() -> None:
                 }
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -4034,6 +4078,9 @@ async def test_state_graph_packets() -> None:
                 },
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -4079,6 +4126,9 @@ async def test_state_graph_packets() -> None:
             "step": 5,
             "writes": {"agent": {"messages": AIMessage(content="answer", id="ai2")}},
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
 
@@ -4307,6 +4357,9 @@ async def test_message_graph() -> None:
                 )
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     # modify ai message
@@ -4353,6 +4406,9 @@ async def test_message_graph() -> None:
                 )
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
@@ -4424,6 +4480,9 @@ async def test_message_graph() -> None:
                 )
             },
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
     await app_w_interrupt.aupdate_state(
@@ -4465,6 +4524,9 @@ async def test_message_graph() -> None:
             "step": 5,
             "writes": {"agent": AIMessage(content="answer", id="ai2")},
         },
+        parent_config=[
+            c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
+        ][-1].config,
     )
 
 
@@ -6017,19 +6079,23 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert times_called == 1
 
 
+@pytest.mark.repeat(10)
 @pytest.mark.parametrize(
-    "checkpointer",
+    "checkpointer_fct",
     [
-        MemorySaverAssertImmutable(),
-        AsyncSqliteSaver.from_conn_string(":memory:"),
+        lambda: MemorySaverAssertImmutable(),
+        lambda: AsyncSqliteSaver.from_conn_string(":memory:"),
     ],
     ids=[
         "memory",
         "sqlite",
     ],
 )
-async def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
+async def test_nested_graph_interrupts(
+    checkpointer_fct: Callable[[], BaseCheckpointSaver],
+) -> None:
     try:
+        checkpointer = checkpointer_fct()
 
         class InnerState(TypedDict):
             my_key: str
@@ -6080,162 +6146,134 @@ async def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> Non
             "my_key": "hi my value",
         }
         await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
         assert await app.ainvoke(None, config, debug=True) == {
             "my_key": "hi my value here and there and back again",
         }
         await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there and back again"},
-                    next=(),
-                    config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "thread_ts": AnyStr(),
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value here and there and back again"},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {
+                        "outer_2": {
+                            "my_key": "hi my value here and there and back again"
                         }
                     },
-                    metadata={
-                        "source": "loop",
-                        "writes": {
-                            "outer_2": {
-                                "my_key": "hi my value here and there and back again"
-                            }
-                        },
-                        "step": 4,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there"},
-                    next=("outer_2",),
-                    config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "source": "loop",
-                        "writes": {"inner": {"my_key": "hi my value here and there"}},
-                        "step": 3,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "1",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+                    "step": 3,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                next=("outer_2",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"inner": {"my_key": "hi my value here and there"}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
         # test stream updates w/ nested interrupt
         config = {"configurable": {"thread_id": "2"}}
         assert [c async for c in app.astream({"my_key": "my value"}, config)] == [
@@ -6287,103 +6325,85 @@ async def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> Non
             },
         ]
         await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
         # while we're waiting for the node w/ interrupt inside to finish
         assert [c async for c in app.astream(None, config, stream_mode="values")] == []
         await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
         assert [c async for c in app.astream(None, config, stream_mode="values")] == [
             {
                 "my_key": "hi my value here and there",
@@ -6393,106 +6413,92 @@ async def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> Non
             },
         ]
         await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there and back again"},
-                    next=(),
-                    config={
-                        "configurable": {
-                            "thread_id": "4",
-                            "thread_ts": AnyStr(),
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value here and there and back again"},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {
+                        "outer_2": {
+                            "my_key": "hi my value here and there and back again"
                         }
                     },
-                    metadata={
-                        "source": "loop",
-                        "writes": {
-                            "outer_2": {
-                                "my_key": "hi my value here and there and back again"
-                            }
-                        },
-                        "step": 4,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "4",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there"},
-                    next=("outer_2",),
-                    config={
-                        "configurable": {
-                            "thread_id": "4",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "source": "loop",
-                        "writes": {"inner": {"my_key": "hi my value here and there"}},
-                        "step": 3,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "4",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+                    "step": 3,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                next=("outer_2",),
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"inner": {"my_key": "hi my value here and there"}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
 
         # test interrupts AFTER the node w/ interrupts
         app = graph.compile(checkpointer=checkpointer, interrupt_after=["inner"])
@@ -6511,303 +6517,247 @@ async def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> Non
             },
         ]
         await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
         assert [c async for c in app.astream(None, config, stream_mode="values")] == [
             {
                 "my_key": "hi my value here and there",
             },
         ]
         await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there"},
-                    next=("outer_2",),
-                    config={
-                        "configurable": {
-                            "thread_id": "5",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "source": "loop",
-                        "writes": {"inner": {"my_key": "hi my value here and there"}},
-                        "step": 3,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "5",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                next=("outer_2",),
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"inner": {"my_key": "hi my value here and there"}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
         assert [c async for c in app.astream(None, config, stream_mode="values")] == [
             {
                 "my_key": "hi my value here and there and back again",
             },
         ]
         await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there and back again"},
-                    next=(),
-                    config={
-                        "configurable": {
-                            "thread_id": "5",
-                            "thread_ts": AnyStr(),
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value here and there and back again"},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {
+                        "outer_2": {
+                            "my_key": "hi my value here and there and back again"
                         }
                     },
-                    metadata={
-                        "source": "loop",
-                        "writes": {
-                            "outer_2": {
-                                "my_key": "hi my value here and there and back again"
-                            }
-                        },
-                        "step": 4,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "5",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there"},
-                    next=("outer_2",),
-                    config={
-                        "configurable": {
-                            "thread_id": "5",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "source": "loop",
-                        "writes": {"inner": {"my_key": "hi my value here and there"}},
-                        "step": 3,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "5",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+                    "step": 3,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                next=("outer_2",),
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"inner": {"my_key": "hi my value here and there"}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
 
         # test restarting from thread_ts
         config = {"configurable": {"thread_id": "6"}}
         app = graph.compile(checkpointer=checkpointer)
         await app.ainvoke({"my_key": "my value"}, config, debug=True)
-        await asyncio.sleep(0.05)
+
         state_history = [c async for c in app.aget_state_history(config)]
-        (
-            state_history,
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            # ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+        assert state_history == [
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
 
         await asyncio.sleep(0.05)
         child_state_history = [
@@ -6816,268 +6766,207 @@ async def test_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> Non
                 {"configurable": {"thread_id": "6-inner"}}
             )
         ]
-        assert_state_history_equal(
-            child_state_history,
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value here"},
-                    next=(),
-                    config={
-                        "configurable": {
-                            "thread_id": "6-inner",
-                            "thread_ts": AnyStr(),
+        assert child_state_history == [
+            StateSnapshot(
+                values={"my_key": "hi my value here"},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "6-inner",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {
+                        "inner_1": {
+                            "my_key": "hi my value here",
+                            "my_other_key": "hi my value",
                         }
                     },
-                    metadata={
-                        "source": "loop",
-                        "writes": {
-                            "inner_1": {
-                                "my_key": "hi my value here",
-                                "my_other_key": "hi my value",
-                            }
-                        },
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "6-inner",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=(),
-                    config={
-                        "configurable": {
-                            "thread_id": "6-inner",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "6-inner",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={
-                        "configurable": {
-                            "thread_id": "6-inner",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "hi my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "6-inner",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+        ]
 
-        # check that parent snapshot is always older than child
+        # check that child snapshot matches id of parent
         child_snapshot = child_state_history[0]
         assert (
             child_snapshot.config["configurable"]["thread_ts"]
-            < state_history[0].config["configurable"]["thread_ts"]
+            == state_history[0].config["configurable"]["thread_ts"]
         )
         # check resuming from interrupt w/ thread_ts
         interrupt_state_snapshot, before_interrupt_state_snapshot = state_history[:2]
         before_interrupt_config = before_interrupt_state_snapshot.config
-        # going to get to interrupt again here, so the output is None
-        assert (await app.ainvoke(None, before_interrupt_config, debug=True)) is None
-
-        await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                # NOTE: there is an identical snapshot here since we replayed from before interrupt
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
-        # going to restart from interrupt
+        # going to get to interrupt again here
+        assert await app.ainvoke(None, before_interrupt_config, debug=True) == {
+            "my_key": "hi my value"
+        }
+        # one more "identical" snapshot than before, at top of list
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
+        # going to resume from interrupt
         interrupt_config = interrupt_state_snapshot.config
         assert (await app.ainvoke(None, interrupt_config, debug=True)) == {
             "my_key": "hi my value here and there and back again",
         }
-        await asyncio.sleep(0.05)
-        assert_state_history_equal(
-            [s async for s in app.aget_state_history(config)],
-            [
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there and back again"},
-                    next=(),
-                    config={
-                        "configurable": {
-                            "thread_id": "6",
-                            "thread_ts": AnyStr(),
+        assert [s async for s in app.aget_state_history(config)] == [
+            StateSnapshot(
+                values={"my_key": "hi my value here and there and back again"},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {
+                        "outer_2": {
+                            "my_key": "hi my value here and there and back again"
                         }
                     },
-                    metadata={
-                        "source": "loop",
-                        "writes": {
-                            "outer_2": {
-                                "my_key": "hi my value here and there and back again"
-                            }
-                        },
-                        "step": 4,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "6",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value here and there"},
-                    next=("outer_2",),
-                    config={
-                        "configurable": {
-                            "thread_id": "6",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                    metadata={
-                        "source": "loop",
-                        "writes": {"inner": {"my_key": "hi my value here and there"}},
-                        "step": 3,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {
-                            "thread_id": "6",
-                            "thread_ts": AnyStr(),
-                        }
-                    },
-                ),
-                # NOTE: there is an identical snapshot here since we replayed from before interrupt
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={"source": "interrupt", "step": 2},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "hi my value"},
-                    next=("inner",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "loop",
-                        "writes": {"outer_1": {"my_key": "hi my value"}},
-                        "step": 1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={"my_key": "my value"},
-                    next=("outer_1",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={"source": "loop", "writes": None, "step": 0},
-                    created_at=AnyStr(),
-                    parent_config={
-                        "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
-                    },
-                ),
-                StateSnapshot(
-                    values={},
-                    next=("__start__",),
-                    config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
-                    metadata={
-                        "source": "input",
-                        "writes": {"my_key": "my value"},
-                        "step": -1,
-                    },
-                    created_at=AnyStr(),
-                    parent_config=None,
-                ),
-            ],
-            ignore_parent_config=isinstance(checkpointer, MemorySaver),
-        )
+                    "step": 3,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                next=("outer_2",),
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"inner": {"my_key": "hi my value here and there"}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                },
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
     finally:
         if hasattr(checkpointer, "__aexit__"):
             await checkpointer.__aexit__(None, None, None)
