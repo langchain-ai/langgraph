@@ -358,8 +358,8 @@ class StateGraph(Graph):
                 raise ValueError("END cannot be a start node")
             if start not in self.nodes:
                 raise ValueError(f"Need to add_node `{start}` first")
-        if end_key == END:
-            raise ValueError("END cannot be an end node")
+        if end_key == START:
+            raise ValueError("START cannot be an end node")
         if end_key not in self.nodes:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
