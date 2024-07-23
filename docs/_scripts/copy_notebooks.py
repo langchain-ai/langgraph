@@ -27,6 +27,8 @@ _MANUAL = {
         "streaming-events-from-within-tools-without-langchain.ipynb",
         "streaming-from-final-node.ipynb",
         "persistence.ipynb",
+        "input_output_schema.ipynb",
+        "pass_private_state.ipynb",
         "memory/manage-conversation-history.ipynb",
         "memory/delete-messages.ipynb",
         "memory/add-summary-conversation-history.ipynb",
