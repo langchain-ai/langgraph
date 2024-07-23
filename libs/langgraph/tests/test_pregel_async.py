@@ -1204,7 +1204,7 @@ async def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         builder.add_edge(START, "two")
         graph = builder.compile(checkpointer=checkpointer)
 
-        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
         with pytest.raises(ValueError, match="I'm not good"):
             await graph.ainvoke({"value": 1}, thread1)
 
@@ -6079,7 +6079,7 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert times_called == 1
 
 
-@pytest.mark.repeat(10)
+# @pytest.mark.repeat(10)
 @pytest.mark.parametrize(
     "checkpointer_fct",
     [

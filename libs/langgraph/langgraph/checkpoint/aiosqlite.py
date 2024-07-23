@@ -352,7 +352,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
     ) -> AsyncIterator[CheckpointTuple]:
         async with self.conn.cursor() as cur:
             if config["configurable"].get("thread_ts"):
-                cur.execute(
+                await cur.execute(
                     "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id LIKE ? || '%' AND thread_ts = ?",
                     (
                         str(config["configurable"]["thread_id"]),
@@ -360,7 +360,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     ),
                 )
             else:
-                cur.execute(
+                await cur.execute(
                     """SELECT checkpoints.thread_id, checkpoints.thread_ts, checkpoints.parent_ts, checkpoints.checkpoint, checkpoints.metadata
                     FROM checkpoints
                     INNER JOIN (

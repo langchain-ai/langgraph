@@ -380,6 +380,34 @@ class Pregel(
                 parent_config=saved.parent_config if saved else None,
             )
 
+    async def _prepare_state_snapshot_async(
+        self, saved: CheckpointTuple, config: RunnableConfig
+    ) -> StateSnapshot:
+        checkpoint = saved.checkpoint if saved else empty_checkpoint()
+        config = saved.config if saved else config
+        async with AsyncChannelsManager(
+            self.channels, checkpoint, config
+        ) as channels, AsyncManagedValuesManager(
+            self.managed_values_dict, ensure_config(config), self
+        ) as managed:
+            next_tasks = prepare_next_tasks(
+                checkpoint,
+                self.nodes,
+                channels,
+                managed,
+                config,
+                -1,
+                for_execution=False,
+            )
+            return StateSnapshot(
+                values=read_channels(channels, self.stream_channels_asis),
+                next=tuple(name for name, _ in next_tasks),
+                config=saved.config if saved else config,
+                metadata=saved.metadata if saved else None,
+                created_at=saved.checkpoint["ts"] if saved else None,
+                parent_config=saved.parent_config if saved else None,
+            )
+
     @staticmethod
     def _assemble_state_snapshot_hierarchy(
         root_thread_id: str, subgraph_state_snapshots: dict[str, StateSnapshot]
@@ -403,7 +431,9 @@ class Pregel(
                     parent_thread_id
                 ]._replace(subgraph_state_snapshots=parent_subgraph_snapshots)
 
-        state_snapshot = subgraph_state_snapshots.pop(root_thread_id)
+        state_snapshot = subgraph_state_snapshots.pop(root_thread_id, None)
+        if state_snapshot is None:
+            raise ValueError(f"Missing snapshot for thread ID '{root_thread_id}'")
         return state_snapshot
 
     def get_state(self, config: RunnableConfig) -> StateSnapshot:
@@ -429,32 +459,18 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        saved = await self.checkpointer.aget_tuple(config)
-        checkpoint = saved.checkpoint if saved else empty_checkpoint()
+        subgraph_state_snapshots: dict[str, StateSnapshot] = {
+            checkpoint.config["configurable"][
+                "thread_id"
+            ]: await self._prepare_state_snapshot_async(checkpoint, config)
+            async for checkpoint in self.checkpointer.alist_subgraph_checkpoints(config)
+        }
 
-        config = saved.config if saved else config
-        async with AsyncChannelsManager(
-            self.channels, checkpoint, config
-        ) as channels, AsyncManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
-        ) as managed:
-            next_tasks = prepare_next_tasks(
-                checkpoint,
-                self.nodes,
-                channels,
-                managed,
-                config,
-                -1,
-                for_execution=False,
-            )
-            return StateSnapshot(
-                read_channels(channels, self.stream_channels_asis),
-                tuple(name for name, _ in next_tasks),
-                saved.config if saved else config,
-                saved.metadata if saved else None,
-                saved.checkpoint["ts"] if saved else None,
-                saved.parent_config if saved else None,
-            )
+        thread_id = config["configurable"]["thread_id"]
+        state_snapshot = self._assemble_state_snapshot_hierarchy(
+            thread_id, subgraph_state_snapshots
+        )
+        return state_snapshot
 
     def get_state_history(
         self,

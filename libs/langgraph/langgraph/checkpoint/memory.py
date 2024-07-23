@@ -311,6 +311,19 @@ class MemorySaver(BaseCheckpointSaver):
             else:
                 break
 
+    async def alist_subgraph_checkpoints(
+        self, config: RunnableConfig
+    ) -> AsyncIterator[CheckpointTuple]:
+        loop = asyncio.get_running_loop()
+        iter = await loop.run_in_executor(None, self.list_subgraph_checkpoints, config)
+        while True:
+            # handling StopIteration exception inside coroutine won't work
+            # as expected, so using next() with default value to break the loop
+            if item := await loop.run_in_executor(None, next, iter, None):
+                yield item
+            else:
+                break
+
     async def aput(
         self,
         config: RunnableConfig,
