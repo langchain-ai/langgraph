@@ -7572,7 +7572,7 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 @pytest.mark.parametrize(
     "checkpointer_fct",
     [
-        lambda: MemorySaverAssertImmutable(),
+        lambda: MemorySaverAssertImmutable(put_sleep=0.2),
         lambda: SqliteSaver.from_conn_string(":memory:"),
     ],
     ids=[
