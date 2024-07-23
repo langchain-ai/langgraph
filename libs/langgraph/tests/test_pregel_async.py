@@ -7033,7 +7033,7 @@ async def test_nested_graph_interrupts_parallel(
 
         # below combo of assertions is asserting two things
         # - outer_1 finishes before inner interrupts (because we see its output in stream, which only happens after node finishes)
-        # - the writes of outer are persisted in 1st call and used in 2nd call, ie outer isnt called again (because we dont see outer_1 output again in 2nd stream)
+        # - the writes of outer are persisted in 1st call and used in 2nd call, ie outer isn't called again (because we dont see outer_1 output again in 2nd stream)
         # test stream updates w/ nested interrupt
         config = {"configurable": {"thread_id": "2"}}
         assert [c async for c in app.astream({"my_key": ""}, config)] == [
