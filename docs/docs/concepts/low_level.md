@@ -327,7 +327,7 @@ The final thing you specify when calling `update_state` is `as_node`. This updat
 
 The reason this matters is that the next steps in the graph to execute depend on the last node to have given an update, so this can be used to control which node executes next.
 
-## Migrations of graph
+## Graph Migrations
 
 LangGraph can easily handle migrations of graph definitions (nodes, edges, and state) even when using a checkpointer to track state.
 
