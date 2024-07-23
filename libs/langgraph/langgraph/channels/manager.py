@@ -1,6 +1,6 @@
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Generator, Mapping
+from typing import Any, AsyncGenerator, Generator, Mapping, Optional
 
 from langchain_core.runnables import RunnableConfig
 
@@ -43,7 +43,11 @@ async def AsyncChannelsManager(
 
 
 def create_checkpoint(
-    checkpoint: Checkpoint, channels: Mapping[str, BaseChannel], step: int
+    checkpoint: Checkpoint,
+    channels: Mapping[str, BaseChannel],
+    step: int,
+    *,
+    id: Optional[str] = None,
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
     ts = datetime.now(timezone.utc).isoformat()
@@ -56,7 +60,7 @@ def create_checkpoint(
     return Checkpoint(
         v=1,
         ts=ts,
-        id=str(uuid6(clock_seq=step)),
+        id=id or str(uuid6(clock_seq=step)),
         channel_values=values,
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],

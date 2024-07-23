@@ -30,9 +30,11 @@ class MemorySaverAssertImmutable(MemorySaver):
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
+        put_sleep: Optional[float] = None,
     ) -> None:
         super().__init__(serde=serde)
         self.storage_for_copies = defaultdict(dict)
+        self.put_sleep = put_sleep
 
     def put(
         self,
@@ -40,6 +42,10 @@ class MemorySaverAssertImmutable(MemorySaver):
         checkpoint: Checkpoint,
         metadata: Optional[CheckpointMetadata] = None,
     ) -> None:
+        if self.put_sleep:
+            import time
+
+            time.sleep(self.put_sleep)
         # assert checkpoint hasn't been modified since last written
         thread_id = config["configurable"]["thread_id"]
         if saved := super().get(config):
@@ -85,7 +91,7 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         configurable = config["configurable"].copy()
 
         # remove thread_ts to make testing simpler
-        configurable.pop("thread_ts", None)
+        thread_ts = configurable.pop("thread_ts", None)
 
         self.storage[config["configurable"]["thread_id"]].update(
             {
@@ -93,6 +99,7 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
                     self.serde.dumps(checkpoint),
                     # merge configurable fields and metadata
                     self.serde.dumps({**configurable, **metadata}),
+                    thread_ts,
                 )
             }
         )

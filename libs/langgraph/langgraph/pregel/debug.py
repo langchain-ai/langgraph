@@ -70,14 +70,15 @@ def map_debug_tasks(
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
+        metadata = config["metadata"].copy()
+        metadata.pop("thread_ts", None)
+
         yield {
             "type": "task",
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(
-                    uuid5(TASK_NAMESPACE, json.dumps((name, step, config["metadata"])))
-                ),
+                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, metadata)))),
                 "name": name,
                 "input": input,
                 "triggers": triggers,
@@ -95,14 +96,15 @@ def map_debug_task_results(
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
+        metadata = config["metadata"].copy()
+        metadata.pop("thread_ts", None)
+
         yield {
             "type": "task_result",
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(
-                    uuid5(TASK_NAMESPACE, json.dumps((name, step, config["metadata"])))
-                ),
+                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, metadata)))),
                 "name": name,
                 "result": [w for w in writes if w[0] in stream_channels_list],
             },

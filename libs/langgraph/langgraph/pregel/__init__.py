@@ -63,7 +63,9 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
+    CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
+    CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     INTERRUPT,
 )
@@ -281,7 +283,13 @@ class Pregel(
                 )
             )
             # these are provided by the Pregel class
-            if spec.id not in [CONFIG_KEY_READ, CONFIG_KEY_SEND]
+            if spec.id
+            not in [
+                CONFIG_KEY_READ,
+                CONFIG_KEY_SEND,
+                CONFIG_KEY_CHECKPOINTER,
+                CONFIG_KEY_RESUMING,
+            ]
         ]
 
     @property
@@ -699,6 +707,7 @@ class Pregel(
         Union[str, Sequence[str]],
         Optional[Sequence[str]],
         Optional[Sequence[str]],
+        Optional[BaseCheckpointSaver],
     ]:
         debug = debug if debug is not None else self.debug
         if output_keys is None:
@@ -710,15 +719,24 @@ class Pregel(
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        if config is not None and config.get("configurable", {}).get(CONFIG_KEY_READ):
+        if config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None:
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
+        if config is not None and config.get("configurable", {}).get(
+            CONFIG_KEY_CHECKPOINTER
+        ):
+            checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
+                CONFIG_KEY_CHECKPOINTER
+            ]
+        else:
+            checkpointer = self.checkpointer
         return (
             debug,
             stream_mode,
             output_keys,
             interrupt_before,
             interrupt_after,
+            checkpointer,
         )
 
     def stream(
@@ -820,6 +838,7 @@ class Pregel(
                 output_keys,
                 interrupt_before,
                 interrupt_after,
+                checkpointer,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -830,7 +849,7 @@ class Pregel(
             )
 
             with SyncPregelLoop(
-                input, config=config, checkpointer=self.checkpointer, graph=self
+                input, config=config, checkpointer=checkpointer, graph=self
             ) as loop:
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -1063,6 +1082,7 @@ class Pregel(
                 output_keys,
                 interrupt_before,
                 interrupt_after,
+                checkpointer,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
@@ -1072,7 +1092,7 @@ class Pregel(
                 debug=debug,
             )
             async with AsyncPregelLoop(
-                input, config=config, checkpointer=self.checkpointer, graph=self
+                input, config=config, checkpointer=checkpointer, graph=self
             ) as loop:
                 aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model
@@ -1201,6 +1221,7 @@ class Pregel(
                     read_channels(loop.channels, output_keys)
                 )
         except BaseException as e:
+            # TODO use on_chain_end if exc is GraphInterrupt
             await asyncio.shield(run_manager.on_chain_error(e))
             raise
 

@@ -26,9 +26,11 @@ from langchain_core.runnables.config import (
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.context import Context
 from langgraph.channels.manager import ChannelsManager, create_checkpoint
-from langgraph.checkpoint.base import Checkpoint, copy_checkpoint
+from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, copy_checkpoint
 from langgraph.constants import (
+    CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
+    CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     INTERRUPT,
     RESERVED,
@@ -213,6 +215,8 @@ def prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[False],
+    is_resuming: bool = False,
+    checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
 ) -> list[PregelTaskDescription]:
     ...
@@ -227,6 +231,8 @@ def prepare_next_tasks(
     config: RunnableConfig,
     step: int,
     for_execution: Literal[True],
+    is_resuming: bool,
+    checkpointer: Optional[BaseCheckpointSaver],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
 ) -> list[PregelExecutableTask]:
     ...
@@ -241,6 +247,8 @@ def prepare_next_tasks(
     step: int,
     *,
     for_execution: bool,
+    is_resuming: bool = False,
+    checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[list[PregelTaskDescription], list[PregelExecutableTask]]:
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
@@ -291,6 +299,8 @@ def prepare_next_tasks(
                                     PregelTaskWrites(packet.node, writes, triggers),
                                     config,
                                 ),
+                                # in Send we can't checkpoint nested graphs
+                                # as they could be running in parallel
                             },
                         ),
                         triggers,
@@ -332,6 +342,12 @@ def prepare_next_tasks(
                         "langgraph_task_idx": len(tasks),
                     }
                     task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
+                    if parent_thread_id := config.get("configurable", {}).get(
+                        "thread_id"
+                    ):
+                        thread_id: Optional[str] = f"{parent_thread_id}-{name}"
+                    else:
+                        thread_id = None
                     writes = deque()
                     tasks.append(
                         PregelExecutableTask(
@@ -363,6 +379,10 @@ def prepare_next_tasks(
                                         PregelTaskWrites(name, writes, triggers),
                                         config,
                                     ),
+                                    CONFIG_KEY_CHECKPOINTER: checkpointer,
+                                    CONFIG_KEY_RESUMING: is_resuming,
+                                    "thread_id": thread_id,
+                                    "thread_ts": checkpoint["id"],
                                 },
                             ),
                             triggers,

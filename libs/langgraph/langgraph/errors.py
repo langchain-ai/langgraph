@@ -28,3 +28,15 @@ class InvalidUpdateError(Exception):
     """Raised when attempting to update a channel with an invalid sequence of updates."""
 
     pass
+
+
+class GraphInterrupt(Exception):
+    """Raised when a subgraph is interrupted."""
+
+    pass
+
+
+class EmptyInputError(Exception):
+    """Raised when graph receives an empty input."""
+
+    pass
