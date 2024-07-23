@@ -98,6 +98,7 @@ _HIDE = set(
         "learning.ipynb",
         "docs/quickstart.ipynb",
         "tutorials/rag-agent-testing.ipynb",
+        "tutorials/rag-agent-testing-local.ipynb",
         "time-travel.ipynb",
         "code_assistant/langgraph_code_assistant_mistral.ipynb",
     ]
