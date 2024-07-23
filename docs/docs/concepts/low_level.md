@@ -327,6 +327,16 @@ The final thing you specify when calling `update_state` is `as_node`. This updat
 
 The reason this matters is that the next steps in the graph to execute depend on the last node to have given an update, so this can be used to control which node executes next.
 
+## Graph Migrations
+
+LangGraph can easily handle migrations of graph definitions (nodes, edges, and state) even when using a checkpointer to track state.
+
+- For threads at the end of the graph (i.e. not interrupted) you can change the entire topology of the graph (i.e. all nodes and edges, remove, add, rename, etc)
+- For threads currently interrupted, we support all topology changes other than renaming / removing nodes (as that thread could now be about to enter a node that no longer exists) -- if this is a blocker please reach out and we can prioritize a solution.
+- For modifying state, we have full backwards and forwards compatibility for adding and removing keys
+- State keys that are renamed lose their saved state in existing threads
+- State keys whose types change in incompatible ways could currently cause issues in threads with state from before the change -- if this is a blocker please reach out and we can prioritize a solution.
+
 ## Configuration
 
 When creating a graph, you can also mark that certain parts of the graph are configurable. This is commonly done to enable easily switching between models or system prompts. This allows you to create a single "cognitive architecture" (the graph) but have multiple different instance of it.
