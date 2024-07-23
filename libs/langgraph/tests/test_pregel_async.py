@@ -283,7 +283,7 @@ async def test_cancel_graph_astream(
 
         # test interrupting astream
         got_event = False
-        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
         async with aclosing(graph.astream({"value": 1}, thread1)) as stream:
             async for chunk in stream:
                 assert chunk == {"alittlewhile": {"value": 2}}
@@ -368,7 +368,7 @@ async def test_cancel_graph_astream_events_v2(
 
         # test interrupting astream_events v2
         got_event = False
-        thread2: RunnableConfig = {"configurable": {"thread_id": 2}}
+        thread2: RunnableConfig = {"configurable": {"thread_id": "2"}}
         async with aclosing(
             graph.astream_events({"value": 1}, thread2, version="v2")
         ) as stream:
@@ -685,53 +685,53 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
     )
 
     # start execution, stop at inbox
-    assert await app.ainvoke(2, {"configurable": {"thread_id": 1}}) is None
+    assert await app.ainvoke(2, {"configurable": {"thread_id": "1"}}) is None
 
     # inbox == 3
-    checkpoint = await memory.aget({"configurable": {"thread_id": 1}})
+    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"]["inbox"] == 3
 
     # resume execution, finish
-    assert await app.ainvoke(None, {"configurable": {"thread_id": 1}}) == 4
+    assert await app.ainvoke(None, {"configurable": {"thread_id": "1"}}) == 4
 
     # start execution again, stop at inbox
-    assert await app.ainvoke(20, {"configurable": {"thread_id": 1}}) is None
+    assert await app.ainvoke(20, {"configurable": {"thread_id": "1"}}) is None
 
     # inbox == 21
-    checkpoint = await memory.aget({"configurable": {"thread_id": 1}})
+    checkpoint = await memory.aget({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"]["inbox"] == 21
 
     # send a new value in, interrupting the previous execution
-    assert await app.ainvoke(3, {"configurable": {"thread_id": 1}}) is None
-    assert await app.ainvoke(None, {"configurable": {"thread_id": 1}}) == 5
+    assert await app.ainvoke(3, {"configurable": {"thread_id": "1"}}) is None
+    assert await app.ainvoke(None, {"configurable": {"thread_id": "1"}}) == 5
 
     # start execution again, stopping at inbox
-    assert await app.ainvoke(20, {"configurable": {"thread_id": 2}}) is None
+    assert await app.ainvoke(20, {"configurable": {"thread_id": "2"}}) is None
 
     # inbox == 21
-    snapshot = await app.aget_state({"configurable": {"thread_id": 2}})
+    snapshot = await app.aget_state({"configurable": {"thread_id": "2"}})
     assert snapshot.values["inbox"] == 21
     assert snapshot.next == ("two",)
 
     # update the state, resume
-    await app.aupdate_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
-    assert await app.ainvoke(None, {"configurable": {"thread_id": 2}}) == 26
+    await app.aupdate_state({"configurable": {"thread_id": "2"}}, 25, as_node="one")
+    assert await app.ainvoke(None, {"configurable": {"thread_id": "2"}}) == 26
 
     # no pending tasks
-    snapshot = await app.aget_state({"configurable": {"thread_id": 2}})
+    snapshot = await app.aget_state({"configurable": {"thread_id": "2"}})
     assert snapshot.next == ()
 
     # list history
-    thread1 = {"configurable": {"thread_id": 1}}
+    thread1 = {"configurable": {"thread_id": "1"}}
     assert [c async for c in app.aget_state_history(thread1)] == [
         StateSnapshot(
             values={"inbox": 4, "output": 5, "input": 3},
             next=(),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -744,7 +744,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             next=("two",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -757,7 +757,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             next=("one",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -770,7 +770,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             next=("two",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -783,7 +783,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             next=("one",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -796,7 +796,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             next=(),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -809,7 +809,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             next=("two",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -822,7 +822,7 @@ async def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> N
             next=("one",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -6754,7 +6754,7 @@ async def test_nested_graph_interrupts(
         child_state_history = [
             c
             async for c in app.aget_state_history(
-                {"configurable": {"thread_id": "6-inner"}}
+                {"configurable": {"thread_id": "6__inner"}}
             )
         ]
         assert child_state_history == [
@@ -6763,7 +6763,7 @@ async def test_nested_graph_interrupts(
                 next=(),
                 config={
                     "configurable": {
-                        "thread_id": "6-inner",
+                        "thread_id": "6__inner",
                         "thread_ts": AnyStr(),
                     }
                 },
@@ -6780,7 +6780,7 @@ async def test_nested_graph_interrupts(
                 created_at=AnyStr(),
                 parent_config={
                     "configurable": {
-                        "thread_id": "6-inner",
+                        "thread_id": "6__inner",
                         "thread_ts": AnyStr(),
                     }
                 },

@@ -99,7 +99,7 @@ class PregelLoop:
     checkpoint: Checkpoint
     checkpoint_config: RunnableConfig
     checkpoint_metadata: CheckpointMetadata
-    checkpoint_pending_writes: Optional[List[PendingWrite]]
+    checkpoint_pending_writes: List[PendingWrite]
 
     step: int
     status: Literal[
@@ -406,7 +406,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         }
         self.checkpoint = copy_checkpoint(saved.checkpoint)
         self.checkpoint_metadata = saved.metadata
-        self.checkpoint_pending_writes = saved.pending_writes
+        self.checkpoint_pending_writes = saved.pending_writes or []
 
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels = self.stack.enter_context(
@@ -484,7 +484,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         }
         self.checkpoint = copy_checkpoint(saved.checkpoint)
         self.checkpoint_metadata = saved.metadata
-        self.checkpoint_pending_writes = saved.pending_writes
+        self.checkpoint_pending_writes = saved.pending_writes or []
 
         self.submit = await self.stack.enter_async_context(AsyncBackgroundExecutor())
         self.channels = await self.stack.enter_async_context(

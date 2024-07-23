@@ -358,8 +358,8 @@ class StateGraph(Graph):
                 raise ValueError("END cannot be a start node")
             if start not in self.nodes:
                 raise ValueError(f"Need to add_node `{start}` first")
-        if end_key == END:
-            raise ValueError("END cannot be an end node")
+        if end_key == START:
+            raise ValueError("START cannot be an end node")
         if end_key not in self.nodes:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
@@ -371,7 +371,7 @@ class StateGraph(Graph):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
-    ) -> CompiledGraph:
+    ) -> "CompiledStateGraph":
         """Compiles the state graph into a `CompiledGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -386,7 +386,7 @@ class StateGraph(Graph):
             debug (bool): A flag indicating whether to enable debug mode.
 
         Returns:
-            CompiledGraph: The compiled state graph.
+            CompiledStateGraph: The compiled state graph.
         """
         # assign default values
         interrupt_before = interrupt_before or []

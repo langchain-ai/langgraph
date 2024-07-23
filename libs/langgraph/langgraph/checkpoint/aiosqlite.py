@@ -347,6 +347,49 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                     ),
                 )
 
+    async def alist_subgraph_checkpoints(
+        self, config: RunnableConfig
+    ) -> AsyncIterator[CheckpointTuple]:
+        async with self.conn.cursor() as cur:
+            if config["configurable"].get("thread_ts"):
+                cur.execute(
+                    "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id LIKE ? || '%' AND thread_ts = ?",
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        str(config["configurable"]["thread_ts"]),
+                    ),
+                )
+            else:
+                cur.execute(
+                    """SELECT checkpoints.thread_id, checkpoints.thread_ts, checkpoints.parent_ts, checkpoints.checkpoint, checkpoints.metadata
+                    FROM checkpoints
+                    INNER JOIN (
+                        SELECT thread_id, MAX(thread_ts) as thread_ts
+                        FROM checkpoints
+                        WHERE thread_id LIKE ? || '%'
+                        GROUP BY thread_id
+                    ) latest_checkpoints
+                    ON checkpoints.thread_id = latest_checkpoints.thread_id AND checkpoints.thread_ts = latest_checkpoints.thread_ts
+                    ORDER BY checkpoints.thread_id, checkpoints.thread_ts DESC""",
+                    (str(config["configurable"]["thread_id"]),),
+                )
+            async for thread_id, thread_ts, parent_ts, value, metadata in cur:
+                yield CheckpointTuple(
+                    {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
+                    self.serde.loads(value),
+                    self.serde.loads(metadata) if metadata is not None else {},
+                    (
+                        {
+                            "configurable": {
+                                "thread_id": thread_id,
+                                "thread_ts": parent_ts,
+                            }
+                        }
+                        if parent_ts
+                        else None
+                    ),
+                )
+
     async def aput(
         self,
         config: RunnableConfig,

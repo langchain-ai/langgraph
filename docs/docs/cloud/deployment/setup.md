@@ -19,6 +19,24 @@ After each step, an example file directory is provided to demonstrate how code c
 
 Dependencies can optionally be specified in one of the following files: `pyproject.toml`, `setup.py`, or `requirements.txt`. If none of these files is created, then dependencies can be specified later in the [LangGraph API configuration file](#create-langgraph-api-config).
 
+The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
+```
+langgraph>=0.1.7
+langchain-core>=0.2.7
+orjson>=3.10.1
+langsmith>=0.1.50
+httpx>=0.27.0
+langchain-core>=0.2.8
+langsmith>=0.1.63
+tenacity>=8.3.0
+uvicorn>=0.29.0
+sse-starlette>=2.1.0
+uvloop>=0.19.0
+httptools>=0.6.1
+jsonschema-rs>=0.18.0
+croniter>=1.0.1
+```
+
 Example `requirements.txt` file:
 ```
 langgraph

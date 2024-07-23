@@ -328,6 +328,11 @@ class BaseCheckpointSaver(ABC):
         raise NotImplementedError
         yield
 
+    async def alist_subgraph_checkpoints(
+        self, config: RunnableConfig
+    ) -> AsyncIterator[CheckpointTuple]:
+        raise NotImplementedError
+
     async def aput(
         self,
         config: RunnableConfig,
