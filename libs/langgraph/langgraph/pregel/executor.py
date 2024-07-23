@@ -80,18 +80,18 @@ class BackgroundExecutor(ContextManager):
             if cancel:
                 task.cancel()
         # wait for all tasks to finish
-        concurrent.futures.wait({t for t in self.tasks if not t.done()})
+        if tasks := {t for t in self.tasks if not t.done()}:
+            concurrent.futures.wait(tasks)
         # shutdown the executor
         self.stack.__exit__(exc_type, exc_value, traceback)
-        # raise caught exception
-        if exc_type is not None:
-            raise exc_value
         # re-raise the first exception that occurred in a task
-        for task in self.tasks:
-            try:
-                task.result()
-            except concurrent.futures.CancelledError:
-                pass
+        if exc_type is None:
+            # if there's already an exception being raised, don't raise another one
+            for task in self.tasks:
+                try:
+                    task.result()
+                except concurrent.futures.CancelledError:
+                    pass
 
 
 class AsyncBackgroundExecutor(AsyncContextManager):
@@ -132,16 +132,27 @@ class AsyncBackgroundExecutor(AsyncContextManager):
     async def __aenter__(self) -> Submit:
         return self.submit
 
-    async def exit(self) -> None:
-        fut = asyncio.gather(*self.tasks, return_exceptions=True)
-        try:
-            rtns = await asyncio.shield(fut)
-        finally:
-            del self.tasks
-        for rtn in rtns:
-            # if this is ever changed to BaseException, need to ignore CancelledError
-            if isinstance(rtn, Exception):
-                raise rtn
+    async def exit(
+        self,
+        exc_type: Optional[type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> None:
+        # cancel all tasks that should be cancelled
+        for task, cancel in self.tasks.items():
+            if cancel:
+                task.cancel(self.sentinel)
+        # wait for all tasks to finish
+        if self.tasks:
+            await asyncio.wait(self.tasks)
+        # re-raise the first exception that occurred in a task
+        if exc_type is None:
+            # if there's already an exception being raised, don't raise another one
+            for task in self.tasks:
+                try:
+                    task.result()
+                except asyncio.CancelledError:
+                    pass
 
     async def __aexit__(
         self,
@@ -151,8 +162,6 @@ class AsyncBackgroundExecutor(AsyncContextManager):
     ) -> Optional[bool]:
         # we cannot use `await` outside of asyncio.shield, as this code can run
         # after owning task is cancelled, so pulling async logic to separate method
-        for task, cancel in self.tasks.items():
-            if cancel:
-                task.cancel(self.sentinel)
+
         # wait for all background tasks to finish, shielded from cancellation
-        await asyncio.shield(self.exit())
+        await asyncio.shield(self.exit(exc_type, exc_value, traceback))

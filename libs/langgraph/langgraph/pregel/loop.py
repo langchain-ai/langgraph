@@ -102,6 +102,23 @@ class PregelLoop:
 
     # public
 
+    def __init__(
+        self,
+        input: Optional[Any],
+        *,
+        config: RunnableConfig,
+        checkpointer: Optional[BaseCheckpointSaver],
+        graph: "Pregel",
+    ) -> None:
+        self.stream = deque()
+        self.input = input
+        self.config = config
+        self.checkpointer = checkpointer
+        self.graph = graph
+        # TODO if managed values no longer needs graph we can replace with
+        # managed_specs, channel_specs
+        self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
+
     def mark_tasks_scheduled(self, tasks: Sequence[PregelExecutableTask]) -> None:
         """Mark tasks as scheduled, to be used by queue-based executors."""
         raise NotImplementedError
@@ -219,7 +236,7 @@ class PregelLoop:
         if should_interrupt(self.checkpoint, interrupt_before, self.tasks):
             self.status = "interrupt_before"
             if self.is_nested:
-                raise GraphInterrupt(self)
+                raise GraphInterrupt()
             else:
                 return False
 
@@ -318,6 +335,15 @@ class PregelLoop:
         # increment step
         self.step += 1
 
+    def _suppress_interrupt(
+        self,
+        exc_type: Optional[Type[BaseException]],
+        exc_value: Optional[BaseException],
+        traceback: Optional[TracebackType],
+    ) -> Optional[bool]:
+        if exc_type is GraphInterrupt and not self.is_nested:
+            return True
+
 
 class SyncPregelLoop(PregelLoop, ContextManager):
     def __init__(
@@ -328,24 +354,21 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         checkpointer: Optional[BaseCheckpointSaver],
         graph: "Pregel",
     ) -> None:
-        self.stream = deque()
+        super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
         self.stack = ExitStack()
-        self.input = input
-        self.config = config
-        self.checkpointer = checkpointer
-        self.checkpointer_get_next_version = (
-            checkpointer.get_next_version if checkpointer else increment
-        )
-        self.checkpointer_put_writes = checkpointer.put_writes if checkpointer else None
-        self.checkpointer_put = checkpointer.put if checkpointer else None
-        self.graph = graph
-        # TODO if managed values no longer needs graph we can replace with
-        # managed_specs, channel_specs
+        self.stack.push(self._suppress_interrupt)
+        if checkpointer:
+            self.checkpointer_get_next_version = checkpointer.get_next_version
+            self.checkpointer_put_writes = checkpointer.put_writes
+            self.checkpointer_put = checkpointer.put
+        else:
+            self.checkpointer_get_next_version = increment
+            self.checkpointer_put_writes = None
+            self.checkpointer_put = None
 
     # context manager
 
     def __enter__(self) -> Self:
-        self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
         saved = (
             self.checkpointer.get_tuple(self.config) if self.checkpointer else None
         ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])
@@ -381,16 +404,6 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        # handle interrupt
-        if exc_type is GraphInterrupt:
-            if exc_value.args[0] is self:
-                # interrupt raised by this loop
-                exc_value.args = (object(),)
-            if not self.is_nested:
-                # in outer graph, catch interrupt
-                del self.graph
-                return True or self.stack.__exit__(None, None, None)
-
         # unwind stack
         del self.graph
         return self.stack.__exit__(exc_type, exc_value, traceback)
@@ -405,26 +418,21 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         checkpointer: Optional[BaseCheckpointSaver],
         graph: "Pregel",
     ) -> None:
-        self.stream = deque()
+        super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
         self.stack = AsyncExitStack()
-        self.input = input
-        self.config = config
-        self.checkpointer = checkpointer
-        self.checkpointer_get_next_version = (
-            checkpointer.get_next_version if checkpointer else increment
-        )
-        self.checkpointer_put_writes = (
-            checkpointer.aput_writes if checkpointer else None
-        )
-        self.checkpointer_put = checkpointer.aput if checkpointer else None
-        self.graph = graph
-        # TODO if managed values no longer needs graph we can replace with
-        # managed_specs, channel_specs
+        self.stack.push(self._suppress_interrupt)
+        if checkpointer:
+            self.checkpointer_get_next_version = checkpointer.get_next_version
+            self.checkpointer_put_writes = checkpointer.aput_writes
+            self.checkpointer_put = checkpointer.aput
+        else:
+            self.checkpointer_get_next_version = increment
+            self.checkpointer_put_writes = None
+            self.checkpointer_put = None
 
     # context manager
 
     async def __aenter__(self) -> Self:
-        self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
         saved = (
             await self.checkpointer.aget_tuple(self.config)
             if self.checkpointer
@@ -462,18 +470,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        # handle interrupt
-        if exc_type is GraphInterrupt:
-            if exc_value.args[0] is self:
-                # interrupt raised by this loop
-                exc_value.args = (object(),)
-            if not self.is_nested:
-                # in outer graph, catch interrupt
-                del self.graph
-                return True or await asyncio.shield(
-                    self.stack.__aexit__(None, None, None)
-                )
-
         # unwind stack
         del self.graph
         return await asyncio.shield(
