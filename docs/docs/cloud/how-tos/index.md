@@ -52,6 +52,7 @@ When creating complex graphs, leaving every decision up to the LLM can be danger
 LangGraph Studio is a built-in UI for visualizing, testing, and debugging your agents.
 
 - [How to enter LangGraph Studio](./test_deployment.md)
+- [How to enter LangGraph Studio for local deployment](./test_local_deployment.md)
 - [How to test your graph in LangGraph Studio](./invoke_studio.md)
 - [Interact with threads in LangGraph Studio](./threads_studio.md)
 

@@ -211,6 +211,7 @@ nav:
               - Replay and Branch from Prior States: "cloud/how-tos/human_in_the_loop_time_travel.md"
           - LangGraph Studio:
               - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
+              - Test Local Deployment: "cloud/how-tos/test_local_deployment.md"
               - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
               - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
           - Different Types of Runs:
