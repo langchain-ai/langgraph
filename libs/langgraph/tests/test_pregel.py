@@ -8457,6 +8457,7 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
             my_other_key: str
 
         def inner_1(state: InnerState):
+            time.sleep(0.1)
             return {"my_key": "got here", "my_other_key": state["my_key"]}
 
         def inner_2(state: InnerState):
@@ -8503,6 +8504,9 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
             "my_key": "got here and there and parallel and back again",
         }
 
+        # below combo of assertions is asserting two things
+        # - outer_1 finishes before inner interrupts (because we see its output in stream, which only happens after node finishes)
+        # - the writes of outer are persisted in 1st call and used in 2nd call, ie outer isnt called again (because we dont see outer_1 output again in 2nd stream)
         # test stream updates w/ nested interrupt
         config = {"configurable": {"thread_id": "2"}}
         assert [*app.stream({"my_key": ""}, config)] == [
