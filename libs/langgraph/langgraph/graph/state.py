@@ -371,7 +371,7 @@ class StateGraph(Graph):
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
-    ) -> CompiledGraph:
+    ) -> "CompiledStateGraph":
         """Compiles the state graph into a `CompiledGraph` object.
 
         The compiled graph implements the `Runnable` interface and can be invoked,
@@ -386,7 +386,7 @@ class StateGraph(Graph):
             debug (bool): A flag indicating whether to enable debug mode.
 
         Returns:
-            CompiledGraph: The compiled state graph.
+            CompiledStateGraph: The compiled state graph.
         """
         # assign default values
         interrupt_before = interrupt_before or []
