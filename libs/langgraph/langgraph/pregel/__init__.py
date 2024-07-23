@@ -59,6 +59,7 @@ from langgraph.channels.manager import (
 )
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    CheckpointTuple,
     copy_checkpoint,
     empty_checkpoint,
 )
@@ -68,6 +69,7 @@ from langgraph.constants import (
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     INTERRUPT,
+    THREAD_ID_SEPARATOR,
 )
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
@@ -350,12 +352,9 @@ class Pregel(
             if is_managed_value(v)
         }
 
-    def get_state(self, config: RunnableConfig) -> StateSnapshot:
-        """Get the current state of the graph."""
-        if not self.checkpointer:
-            raise ValueError("No checkpointer set")
-
-        saved = self.checkpointer.get_tuple(config)
+    def _prepare_state_snapshot(
+        self, saved: CheckpointTuple, config: RunnableConfig
+    ) -> StateSnapshot:
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
         config = saved.config if saved else config
         with ChannelsManager(
@@ -373,13 +372,57 @@ class Pregel(
                 for_execution=False,
             )
             return StateSnapshot(
-                read_channels(channels, self.stream_channels_asis),
-                tuple(name for name, _ in next_tasks),
-                saved.config if saved else config,
-                saved.metadata if saved else None,
-                saved.checkpoint["ts"] if saved else None,
-                saved.parent_config if saved else None,
+                values=read_channels(channels, self.stream_channels_asis),
+                next=tuple(name for name, _ in next_tasks),
+                config=saved.config if saved else config,
+                metadata=saved.metadata if saved else None,
+                created_at=saved.checkpoint["ts"] if saved else None,
+                parent_config=saved.parent_config if saved else None,
             )
+
+    @staticmethod
+    def _assemble_state_snapshot_hierarchy(
+        root_thread_id: str, subgraph_state_snapshots: dict[str, StateSnapshot]
+    ) -> StateSnapshot:
+        thread_ids_to_visit = sorted(
+            subgraph_state_snapshots.keys(),
+            key=lambda x: len(x.split(THREAD_ID_SEPARATOR)),
+        )
+        while thread_ids_to_visit:
+            thread_id = thread_ids_to_visit.pop()
+            state_snapshot = subgraph_state_snapshots[thread_id]
+            *path, subgraph_node = thread_id.split(THREAD_ID_SEPARATOR)
+            parent_thread_id = THREAD_ID_SEPARATOR.join(path)
+            if parent_thread_id and THREAD_ID_SEPARATOR in parent_thread_id:
+                parent_subgraph_snapshots = (
+                    subgraph_state_snapshots[parent_thread_id].subgraph_state_snapshots
+                    or {}
+                )
+                parent_subgraph_snapshots[subgraph_node] = state_snapshot
+                subgraph_state_snapshots[parent_thread_id] = subgraph_state_snapshots[
+                    parent_thread_id
+                ]._replace(subgraph_state_snapshots=parent_subgraph_snapshots)
+
+        state_snapshot = subgraph_state_snapshots.pop(root_thread_id)
+        return state_snapshot
+
+    def get_state(self, config: RunnableConfig) -> StateSnapshot:
+        """Get the current state of the graph."""
+        if not self.checkpointer:
+            raise ValueError("No checkpointer set")
+
+        subgraph_state_snapshots: dict[str, StateSnapshot] = {
+            checkpoint.config["configurable"][
+                "thread_id"
+            ]: self._prepare_state_snapshot(checkpoint, config)
+            for checkpoint in self.checkpointer.list_subgraph_checkpoints(config)
+        }
+
+        thread_id = config["configurable"]["thread_id"]
+        state_snapshot = self._assemble_state_snapshot_hierarchy(
+            thread_id, subgraph_state_snapshots
+        )
+        return state_snapshot
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
         """Get the current state of the graph."""

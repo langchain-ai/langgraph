@@ -171,6 +171,39 @@ class MemorySaver(BaseCheckpointSaver):
                     else None,
                 )
 
+    def list_subgraph_checkpoints(
+        self, config: RunnableConfig
+    ) -> Iterator[CheckpointTuple]:
+        thread_id_prefix = config["configurable"]["thread_id"]
+        matching_thread_ids = [
+            key for key in self.storage.keys() if key.startswith(thread_id_prefix)
+        ]
+        for thread_id in matching_thread_ids:
+            ts = config["configurable"].get("thread_ts")
+            if not ts:
+                if checkpoints := self.storage[thread_id]:
+                    ts = max(checkpoints.keys())
+
+            if saved := self.storage[thread_id].get(ts):
+                checkpoint, metadata, parent_ts = saved
+                writes = self.writes[(thread_id, ts)]
+                yield CheckpointTuple(
+                    config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
+                    checkpoint=self.serde.loads(checkpoint),
+                    metadata=self.serde.loads(metadata),
+                    pending_writes=[
+                        (id, c, self.serde.loads(v)) for id, c, v in writes
+                    ],
+                    parent_config={
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "thread_ts": parent_ts,
+                        }
+                    }
+                    if parent_ts
+                    else None,
+                )
+
     def put(
         self,
         config: RunnableConfig,

@@ -36,6 +36,7 @@ from langgraph.constants import (
     RESERVED,
     TAG_HIDDEN,
     TASKS,
+    THREAD_ID_SEPARATOR,
     Send,
 )
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -345,7 +346,9 @@ def prepare_next_tasks(
                     if parent_thread_id := config.get("configurable", {}).get(
                         "thread_id"
                     ):
-                        thread_id: Optional[str] = f"{parent_thread_id}-{name}"
+                        thread_id: Optional[
+                            str
+                        ] = f"{parent_thread_id}{THREAD_ID_SEPARATOR}{name}"
                     else:
                         thread_id = None
                     writes = deque()

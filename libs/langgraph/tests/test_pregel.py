@@ -568,53 +568,53 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     )
 
     # start execution, stop at inbox
-    assert app.invoke(2, {"configurable": {"thread_id": 1}}) is None
+    assert app.invoke(2, {"configurable": {"thread_id": "1"}}) is None
 
     # inbox == 3
-    checkpoint = memory.get({"configurable": {"thread_id": 1}})
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"]["inbox"] == 3
 
     # resume execution, finish
-    assert app.invoke(None, {"configurable": {"thread_id": 1}}) == 4
+    assert app.invoke(None, {"configurable": {"thread_id": "1"}}) == 4
 
     # start execution again, stop at inbox
-    assert app.invoke(20, {"configurable": {"thread_id": 1}}) is None
+    assert app.invoke(20, {"configurable": {"thread_id": "1"}}) is None
 
     # inbox == 21
-    checkpoint = memory.get({"configurable": {"thread_id": 1}})
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"]["inbox"] == 21
 
     # send a new value in, interrupting the previous execution
-    assert app.invoke(3, {"configurable": {"thread_id": 1}}) is None
-    assert app.invoke(None, {"configurable": {"thread_id": 1}}) == 5
+    assert app.invoke(3, {"configurable": {"thread_id": "1"}}) is None
+    assert app.invoke(None, {"configurable": {"thread_id": "1"}}) == 5
 
     # start execution again, stopping at inbox
-    assert app.invoke(20, {"configurable": {"thread_id": 2}}) is None
+    assert app.invoke(20, {"configurable": {"thread_id": "2"}}) is None
 
     # inbox == 21
-    snapshot = app.get_state({"configurable": {"thread_id": 2}})
+    snapshot = app.get_state({"configurable": {"thread_id": "2"}})
     assert snapshot.values["inbox"] == 21
     assert snapshot.next == ("two",)
 
     # update the state, resume
-    app.update_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
-    assert app.invoke(None, {"configurable": {"thread_id": 2}}) == 26
+    app.update_state({"configurable": {"thread_id": "2"}}, 25, as_node="one")
+    assert app.invoke(None, {"configurable": {"thread_id": "2"}}) == 26
 
     # no pending tasks
-    snapshot = app.get_state({"configurable": {"thread_id": 2}})
+    snapshot = app.get_state({"configurable": {"thread_id": "2"}})
     assert snapshot.next == ()
 
     # list history
-    thread1 = {"configurable": {"thread_id": 1}}
+    thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in app.get_state_history(thread1)] == [
         StateSnapshot(
             values={"inbox": 4, "output": 5, "input": 3},
             next=(),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -627,7 +627,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("two",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -640,7 +640,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("one",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -653,7 +653,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("two",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -666,7 +666,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("one",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -679,7 +679,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=(),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -692,7 +692,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("two",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -705,7 +705,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("one",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -1080,7 +1080,7 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         builder.add_edge(START, "two")
         graph = builder.compile(checkpointer=checkpointer)
 
-        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
         with pytest.raises(ConnectionError, match="I'm not good"):
             graph.invoke({"value": 1}, thread1)
 

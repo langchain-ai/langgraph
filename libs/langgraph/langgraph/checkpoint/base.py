@@ -231,6 +231,11 @@ class BaseCheckpointSaver(ABC):
         """
         raise NotImplementedError
 
+    def list_subgraph_checkpoints(
+        self, config: RunnableConfig
+    ) -> Iterator[CheckpointTuple]:
+        raise NotImplementedError
+
     def put(
         self,
         config: RunnableConfig,
