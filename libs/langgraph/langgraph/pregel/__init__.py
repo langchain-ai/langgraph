@@ -421,21 +421,29 @@ class Pregel(
             state_snapshot = thread_id_to_state_snapshots[thread_id]
             *path, subgraph_node = thread_id.split(THREAD_ID_SEPARATOR)
             parent_thread_id = THREAD_ID_SEPARATOR.join(path)
-            if parent_thread_id and (parent_state_snapshot := thread_id_to_state_snapshots.get(parent_thread_id)):
+            if parent_thread_id and (
+                parent_state_snapshot := thread_id_to_state_snapshots.get(
+                    parent_thread_id
+                )
+            ):
                 parent_subgraph_snapshots = {
                     **(parent_state_snapshot.subgraph_state_snapshots or {}),
-                    subgraph_node: state_snapshot
+                    subgraph_node: state_snapshot,
                 }
-                thread_id_to_state_snapshots[parent_thread_id] = thread_id_to_state_snapshots[
+                thread_id_to_state_snapshots[
                     parent_thread_id
-                ]._replace(subgraph_state_snapshots=parent_subgraph_snapshots)
+                ] = thread_id_to_state_snapshots[parent_thread_id]._replace(
+                    subgraph_state_snapshots=parent_subgraph_snapshots
+                )
 
         state_snapshot = thread_id_to_state_snapshots.pop(root_thread_id, None)
         if state_snapshot is None:
             raise ValueError(f"Missing snapshot for thread ID '{root_thread_id}'")
         return state_snapshot
 
-    def get_state(self, config: RunnableConfig, *, include_subgraph_state: bool = False) -> StateSnapshot:
+    def get_state(
+        self, config: RunnableConfig, *, include_subgraph_state: bool = False
+    ) -> StateSnapshot:
         """Get the current state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
@@ -458,7 +466,9 @@ class Pregel(
         )
         return state_snapshot
 
-    async def aget_state(self, config: RunnableConfig, *, include_subgraph_state: bool = False) -> StateSnapshot:
+    async def aget_state(
+        self, config: RunnableConfig, *, include_subgraph_state: bool = False
+    ) -> StateSnapshot:
         """Get the current state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
@@ -466,8 +476,10 @@ class Pregel(
         if include_subgraph_state:
             checkpoint_tuples = self.checkpointer.alist_subgraph_checkpoints(config)
         else:
+
             async def alist_checkpoints():
                 yield await self.checkpointer.aget_tuple(config)
+
             checkpoint_tuples = alist_checkpoints()
 
         thread_id_to_state_snapshots: dict[str, StateSnapshot] = {

@@ -360,6 +360,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
     def list_subgraph_checkpoints(
         self, config: RunnableConfig
     ) -> Iterator[CheckpointTuple]:
+        # TODO: docstring
         with self.cursor(transaction=False) as cur:
             if config["configurable"].get("thread_ts"):
                 cur.execute(
