@@ -502,6 +502,7 @@ class Pregel(
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        include_subgraph_state: bool = False,
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         if not self.checkpointer:
@@ -514,28 +515,44 @@ class Pregel(
         for config, checkpoint, metadata, parent_config, _ in self.checkpointer.list(
             config, before=before, limit=limit, filter=filter
         ):
-            with ChannelsManager(
-                self.channels, checkpoint, config
-            ) as channels, ManagedValuesManager(
-                self.managed_values_dict, ensure_config(config), self
-            ) as managed:
-                next_tasks = prepare_next_tasks(
-                    checkpoint,
-                    self.nodes,
-                    channels,
-                    managed,
-                    config,
-                    -1,
-                    for_execution=False,
+            # is there a way to do this more efficiently?
+            if include_subgraph_state:
+                checkpoint_tuples = self.checkpointer.list_subgraph_checkpoints(config)
+
+                thread_id_to_state_snapshots: dict[str, StateSnapshot] = {
+                    checkpoint.config["configurable"][
+                        "thread_id"
+                    ]: self._prepare_state_snapshot(checkpoint, config)
+                    for checkpoint in checkpoint_tuples
+                }
+                thread_id = config["configurable"]["thread_id"]
+                state_snapshot = self._assemble_state_snapshot_hierarchy(
+                    thread_id, thread_id_to_state_snapshots
                 )
-                yield StateSnapshot(
-                    read_channels(channels, self.stream_channels_asis),
-                    tuple(name for name, _ in next_tasks),
-                    config,
-                    metadata,
-                    checkpoint["ts"],
-                    parent_config,
-                )
+                yield state_snapshot
+            else:
+                with ChannelsManager(
+                    self.channels, checkpoint, config
+                ) as channels, ManagedValuesManager(
+                    self.managed_values_dict, ensure_config(config), self
+                ) as managed:
+                    next_tasks = prepare_next_tasks(
+                        checkpoint,
+                        self.nodes,
+                        channels,
+                        managed,
+                        config,
+                        -1,
+                        for_execution=False,
+                    )
+                    yield StateSnapshot(
+                        read_channels(channels, self.stream_channels_asis),
+                        tuple(name for name, _ in next_tasks),
+                        config,
+                        metadata,
+                        checkpoint["ts"],
+                        parent_config,
+                    )
 
     async def aget_state_history(
         self,
