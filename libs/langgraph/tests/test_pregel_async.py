@@ -7322,6 +7322,78 @@ async def test_nested_graph_state(checkpointer: BaseCheckpointSaver) -> None:
                 )
             },
         )
+        assert [
+            c async for c in app.aget_state_history(config, include_subgraph_state=True)
+        ] == [
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                },
+                subgraph_state_snapshots={
+                    "inner": StateSnapshot(
+                        values={"my_key": "hi my value here"},
+                        next=(),
+                        config={
+                            "configurable": {
+                                "thread_id": "1__inner",
+                                "thread_ts": AnyStr(),
+                            }
+                        },
+                        metadata={
+                            "source": "loop",
+                            "writes": {
+                                "inner_1": {
+                                    "my_key": "hi my value here",
+                                    "my_other_key": "hi my value",
+                                }
+                            },
+                            "step": 1,
+                        },
+                        created_at=AnyStr(),
+                        parent_config={
+                            "configurable": {
+                                "thread_id": "1__inner",
+                                "thread_ts": AnyStr(),
+                            }
+                        },
+                        subgraph_state_snapshots=None,
+                    )
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                },
+                subgraph_state_snapshots=None,
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+                subgraph_state_snapshots=None,
+            ),
+        ]
         await app.ainvoke(None, config, debug=True)
         # test state w/ nested subgraph state (after resuming from interrupt)
         assert await app.aget_state(
@@ -7364,6 +7436,153 @@ async def test_nested_graph_state(checkpointer: BaseCheckpointSaver) -> None:
                 )
             },
         )
+        assert [
+            c async for c in app.aget_state_history(config, include_subgraph_state=True)
+        ] == [
+            StateSnapshot(
+                values={"my_key": "hi my value here and there and back again"},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {
+                        "outer_2": {
+                            "my_key": "hi my value here and there and back again"
+                        }
+                    },
+                    "step": 3,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                next=("outer_2",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"inner": {"my_key": "hi my value here and there"}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                # TODO: this is likely very confusing for an end user, and we'll probably need to update this.
+                # right now this is happening due to us overwriting the
+                # subgraph snapshot after we finish the graph with while the thread_ts
+                # is the same as when we interrupted
+                subgraph_state_snapshots={
+                    "inner": StateSnapshot(
+                        values={"my_key": "hi my value here and there"},
+                        next=(),
+                        config={
+                            "configurable": {
+                                "thread_id": "1__inner",
+                                "thread_ts": AnyStr(),
+                            }
+                        },
+                        metadata={
+                            "source": "loop",
+                            "writes": {
+                                "inner_2": {
+                                    "my_key": "hi my value here and there",
+                                    "my_other_key": "hi my value here",
+                                }
+                            },
+                            "step": 2,
+                        },
+                        created_at=AnyStr(),
+                        parent_config={
+                            "configurable": {
+                                "thread_id": "1__inner",
+                                "thread_ts": AnyStr(),
+                            }
+                        },
+                        subgraph_state_snapshots=None,
+                    )
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+                subgraph_state_snapshots=None,
+            ),
+        ]
     finally:
         if hasattr(checkpointer, "__aexit__"):
             await checkpointer.__aexit__(None, None, None)

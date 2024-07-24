@@ -8896,7 +8896,7 @@ def test_nested_graph_state(
                 )
             },
         )
-        assert list(app.get_state_history(config, include_subgraph_state=False)) == [
+        assert list(app.get_state_history(config, include_subgraph_state=True)) == [
             StateSnapshot(
                 values={"my_key": "hi my value here and there and back again"},
                 next=(),

@@ -119,6 +119,7 @@ class MemorySaver(BaseCheckpointSaver):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        as_prefix: bool = False,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the in-memory storage.
 
@@ -134,7 +135,19 @@ class MemorySaver(BaseCheckpointSaver):
         Yields:
             Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
         """
-        thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
+        if config:
+            config_thread_id = config["configurable"]["thread_id"]
+            if as_prefix:
+                thread_ids = (
+                    thread_id
+                    for thread_id in self.storage
+                    if thread_id.startswith(config_thread_id)
+                )
+            else:
+                thread_ids = (config_thread_id,)
+        else:
+            thread_ids = self.storage.keys()
+
         for thread_id in thread_ids:
             for ts, (checkpoint, metadata_b, parent_ts) in sorted(
                 self.storage[thread_id].items(), key=lambda x: x[0], reverse=True
@@ -161,40 +174,6 @@ class MemorySaver(BaseCheckpointSaver):
                     config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
                     checkpoint=self.serde.loads(checkpoint),
                     metadata=metadata,
-                    parent_config={
-                        "configurable": {
-                            "thread_id": thread_id,
-                            "thread_ts": parent_ts,
-                        }
-                    }
-                    if parent_ts
-                    else None,
-                )
-
-    def list_subgraph_checkpoints(
-        self, config: RunnableConfig
-    ) -> Iterator[CheckpointTuple]:
-        # TODO: docstring
-        thread_id_prefix = config["configurable"]["thread_id"]
-        matching_thread_ids = [
-            key for key in self.storage.keys() if key.startswith(thread_id_prefix)
-        ]
-        for thread_id in matching_thread_ids:
-            ts = config["configurable"].get("thread_ts")
-            if not ts:
-                if checkpoints := self.storage[thread_id]:
-                    ts = max(checkpoints.keys())
-
-            if saved := self.storage[thread_id].get(ts):
-                checkpoint, metadata, parent_ts = saved
-                writes = self.writes[(thread_id, ts)]
-                yield CheckpointTuple(
-                    config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
-                    checkpoint=self.serde.loads(checkpoint),
-                    metadata=self.serde.loads(metadata),
-                    pending_writes=[
-                        (id, c, self.serde.loads(v)) for id, c, v in writes
-                    ],
                     parent_config={
                         "configurable": {
                             "thread_id": thread_id,
@@ -288,6 +267,7 @@ class MemorySaver(BaseCheckpointSaver):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        as_prefix: bool = False,
     ) -> AsyncIterator[CheckpointTuple]:
         """Asynchronous version of list.
 
@@ -302,22 +282,16 @@ class MemorySaver(BaseCheckpointSaver):
         """
         loop = asyncio.get_running_loop()
         iter = await loop.run_in_executor(
-            None, partial(self.list, before=before, limit=limit, filter=filter), config
+            None,
+            partial(
+                self.list,
+                before=before,
+                limit=limit,
+                filter=filter,
+                as_prefix=as_prefix,
+            ),
+            config,
         )
-        while True:
-            # handling StopIteration exception inside coroutine won't work
-            # as expected, so using next() with default value to break the loop
-            if item := await loop.run_in_executor(None, next, iter, None):
-                yield item
-            else:
-                break
-
-    async def alist_subgraph_checkpoints(
-        self, config: RunnableConfig
-    ) -> AsyncIterator[CheckpointTuple]:
-        # TODO: docstring
-        loop = asyncio.get_running_loop()
-        iter = await loop.run_in_executor(None, self.list_subgraph_checkpoints, config)
         while True:
             # handling StopIteration exception inside coroutine won't work
             # as expected, so using next() with default value to break the loop

@@ -214,6 +214,7 @@ class BaseCheckpointSaver(ABC):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        as_prefix: bool = False,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints that match the given criteria.
 
@@ -229,12 +230,6 @@ class BaseCheckpointSaver(ABC):
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
         """
-        raise NotImplementedError
-
-    def list_subgraph_checkpoints(
-        self, config: RunnableConfig
-    ) -> Iterator[CheckpointTuple]:
-        # TODO: docstring
         raise NotImplementedError
 
     def put(
@@ -328,12 +323,6 @@ class BaseCheckpointSaver(ABC):
         """
         raise NotImplementedError
         yield
-
-    async def alist_subgraph_checkpoints(
-        self, config: RunnableConfig
-    ) -> AsyncIterator[CheckpointTuple]:
-        # TODO: docstring
-        raise NotImplementedError
 
     async def aput(
         self,
