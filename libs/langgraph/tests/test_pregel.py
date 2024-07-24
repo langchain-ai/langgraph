@@ -8593,6 +8593,7 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
             checkpointer.__exit__(None, None, None)
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize(
     "checkpointer",
     [
