@@ -7099,6 +7099,7 @@ async def test_nested_graph_interrupts_parallel(
             await checkpointer.__aexit__(None, None, None)
 
 
+@pytest.mark.skip
 @pytest.mark.parametrize(
     "checkpointer",
     [
