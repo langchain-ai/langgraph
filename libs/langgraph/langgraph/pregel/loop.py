@@ -420,7 +420,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
-        self.stop = self.step + self.config["recursion_limit"] + 2
+        self.stop = self.step + self.config["recursion_limit"] + 1
 
         return self
 
@@ -499,7 +499,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
-        self.stop = self.step + self.config["recursion_limit"] + 2
+        self.stop = self.step + self.config["recursion_limit"] + 1
 
         return self
 
