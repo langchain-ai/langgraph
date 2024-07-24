@@ -410,65 +410,76 @@ class Pregel(
 
     @staticmethod
     def _assemble_state_snapshot_hierarchy(
-        root_thread_id: str, subgraph_state_snapshots: dict[str, StateSnapshot]
+        root_thread_id: str, thread_id_to_state_snapshots: dict[str, StateSnapshot]
     ) -> StateSnapshot:
         thread_ids_to_visit = sorted(
-            subgraph_state_snapshots.keys(),
+            thread_id_to_state_snapshots.keys(),
             key=lambda x: len(x.split(THREAD_ID_SEPARATOR)),
         )
         while thread_ids_to_visit:
             thread_id = thread_ids_to_visit.pop()
-            state_snapshot = subgraph_state_snapshots[thread_id]
+            state_snapshot = thread_id_to_state_snapshots[thread_id]
             *path, subgraph_node = thread_id.split(THREAD_ID_SEPARATOR)
             parent_thread_id = THREAD_ID_SEPARATOR.join(path)
-            if parent_thread_id and THREAD_ID_SEPARATOR in parent_thread_id:
-                parent_subgraph_snapshots = (
-                    subgraph_state_snapshots[parent_thread_id].subgraph_state_snapshots
-                    or {}
-                )
-                parent_subgraph_snapshots[subgraph_node] = state_snapshot
-                subgraph_state_snapshots[parent_thread_id] = subgraph_state_snapshots[
+            if parent_thread_id and (parent_state_snapshot := thread_id_to_state_snapshots.get(parent_thread_id)):
+                parent_subgraph_snapshots = {
+                    **(parent_state_snapshot.subgraph_state_snapshots or {}),
+                    subgraph_node: state_snapshot
+                }
+                thread_id_to_state_snapshots[parent_thread_id] = thread_id_to_state_snapshots[
                     parent_thread_id
                 ]._replace(subgraph_state_snapshots=parent_subgraph_snapshots)
 
-        state_snapshot = subgraph_state_snapshots.pop(root_thread_id, None)
+        state_snapshot = thread_id_to_state_snapshots.pop(root_thread_id, None)
         if state_snapshot is None:
             raise ValueError(f"Missing snapshot for thread ID '{root_thread_id}'")
         return state_snapshot
 
-    def get_state(self, config: RunnableConfig) -> StateSnapshot:
+    def get_state(self, config: RunnableConfig, *, include_subgraph_state: bool = False) -> StateSnapshot:
         """Get the current state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        subgraph_state_snapshots: dict[str, StateSnapshot] = {
+        if include_subgraph_state:
+            checkpoint_tuples = self.checkpointer.list_subgraph_checkpoints(config)
+        else:
+            checkpoint_tuples = iter([self.checkpointer.get_tuple(config)])
+
+        thread_id_to_state_snapshots: dict[str, StateSnapshot] = {
             checkpoint.config["configurable"][
                 "thread_id"
             ]: self._prepare_state_snapshot(checkpoint, config)
-            for checkpoint in self.checkpointer.list_subgraph_checkpoints(config)
+            for checkpoint in checkpoint_tuples
         }
 
         thread_id = config["configurable"]["thread_id"]
         state_snapshot = self._assemble_state_snapshot_hierarchy(
-            thread_id, subgraph_state_snapshots
+            thread_id, thread_id_to_state_snapshots
         )
         return state_snapshot
 
-    async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
+    async def aget_state(self, config: RunnableConfig, *, include_subgraph_state: bool = False) -> StateSnapshot:
         """Get the current state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
-        subgraph_state_snapshots: dict[str, StateSnapshot] = {
+        if include_subgraph_state:
+            checkpoint_tuples = self.checkpointer.alist_subgraph_checkpoints(config)
+        else:
+            async def alist_checkpoints():
+                yield await self.checkpointer.aget_tuple(config)
+            checkpoint_tuples = alist_checkpoints()
+
+        thread_id_to_state_snapshots: dict[str, StateSnapshot] = {
             checkpoint.config["configurable"][
                 "thread_id"
             ]: await self._prepare_state_snapshot_async(checkpoint, config)
-            async for checkpoint in self.checkpointer.alist_subgraph_checkpoints(config)
+            async for checkpoint in checkpoint_tuples
         }
 
         thread_id = config["configurable"]["thread_id"]
         state_snapshot = self._assemble_state_snapshot_hierarchy(
-            thread_id, subgraph_state_snapshots
+            thread_id, thread_id_to_state_snapshots
         )
         return state_snapshot
 
