@@ -4,7 +4,8 @@ build-typedoc:
 	cd libs/sdk-js && yarn install --include-dev && yarn typedoc
 	cd libs/sdk-js && yarn --silent concat-md --decrease-title-levels --ignore=js_ts_sdk_ref.md --start-title-level-at 2 docs > ../../docs/docs/cloud/reference/sdk/js_ts_sdk_ref.md 2>/dev/null
 	#  Add links to the monorepo
-	sed -i '' '1,10s/@langchain\/langgraph-sdk/[@langchain\/langgraph-sdk](https:\/\/github.com\/langchain-ai\/langgraph\/tree\/main\/libs\/sdk-js)/g' docs/docs/cloud/reference/sdk/js_ts_sdk_ref.md
+	sed -e '1,10s|@langchain/langgraph-sdk|[@langchain/langgraph-sdk](https://github.com/langchain-ai/langgraph/tree/main/libs/sdk-js)|g' docs/docs/cloud/reference/sdk/js_ts_sdk_ref.md > temp_file && mv temp_file docs/docs/cloud/reference/sdk/js_ts_sdk_ref.md
+
 
 
 build-docs: build-typedoc
