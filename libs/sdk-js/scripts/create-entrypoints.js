@@ -38,9 +38,19 @@ const updateConfig = () => {
     ...json,
     typedocOptions: {
       ...json.typedocOptions,
-      entryPoints: [...Object.keys(entrypoints)].map(
-        (key) => `src/${entrypoints[key]}.ts`,
-      ),
+      entryPoints: [...Object.keys(entrypoints)].map((key) => {
+        const basePath = `src/${entrypoints[key]}`;
+        if (fs.existsSync(`${basePath}.mts`)) {
+          return `${basePath}.mts`;
+        } else if (fs.existsSync(`${basePath}.ts`)) {
+          return `${basePath}.ts`;
+        } else {
+          console.warn(
+            `Warning: Neither ${basePath}.mts nor ${basePath}.ts found for entrypoint ${key}`,
+          );
+          return `${basePath}.ts`; // Default to .ts if neither exists
+        }
+      }),
     },
   }));
 
