@@ -66,6 +66,7 @@ from tests.any_str import AnyStr
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
+    MemorySaverNoPending,
     NoopSerializer,
 )
 
@@ -1149,8 +1150,30 @@ def test_cond_edge_after_send() -> None:
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-
     assert graph.invoke(["0"]) == ["0", "1", "2", "3"]
+
+
+async def test_checkpointer_null_pending_writes() -> None:
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            setattr(self, "__name__", name)
+
+        def __call__(self, state):
+            return [self.name]
+
+    builder = StateGraph(Annotated[list, operator.add])
+    builder.add_node(Node("1"))
+    builder.add_edge(START, "1")
+    graph = builder.compile(checkpointer=MemorySaverNoPending())
+    assert graph.invoke([], {"configurable": {"thread_id": "foo"}}) == ["1"]
+    assert graph.invoke([], {"configurable": {"thread_id": "foo"}}) == ["1"] * 2
+    assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
+        "1"
+    ] * 3
+    assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
+        "1"
+    ] * 4
 
 
 def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
