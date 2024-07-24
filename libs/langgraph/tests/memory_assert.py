@@ -7,6 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
+    CheckpointTuple,
     SerializerProtocol,
     copy_checkpoint,
 )
@@ -119,3 +120,11 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         return await asyncio.get_running_loop().run_in_executor(
             None, self.put, config, checkpoint, metadata
         )
+
+
+class MemorySaverNoPending(MemorySaver):
+    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+        result = super().get_tuple(config)
+        if result:
+            return CheckpointTuple(result.config, result.checkpoint, result.metadata)
+        return result

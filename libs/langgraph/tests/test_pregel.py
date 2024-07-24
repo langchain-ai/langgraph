@@ -66,6 +66,7 @@ from tests.any_str import AnyStr
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
+    MemorySaverNoPending,
     NoopSerializer,
 )
 
@@ -1126,19 +1127,19 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
             checkpointer.__exit__(None, None, None)
 
 
-def test_cond_edge_after_send() -> None:
+async def test_cond_edge_after_send() -> None:
     class Node:
         def __init__(self, name: str):
             self.name = name
             setattr(self, "__name__", name)
 
-        def __call__(self, state):
+        async def __call__(self, state):
             return state + [self.name]
 
-    def send_for_fun(state):
+    async def send_for_fun(state):
         return [Send("2", state)]
 
-    def route_to_three(state) -> Literal["3"]:
+    async def route_to_three(state) -> Literal["3"]:
         return "3"
 
     builder = StateGraph(list)
@@ -1149,8 +1150,33 @@ def test_cond_edge_after_send() -> None:
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
+    graph.name = "MyCustomName"
+    async for event in graph.astream(["0"], debug=1):
+        print(event)
+    assert await graph.ainvoke(["0"]) == ["0", "1", "2", "3"]
 
-    assert graph.invoke(["0"]) == ["0", "1", "2", "3"]
+
+async def test_conditional_entry() -> None:
+    class Node:
+        def __init__(self, name: str):
+            self.name = name
+            setattr(self, "__name__", name)
+
+        def __call__(self, state):
+            return [self.name]
+
+    builder = StateGraph(Annotated[list, operator.add])
+    builder.add_node(Node("1"))
+    builder.add_edge(START, "1")
+    graph = builder.compile(checkpointer=MemorySaverNoPending())
+    assert graph.invoke([], {"configurable": {"thread_id": "foo"}}) == ["1"]
+    assert graph.invoke([], {"configurable": {"thread_id": "foo"}}) == ["1"] * 2
+    assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
+        "1"
+    ] * 3
+    assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
+        "1"
+    ] * 4
 
 
 def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
@@ -7527,7 +7553,7 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
-    assert app.invoke(
+    assert app.ainvoke(
         {"my_key": "my value", "never_called": never_called}, debug=True
     ) == {
         "my_key": "my value there and back again",
