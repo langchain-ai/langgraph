@@ -267,6 +267,13 @@ async def test_tool_node():
             raise ValueError("Test error")
         return f"tool2: {some_val} - {some_other_val}"
 
+    async def tool3(some_val: int, some_other_val: str) -> str:
+        """Tool 3 docstring."""
+        return [
+            {"key_1": some_val, "key_2": "foo"},
+            {"key_1": some_other_val, "key_2": "baz"},
+        ]
+
     result = ToolNode([tool1]).invoke(
         {
             "messages": [
@@ -374,6 +381,31 @@ async def test_tool_node():
     assert (
         tool_message.content
         == "Error: tool3 is not a valid tool, try one of [tool1, tool2]."
+    )
+    assert tool_message.tool_call_id == "some 0"
+
+    # list of dicts tool content
+    result3 = await ToolNode([tool3]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool3",
+                            "args": {"some_val": 2, "some_other_val": "bar"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+    tool_message: ToolMessage = result3["messages"][-1]
+    assert tool_message.type == "tool"
+    assert (
+        tool_message.content
+        == '[{"key_1": 2, "key_2": "foo"}, {"key_1": "bar", "key_2": "baz"}]'
     )
     assert tool_message.tool_call_id == "some 0"
 
