@@ -123,7 +123,7 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
 
 
 class MemorySaverNoPending(MemorySaver):
-    def get_tuple(self, config: RunnableConfig) -> CheckpointTuple | None:
+    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         result = super().get_tuple(config)
         if result:
             return CheckpointTuple(result.config, result.checkpoint, result.metadata)
