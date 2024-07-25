@@ -1,0 +1,27 @@
+name: Check File Size
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  size:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Get changed files
+        id: changed-files
+        uses: tj-actions/changed-files@v44
+      - name: Filter by size
+        run: |
+          large_added_files=$(find ${{ steps.changed-files.outputs.added_files }} -maxdepth 0 -size +1M)
+          if [ -n "$large_added_files" ]; then
+            echo "# Large files added:" >> $GITHUB_STEP_SUMMARY
+            echo "$large_added_files" >> $GITHUB_STEP_SUMMARY
+            exit 1
+          fi
