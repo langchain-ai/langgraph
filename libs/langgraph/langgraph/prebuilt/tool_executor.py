@@ -94,8 +94,9 @@ class ToolExecutor(RunnableCallable):
         tools: Sequence[Union[BaseTool, Callable]],
         *,
         invalid_tool_msg_template: str = INVALID_TOOL_MSG_TEMPLATE,
+        trace: bool = False,
     ) -> None:
-        super().__init__(self._execute, afunc=self._aexecute, trace=False)
+        super().__init__(self._execute, afunc=self._aexecute, trace=trace)
         tools_ = [
             tool if isinstance(tool, BaseTool) else create_tool(tool) for tool in tools
         ]
