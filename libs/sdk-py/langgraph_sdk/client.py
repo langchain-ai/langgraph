@@ -239,15 +239,57 @@ class AssistantsClient:
         self.http = http
 
     async def get(self, assistant_id: str) -> Assistant:
-        """Get an assistant by ID."""
+        """Get an assistant by ID.
+        
+        Args:
+            assistant_id (str): The ID of the assistant to get.
+            
+        Returns:
+            Assistant: The returned assistant.
+
+        Example Usage:
+
+            assistant = await client.assistants.get(
+                assistant_id="my_assistant_id"
+            )
+        
+        """ # noqa: E501
         return await self.http.get(f"/assistants/{assistant_id}")
 
     async def get_graph(self, assistant_id: str) -> dict[str, list[dict[str, Any]]]:
-        """Get the graph of an assistant by ID."""
+        """Get the graph of an assistant by ID.
+
+        Args:
+            assistant_id (str): The ID of the assistant to get the graph of.
+            
+        Returns:
+            dict[str, list[dict[str, Any]]]: The graph information for the assistant.
+
+        Example Usage:
+
+            graph_info = await client.assistants.get_graph(
+                assistant_id="my_assistant_id"
+            )
+        
+        """ # noqa: E501
         return await self.http.get(f"/assistants/{assistant_id}/graph")
 
     async def get_schemas(self, assistant_id: str) -> GraphSchema:
-        """Get the schemas of an assistant by ID."""
+        """Get the schemas of an assistant by ID.
+
+        Args:
+            assistant_id (str): The ID of the assistant to get the schema of.
+            
+        Returns:
+            GraphSchema: The graph schema for the assistant.
+
+        Example Usage:
+
+            schema = await client.assistants.get_schemas(
+                assistant_id="my_assistant_id"
+            )
+        
+        """ # noqa: E501
         return await self.http.get(f"/assistants/{assistant_id}/schemas")
 
     async def create(
@@ -259,7 +301,31 @@ class AssistantsClient:
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Assistant:
-        """Create a new assistant."""
+        """Create a new assistant. 
+        
+        Useful when graph is configurable and you want to create different assistants based on different configurations.
+        
+        Args:
+            graph_id (str): The ID of the graph the assistant should use.
+            config (Config, optional): Configuration to use for the graph. Defaults to None.
+            metadata (dict, optional): Metadata to add to assistant. Defaults to None.
+            assistant_id (str, optional): Assistant ID to use, will default to a random UUID if not provided.
+            if_exists (OnConflictBehavior, optional): How to handle duplicate creation. Defaults to None.
+                Must be either 'raise', or 'do_nothing'.
+
+        Returns:
+            Assistant: The created assistant.
+
+        Example Usage:
+
+            assistant = await client.assistants.create(
+                graph_id="agent", 
+                config={"configurable": {"model_name": "openai"}},
+                metadata={"number":1},
+                assistant_id="my-assistant-id",
+                if_exists="do_nothing"
+            )     
+        """ # noqa: E501
         payload: Dict[str, Any] = {
             "graph_id": graph_id,
         }
@@ -281,7 +347,30 @@ class AssistantsClient:
         config: Optional[Config] = None,
         metadata: Metadata = None,
     ) -> Assistant:
-        """Update an assistant."""
+        """Update an assistant.
+        
+        Use this to point to a different graph, update the configuration, or change the metadata of an assistant. 
+
+        Args:
+            assistant_id (str): Assistant to update.
+            graph_id (str, optional): The ID of the graph the assistant should use. Defaults to None.
+                If None, assistant will keep pointing to same graph.
+            config (Config, optional): Configuration to use for the graph. Defaults to None.
+            metadata (dict, optional): Metadata to add to assistant. Defaults to None.
+
+        Returns:
+            Assistant: The updated assistant.
+
+        Example Usage:
+
+            assistant = await client.assistants.update(
+                assistant_id='e280dad7-8618-443f-87f1-8e41841c180f',
+                graph_id="other-graph",
+                config={"configurable": {"model_name": "anthropic"}},
+                metadata={"number":2}
+            )
+
+        """ # noqa: E501
         payload: Dict[str, Any] = {}
         if graph_id:
             payload["graph_id"] = graph_id
@@ -298,7 +387,21 @@ class AssistantsClient:
         self,
         assistant_id: str,
     ) -> None:
-        """Delete an assistant."""
+        """Delete an assistant.
+
+        Args:
+            assistant_id (str): The assistant ID to delete.
+            
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.assistants.delete(
+                assistant_id="my_assistant_id"
+            )
+        
+        """ # noqa: E501
         await self.http.delete(f"/assistants/{assistant_id}")
 
     async def search(
@@ -320,6 +423,15 @@ class AssistantsClient:
 
         Returns:
             list[Assistant]: A list of assistants.
+
+        Example Usage:
+
+            assistants = await client.assistants.search(
+                metadata = {"name":"my_name"},
+                graph_id="my_graph_id",
+                limit=5,
+                offset=5
+            )
         """
         payload: Dict[str, Any] = {
             "limit": limit,
@@ -340,7 +452,22 @@ class ThreadsClient:
         self.http = http
 
     async def get(self, thread_id: str) -> Thread:
-        """Get a thread by ID."""
+        """Get a thread by ID.
+
+        Args:
+            thread_id (str): The ID of the thread to get.
+            
+        Returns:
+            Thread: The returned thread.
+
+        Example Usage:
+
+            thread = await client.threads.get(
+                thread_id="my_thread_id"
+            )
+        
+        """ # noqa: E501
+
         return await self.http.get(f"/threads/{thread_id}")
 
     async def create(
@@ -350,7 +477,26 @@ class ThreadsClient:
         thread_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Thread:
-        """Create a new thread."""
+        """Create a new thread.
+        
+        Args:
+            metadata (dict, optional): Metadata to add to thread. Defaults to None.
+            thread_id (str, optional): ID of thread. Defaults to None.
+                If None, ID will be a randomly generated UUID.
+            if_exists (OnConflictBehavior, optional): How to handle duplicate creation. Defaults to None.
+                Must be either 'raise', or 'do_nothing'.
+            
+        Returns:
+            Thread: The created thread.
+
+        Example Usage:
+
+            thread = await client.threads.create(
+                metadata={"number":1},
+                thread_id="my-thread-id",
+                if_exists="raise"
+            )
+        """ # noqa: E501
         payload: Dict[str, Any] = {}
         if thread_id:
             payload["thread_id"] = thread_id
@@ -361,13 +507,42 @@ class ThreadsClient:
         return await self.http.post("/threads", json=payload)
 
     async def update(self, thread_id: str, *, metadata: dict[str, Any]) -> Thread:
-        """Update a thread."""
+        """Update a thread.
+        
+        Args:
+            thread_id (str): ID of thread to update.
+            metadata (dict): Metadata to add to thread.
+            
+        Returns:
+            Thread: The created thread.
+
+        Example Usage:
+
+            thread = await client.threads.update(
+                thread_id="my-thread-id",
+                metadata={"number":1},
+            )
+        """ # noqa: E501
         return await self.http.patch(
             f"/threads/{thread_id}", json={"metadata": metadata}
         )
 
     async def delete(self, thread_id: str) -> None:
-        """Delete a thread."""
+        """Delete a thread.
+        
+        Args:
+            thread_id (str): The ID of the thread to delete.
+            
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.threads.delete(
+                thread_id="my_thread_id"
+            )
+        
+        """ # noqa: E501
         await self.http.delete(f"/threads/{thread_id}")
 
     async def search(
@@ -378,7 +553,29 @@ class ThreadsClient:
         limit: int = 10,
         offset: int = 0,
     ) -> list[Thread]:
-        """Search for threads."""
+        """Search for threads.
+        
+        
+        Args:
+            metadata (dict, optional): Thread metadata to search for. Defaults to None.
+            status (ThreadStatus, optional): Status to search for. Defaults to None.
+                Must be one of 'idle', 'busy', or 'interrupted'.
+            limit (int, optional): Limit on number of threads to return. Defaults to 10.
+            offset (int, optional): Offset in threads table to start search from. Defaults to 0.
+            
+        Returns:
+            list[Thread]: List of the threads matching the search parameters.
+
+        Example Usage:
+
+            threads = await client.threads.searcb(
+                metadata={"number":1},
+                status="interrupted"m
+                limit=15,
+                offset=5
+            )
+        
+        """ # noqa: E501
         payload: Dict[str, Any] = {
             "limit": limit,
             "offset": offset,
@@ -393,13 +590,43 @@ class ThreadsClient:
         )
 
     async def copy(self, thread_id: str) -> None:
-        """Copy a thread."""
+        """Copy a thread.
+        
+        Args:
+            thread_id (str): The ID of the thread to copy.
+            
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.threads.copy(
+                thread_id="my_thread_id"
+            )
+        
+        """ # noqa: E501
         return await self.http.post(f"/threads/{thread_id}/copy", json=None)
 
     async def get_state(
         self, thread_id: str, checkpoint_id: Optional[str] = None
     ) -> ThreadState:
-        """Get the state of a thread."""
+        """Get the state of a thread.
+
+        Args:
+            thread_id (str): The ID of the thread to get the state of.
+            checkpoint_id (optional, str): The ID of the checkpoint to get the state of. Defaults to None.
+            
+        Returns:
+            ThreadState: the thread of the state.
+
+        Example Usage:
+
+            thread_state = await client.threads.get_state(
+                thread_id="my_thread_id",
+                checkpoint_id="my_checkpoint_id"
+            )
+        
+        """ # noqa: E501
         if checkpoint_id:
             return await self.http.get(f"/threads/{thread_id}/state/{checkpoint_id}")
         else:
@@ -413,7 +640,28 @@ class ThreadsClient:
         as_node: Optional[str] = None,
         checkpoint_id: Optional[str] = None,
     ) -> None:
-        """Update the state of a thread."""
+        """Update the state of a thread.
+
+        Args:
+            thread_id (str): The ID of the thread to get the state of.
+            values (dict): The values to update to the state.
+            as_node (optional, str): Update the state as if this node had just executed.
+                Defaults to None.
+            checkpoint_id (optional, str): The ID of the checkpoint to get the state of. Defaults to None.
+            
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.threads.get_state(
+                thread_id="my_thread_id",
+                values={"messages":[{"role": "user", "content": "hello!"}]},
+                as_node="my_node",
+                checkpoint_id="my_checkpoint_id"
+            )
+        
+        """ # noqa: E501
         payload: Dict[str, Any] = {
             "values": values,
         }
@@ -428,7 +676,23 @@ class ThreadsClient:
         thread_id: Union[str, Config],
         metadata: dict,
     ) -> None:
-        """Patch the state of a thread."""
+        """Patch the state of a thread.
+
+        Args:
+            thread_id (str): The ID of the thread to get the state of.
+            metadata (dict): The metadata to assign to the state.
+            
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.threads.patch_state(
+                thread_id="my_thread_id",
+                metadata={"name":"new_name"},
+            )
+        
+        """ # noqa: E501
         if isinstance(thread_id, dict):
             thread_id_: str = thread_id["configurable"]["thread_id"]
         else:
@@ -445,7 +709,27 @@ class ThreadsClient:
         before: Optional[str] = None,
         metadata: Optional[dict] = None,
     ) -> list[ThreadState]:
-        """Get the history of a thread."""
+        """Get the history of a thread.
+
+        Args:
+            thread_id (str): The ID of the thread to get the state of.
+            limit (int, optional): The maximum number of results to return. Defaults to 10.
+            before (optional, str): Thread timestamp to get history before. Defaults to None.
+            metadata (optional, dict): The metadata of the thread history to get. Defaults to None.
+            
+        Returns:
+            list[ThreadState]: the state history of the thread.
+
+        Example Usage:
+
+            thread_state = await client.threads.get_history(
+                thread_id="my_thread_id",
+                limit=5,
+                before="my_timestamp",
+                metadata={"name":"my_name"}
+            )
+        
+        """ # noqa: E501
         payload: Dict[str, Any] = {
             "limit": limit,
         }
@@ -510,7 +794,50 @@ class RunsClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> AsyncIterator[StreamPart]:
-        """Create a run and stream the results."""
+        """Create a run and stream the results.
+        
+        Args:
+            thread_id (optional,str) the thread ID to assign to the thread. Defaults to None.
+                If None a random UUID will be generated.
+            assistant_id (str): The assistant ID or graph name to stream from. 
+                If using graph name, will default to first assistant created from that graph.
+            input (optional, dict): The input to the graph. Defaults to None.
+            stream_mode (optional, StreamMode or list[StreamMode]): The stream mode(s) to use.
+                Defaults to "values".
+            metadata (optional, dict): Metadata to assign to the run. Defaults to None.
+            config (optional, Config): The configuration for the assistant. Defaults to None.
+            checkpoint_id (optional, str): The checkpoint to start streaming from. Defaults to None.
+            interrupt_before (optional, list[str]): Nodes to interrupt streaming on immediately they get executed. 
+                Defaults to None.
+            interrupt_after (optional, list[str]): Nodes to interrupt streaming on immediately after they are executed. 
+                Defaults to None.
+            feedback_keys (optional, list[str]): Feedback keys to assign to run. Defaults to None.
+            webhook (optional, list[str]): Webhook to call after LangGraph API call is done. Defaults to None.
+            multitask_strategy (optional, MultitaskStrategy): Multitask strategy to use. Defaults to none.
+                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            
+        Returns:
+            AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
+
+        Example Usage:
+
+            async for chunk in client.runs.stream(
+                thread_id=None,
+                assistant_id="agent",
+                input={"messages": [{"role": "user", "content": "hello!"}]},
+                stream_mode=["values","debug"],
+                metadata={"name":"my_run"},
+                config={"configurable": {"model_name": "openai"}},
+                checkpoint_id="my_checkpoint",
+                interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
+                interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
+                feedback_keys=["my_feedback_key_1","my_feedback_key_2"],
+                webhook="https://my.fake.webhook.com",
+                multitask_strategy="interrupt"
+            ):
+                print(chunk)
+        
+        """ # noqa: E501
         payload = {
             "input": input,
             "config": config,
@@ -579,7 +906,44 @@ class RunsClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Run:
-        """Create a background run."""
+        """Create a background run.
+        
+        Args:
+            thread_id (optional,str) the thread ID to assign to the thread. Defaults to None.
+                If None a random UUID will be generated.
+            assistant_id (str): The assistant ID or graph name to stream from. 
+                If using graph name, will default to first assistant created from that graph.
+            input (optional, dict): The input to the graph. Defaults to None.
+            metadata (optional, dict): Metadata to assign to the run. Defaults to None.
+            config (optional, Config): The configuration for the assistant. Defaults to None.
+            checkpoint_id (optional, str): The checkpoint to start streaming from. Defaults to None.
+            interrupt_before (optional, list[str]): Nodes to interrupt streaming on immediately they get executed. 
+                Defaults to None.
+            interrupt_after (optional, list[str]): Nodes to interrupt streaming on immediately after they are executed. 
+                Defaults to None.
+            webhook (optional, list[str]): Webhook to call after LangGraph API call is done. Defaults to None.
+            multitask_strategy (optional, MultitaskStrategy): Multitask strategy to use. Defaults to none.
+                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            
+        Returns:
+            Run: The created background run.
+
+        Example Usage:
+
+            background_run = await client.runs.create(
+                thread_id=None,
+                assistant_id="agent",
+                input={"messages": [{"role": "user", "content": "hello!"}]},
+                metadata={"name":"my_run"},
+                config={"configurable": {"model_name": "openai"}},
+                checkpoint_id="my_checkpoint",
+                interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
+                interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
+                webhook="https://my.fake.webhook.com",
+                multitask_strategy="interrupt"
+            )
+        
+        """ # noqa: E501
         payload = {
             "input": input,
             "config": config,
@@ -650,7 +1014,44 @@ class RunsClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Union[list[dict], dict[str, Any]]:
-        """Create a run, wait for and return the final state."""
+        """Create a run, wait for and return the final state.
+        
+        Args:
+            thread_id (optional,str) the thread ID to create the run on. Defaults to None.
+                If None a random UUID will be generated.
+            assistant_id (str): The assistant ID or graph name to run. 
+                If using graph name, will default to first assistant created from that graph.
+            input (optional, dict): The input to the graph. Defaults to None.
+            metadata (optional, dict): Metadata to assign to the run. Defaults to None.
+            config (optional, Config): The configuration for the assistant. Defaults to None.
+            checkpoint_id (optional, str): The checkpoint to start streaming from. Defaults to None.
+            interrupt_before (optional, list[str]): Nodes to interrupt streaming on immediately they get executed. 
+                Defaults to None.
+            interrupt_after (optional, list[str]): Nodes to interrupt streaming on immediately after they are executed. 
+                Defaults to None.
+            webhook (optional, list[str]): Webhook to call after LangGraph API call is done. Defaults to None.
+            multitask_strategy (optional, MultitaskStrategy): Multitask strategy to use. Defaults to none.
+                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            
+        Returns:
+            Union[list[dict], dict[str, Any]]: The output of the run.
+
+        Example Usage:
+
+            final_state_of_run = await client.runs.wait(
+                thread_id=None,
+                assistant_id="agent",
+                input={"messages": [{"role": "user", "content": "hello!"}]},
+                metadata={"name":"my_run"},
+                config={"configurable": {"model_name": "openai"}},
+                checkpoint_id="my_checkpoint",
+                interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
+                interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
+                webhook="https://my.fake.webhook.com",
+                multitask_strategy="interrupt"
+            )
+        
+        """ # noqa: E501
         payload = {
             "input": input,
             "config": config,
@@ -672,28 +1073,113 @@ class RunsClient:
     async def list(
         self, thread_id: str, *, limit: int = 10, offset: int = 0
     ) -> List[Run]:
-        """List runs."""
+        """List runs.
+        
+        Args:
+            thread_id (str): The thread ID to delete. 
+            limit (int, optional): The maximum number of results to return. Defaults to 10.
+            offset (int, optional): The number of results to skip. Defaults to 0.
+            
+        Returns:
+            List[Run]: The runs for the thread.
+
+        Example Usage:
+
+            await client.runs.delete(
+                thread_id="thread_id_to_delete",
+                limit=5,
+                offset=5,
+            )
+        
+        """ # noqa: E501
         return await self.http.get(
             f"/threads/{thread_id}/runs?limit={limit}&offset={offset}"
         )
 
     async def get(self, thread_id: str, run_id: str) -> Run:
-        """Get a run."""
+        """Get a run.
+        
+        Args:
+            thread_id (str): The thread ID to delete. 
+            run_id (str): The run ID to delete.
+            
+        Returns:
+            Run: The returned Run.
+
+        Example Usage:
+
+            run = await client.runs.get(
+                thread_id="thread_id_to_delete",
+                run_id="run_id_to_delete",
+            )
+        
+        """ # noqa: E501
+        
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}")
 
     async def cancel(self, thread_id: str, run_id: str, *, wait: bool = False) -> None:
-        """Get a run."""
+        """Get a run.
+        
+        Args:
+            thread_id (str): The thread ID to delete. 
+            run_id (str): The run ID to delete.
+            wait (optional, bool): Whether to wait until run has completed. Defaults to False.
+            
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.runs.delete(
+                thread_id="thread_id_to_delete",
+                run_id="run_id_to_delete",
+                wait=True
+            )
+        
+        """ # noqa: E501
         return await self.http.post(
             f"/threads/{thread_id}/runs/{run_id}/cancel?wait={1 if wait else 0}",
             json=None,
         )
 
     async def join(self, thread_id: str, run_id: str) -> None:
-        """Block until a run is done."""
+        """Block until a run is done.
+        
+        Args:
+            thread_id (str): The thread ID to delete. 
+            run_id (str): The run ID to delete.
+            
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.runs.join(
+                thread_id="thread_id_to_join",
+                run_id="run_id_to_join"
+            )
+        
+        """ # noqa: E501
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
     async def delete(self, thread_id: str, run_id: str) -> None:
-        """Delete a run."""
+        """Delete a run.
+        
+        Args:
+            thread_id (str): The thread ID to delete. 
+            run_id (str): The run ID to delete.
+            
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.runs.delete(
+                thread_id="thread_id_to_delete",
+                run_id="run_id_to_delete"
+            )
+        
+        """ # noqa: E501
         await self.http.delete(f"/threads/{thread_id}/runs/{run_id}")
 
 
@@ -715,7 +1201,43 @@ class CronClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
     ) -> Run:
-        """Create a background run."""
+        """Create a cron job for a thread.
+        
+        Args:
+            thread_id (str) the thread ID to run the cron job on.
+            assistant_id (str): The assistant ID or graph name to use for the cron job. 
+                If using graph name, will default to first assistant created from that graph.
+            schedule (str): The cron schedule to execute this job on.
+            input (optional, dict): The input to the graph. Defaults to None.
+            metadata (optional, dict): Metadata to assign to the cron job runs. Defaults to None.
+            config (optional, Config): The configuration for the assistant. Defaults to None.
+            interrupt_before (optional, list[str]): Nodes to interrupt streaming on immediately they get executed. 
+                Defaults to None.
+            interrupt_after (optional, list[str]): Nodes to interrupt streaming on immediately after they are executed. 
+                Defaults to None.
+            webhook (optional, list[str]): Webhook to call after LangGraph API call is done. Defaults to None.
+            multitask_strategy (optional, MultitaskStrategy): Multitask strategy to use. Defaults to none.
+                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            
+        Returns:
+            Run: The cron run.
+
+        Example Usage:
+
+            cron_run = await client.crons.create_for_thread(
+                thread_id="my-thread-id",
+                assistant_id="agent",
+                schedule="27 15 * * *",
+                input={"messages": [{"role": "user", "content": "hello!"}]},
+                metadata={"name":"my_run"},
+                config={"configurable": {"model_name": "openai"}},
+                interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
+                interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
+                webhook="https://my.fake.webhook.com",
+                multitask_strategy="interrupt"
+            )
+        
+        """ # noqa: E501
         payload = {
             "schedule": schedule,
             "input": input,
@@ -744,7 +1266,41 @@ class CronClient:
         webhook: Optional[str] = None,
         multitask_strategy: Optional[str] = None,
     ) -> Run:
-        """Create a background run."""
+        """Create a cron run.
+        
+        Args:
+            assistant_id (str): The assistant ID or graph name to use for the cron job. 
+                If using graph name, will default to first assistant created from that graph.
+            schedule (str): The cron schedule to execute this job on.
+            input (optional, dict): The input to the graph. Defaults to None.
+            metadata (optional, dict): Metadata to assign to the cron job runs. Defaults to None.
+            config (optional, Config): The configuration for the assistant. Defaults to None.
+            interrupt_before (optional, list[str]): Nodes to interrupt streaming on immediately they get executed. 
+                Defaults to None.
+            interrupt_after (optional, list[str]): Nodes to interrupt streaming on immediately after they are executed. 
+                Defaults to None.
+            webhook (optional, list[str]): Webhook to call after LangGraph API call is done. Defaults to None.
+            multitask_strategy (optional, MultitaskStrategy): Multitask strategy to use. Defaults to none.
+                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            
+        Returns:
+            Run: The cron run.
+
+        Example Usage:
+
+            cron_run = await client.crons.create(
+                assistant_id="agent",
+                schedule="27 15 * * *",
+                input={"messages": [{"role": "user", "content": "hello!"}]},
+                metadata={"name":"my_run"},
+                config={"configurable": {"model_name": "openai"}},
+                interrupt_before=["node_to_stop_before_1","node_to_stop_before_2"],
+                interrupt_after=["node_to_stop_after_1","node_to_stop_after_2"],
+                webhook="https://my.fake.webhook.com",
+                multitask_strategy="interrupt"
+            )
+        
+        """ # noqa: E501
         payload = {
             "schedule": schedule,
             "input": input,
@@ -761,7 +1317,21 @@ class CronClient:
         return await self.http.post("/runs/crons", json=payload)
 
     async def delete(self, cron_id: str) -> None:
-        """Delete a cron."""
+        """Delete a cron.
+        
+        Args:
+            cron_id (str): The cron ID to delete. 
+            
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.crons.delete(
+                cron_id="cron_to_delete"
+            )
+        
+        """ # noqa: E501
         await self.http.delete(f"/runs/crons/{cron_id}")
 
     async def search(
@@ -772,7 +1342,27 @@ class CronClient:
         limit: int = 10,
         offset: int = 0,
     ) -> list[Cron]:
-        """Get a list of cron jobs."""
+        """Get a list of cron jobs.
+        
+        Args:
+            assistant_id (optional, str): The assistant ID or graph name to search for. Defaults to None.
+            thread_id (optional, str) the thread ID to search for. Defaults to None.
+            limit (int, optional): The maximum number of results to return. Defaults to 10.
+            offset (int, optional): The number of results to skip. Defaults to 0.
+            
+        Returns:
+            list[Cron]: The list of cron jobs returned by the search,
+
+        Example Usage:
+
+            cron_jobs = await client.crons.search(
+                assistant_id="my_assistant",
+                thread_id="my_thread_id",
+                limit=5,
+                offset=5,
+            )
+
+        """ # noqa: E501
         payload = {
             "assistant_id": assistant_id,
             "thread_id": thread_id,
