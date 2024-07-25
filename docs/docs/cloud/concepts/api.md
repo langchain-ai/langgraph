@@ -14,7 +14,7 @@ The LangGraph Cloud API provides several endpoints for creating and managing ass
 
 #### Configuring Assistants
 
-One of the benefits of LangGraph API is that it lets you create agents with different configurations. This is useful when you want to allow users to use different models or prompts when using your graph. This also allows you the ability to quickly test out different configurations without having to rewrite your graph every time. See <a href="https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/configuration_cloud/">this</a> how-to for information on how to configure a deployed graph. 
+You can save custom assistants from the same graph to set different default prompts, models, and other configurations without changing a line of code in your graph. This allows you the ability to quickly test out different configurations without having to rewrite your graph every time, and also give users the flexibility to select different configurations when sing your LangGraph application. See <a href="https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/configuration_cloud/">this</a> how-to for information on how to configure a deployed graph. 
 
 ### Threads
 
