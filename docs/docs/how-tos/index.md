@@ -61,6 +61,13 @@ These guides show how to use different streaming modes.
 - [How to pass graph state to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
 
+## State Management
+
+- [Use Pydantic model as state](state-model.ipynb)
+- [Use a context object in state](state-context-key.ipynb)
+- [Have a separate input and output schema](input_output_schema.ipynb)
+- [Pass private state between nodes inside the graph](pass_private_state.ipynb)
+
 ## Other
 
 - [How to run graph asynchronously](async.ipynb)

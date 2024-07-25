@@ -722,8 +722,10 @@ class Pregel(
         if config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None:
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
-        if config is not None and config.get("configurable", {}).get(
-            CONFIG_KEY_CHECKPOINTER
+        if (
+            config is not None
+            and config.get("configurable", {}).get(CONFIG_KEY_CHECKPOINTER)
+            and (interrupt_after or interrupt_before)
         ):
             checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
                 CONFIG_KEY_CHECKPOINTER

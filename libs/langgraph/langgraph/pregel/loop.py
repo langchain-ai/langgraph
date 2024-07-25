@@ -102,6 +102,7 @@ class PregelLoop:
     checkpoint_pending_writes: List[PendingWrite]
 
     step: int
+    stop: int
     status: Literal[
         "pending", "done", "interrupt_before", "interrupt_after", "out_of_steps"
     ]
@@ -203,7 +204,7 @@ class PregelLoop:
             return False
 
         # check if iteration limit is reached
-        if self.step > self.config["recursion_limit"]:
+        if self.step > self.stop:
             self.status = "out_of_steps"
             return False
 
@@ -419,6 +420,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
+        self.stop = self.step + self.config["recursion_limit"] + 1
 
         return self
 
@@ -497,6 +499,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
+        self.stop = self.step + self.config["recursion_limit"] + 1
 
         return self
 

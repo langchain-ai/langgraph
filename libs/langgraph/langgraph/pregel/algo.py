@@ -257,6 +257,9 @@ def prepare_next_tasks(
         if not isinstance(packet, Send):
             logger.warn(f"Ignoring invalid packet type {type(packet)} in pending sends")
             continue
+        if packet.node not in processes:
+            logger.warn(f"Ignoring unknown node name {packet.node} in pending sends")
+            continue
         if for_execution:
             proc = processes[packet.node]
             if node := proc.get_node():

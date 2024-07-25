@@ -88,7 +88,7 @@ agent = graph_workflow.compile()
 ```
 
 !!! warning "Assign `CompiledGraph` to Variable"
-    The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module.
+    The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module (alternatively, you can provide [a function that creates a graph](./graph_rebuild.md)).
 
 Example file directory:
 ```
