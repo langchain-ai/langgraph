@@ -8,6 +8,8 @@ The LangGraph Studio lets you test different configurations and inputs to your g
     1. Select `Submit` to invoke the selected assistant.
 1. View output of the invocation in the right-hand pane.
 
-The following GIF shows these exact steps being carried out:
+The following video shows these exact steps being carried out:
 
-![Using LangGraph Studio](./img/studio_input.gif)
+<video controls allowfullscreen="true" poster="../img/studio_input_poster.png">
+    <source src="../img/studio_input.mp4" type="video/mp4">
+</video>
