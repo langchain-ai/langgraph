@@ -253,7 +253,9 @@ class AssistantsClient:
                 assistant_id="my_assistant_id"
             )
             print(assistant)
+
             ----------------------------------------------------
+
             {
                 'assistant_id': 'my_assistant_id',
                 'graph_id': 'agent',
@@ -281,7 +283,9 @@ class AssistantsClient:
                 assistant_id="my_assistant_id"
             )
             print(graph_info)
+
             --------------------------------------------------------------------------------------------------------------------------
+
             {
                 'nodes':
                     [
@@ -315,7 +319,9 @@ class AssistantsClient:
                 assistant_id="my_assistant_id"
             )
             print(schema)
+
             ----------------------------------------------------------------------------------------------------------------------------
+
             {
                 'graph_id': 'agent',
                 'state_schema':
@@ -577,7 +583,9 @@ class ThreadsClient:
                 thread_id="my_thread_id"
             )
             print(thread)
+
             -----------------------------------------------------
+
             {
                 'thread_id': 'my_thread_id',
                 'created_at': '2024-07-18T18:35:15.540834+00:00',
@@ -745,7 +753,9 @@ class ThreadsClient:
                 checkpoint_id="my_checkpoint_id"
             )
             print(thread_state)
+
             ----------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
             {
                 'values': {
                     'messages': [
@@ -1031,7 +1041,9 @@ class RunsClient:
                 multitask_strategy="interrupt"
             ):
                 print(chunk)
+
             ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------
+            
             StreamPart(event='metadata', data={'run_id': '1ef4a9b8-d7da-679a-a45a-872054341df2'})
             StreamPart(event='values', data={'messages': [{'content': 'how are you?', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'fe0a5778-cfe9-42ee-b807-0adaa1873c10', 'example': False}]})
             StreamPart(event='values', data={'messages': [{'content': 'how are you?', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': 'fe0a5778-cfe9-42ee-b807-0adaa1873c10', 'example': False}, {'content': "I'm doing well, thanks for asking! I'm an AI assistant created by Anthropic to be helpful, honest, and harmless.", 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'ai', 'name': None, 'id': 'run-159b782c-b679-4830-83c6-cef87798fe8b', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]})
@@ -1143,7 +1155,9 @@ class RunsClient:
                 multitask_strategy="interrupt"
             )
             print(background_run)
+
             --------------------------------------------------------------------------------
+
             {
                 'run_id': 'my_run_id',
                 'thread_id': 'my_thread_id',
@@ -1298,7 +1312,9 @@ class RunsClient:
                 multitask_strategy="interrupt"
             )
             print(final_state_of_run)
+
             -------------------------------------------------------------------------------------------------------------------------------------------
+
             {
                 'messages': [
                     {
@@ -1636,7 +1652,9 @@ class CronClient:
                 offset=5,
             )
             print(cron_jobs)
+
             ----------------------------------------------------------
+            
             [
                 {
                     'cron_id': '1ef3cefa-4c09-6926-96d0-3dc97fd5e39b',
