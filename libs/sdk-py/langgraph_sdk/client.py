@@ -638,7 +638,7 @@ class ThreadsClient:
 
         Args:
             thread_id: ID of thread to update.
-            metadata: Metadata to add to thread.
+            metadata: Metadata to add/update to thread.
 
         Returns:
             Thread: The created thread.
@@ -681,7 +681,6 @@ class ThreadsClient:
         offset: int = 0,
     ) -> list[Thread]:
         """Search for threads.
-
 
         Args:
             metadata: Thread metadata to search for.
@@ -1004,7 +1003,7 @@ class RunsClient:
 
         Args:
             thread_id: the thread ID to assign to the thread.
-                If None a random UUID will be generated.
+                If None will create a stateless run.
             assistant_id: The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
             input: The input to the graph.
@@ -1566,9 +1565,7 @@ class CronClient:
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
