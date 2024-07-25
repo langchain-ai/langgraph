@@ -20,8 +20,8 @@ jobs:
       - name: Filter by size
         run: |
           large_added_files=$(find ${{ steps.changed-files.outputs.added_files }} -maxdepth 0 -size +1M)
-          echo "Large added files: $large_added_files"
           if [ -n "$large_added_files" ]; then
+            echo "Large files added: $large_added_files"
             echo "# Large files added:" >> $GITHUB_STEP_SUMMARY
             echo "$large_added_files" >> $GITHUB_STEP_SUMMARY
             exit 1
