@@ -22,9 +22,9 @@ jobs:
       - name: Filter by size
         run: |
           echo "Added files: ${{ steps.changed-files.outputs.added_files }}"
-          sanitized=$(echo "${{ steps.changed-files.outputs.all_files }}" | sed 's/ /\\ /g' | sed 's/\n/ /g')
+          sanitized=$(echo "${{ steps.changed-files.outputs.all_files }}" | sed 's/ /\\ /g')
           echo "Sanitized files: $sanitized"
-          large_added_files=$(find $sanitized -maxdepth 0 -size +1M)
+          large_added_files=$(echo $sanitized | xargs -J % find % -maxdepth 0 -size +1M)
           echo "Large added files: $large_added_files"
           if [ -n "$large_added_files" ]; then
             echo "# Large files added:" >> $GITHUB_STEP_SUMMARY
