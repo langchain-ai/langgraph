@@ -12,7 +12,11 @@
 !!! warning "Under Construction"
     LangGraph Cloud documentation is under construction. Contents may change until general availability.
 
-![GIF](./how-tos/img/studio_input.gif)
+
+<video controls preload="auto" allowfullscreen="true" poster="how-tos/img/studio_forks_poster.png">
+    <source src="how-tos/img/studio_forks.mp4" type="video/mp4">
+</video>
+
 
 ## Overview
 
