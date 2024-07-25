@@ -12,6 +12,10 @@ An assistant is a configured instance of a [`CompiledGraph`][compiledgraph]. It 
 
 The LangGraph Cloud API provides several endpoints for creating and managing assistants. See the <a href="../reference/api/api_ref.html#tag/assistantscreate" target="_blank">API reference</a> for more details.
 
+#### Configuring Assistants
+
+You can save custom assistants from the same graph to set different default prompts, models, and other configurations without changing a line of code in your graph. This allows you the ability to quickly test out different configurations without having to rewrite your graph every time, and also give users the flexibility to select different configurations when using your LangGraph application. See <a href="https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/configuration_cloud/">this</a> how-to for information on how to configure a deployed graph. 
+
 ### Threads
 
 A thread contains the accumulated state of a group of runs. If a run is executed on a thread, then the [state][state] of the underlying graph of the assistant will be persisted to the thread. A thread's current and historical state can be retrieved. To persist state, a thread must be created prior to executing a run.
