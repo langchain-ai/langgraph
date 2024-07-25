@@ -842,7 +842,7 @@ class ThreadsClient:
             thread_id: The ID of the thread to update.
             values: The values to update to the state.
             as_node: Update the state as if this node had just executed.
-               
+
             checkpoint_id: The ID of the checkpoint to get the state of.
 
         Returns:
@@ -1003,9 +1003,9 @@ class RunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-               
+
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-               
+
             feedback_keys: Feedback keys to assign to run.
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
@@ -1118,9 +1118,9 @@ class RunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-               
+
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-               
+
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
@@ -1273,9 +1273,9 @@ class RunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-               
+
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-               
+
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
@@ -1486,9 +1486,9 @@ class CronClient:
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-               
+
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-               
+
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
@@ -1550,9 +1550,9 @@ class CronClient:
             metadata: Metadata to assign to the cron job runs.
             config: The configuration for the assistant.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-               
+
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-               
+
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
