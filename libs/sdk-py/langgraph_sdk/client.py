@@ -797,7 +797,7 @@ class RunsClient:
         """Create a run and stream the results.
 
         Args:
-            thread_id (optional,str) the thread ID to assign to the thread. Defaults to None.
+            thread_id (optional,str): the thread ID to assign to the thread. Defaults to None.
                 If None a random UUID will be generated.
             assistant_id (str): The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
@@ -909,7 +909,7 @@ class RunsClient:
         """Create a background run.
 
         Args:
-            thread_id (optional,str) the thread ID to assign to the thread. Defaults to None.
+            thread_id (optional,str): the thread ID to assign to the thread. Defaults to None.
                 If None a random UUID will be generated.
             assistant_id (str): The assistant ID or graph name to stream from.
                 If using graph name, will default to first assistant created from that graph.
@@ -1017,7 +1017,7 @@ class RunsClient:
         """Create a run, wait for and return the final state.
 
         Args:
-            thread_id (optional,str) the thread ID to create the run on. Defaults to None.
+            thread_id (optional,str): the thread ID to create the run on. Defaults to None.
                 If None a random UUID will be generated.
             assistant_id (str): The assistant ID or graph name to run.
                 If using graph name, will default to first assistant created from that graph.
@@ -1204,7 +1204,7 @@ class CronClient:
         """Create a cron job for a thread.
 
         Args:
-            thread_id (str) the thread ID to run the cron job on.
+            thread_id (str): the thread ID to run the cron job on.
             assistant_id (str): The assistant ID or graph name to use for the cron job.
                 If using graph name, will default to first assistant created from that graph.
             schedule (str): The cron schedule to execute this job on.
@@ -1346,7 +1346,7 @@ class CronClient:
 
         Args:
             assistant_id (optional, str): The assistant ID or graph name to search for. Defaults to None.
-            thread_id (optional, str) the thread ID to search for. Defaults to None.
+            thread_id (optional, str): the thread ID to search for. Defaults to None.
             limit (int, optional): The maximum number of results to return. Defaults to 10.
             offset (int, optional): The number of results to skip. Defaults to 0.
 
