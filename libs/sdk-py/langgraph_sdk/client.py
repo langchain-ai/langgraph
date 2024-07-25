@@ -696,7 +696,7 @@ class ThreadsClient:
 
             threads = await client.threads.search(
                 metadata={"number":1},
-                status="interrupted"m
+                status="interrupted",
                 limit=15,
                 offset=5
             )
