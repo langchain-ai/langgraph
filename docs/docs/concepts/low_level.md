@@ -78,22 +78,27 @@ class State(TypedDict):
 
 In this example, we've used the `Annotated` type to specify a reducer function (`operator.add`) for the second key (`bar`). Note that the first key remains unchanged. Let's assume the input to the graph is `{"foo": 1, "bar": ["hi"]}`. Let's then assume the first `Node` returns `{"foo": 2}`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{"foo": 2, "bar": ["hi"]}`. If the second node returns `{"bar": ["bye"]}` then the `State` would then be `{"foo": 2, "bar": ["hi", "bye"]}`. Notice here that the `bar` key is updated by adding the two lists together.
 
-### MessageState
+### Working with Messages in Graph State
 
-`MessageState` is one of the few opinionated components in LangGraph. `MessageState` is a special state designed to make it easy to use a list of messages as a key in your state. Specifically, `MessageState` is defined as:
+#### What are Messages
+
+`Message` objects are the building blocks of a conversation, and can come in a variety of forms such as `HumanMessage` or `AIMessage`. To read all about what `Message` objects are, please refer to [this](https://python.langchain.com/v0.2/docs/concepts/#messages) conceptual guide.
+
+#### Using Messages in your Graph
+
+In many use cases, it is helpful to store prior conversation history as a list of messages in your graph state. To do so, we can add a list of `AnyMessage` objects and annotate it with a reducer function. The reducer function is vital to telling our state how to update our list of `AnyMessage` objects. Most of the time you would like to just append new messages to the end of the conversation history, in which case you can use the prebuilt `add_messages` function. The `add_messages` function will try to deserialize messages into LangChain message objects whenever a state update is received on the `messages` channel. It will also do more nice things like handling updates based on message IDs. Below is an example of a graph that uses `add_messages` as it's reducer function. 
 
 ```python
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from typing import Annotated, TypedDict
 
-class MessagesState(TypedDict):
+class GraphState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 ```
 
-What this is doing is creating a `TypedDict` with a single key: `messages`. This is a list of `Message` objects, with `add_messages` as a reducer. `add_messages` basically adds messages to the existing list (it also does some nice extra things, like convert from OpenAI message format to the standard LangChain message format, handle updates based on message IDs, etc).
 
-We often see a list of messages being a key component of state, so this prebuilt state is intended to make it easy to use messages. Typically, there is more state to track than just messages, so we see people subclass this state and add more fields, like:
+Since having a list of messages in your state is so common, there exists a prebuilt state called `MessagesState` which makes it easy to use messages. `MessagesState` is defined with a single `messages` key which is a list of `AnyMessage` objects and uses the `add_messages` reducer. Typically, there is more state to track than just messages, so we see people subclass this state and add more fields, like:
 
 ```python
 from langgraph.graph import MessagesState
@@ -101,6 +106,8 @@ from langgraph.graph import MessagesState
 class State(MessagesState):
     documents: list[str]
 ```
+
+What this is doing is creating a `TypedDict` with a single key: `messages`. This is a list of `Message` objects, with `add_messages` as a reducer. 
 
 ## Nodes
 
