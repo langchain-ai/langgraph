@@ -615,6 +615,232 @@
   
   '''
 # ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1.1
+  dict({
+    'definitions': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/definitions/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1.2
+  dict({
+    'definitions': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/definitions/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2.1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2.2
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_via_branch
   '''
   graph TD;
