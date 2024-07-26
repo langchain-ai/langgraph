@@ -49,6 +49,7 @@ The main documented way to specify the schema of a graph is by using `TypedDict`
 By default, the graph will have the same input and output schemas. If you want to change this, you can also specify explicit input and output schemas directly. This is useful when you have a lot of keys, and some are explicitly for input and others for output. See the [notebook here](../how-tos/input_output_schema.ipynb) for how to use.
 
 By default, all nodes in the graph will share the same state. This means that they will read and write to the same state channels. It is possible to have nodes write to private state channels inside the graph for internal node communication - see [this notebook](../how-tos/pass_private_state.ipynb) for how to do that.
+
 ### Reducers
 
 Reducers are key to understanding how updates from nodes are applied to the `State`. Each key in the `State` has its own independent reducer function. If no reducer function is explicitly specified then it is assumed that all updates to that key should override it. Let's take a look at a few examples to understand them better.
@@ -80,13 +81,29 @@ In this example, we've used the `Annotated` type to specify a reducer function (
 
 ### Working with Messages in Graph State
 
-#### What are Messages
+#### Why use messages?
 
-`Message` objects are the building blocks of a conversation, and can come in a variety of forms such as `HumanMessage` or `AIMessage`. To read all about what `Message` objects are, please refer to [this](https://python.langchain.com/v0.2/docs/concepts/#messages) conceptual guide.
+Most modern LLM providers have a chat model interface that accepts a list of messages as input. LangChain's [`ChatModel`](https://python.langchain.com/v0.2/docs/concepts/#chat-models) in particular accepts a list of `Message` objects as inputs. These messages come in a variety of forms such as `HumanMessage` (user input) or `AIMessage` (LLM response). To read more about what message objects are, please refer to [this](https://python.langchain.com/v0.2/docs/concepts/#messages) conceptual guide.
 
 #### Using Messages in your Graph
 
-In many use cases, it is helpful to store prior conversation history as a list of messages in your graph state. To do so, we can add a list of `AnyMessage` objects and annotate it with a reducer function. The reducer function is vital to telling our state how to update our list of `AnyMessage` objects. Most of the time you would like to just append new messages to the end of the conversation history, in which case you can use the prebuilt `add_messages` function. The `add_messages` function will try to deserialize messages into LangChain message objects whenever a state update is received on the `messages` channel. It will also do more nice things like handling updates based on message IDs. Below is an example of a graph that uses `add_messages` as it's reducer function. 
+In many cases, it is helpful to store prior conversation history as a list of messages in your graph state. To do so, we can add a key (channel) to the graph state that stores a list of `Message` objects and annotate it with a reducer function (see `messages` key in the example below). The reducer function is vital to telling the graph how to update the list of `Message` objects in the state with each state update (for example, when a node sends an update). If you don't specify a reducer, every state update will overwrite the list of messages with the most recently provided value. If you wanted to simply append messages to the existing list, you could use `operator.add` as a reducer.
+
+However, you might also want to manually update messages in your graph state (e.g. human-in-the-loop). If you were to use `operator.add`, the manual state updates you send to the graph would be appended to the existing list of messages, instead of updating existing messages. To avoid that, you need a reducer that can keep track of message IDs and overwrite existing messages, if updated. To achieve this, you can use the prebuilt `add_messages` function. For brand new messages, it will simply append to existing list, but it will also handle the updates for existing messages correctly.
+
+#### Serialization
+
+In addition to keeping track of message IDs, the `add_messages` function will also try to deserialize messages into LangChain `Message` objects whenever a state update is received on the `messages` channel. See more information on LangChain serialization/deserialization [here](https://python.langchain.com/v0.2/docs/how_to/serialization/). This allows sending graph inputs / state updates in the following format:
+
+```python
+# this is supported
+{"messages": [HumanMessage(content="message")]}
+
+# and this is also supported
+{"messages": [{"type": "human", "content": "message"}]}
+```
+
+Since the state updates are always deserialized into LangChain `Messages` when using `add_messages`, you should use dot notation to access message attributes, like `state["messages"][-1].content`. Below is an example of a graph that uses `add_messages` as it's reducer function.
 
 ```python
 from langchain_core.messages import AnyMessage
@@ -97,7 +114,6 @@ class GraphState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 ```
 
-
 Since having a list of messages in your state is so common, there exists a prebuilt state called `MessagesState` which makes it easy to use messages. `MessagesState` is defined with a single `messages` key which is a list of `AnyMessage` objects and uses the `add_messages` reducer. Typically, there is more state to track than just messages, so we see people subclass this state and add more fields, like:
 
 ```python
@@ -106,8 +122,6 @@ from langgraph.graph import MessagesState
 class State(MessagesState):
     documents: list[str]
 ```
-
-What this is doing is creating a `TypedDict` with a single key: `messages`. This is a list of `Message` objects, with `add_messages` as a reducer. 
 
 ## Nodes
 
