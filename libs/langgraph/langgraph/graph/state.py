@@ -452,7 +452,11 @@ class CompiledStateGraph(CompiledGraph):
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> type[BaseModel]:
-        if isclass(self.builder.input) and issubclass(self.builder.input, BaseModel):
+        from pydantic import BaseModel as BaseModelP
+
+        if isclass(self.builder.input) and issubclass(
+            self.builder.input, (BaseModel, BaseModelP)
+        ):
             return self.builder.input
         else:
             keys = list(self.builder.schemas[self.builder.input].keys())
@@ -475,7 +479,11 @@ class CompiledStateGraph(CompiledGraph):
     def get_output_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> type[BaseModel]:
-        if isclass(self.builder.input) and issubclass(self.builder.output, BaseModel):
+        from pydantic import BaseModel as BaseModelP
+
+        if isclass(self.builder.input) and issubclass(
+            self.builder.output, (BaseModel, BaseModelP)
+        ):
             return self.builder.output
 
         return super().get_output_schema(config)
@@ -497,7 +505,7 @@ class CompiledStateGraph(CompiledGraph):
                 return SKIP_WRITE
             elif isinstance(input, dict):
                 return input.get(key, SKIP_WRITE)
-            elif get_type_hints(type(input)).get(key):
+            elif get_type_hints(type(input)):
                 value = getattr(input, key, SKIP_WRITE)
                 return value if value is not None else SKIP_WRITE
             else:
