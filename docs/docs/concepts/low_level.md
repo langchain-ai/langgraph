@@ -114,6 +114,8 @@ class GraphState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 ```
 
+#### MessagesState
+
 Since having a list of messages in your state is so common, there exists a prebuilt state called `MessagesState` which makes it easy to use messages. `MessagesState` is defined with a single `messages` key which is a list of `AnyMessage` objects and uses the `add_messages` reducer. Typically, there is more state to track than just messages, so we see people subclass this state and add more fields, like:
 
 ```python
