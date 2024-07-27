@@ -498,7 +498,7 @@ def test_tool_node_inject_state() -> None:
         return foo
 
     def tool4(
-        some_val: int, msgs: Annotated[List[AnyMessage], InjectedState("messages")]
+        some_val: int = 5, *, msgs: Annotated[Any, InjectedState("messages")]
     ) -> str:
         """Tool 1 docstring."""
         return msgs[0].content
