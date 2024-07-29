@@ -16,9 +16,9 @@ from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
+from langgraph_checkpoint.checkpoint.base import BaseCheckpointSaver
 from pydantic import BaseModel as BaseModelV2
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState
 from tests.any_str import AnyStr

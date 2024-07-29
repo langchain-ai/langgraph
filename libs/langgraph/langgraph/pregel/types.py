@@ -2,8 +2,7 @@ from collections import deque
 from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
-
-from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph_checkpoint.checkpoint.base import CheckpointMetadata
 
 
 def default_retry_on(exc: Exception) -> bool:

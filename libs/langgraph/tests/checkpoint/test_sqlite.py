@@ -2,7 +2,7 @@ import pytest
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.channels.manager import create_checkpoint
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
+from langgraph_checkpoint.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
 from langgraph.checkpoint.sqlite import (
     _AIO_ERROR_MSG,
     SqliteSaver,

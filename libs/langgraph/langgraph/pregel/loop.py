@@ -22,15 +22,7 @@ from typing import (
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
-from typing_extensions import Self
-
-from langgraph.channels.base import BaseChannel
-from langgraph.channels.manager import (
-    AsyncChannelsManager,
-    ChannelsManager,
-    create_checkpoint,
-)
-from langgraph.checkpoint.base import (
+from langgraph_checkpoint.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
@@ -38,6 +30,14 @@ from langgraph.checkpoint.base import (
     PendingWrite,
     copy_checkpoint,
     empty_checkpoint,
+)
+from typing_extensions import Self
+
+from langgraph.channels.base import BaseChannel
+from langgraph.channels.manager import (
+    AsyncChannelsManager,
+    ChannelsManager,
+    create_checkpoint,
 )
 from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_RESUMING, INPUT, INTERRUPT
 from langgraph.errors import EmptyInputError, GraphInterrupt

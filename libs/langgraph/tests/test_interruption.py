@@ -1,6 +1,7 @@
 from typing import TypedDict
 
-from langgraph.checkpoint.memory import MemorySaver
+from langgraph_checkpoint.checkpoint.memory import MemorySaver
+
 from langgraph.graph import END, START, StateGraph
 
 
