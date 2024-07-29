@@ -1134,15 +1134,15 @@ def test_cond_edge_after_send() -> None:
             setattr(self, "__name__", name)
 
         def __call__(self, state):
-            return state + [self.name]
+            return [self.name]
 
     def send_for_fun(state):
-        return [Send("2", state)]
+        return [Send("2", state), Send("2", state)]
 
     def route_to_three(state) -> Literal["3"]:
         return "3"
 
-    builder = StateGraph(list)
+    builder = StateGraph(Annotated[list, operator.add])
     builder.add_node(Node("1"))
     builder.add_node(Node("2"))
     builder.add_node(Node("3"))
@@ -1150,7 +1150,7 @@ def test_cond_edge_after_send() -> None:
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert graph.invoke(["0"]) == ["0", "1", "2", "3"]
+    assert graph.invoke(["0"]) == ["0", "1", "2", "2", "3"]
 
 
 async def test_checkpointer_null_pending_writes() -> None:
@@ -6536,10 +6536,10 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "ceada3c5-5f25-59e4-9ea5-544599ce1d2f",
+                    "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
                     "name": "finish",
                     "input": {"my_key": "value prepared slow", "market": "DE"},
-                    "triggers": ["branch:prepare:condition:then"],
+                    "triggers": ["branch:prepare:condition::then"],
                 },
             },
             {
@@ -6547,7 +6547,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "ceada3c5-5f25-59e4-9ea5-544599ce1d2f",
+                    "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
                     "name": "finish",
                     "result": [("my_key", " finished")],
                 },
