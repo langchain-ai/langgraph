@@ -33,6 +33,7 @@ langchain-anthropic = ">=0.1.8"
 dataclasses-json = "^0.6.7"
 pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
 pytest-repeat = "^0.9.3"
+langgraph-checkpoint = {path = "../checkpoint", develop = true}
 
 [tool.poetry.group.dev]
 optional = true

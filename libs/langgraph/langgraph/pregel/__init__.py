@@ -46,7 +46,7 @@ from langchain_core.runnables.utils import (
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
-from langgraph_checkpoint.checkpoint.base import (
+from langgraph_checkpoint.base import (
     BaseCheckpointSaver,
     copy_checkpoint,
     empty_checkpoint,

@@ -29,13 +29,13 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnablePick,
 )
-from langgraph_checkpoint.checkpoint.base import (
+from langgraph_checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph_checkpoint.checkpoint.memory import MemorySaver
+from langgraph_checkpoint.memory import MemorySaver
 from langgraph_checkpoint.serde.base import SerializerProtocol
 from langgraph_checkpoint.serde.jsonplus import JsonPlusSerializer
 from langsmith import traceable

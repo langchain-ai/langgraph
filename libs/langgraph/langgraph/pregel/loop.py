@@ -22,7 +22,7 @@ from typing import (
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
-from langgraph_checkpoint.checkpoint.base import (
+from langgraph_checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,

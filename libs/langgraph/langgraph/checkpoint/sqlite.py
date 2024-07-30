@@ -8,7 +8,7 @@ from types import TracebackType
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
-from langgraph_checkpoint.checkpoint.base import (
+from langgraph_checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,

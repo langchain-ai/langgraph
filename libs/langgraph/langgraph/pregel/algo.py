@@ -22,7 +22,7 @@ from langchain_core.runnables.config import (
     merge_configs,
     patch_config,
 )
-from langgraph_checkpoint.checkpoint.base import (
+from langgraph_checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     copy_checkpoint,

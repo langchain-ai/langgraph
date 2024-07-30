@@ -30,13 +30,13 @@ from langchain_core.runnables import (
     RunnablePick,
 )
 from langchain_core.utils.aiter import aclosing
-from langgraph_checkpoint.checkpoint import BaseCheckpointSaver
-from langgraph_checkpoint.checkpoint.base import (
+from langgraph_checkpoint.base import (
+    BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
 )
-from langgraph_checkpoint.checkpoint.memory import MemorySaver
+from langgraph_checkpoint.memory import MemorySaver
 from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion

@@ -15,7 +15,7 @@ from typing import (
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
-from langgraph_checkpoint.checkpoint.base import (
+from langgraph_checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
