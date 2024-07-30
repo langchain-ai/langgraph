@@ -4,13 +4,13 @@ from typing import Any, Mapping, Optional
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from langgraph_checkpoint.checkpoint.base import (
+from langgraph_checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     empty_checkpoint,
 )
-from langgraph_checkpoint.checkpoint.id import uuid6
-from langgraph_checkpoint.checkpoint.memory import MemorySaver
+from langgraph_checkpoint.id import uuid6
+from langgraph_checkpoint.memory import MemorySaver
 from langgraph_checkpoint.types import ChannelProtocol
 
 

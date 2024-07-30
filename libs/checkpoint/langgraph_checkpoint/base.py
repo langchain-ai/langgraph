@@ -17,7 +17,7 @@ from typing import (
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
-from langgraph_checkpoint.checkpoint.id import uuid6
+from langgraph_checkpoint.id import uuid6
 from langgraph_checkpoint.serde.base import SerializerProtocol
 from langgraph_checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph_checkpoint.types import ChannelProtocol, SendProtocol

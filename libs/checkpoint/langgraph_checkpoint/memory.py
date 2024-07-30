@@ -5,7 +5,7 @@ from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
-from langgraph_checkpoint.checkpoint.base import (
+from langgraph_checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
