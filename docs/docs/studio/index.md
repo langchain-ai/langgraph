@@ -8,7 +8,7 @@ hide:
 
 ## Overview
 
-LangGraph Studio is a desktop app for Mac with an interactive UI for developing and testing LangGraph Cloud applications locally. LangGraph Studio allows you to run LangGraph API server for your app and interact with it via a UI, all in one place. It leverages full power of LangGraph and LangGraph Cloud features, including streaming, human-in-the-loop, time travel and more.
+LangGraph Studio is a desktop app for prototyping and debugging LangGraph Cloud applications locally. LangGraph Studio allows you to run API server for your LangGraph app and interact with it via a UI, all in one place. Agent trajectories are visually laid out, making it easier to understand agent workflows and to debug failure modes. LangGraph Studio leverages full power of LangGraph and LangGraph Cloud features, including adding breakpoints for easy interruption, state editing, resumption, and time travel.
 
 ## Setup
 
