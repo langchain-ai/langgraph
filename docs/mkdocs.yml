@@ -183,6 +183,14 @@ nav:
       - Checkpointing: reference/checkpoints.md
       - Prebuilt Components: reference/prebuilt.md
       - Errors: reference/errors.md
+  - Studio:
+      - How-to Guides:
+          - Open Project (desktop): studio/open.md
+          - Invoke Graph: studio/invoke_graph.md
+          - Create and Edit Threads: studio/create_edit_threads.md
+          - Add Interrupts: studio/interrupts.md
+          - Edit Project Config: studio/edit_project_config.md
+          - Edit Graph Code: studio/edit_graph_code.md
   - "Cloud (beta)":
       - "cloud/index.md"
       - Tutorials:
