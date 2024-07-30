@@ -1,8 +1,16 @@
-from typing import Any, Protocol, Sequence, Generator, AsyncGenerator, Optional, TypeVar, runtime_checkable
-from typing_extensions import Self
+from typing import (
+    Any,
+    AsyncGenerator,
+    Generator,
+    Optional,
+    Protocol,
+    Sequence,
+    TypeVar,
+    runtime_checkable,
+)
 
 from langchain_core.runnables import RunnableConfig
-
+from typing_extensions import Self
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")
@@ -10,6 +18,7 @@ C = TypeVar("C")
 
 
 class ChannelProtocol(Protocol[Value, Update, C]):
+    # Mirrors langgraph.channels.base.BaseChannel
     @property
     def ValueType(self) -> Any:
         ...
@@ -43,8 +52,7 @@ class ChannelProtocol(Protocol[Value, Update, C]):
 
 @runtime_checkable
 class SendProtocol(Protocol):
-    """A message or packet to send to a specific node in the graph."""
-
+    # Mirrors langgraph.constants.Send
     node: str
     arg: Any
 

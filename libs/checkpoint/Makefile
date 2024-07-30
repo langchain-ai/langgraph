@@ -1,7 +1,11 @@
-.PHONY: lint format
+.PHONY: test lint format
+
+######################
+# TESTING AND COVERAGE
+######################
 
 test:
-	echo "No tests to run"
+	poetry run pytest tests
 
 ######################
 # LINTING AND FORMATTING
@@ -12,8 +16,11 @@ PYTHON_FILES=.
 MYPY_CACHE=.mypy_cache
 lint format: PYTHON_FILES=.
 lint_diff format_diff: PYTHON_FILES=$(shell git diff --name-only --relative --diff-filter=d main . | grep -E '\.py$$|\.ipynb$$')
+lint_package: PYTHON_FILES=langgraph_checkpoint
+lint_tests: PYTHON_FILES=tests
+lint_tests: MYPY_CACHE=.mypy_cache_test
 
-lint lint_diff:
+lint lint_diff lint_package lint_tests:
 	poetry run ruff .
 	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff format $(PYTHON_FILES) --diff
 	[ "$(PYTHON_FILES)" = "" ] || poetry run ruff --select I $(PYTHON_FILES)

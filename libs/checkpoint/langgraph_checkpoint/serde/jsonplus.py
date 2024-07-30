@@ -9,8 +9,8 @@ from uuid import UUID
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
 
-from langgraph_checkpoint.types import SendProtocol
 from langgraph_checkpoint.serde.base import SerializerProtocol
+from langgraph_checkpoint.types import SendProtocol
 
 LC_REVIVER = Reviver()
 
