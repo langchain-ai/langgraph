@@ -15,15 +15,15 @@ from typing import (
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
-from typing_extensions import Self
-
-from langgraph.checkpoint.base import (
+from langgraph_checkpoint.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
 )
+from typing_extensions import Self
+
 from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat, search_where
 
 T = TypeVar("T", bound=callable)

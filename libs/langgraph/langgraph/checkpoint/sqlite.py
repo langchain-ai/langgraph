@@ -8,18 +8,18 @@ from types import TracebackType
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
-from typing_extensions import Self
-
-from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import (
+from langgraph_checkpoint.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
 )
+from langgraph_checkpoint.serde.jsonplus import JsonPlusSerializer
+from typing_extensions import Self
+
+from langgraph.channels.base import BaseChannel
 from langgraph.errors import EmptyChannelError
-from langgraph.serde.jsonplus import JsonPlusSerializer
 
 
 class JsonPlusSerializerCompat(JsonPlusSerializer):
