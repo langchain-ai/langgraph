@@ -9,7 +9,7 @@ from langchain_core.pydantic_v1 import BaseModel as LcBaseModel
 from langchain_core.runnables import RunnableMap
 from pydantic import BaseModel
 
-from langgraph.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 
 class MyPydantic(BaseModel):

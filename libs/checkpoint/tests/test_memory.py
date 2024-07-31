@@ -1,8 +1,12 @@
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from langgraph.channels.manager import create_checkpoint
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
+from langgraph.checkpoint.base import (
+    Checkpoint,
+    CheckpointMetadata,
+    create_checkpoint,
+    empty_checkpoint,
+)
 from langgraph.checkpoint.memory import MemorySaver
 
 

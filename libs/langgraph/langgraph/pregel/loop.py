@@ -28,7 +28,6 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.manager import (
     AsyncChannelsManager,
     ChannelsManager,
-    create_checkpoint,
 )
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -37,6 +36,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     PendingWrite,
     copy_checkpoint,
+    create_checkpoint,
     empty_checkpoint,
 )
 from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_RESUMING, INPUT, INTERRUPT

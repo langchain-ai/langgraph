@@ -24,7 +24,7 @@ from langchain_core.runnables.graph import Graph as DrawableGraph
 from langchain_core.runnables.graph import Node as DrawableNode
 
 from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.checkpoint import BaseCheckpointSaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import END, START, TAG_HIDDEN, Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel import Channel, Pregel

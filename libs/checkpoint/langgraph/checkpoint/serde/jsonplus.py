@@ -9,8 +9,8 @@ from uuid import UUID
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
 
-from langgraph.constants import Send
-from langgraph.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.types import SendProtocol
 
 LC_REVIVER = Reviver()
 
@@ -64,7 +64,7 @@ class JsonPlusSerializer(SerializerProtocol):
             )
         elif isinstance(obj, Enum):
             return self._encode_constructor_args(obj.__class__, args=[obj.value])
-        elif isinstance(obj, Send):
+        elif isinstance(obj, SendProtocol):
             return self._encode_constructor_args(
                 obj.__class__, kwargs={"node": obj.node, "arg": obj.arg}
             )

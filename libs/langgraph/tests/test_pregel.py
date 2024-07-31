@@ -45,6 +45,8 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
@@ -60,8 +62,6 @@ from langgraph.prebuilt.chat_agent_executor import (
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
-from langgraph.serde.base import SerializerProtocol
-from langgraph.serde.jsonplus import JsonPlusSerializer
 from tests.any_str import AnyStr
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
