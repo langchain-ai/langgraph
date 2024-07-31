@@ -69,6 +69,7 @@ from tests.memory_assert import (
     MemorySaverNoPending,
     NoopSerializer,
 )
+from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
 
 def test_graph_validation() -> None:
@@ -235,8 +236,6 @@ def test_checkpoint_errors() -> None:
 
 
 def test_node_schemas_custom_output() -> None:
-    from langchain_core.messages import HumanMessage
-
     class State(TypedDict):
         hello: str
         bye: str
@@ -252,7 +251,7 @@ def test_node_schemas_custom_output() -> None:
     def node_a(state: StateForA) -> State:
         assert state == {
             "hello": "there",
-            "messages": [HumanMessage(content="hello", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="hello")],
         }
 
     class StateForB(TypedDict):
@@ -289,7 +288,7 @@ def test_node_schemas_custom_output() -> None:
     graph = builder.compile()
 
     assert graph.invoke({"hello": "there", "bye": "world", "messages": "hello"}) == {
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
     builder = StateGraph(input=State, output=Output)
@@ -309,13 +308,11 @@ def test_node_schemas_custom_output() -> None:
             "now": 345,  # ignored because not in input schema
         }
     ) == {
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
 
 def test_reducer_before_first_node() -> None:
-    from langchain_core.messages import HumanMessage
-
     class State(TypedDict):
         hello: str
         messages: Annotated[list[str], add_messages]
@@ -323,7 +320,7 @@ def test_reducer_before_first_node() -> None:
     def node_a(state: State) -> State:
         assert state == {
             "hello": "there",
-            "messages": [HumanMessage(content="hello", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="hello")],
         }
 
     builder = StateGraph(State)
@@ -333,7 +330,7 @@ def test_reducer_before_first_node() -> None:
     graph = builder.compile()
     assert graph.invoke({"hello": "there", "messages": "hello"}) == {
         "hello": "there",
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
     class State(TypedDict):
@@ -343,7 +340,7 @@ def test_reducer_before_first_node() -> None:
     def node_a(state: State) -> State:
         assert state == {
             "hello": "there",
-            "messages": [HumanMessage(content="hello", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="hello")],
         }
 
     builder = StateGraph(State)
@@ -353,7 +350,7 @@ def test_reducer_before_first_node() -> None:
     graph = builder.compile()
     assert graph.invoke({"hello": "there", "messages": "hello"}) == {
         "hello": "there",
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
     class State(TypedDict):
@@ -363,7 +360,7 @@ def test_reducer_before_first_node() -> None:
     def node_a(state: State) -> State:
         assert state == {
             "hello": "there",
-            "messages": [HumanMessage(content="hello", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="hello")],
         }
 
     builder = StateGraph(State)
@@ -373,7 +370,7 @@ def test_reducer_before_first_node() -> None:
     graph = builder.compile()
     assert graph.invoke({"hello": "there", "messages": "hello"}) == {
         "hello": "there",
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
 
@@ -3382,7 +3379,7 @@ def test_state_graph_few_shot() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+    from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
 
@@ -3468,7 +3465,7 @@ Some examples of past conversations:
         app = workflow.compile(checkpointer=saver)
 
         first_messages = [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id=AnyStr(),
@@ -3487,7 +3484,7 @@ Some examples of past conversations:
                 id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
         actual = app.invoke(
             {"messages": "what is weather in sf"},
@@ -3521,7 +3518,7 @@ Some examples of past conversations:
         assert hiscored[0].checkpoint["channel_values"]["messages"] == first_messages
 
         second_messages = [
-            HumanMessage(content="what is weather in la", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in la"),
             AIMessage(
                 content="",
                 id=AnyStr(),
@@ -3540,7 +3537,7 @@ Some examples of past conversations:
                 id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
         assert app.invoke(
             {"messages": "what is weather in la"},
@@ -3581,7 +3578,7 @@ Some examples of past conversations:
             },
         ) == {
             "messages": [
-                HumanMessage(content="what is weather in ny", id=AnyStr()),
+                _AnyIdHumanMessage(content="what is weather in ny"),
                 AIMessage(
                     content="",
                     id=AnyStr(),
@@ -3600,7 +3597,7 @@ Some examples of past conversations:
                     id=AnyStr(),
                     tool_call_id="tool_call123",
                 ),
-                AIMessage(content="answer", id=AnyStr()),
+                _AnyIdAIMessage(content="answer"),
             ]
         }
 
@@ -3716,7 +3713,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -3762,7 +3759,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call567",
                 id=AnyStr(),
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
     }
 
@@ -3772,10 +3769,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         debug=True,
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
-            AIMessage(
-                content="Sorry, need more steps to process this request.", id=AnyStr()
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
+            _AnyIdAIMessage(content="Sorry, need more steps to process this request."),
         ]
     }
 
@@ -3854,16 +3849,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 ]
             }
         },
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        content="answer",
-                        id=AnyStr(),
-                    )
-                ]
-            }
-        },
+        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
     ]
 
     assert [
@@ -3938,7 +3924,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 ]
             }
         },
-        {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
+        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
     ]
 
 
@@ -3996,7 +3982,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -4015,7 +4001,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
             FunctionMessage(
                 content="result for another", name="search_api", id=AnyStr()
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
     }
 
@@ -4072,7 +4058,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
                 ]
             }
         },
-        {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
+        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
     ]
 
 
@@ -4185,7 +4171,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
 
     assert app.invoke({"messages": HumanMessage(content="what is weather in sf")}) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 id="ai1",
                 content="",
@@ -4341,10 +4327,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4394,10 +4377,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4473,10 +4453,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4554,10 +4531,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4842,7 +4816,7 @@ def test_message_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 tool_calls=[
@@ -4886,7 +4860,7 @@ def test_message_graph(
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -4950,10 +4924,7 @@ def test_message_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5014,10 +4985,7 @@ def test_message_graph(
     # replaces message even if object identity is different, as long as id is the same
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5073,10 +5041,7 @@ def test_message_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 tool_calls=[
@@ -5120,10 +5085,7 @@ def test_message_graph(
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5187,10 +5149,7 @@ def test_message_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5251,10 +5210,7 @@ def test_message_graph(
     # replaces message even if object identity is different, as long as id is the same
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5292,10 +5248,7 @@ def test_message_graph(
     # now the next node is "agent" per the graph edges
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5314,7 +5267,7 @@ def test_message_graph(
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
-            AIMessage(content="an extra message", id=AnyStr()),
+            _AnyIdAIMessage(content="an extra message"),
         ],
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -5573,7 +5526,7 @@ def test_root_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 tool_calls=[
@@ -5617,7 +5570,7 @@ def test_root_graph(
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5681,10 +5634,7 @@ def test_root_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5745,10 +5695,7 @@ def test_root_graph(
     # replaces message even if object identity is different, as long as id is the same
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5804,10 +5751,7 @@ def test_root_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 tool_calls=[
@@ -5851,10 +5795,7 @@ def test_root_graph(
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5918,10 +5859,7 @@ def test_root_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5982,10 +5920,7 @@ def test_root_graph(
     # replaces message even if object identity is different, as long as id is the same
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -6023,10 +5958,7 @@ def test_root_graph(
     # now the next node is "agent" per the graph edges
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -6045,7 +5977,7 @@ def test_root_graph(
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
-            AIMessage(content="an extra message", id=AnyStr()),
+            _AnyIdAIMessage(content="an extra message"),
         ],
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -6096,10 +6028,7 @@ def test_root_graph(
     assert new_app.get_state(config) == StateSnapshot(
         values={
             "__root__": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     content="",
                     id="ai1",
@@ -6118,7 +6047,7 @@ def test_root_graph(
                     id=AnyStr(),
                 ),
                 AIMessage(content="answer", id="ai2"),
-                AIMessage(content="an extra message", id=AnyStr()),
+                _AnyIdAIMessage(content="an extra message"),
             ]
         },
         next=("agent",),
@@ -9079,7 +9008,7 @@ def test_checkpoint_metadata() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+    from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
 
@@ -9165,7 +9094,7 @@ def test_checkpoint_metadata() -> None:
         },
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id=AnyStr(),
@@ -9184,7 +9113,7 @@ def test_checkpoint_metadata() -> None:
                 id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
     }
 
