@@ -1,6 +1,6 @@
 # Checkpoints
 
-You can [compile][langgraph.graph.MessageGraph.compile] any LangGraph workflow with a [CheckPointer][basecheckpointsaver] to give your agent "memory" by persisting its state. This permits things like:
+You can [compile][langgraph.graph.MessageGraph.compile] any LangGraph workflow with a [CheckPointer][https://github.com/langchain-ai/langgraph/blob/main/libs/checkpoint/langgraph_checkpoint/base.py#L151] to give your agent "memory" by persisting its state. This permits things like:
 
 - Remembering things across multiple interactions
 - Interrupting to wait for user input
