@@ -45,10 +45,10 @@ class TestMemorySaver:
 
         # objects for test setup
         self.config_1: RunnableConfig = {
-            "configurable": {"thread_id": "thread-1", "thread_ts": "1"}
+            "configurable": {"thread_id": "thread-1", "checkpoint_ns": "", "checkpoint_id": "1"}
         }
         self.config_2: RunnableConfig = {
-            "configurable": {"thread_id": "thread-2", "thread_ts": "2"}
+            "configurable": {"thread_id": "thread-2", "checkpoint_ns": "", "checkpoint_id": "2"}
         }
 
         self.chkpnt_1: Checkpoint = empty_checkpoint()

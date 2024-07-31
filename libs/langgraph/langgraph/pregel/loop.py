@@ -143,6 +143,7 @@ class PregelLoop:
                     **self.checkpoint_config,
                     "configurable": {
                         **self.checkpoint_config["configurable"],
+                        "checkpoint_ns": self.config["configurable"].get("checkpoint_ns", ""),
                         "checkpoint_id": self.checkpoint["id"],
                     },
                 },
@@ -317,6 +318,13 @@ class PregelLoop:
                 # but doing so always with an id equal to that of the parent checkpoint
                 id=self.config["configurable"]["checkpoint_id"] if self.is_nested else None,
             )
+            self.checkpoint_config = {
+                **self.checkpoint_config,
+                "configurable": {
+                    **self.checkpoint_config["configurable"],
+                    "checkpoint_ns": self.config["configurable"].get("checkpoint_ns", "")
+                }
+            }
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
             # ensuring checkpointers receive checkpoints in order

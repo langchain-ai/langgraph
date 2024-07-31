@@ -6758,7 +6758,7 @@ async def test_nested_graph_interrupts(
         child_state_history = [
             c
             async for c in app.aget_state_history(
-                {"configurable": {"thread_id": "6-inner"}}
+                {"configurable": {"thread_id": "6", "checkpoint_ns": "inner"}}
             )
         ]
         assert child_state_history == [
@@ -6767,7 +6767,7 @@ async def test_nested_graph_interrupts(
                 next=(),
                 config={
                     "configurable": {
-                        "thread_id": "6-inner",
+                        "thread_id": "6",
                         "checkpoint_id": AnyStr(),
                     }
                 },
@@ -6784,7 +6784,7 @@ async def test_nested_graph_interrupts(
                 created_at=AnyStr(),
                 parent_config={
                     "configurable": {
-                        "thread_id": "6-inner",
+                        "thread_id": "6",
                         "checkpoint_id": AnyStr(),
                     }
                 },

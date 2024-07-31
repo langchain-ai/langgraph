@@ -10,16 +10,17 @@ Checkpoint is a snapshot of the graph state at a given point in time. Checkpoint
 
 ### Thread
 
-Threads enable the checkpointing of multiple different runs, making them essential for multi-tenant chat applications and other scenarios where maintaining separate states is necessary. A thread is a unique ID assigned to a series of checkpoints saved by a checkpointer. When using a checkpointer, you must specify a `thread_id` or `thread_ts` when running the graph.
+Threads enable the checkpointing of multiple different runs, making them essential for multi-tenant chat applications and other scenarios where maintaining separate states is necessary. A thread is a unique ID assigned to a series of checkpoints saved by a checkpointer. When using a checkpointer, you must specify a `thread_id` and optionally `checkpoint_ns` / `checkpoint_id` when running the graph.
 
 - `thread_id` is simply the ID of a thread. This is always required
-- `thread_ts` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to kick of a run of a graph from some point halfway through a thread.
+- `checkpoint_ns` can optionally be passed. This is a path to the subgraph the checkpoint originates from. Defaults to "" (root graph).
+- `checkpoint_id` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to kick of a run of a graph from some point halfway through a thread.
 
 You must pass these when invoking the graph as part of the configurable part of the config, e.g.
 
 ```python
 {"configurable": {"thread_id": "1"}}  # valid config
-{"configurable": {"thread_id": "1", "thread_ts": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
+{"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
 ```
 
 ### Serde

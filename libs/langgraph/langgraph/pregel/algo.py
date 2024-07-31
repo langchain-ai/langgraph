@@ -32,6 +32,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.context import Context
 from langgraph.channels.manager import ChannelsManager, create_checkpoint
 from langgraph.constants import (
+    CHECKPOINT_NAMESPACE_SEPARATOR,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
@@ -349,12 +350,14 @@ def prepare_next_tasks(
                         "langgraph_task_idx": len(tasks),
                     }
                     task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
-                    if parent_thread_id := config.get("configurable", {}).get(
-                        "thread_id"
-                    ):
-                        thread_id: Optional[str] = f"{parent_thread_id}-{name}"
+                    if parent_checkpoint_ns := config.get("configurable", {}).get(
+                        "checkpoint_ns"
+                    ) :
+                        checkpoint_ns = f"{parent_checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
                     else:
-                        thread_id = None
+                        checkpoint_ns = name
+
+                    thread_id = config.get("configurable", {}).get("thread_id")
                     writes = deque()
                     tasks.append(
                         PregelExecutableTask(
@@ -390,6 +393,7 @@ def prepare_next_tasks(
                                     CONFIG_KEY_RESUMING: is_resuming,
                                     "thread_id": thread_id,
                                     "checkpoint_id": checkpoint["id"],
+                                    "checkpoint_ns": checkpoint_ns
                                 },
                             ),
                             triggers,

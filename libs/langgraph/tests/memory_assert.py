@@ -33,7 +33,7 @@ class MemorySaverAssertImmutable(MemorySaver):
         put_sleep: Optional[float] = None,
     ) -> None:
         super().__init__(serde=serde)
-        self.storage_for_copies = defaultdict(dict)
+        self.storage_for_copies = defaultdict(lambda: defaultdict(dict))
         self.put_sleep = put_sleep
 
     def put(
@@ -48,12 +48,13 @@ class MemorySaverAssertImmutable(MemorySaver):
             time.sleep(self.put_sleep)
         # assert checkpoint hasn't been modified since last written
         thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
         if saved := super().get(config):
             assert (
-                self.serde.loads(self.storage_for_copies[thread_id][saved["id"]])
+                self.serde.loads(self.storage_for_copies[thread_id][checkpoint_ns][saved["id"]])
                 == saved
             )
-        self.storage_for_copies[thread_id][checkpoint["id"]] = self.serde.dumps(
+        self.storage_for_copies[thread_id][checkpoint_ns][checkpoint["id"]] = self.serde.dumps(
             copy_checkpoint(checkpoint)
         )
         # call super to write checkpoint
@@ -92,8 +93,9 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
 
         # remove checkpoint_id to make testing simpler
         checkpoint_id = configurable.pop("checkpoint_id", None)
-
-        self.storage[config["configurable"]["thread_id"]].update(
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        self.storage[thread_id][checkpoint_ns].update(
             {
                 checkpoint["id"]: (
                     self.serde.dumps(checkpoint),

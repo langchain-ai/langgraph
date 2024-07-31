@@ -138,6 +138,15 @@ CheckpointThreadId = ConfigurableFieldSpec(
     is_shared=True,
 )
 
+CheckpointNS = ConfigurableFieldSpec(
+    id="checkpoint_ns",
+    annotation=str,
+    name="Checkpoint NS",
+    description="Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from. Defaults to "" (root graph).",
+    default=None,
+    is_shared=True,
+)
+
 CheckpointId = ConfigurableFieldSpec(
     id="checkpoint_id",
     annotation=Optional[str],
@@ -178,7 +187,7 @@ class BaseCheckpointSaver(ABC):
         Returns:
             list[ConfigurableFieldSpec]: List of configuration field specs.
         """
-        return [CheckpointThreadId, CheckpointId]
+        return [CheckpointThreadId, CheckpointNS, CheckpointId]
 
     def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
         """Fetch a checkpoint using the given configuration.

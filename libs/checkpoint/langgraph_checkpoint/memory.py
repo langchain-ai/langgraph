@@ -43,8 +43,8 @@ class MemorySaver(BaseCheckpointSaver):
             coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
             asyncio.run(coro)  # Output: 2
     """
-
-    storage: defaultdict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]
+    # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping
+    storage: defaultdict[str, dict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]]
 
     def __init__(
         self,
@@ -52,7 +52,7 @@ class MemorySaver(BaseCheckpointSaver):
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
-        self.storage = defaultdict(dict)
+        self.storage = defaultdict(lambda: defaultdict(dict))
         self.writes = defaultdict(list)
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
@@ -70,10 +70,11 @@ class MemorySaver(BaseCheckpointSaver):
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         if checkpoint_id := config["configurable"].get("checkpoint_id"):
-            if saved := self.storage[thread_id].get(checkpoint_id):
+            if saved := self.storage[thread_id][checkpoint_ns].get(checkpoint_id):
                 checkpoint, metadata, parent_checkpoint_id = saved
-                writes = self.writes[(thread_id, checkpoint_id)]
+                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)]
                 return CheckpointTuple(
                     config=config,
                     checkpoint=self.serde.loads(checkpoint),
@@ -91,10 +92,10 @@ class MemorySaver(BaseCheckpointSaver):
                     else None,
                 )
         else:
-            if checkpoints := self.storage[thread_id]:
+            if checkpoints := self.storage[thread_id][checkpoint_ns]:
                 checkpoint_id = max(checkpoints.keys())
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
-                writes = self.writes[(thread_id, checkpoint_id)]
+                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)]
                 return CheckpointTuple(
                     config={"configurable": {"thread_id": thread_id, "checkpoint_id": checkpoint_id}},
                     checkpoint=self.serde.loads(checkpoint),
@@ -135,9 +136,10 @@ class MemorySaver(BaseCheckpointSaver):
             Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
         """
         thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "") if config else ""
         for thread_id in thread_ids:
             for checkpoint_id, (checkpoint, metadata_b, parent_checkpoint_id) in sorted(
-                self.storage[thread_id].items(), key=lambda x: x[0], reverse=True
+                self.storage[thread_id][checkpoint_ns].items(), key=lambda x: x[0], reverse=True
             ):
                 # filter by checkpoint ID
                 if before and checkpoint_id >= before["configurable"]["checkpoint_id"]:
@@ -190,7 +192,9 @@ class MemorySaver(BaseCheckpointSaver):
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
-        self.storage[config["configurable"]["thread_id"]].update(
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        self.storage[thread_id][checkpoint_ns].update(
             {
                 checkpoint["id"]: (
                     self.serde.dumps(checkpoint),
@@ -226,8 +230,10 @@ class MemorySaver(BaseCheckpointSaver):
             RunnableConfig: The updated config containing the saved writes' timestamp.
         """
         thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
         checkpoint_id = config["configurable"]["checkpoint_id"]
-        self.writes[(thread_id, checkpoint_id)].extend(
+        key = (thread_id, checkpoint_ns, checkpoint_id)
+        self.writes[key].extend(
             [(task_id, c, self.serde.dumps(v)) for c, v in writes]
         )
 
