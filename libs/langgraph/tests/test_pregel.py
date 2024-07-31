@@ -755,7 +755,6 @@ def test_invoke_two_processes_in_out_interrupt(
         assert [c for c in app.stream(None, fork_config, stream_mode="updates")] == [
             {"one": {"inbox": 4}}
         ]
-        assert 0
     finally:
         if hasattr(checkpointer, "__exit__"):
             checkpointer.__exit__(None, None, None)
