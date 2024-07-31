@@ -176,7 +176,7 @@ CheckpointNS = ConfigurableFieldSpec(
     id="checkpoint_ns",
     annotation=str,
     name="Checkpoint NS",
-    description="Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from. Defaults to "" (root graph).",
+    description='Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from. Defaults to "" (root graph).',
     default=None,
     is_shared=True,
 )

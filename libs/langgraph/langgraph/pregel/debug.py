@@ -72,6 +72,7 @@ def map_debug_tasks(
 
         metadata = config["metadata"].copy()
         metadata.pop("checkpoint_id", None)
+        metadata.pop("checkpoint_ns", None)
 
         yield {
             "type": "task",
@@ -98,6 +99,7 @@ def map_debug_task_results(
 
         metadata = config["metadata"].copy()
         metadata.pop("checkpoint_id", None)
+        metadata.pop("checkpoint_ns", None)
 
         yield {
             "type": "task_result",

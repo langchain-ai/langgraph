@@ -18,14 +18,30 @@ class TestSqliteSaver:
 
         # objects for test setup
         self.config_1: RunnableConfig = {
-            "configurable": {"thread_id": "thread-1", "checkpoint_id": "1"}
+            "configurable": {
+                "thread_id": "thread-1",
+                "checkpoint_id": "1",
+                "checkpoint_ns": "",
+            }
         }
         self.config_2: RunnableConfig = {
-            "configurable": {"thread_id": "thread-2", "checkpoint_id": "2"}
+            "configurable": {
+                "thread_id": "thread-2",
+                "checkpoint_id": "2",
+                "checkpoint_ns": "",
+            }
+        }
+        self.config_3: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-2",
+                "checkpoint_id": "2-inner",
+                "checkpoint_ns": "inner",
+            }
         }
 
         self.chkpnt_1: Checkpoint = empty_checkpoint()
         self.chkpnt_2: Checkpoint = create_checkpoint(self.chkpnt_1, {}, 1)
+        self.chkpnt_3: Checkpoint = empty_checkpoint()
 
         self.metadata_1: CheckpointMetadata = {
             "source": "input",
@@ -46,6 +62,7 @@ class TestSqliteSaver:
         # save checkpoints
         self.sqlite_saver.put(self.config_1, self.chkpnt_1, self.metadata_1)
         self.sqlite_saver.put(self.config_2, self.chkpnt_2, self.metadata_2)
+        self.sqlite_saver.put(self.config_3, self.chkpnt_3, self.metadata_3)
 
         # call method / assertions
         query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
@@ -65,10 +82,26 @@ class TestSqliteSaver:
         assert search_results_2[0].metadata == self.metadata_2
 
         search_results_3 = list(self.sqlite_saver.list(None, filter=query_3))
-        assert len(search_results_3) == 2
+        assert len(search_results_3) == 3
 
         search_results_4 = list(self.sqlite_saver.list(None, filter=query_4))
         assert len(search_results_4) == 0
+
+        # search by config (defaults to root graph checkpoints)
+        search_results_5 = list(
+            self.sqlite_saver.list({"configurable": {"thread_id": "thread-2"}})
+        )
+        assert len(search_results_5) == 1
+        assert search_results_5[0].config["configurable"]["checkpoint_ns"] == ""
+
+        # search by config and checkpoint_ns
+        search_results_6 = list(
+            self.sqlite_saver.list(
+                {"configurable": {"thread_id": "thread-2", "checkpoint_ns": "inner"}}
+            )
+        )
+        assert len(search_results_6) == 1
+        assert search_results_6[0].config["configurable"]["checkpoint_ns"] == "inner"
 
         # TODO: test before and limit params
 

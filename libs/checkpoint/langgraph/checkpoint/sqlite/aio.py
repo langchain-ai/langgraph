@@ -24,7 +24,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     SerializerProtocol,
 )
-from langgraph.checkpoint.sqlite.utils import JsonPlusSerializerCompat, search_where
+from langgraph.checkpoint.sqlite.utils import search_where
 
 T = TypeVar("T", bound=callable)
 
@@ -117,8 +117,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         ```
     """
 
-    serde = JsonPlusSerializerCompat()
-
     lock: asyncio.Lock
     is_setup: bool
 
@@ -209,20 +207,22 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 PRAGMA journal_mode=WAL;
                 CREATE TABLE IF NOT EXISTS checkpoints (
                     thread_id TEXT NOT NULL,
+                    checkpoint_ns TEXT NOT NULL,
                     checkpoint_id TEXT NOT NULL,
-                    parent_ts TEXT,
+                    parent_checkpoint_id TEXT,
                     checkpoint BLOB,
                     metadata BLOB,
-                    PRIMARY KEY (thread_id, checkpoint_id)
+                    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
                 );
                 CREATE TABLE IF NOT EXISTS writes (
                     thread_id TEXT NOT NULL,
+                    checkpoint_ns TEXT NOT NULL,
                     checkpoint_id TEXT NOT NULL,
                     task_id TEXT NOT NULL,
                     idx INTEGER NOT NULL,
                     channel TEXT NOT NULL,
                     value BLOB,
-                    PRIMARY KEY (thread_id, checkpoint_id, task_id, idx)
+                    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
                 );
                 """
             ):
@@ -245,55 +245,69 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         await self.setup()
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         async with self.conn.cursor() as cur:
             # find the latest checkpoint for the thread_id
             if config["configurable"].get("checkpoint_id"):
                 await cur.execute(
-                    "SELECT thread_id, checkpoint_id, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_id = ?",
+                    "SELECT thread_id, checkpoint_id, parent_checkpoint_id, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
                     (
                         str(config["configurable"]["thread_id"]),
+                        checkpoint_ns,
                         str(config["configurable"]["checkpoint_id"]),
                     ),
                 )
             else:
                 await cur.execute(
-                    "SELECT thread_id, checkpoint_id, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY checkpoint_id DESC LIMIT 1",
-                    (str(config["configurable"]["thread_id"]),),
+                    "SELECT thread_id, checkpoint_id, parent_checkpoint_id, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_ns = ? ORDER BY checkpoint_id DESC LIMIT 1",
+                    (str(config["configurable"]["thread_id"]), checkpoint_ns),
                 )
             # if a checkpoint is found, return it
             if value := await cur.fetchone():
+                (
+                    thread_id,
+                    checkpoint_id,
+                    parent_checkpoint_id,
+                    checkpoint,
+                    metadata,
+                ) = value
                 if not config["configurable"].get("checkpoint_id"):
                     config = {
                         "configurable": {
-                            "thread_id": value[0],
-                            "checkpoint_id": value[1],
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": checkpoint_id,
                         }
                     }
                 # find any pending writes
                 await cur.execute(
-                    "SELECT task_id, channel, value FROM writes WHERE thread_id = ? AND checkpoint_id = ?",
+                    "SELECT task_id, channel, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
                     (
                         str(config["configurable"]["thread_id"]),
+                        checkpoint_ns,
                         str(config["configurable"]["checkpoint_id"]),
                     ),
                 )
                 # deserialize the checkpoint and metadata
                 return CheckpointTuple(
                     config,
-                    self.serde.loads(value[3]),
-                    self.serde.loads(value[4]) if value[4] is not None else {},
+                    self.serde.loads(("json", checkpoint)),
+                    self.serde.loads(("json", metadata))
+                    if metadata is not None
+                    else {},
                     (
                         {
                             "configurable": {
-                                "thread_id": value[0],
-                                "checkpoint_id": value[2],
+                                "thread_id": thread_id,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
                             }
                         }
-                        if value[2]
+                        if parent_checkpoint_id
                         else None
                     ),
                     [
-                        (task_id, channel, self.serde.loads(value))
+                        (task_id, channel, self.serde.loads(("json", value)))
                         async for task_id, channel, value in cur
                     ],
                 )
@@ -322,26 +336,42 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         """
         await self.setup()
         where, param_values = search_where(config, filter, before)
-        query = f"""SELECT thread_id, checkpoint_id, parent_ts, checkpoint, metadata
+        query = f"""SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata
         FROM checkpoints
         {where}
         ORDER BY checkpoint_id DESC"""
         if limit:
             query += f" LIMIT {limit}"
         async with self.conn.execute(query, param_values) as cursor:
-            async for thread_id, checkpoint_id, parent_ts, value, metadata in cursor:
+            async for (
+                thread_id,
+                checkpoint_ns,
+                checkpoint_id,
+                parent_checkpoint_id,
+                value,
+                metadata,
+            ) in cursor:
                 yield CheckpointTuple(
-                    {"configurable": {"thread_id": thread_id, "checkpoint_id": checkpoint_id}},
-                    self.serde.loads(value),
-                    self.serde.loads(metadata) if metadata is not None else {},
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": checkpoint_id,
+                        }
+                    },
+                    self.serde.loads(("json", value)),
+                    self.serde.loads(("json", metadata))
+                    if metadata is not None
+                    else {},
                     (
                         {
                             "configurable": {
                                 "thread_id": thread_id,
-                                "checkpoint_id": parent_ts,
+                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": parent_checkpoint_id,
                             }
                         }
-                        if parent_ts
+                        if parent_checkpoint_id
                         else None
                     ),
                 )
@@ -366,20 +396,24 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
         await self.setup()
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
         async with self.conn.execute(
-            "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_id, parent_ts, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?)",
             (
                 str(config["configurable"]["thread_id"]),
+                checkpoint_ns,
                 checkpoint["id"],
                 config["configurable"].get("checkpoint_id"),
-                self.serde.dumps(checkpoint),
-                self.serde.dumps(metadata),
+                self.serde.dumps(checkpoint)[1],
+                self.serde.dumps(metadata)[1],
             ),
         ):
             await self.conn.commit()
         return {
             "configurable": {
-                "thread_id": config["configurable"]["thread_id"],
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
                 "checkpoint_id": checkpoint["id"],
             }
         }
@@ -401,15 +435,16 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         """
         await self.setup()
         async with self.conn.executemany(
-            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_id, task_id, idx, channel, value) VALUES (?, ?, ?, ?, ?, ?)",
+            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, value) VALUES (?, ?, ?, ?, ?, ?, ?)",
             [
                 (
                     str(config["configurable"]["thread_id"]),
+                    str(config["configurable"]["checkpoint_ns"]),
                     str(config["configurable"]["checkpoint_id"]),
                     task_id,
                     idx,
                     channel,
-                    self.serde.dumps(value),
+                    self.serde.dumps(value)[1],
                 )
                 for idx, (channel, value) in enumerate(writes)
             ],

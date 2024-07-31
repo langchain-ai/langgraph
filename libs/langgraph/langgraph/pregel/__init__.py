@@ -519,7 +519,14 @@ class Pregel(
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
-        checkpoint_config = config
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                # TODO: add proper support for updating nested subgraph state
+                "checkpoint_ns": "",
+            },
+        }
         if saved:
             checkpoint_config = {
                 "configurable": {
@@ -681,7 +688,14 @@ class Pregel(
             step = saved.metadata.get("step", -2) + 1 if saved else -1
 
             # merge configurable fields with previous checkpoint config
-            checkpoint_config = config
+            checkpoint_config = {
+                **config,
+                "configurable": {
+                    **config["configurable"],
+                    # TODO: add proper support for updating nested subgraph state
+                    "checkpoint_ns": "",
+                },
+            }
             if saved:
                 checkpoint_config = {
                     "configurable": {

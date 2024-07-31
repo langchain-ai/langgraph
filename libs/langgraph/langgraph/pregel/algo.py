@@ -353,7 +353,7 @@ def prepare_next_tasks(
                     task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
                     if parent_checkpoint_ns := config.get("configurable", {}).get(
                         "checkpoint_ns"
-                    ) :
+                    ):
                         checkpoint_ns = f"{parent_checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
                     else:
                         checkpoint_ns = name
@@ -394,7 +394,7 @@ def prepare_next_tasks(
                                     CONFIG_KEY_RESUMING: is_resuming,
                                     "thread_id": thread_id,
                                     "checkpoint_id": checkpoint["id"],
-                                    "checkpoint_ns": checkpoint_ns
+                                    "checkpoint_ns": checkpoint_ns,
                                 },
                             ),
                             triggers,
