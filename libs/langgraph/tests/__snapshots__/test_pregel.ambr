@@ -855,10 +855,10 @@
   '''
 # ---
 # name: test_message_graph
-  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}}, "required": ["content", "tool_call_id"]}}}'
+  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
 # ---
 # name: test_message_graph.1
-  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}}, "required": ["content", "tool_call_id"]}}}'
+  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
 # ---
 # name: test_message_graph.2
   '''
@@ -1323,4 +1323,247 @@
 # ---
 # name: test_state_graph_w_config
   '{"title": "LangGraphConfig", "type": "object", "properties": {"configurable": {"$ref": "#/definitions/Configurable"}}, "definitions": {"Configurable": {"title": "Configurable", "type": "object", "properties": {"tools": {"title": "Tools", "type": "array", "items": {"type": "string"}}}}}}'
+# ---
+# name: test_xray_lance
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'ask_question',
+      }),
+      dict({
+        'source': 'ask_question',
+        'target': 'answer_question',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'answer_question',
+        'target': 'ask_question',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'answer_question',
+        'target': '__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'ask_question',
+        }),
+        'id': 'ask_question',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'answer_question',
+        }),
+        'id': 'answer_question',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+    ]),
+  })
+# ---
+# name: test_xray_lance.1
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'generate_analysts',
+      }),
+      dict({
+        'source': 'conduct_interview',
+        'target': 'generate_sections',
+      }),
+      dict({
+        'source': 'generate_sections',
+        'target': '__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'generate_analysts',
+        'target': 'conduct_interview',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'generate_analysts',
+        }),
+        'id': 'generate_analysts',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'graph',
+            'state',
+            'CompiledStateGraph',
+          ]),
+          'name': 'conduct_interview',
+        }),
+        'id': 'conduct_interview',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'generate_sections',
+        }),
+        'id': 'generate_sections',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+    ]),
+  })
+# ---
+# name: test_xray_lance.2
+  dict({
+    'edges': list([
+      dict({
+        'source': 'conduct_interview:__start__',
+        'target': 'conduct_interview:ask_question',
+      }),
+      dict({
+        'source': 'conduct_interview:ask_question',
+        'target': 'conduct_interview:answer_question',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'conduct_interview:answer_question',
+        'target': 'conduct_interview:ask_question',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'conduct_interview:answer_question',
+        'target': 'conduct_interview:__end__',
+      }),
+      dict({
+        'source': '__start__',
+        'target': 'generate_analysts',
+      }),
+      dict({
+        'source': 'conduct_interview:__end__',
+        'target': 'generate_sections',
+      }),
+      dict({
+        'source': 'generate_sections',
+        'target': '__end__',
+      }),
+      dict({
+        'conditional': True,
+        'source': 'generate_analysts',
+        'target': 'conduct_interview:__start__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'generate_analysts',
+        }),
+        'id': 'generate_analysts',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': 'conduct_interview:__start__',
+        'id': 'conduct_interview:__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'conduct_interview:ask_question',
+        }),
+        'id': 'conduct_interview:ask_question',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'conduct_interview:answer_question',
+        }),
+        'id': 'conduct_interview:answer_question',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': 'conduct_interview:__end__',
+        'id': 'conduct_interview:__end__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'generate_sections',
+        }),
+        'id': 'generate_sections',
+        'type': 'runnable',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+    ]),
+  })
 # ---

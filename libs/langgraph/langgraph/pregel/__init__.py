@@ -504,7 +504,7 @@ class Pregel(
     def update_state(
         self,
         config: RunnableConfig,
-        values: dict[str, Any] | Any,
+        values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
         """Update the state of the graph with the given values, as if they came from
@@ -517,8 +517,28 @@ class Pregel(
         # get last checkpoint
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        step = saved.metadata.get("step", -1) if saved else -1
+        # merge configurable fields with previous checkpoint config
+        checkpoint_config = config
+        if saved:
+            checkpoint_config = {
+                "configurable": {
+                    **config.get("configurable", {}),
+                    **saved.config["configurable"],
+                }
+            }
         # find last node that updated the state, if not provided
-        if as_node is None and not any(
+        if values is None and as_node is None:
+            return self.checkpointer.put(
+                checkpoint_config,
+                create_checkpoint(checkpoint, None, step),
+                {
+                    "source": "update",
+                    "step": step,
+                    "writes": {},
+                },
+            )
+        elif as_node is None and not any(
             v for vv in checkpoint["versions_seen"].values() for v in vv.values()
         ):
             if (
@@ -577,24 +597,13 @@ class Pregel(
             apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-            step = saved.metadata.get("step", -2) + 1 if saved else -1
-
-            # merge configurable fields with previous checkpoint config
-            checkpoint_config = config
-            if saved:
-                checkpoint_config = {
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    }
-                }
 
             return self.checkpointer.put(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step),
+                create_checkpoint(checkpoint, channels, step + 1),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {as_node: values},
                 },
             )
