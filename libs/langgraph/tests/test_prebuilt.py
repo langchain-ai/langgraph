@@ -23,6 +23,7 @@ from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState
 from tests.any_str import AnyStr
 from tests.memory_assert import MemorySaverAssertImmutable
+from tests.messages import _AnyIdHumanMessage
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -81,7 +82,7 @@ def test_no_modifier(checkpointer: Optional[BaseCheckpointSaver]):
             "id": AnyStr(),
             "channel_values": {
                 "messages": [
-                    HumanMessage(content="hi?", id=AnyStr()),
+                    _AnyIdHumanMessage(content="hi?"),
                     AIMessage(content="hi?", id="0"),
                 ],
                 "agent": "agent",
@@ -137,7 +138,7 @@ async def test_no_modifier_async(checkpointer: Optional[BaseCheckpointSaver]):
             "id": AnyStr(),
             "channel_values": {
                 "messages": [
-                    HumanMessage(content="hi?", id=AnyStr()),
+                    _AnyIdHumanMessage(content="hi?"),
                     AIMessage(content="hi?", id="0"),
                 ],
                 "agent": "agent",

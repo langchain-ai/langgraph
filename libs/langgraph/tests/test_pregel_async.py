@@ -62,6 +62,7 @@ from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
 )
+from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
 
 async def test_checkpoint_errors() -> None:
@@ -406,8 +407,6 @@ async def test_cancel_graph_astream_events_v2(
 
 
 async def test_node_schemas_custom_output() -> None:
-    from langchain_core.messages import HumanMessage
-
     class State(TypedDict):
         hello: str
         bye: str
@@ -423,7 +422,7 @@ async def test_node_schemas_custom_output() -> None:
     async def node_a(state: StateForA):
         assert state == {
             "hello": "there",
-            "messages": [HumanMessage(content="hello", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="hello")],
         }
 
     class StateForB(TypedDict):
@@ -462,7 +461,7 @@ async def test_node_schemas_custom_output() -> None:
     assert await graph.ainvoke(
         {"hello": "there", "bye": "world", "messages": "hello"}
     ) == {
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
     builder = StateGraph(input=State, output=Output)
@@ -482,7 +481,7 @@ async def test_node_schemas_custom_output() -> None:
             "now": 345,  # ignored because not in input schema
         }
     ) == {
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
 
@@ -3232,7 +3231,6 @@ async def test_state_graph_few_shot() -> None:
     from langchain_core.messages import (
         AIMessage,
         AnyMessage,
-        HumanMessage,
         ToolCall,
         ToolMessage,
     )
@@ -3330,7 +3328,7 @@ Some examples of past conversations:
         app = workflow.compile(checkpointer=saver)
 
         first_messages = [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id=AnyStr(),
@@ -3348,7 +3346,7 @@ Some examples of past conversations:
                 id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
         assert await app.ainvoke(
             {"messages": "what is weather in sf"},
@@ -3384,7 +3382,7 @@ Some examples of past conversations:
             },
         ) == {
             "messages": [
-                HumanMessage(content="what is weather in la", id=AnyStr()),
+                _AnyIdHumanMessage(content="what is weather in la"),
                 AIMessage(
                     content="",
                     id=AnyStr(),
@@ -3402,7 +3400,7 @@ Some examples of past conversations:
                     id=AnyStr(),
                     tool_call_id="tool_call123",
                 ),
-                AIMessage(content="answer", id=AnyStr()),
+                _AnyIdAIMessage(content="answer"),
             ]
         }
 
@@ -3545,7 +3543,7 @@ async def test_prebuilt_tool_chat() -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -3591,7 +3589,7 @@ async def test_prebuilt_tool_chat() -> None:
                 tool_call_id="tool_call567",
                 id=AnyStr(),
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
     }
 
@@ -3670,7 +3668,7 @@ async def test_prebuilt_tool_chat() -> None:
                 ]
             }
         },
-        {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
+        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
     ]
 
 
@@ -3723,7 +3721,7 @@ async def test_prebuilt_chat() -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -3742,7 +3740,7 @@ async def test_prebuilt_chat() -> None:
             FunctionMessage(
                 content="result for another", name="search_api", id=AnyStr()
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
     }
 
@@ -3802,7 +3800,7 @@ async def test_prebuilt_chat() -> None:
                 ]
             }
         },
-        {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
+        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
     ]
 
 
@@ -3909,7 +3907,7 @@ async def test_state_graph_packets() -> None:
         {"messages": HumanMessage(content="what is weather in sf")}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 id="ai1",
                 content="",
@@ -4065,10 +4063,7 @@ async def test_state_graph_packets() -> None:
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4120,10 +4115,7 @@ async def test_state_graph_packets() -> None:
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4202,10 +4194,7 @@ async def test_state_graph_packets() -> None:
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4284,10 +4273,7 @@ async def test_state_graph_packets() -> None:
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4440,7 +4426,7 @@ async def test_message_graph() -> None:
     app = workflow.compile()
 
     assert await app.ainvoke(HumanMessage(content="what is weather in sf")) == [
-        HumanMessage(content="what is weather in sf", id=AnyStr()),
+        _AnyIdHumanMessage(content="what is weather in sf"),
         AIMessage(
             content="",
             additional_kwargs={
@@ -4519,10 +4505,7 @@ async def test_message_graph() -> None:
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 additional_kwargs={
@@ -4562,10 +4545,7 @@ async def test_message_graph() -> None:
     # message was replaced instead of appended
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 additional_kwargs={
@@ -4624,10 +4604,7 @@ async def test_message_graph() -> None:
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 additional_kwargs={
@@ -4685,10 +4662,7 @@ async def test_message_graph() -> None:
     # replaces message even if object identity is different, as long as id is the same
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 additional_kwargs={
