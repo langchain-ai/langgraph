@@ -18,10 +18,10 @@ class TestSqliteSaver:
 
         # objects for test setup
         self.config_1: RunnableConfig = {
-            "configurable": {"thread_id": "thread-1", "thread_ts": "1"}
+            "configurable": {"thread_id": "thread-1", "checkpoint_id": "1"}
         }
         self.config_2: RunnableConfig = {
-            "configurable": {"thread_id": "thread-2", "thread_ts": "2"}
+            "configurable": {"thread_id": "thread-2", "checkpoint_id": "2"}
         }
 
         self.chkpnt_1: Checkpoint = empty_checkpoint()
@@ -74,7 +74,7 @@ class TestSqliteSaver:
 
     def test_search_where(self):
         # call method / assertions
-        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND thread_ts < ?"
+        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND checkpoint_id < ?"
         expected_param_values_1 = ["input", 2, "{}", 1, "1"]
         assert search_where(None, self.metadata_1, self.config_1) == (
             expected_predicate_1,

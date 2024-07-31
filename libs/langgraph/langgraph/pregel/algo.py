@@ -389,7 +389,7 @@ def prepare_next_tasks(
                                     CONFIG_KEY_CHECKPOINTER: checkpointer,
                                     CONFIG_KEY_RESUMING: is_resuming,
                                     "thread_id": thread_id,
-                                    "thread_ts": checkpoint["id"],
+                                    "checkpoint_id": checkpoint["id"],
                                 },
                             ),
                             triggers,

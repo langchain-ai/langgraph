@@ -92,7 +92,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         >>> graph.get_state(config)
         >>> result = graph.invoke(3, config)
         >>> graph.get_state(config)
-        StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'thread_ts': '2024-05-04T06:32:42.235444+00:00'}}, parent_config=None)
+        StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'checkpoint_id': '0c62ca34-ac19-445d-bbb0-5b4984975b2a'}}, parent_config=None)
     """  # noqa
 
     serde = JsonPlusSerializerCompat()
@@ -165,20 +165,20 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             PRAGMA journal_mode=WAL;
             CREATE TABLE IF NOT EXISTS checkpoints (
                 thread_id TEXT NOT NULL,
-                thread_ts TEXT NOT NULL,
+                checkpoint_id TEXT NOT NULL,
                 parent_ts TEXT,
                 checkpoint BLOB,
                 metadata BLOB,
-                PRIMARY KEY (thread_id, thread_ts)
+                PRIMARY KEY (thread_id, checkpoint_id)
             );
             CREATE TABLE IF NOT EXISTS writes (
                 thread_id TEXT NOT NULL,
-                thread_ts TEXT NOT NULL,
+                checkpoint_id TEXT NOT NULL,
                 task_id TEXT NOT NULL,
                 idx INTEGER NOT NULL,
                 channel TEXT NOT NULL,
                 value BLOB,
-                PRIMARY KEY (thread_id, thread_ts, task_id, idx)
+                PRIMARY KEY (thread_id, checkpoint_id, task_id, idx)
             );
             """
         )
@@ -211,7 +211,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         """Get a checkpoint tuple from the database.
 
         This method retrieves a checkpoint tuple from the SQLite database based on the
-        provided config. If the config contains a "thread_ts" key, the checkpoint with
+        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
         the matching thread ID and timestamp is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
@@ -234,7 +234,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             >>> config = {
             ...    "configurable": {
             ...        "thread_id": "1",
-            ...        "thread_ts": "2024-05-04T06:32:42.235444+00:00",
+            ...        "checkpoint_id": "2024-05-04T06:32:42.235444+00:00",
             ...    }
             ... }
             >>> checkpoint_tuple = memory.get_tuple(config)
@@ -243,34 +243,34 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         """  # noqa
         with self.cursor(transaction=False) as cur:
             # find the latest checkpoint for the thread_id
-            if config["configurable"].get("thread_ts"):
+            if config["configurable"].get("checkpoint_id"):
                 cur.execute(
-                    "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND thread_ts = ?",
+                    "SELECT thread_id, checkpoint_id, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? AND checkpoint_id = ?",
                     (
                         str(config["configurable"]["thread_id"]),
-                        str(config["configurable"]["thread_ts"]),
+                        str(config["configurable"]["checkpoint_id"]),
                     ),
                 )
             else:
                 cur.execute(
-                    "SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY thread_ts DESC LIMIT 1",
+                    "SELECT thread_id, checkpoint_id, parent_ts, checkpoint, metadata FROM checkpoints WHERE thread_id = ? ORDER BY checkpoint_id DESC LIMIT 1",
                     (str(config["configurable"]["thread_id"]),),
                 )
             # if a checkpoint is found, return it
             if value := cur.fetchone():
-                if not config["configurable"].get("thread_ts"):
+                if not config["configurable"].get("checkpoint_id"):
                     config = {
                         "configurable": {
                             "thread_id": value[0],
-                            "thread_ts": value[1],
+                            "checkpoint_id": value[1],
                         }
                     }
                 # find any pending writes
                 cur.execute(
-                    "SELECT task_id, channel, value FROM writes WHERE thread_id = ? AND thread_ts = ?",
+                    "SELECT task_id, channel, value FROM writes WHERE thread_id = ? AND checkpoint_id = ?",
                     (
                         str(config["configurable"]["thread_id"]),
-                        str(config["configurable"]["thread_ts"]),
+                        str(config["configurable"]["checkpoint_id"]),
                     ),
                 )
                 # deserialize the checkpoint and metadata
@@ -282,7 +282,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                         {
                             "configurable": {
                                 "thread_id": value[0],
-                                "thread_ts": value[2],
+                                "checkpoint_id": value[2],
                             }
                         }
                         if value[2]
@@ -326,30 +326,30 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             [CheckpointTuple(...), CheckpointTuple(...)]
 
             >>> config = {"configurable": {"thread_id": "1"}}
-            >>> before = {"configurable": {"thread_ts": "2024-05-04T06:32:42.235444+00:00"}}
+            >>> before = {"configurable": {"checkpoint_id": "2024-05-04T06:32:42.235444+00:00"}}
             >>> checkpoints = list(memory.list(config, before=before))
             >>> print(checkpoints)
             [CheckpointTuple(...), ...]
         """
         where, param_values = search_where(config, filter, before)
-        query = f"""SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata
+        query = f"""SELECT thread_id, checkpoint_id, parent_ts, checkpoint, metadata
         FROM checkpoints
         {where}
-        ORDER BY thread_ts DESC"""
+        ORDER BY checkpoint_id DESC"""
         if limit:
             query += f" LIMIT {limit}"
         with self.cursor(transaction=False) as cur:
             cur.execute(query, param_values)
-            for thread_id, thread_ts, parent_ts, value, metadata in cur:
+            for thread_id, checkpoint_id, parent_ts, value, metadata in cur:
                 yield CheckpointTuple(
-                    {"configurable": {"thread_id": thread_id, "thread_ts": thread_ts}},
+                    {"configurable": {"thread_id": thread_id, "checkpoint_id": checkpoint_id}},
                     self.serde.loads(value),
                     self.serde.loads(metadata) if metadata is not None else {},
                     (
                         {
                             "configurable": {
                                 "thread_id": thread_id,
-                                "thread_ts": parent_ts,
+                                "checkpoint_id": parent_ts,
                             }
                         }
                         if parent_ts
@@ -385,15 +385,15 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             >>> checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
             >>> saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}})
             >>> print(saved_config)
-            {"configurable": {"thread_id": "1", "thread_ts": 2024-05-04T06:32:42.235444+00:00"}}
+            {"configurable": {"thread_id": "1", "checkpoint_id": 2024-05-04T06:32:42.235444+00:00"}}
         """
         with self.lock, self.cursor() as cur:
             cur.execute(
-                "INSERT OR REPLACE INTO checkpoints (thread_id, thread_ts, parent_ts, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_id, parent_ts, checkpoint, metadata) VALUES (?, ?, ?, ?, ?)",
                 (
                     str(config["configurable"]["thread_id"]),
                     checkpoint["id"],
-                    config["configurable"].get("thread_ts"),
+                    config["configurable"].get("checkpoint_id"),
                     self.serde.dumps(checkpoint),
                     self.serde.dumps(metadata),
                 ),
@@ -401,7 +401,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         return {
             "configurable": {
                 "thread_id": config["configurable"]["thread_id"],
-                "thread_ts": checkpoint["id"],
+                "checkpoint_id": checkpoint["id"],
             }
         }
 
@@ -422,11 +422,11 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         """
         with self.lock, self.cursor() as cur:
             cur.executemany(
-                "INSERT OR REPLACE INTO writes (thread_id, thread_ts, task_id, idx, channel, value) VALUES (?, ?, ?, ?, ?, ?)",
+                "INSERT OR REPLACE INTO writes (thread_id, checkpoint_id, task_id, idx, channel, value) VALUES (?, ?, ?, ?, ?, ?)",
                 [
                     (
                         str(config["configurable"]["thread_id"]),
-                        str(config["configurable"]["thread_ts"]),
+                        str(config["configurable"]["checkpoint_id"]),
                         task_id,
                         idx,
                         channel,
@@ -573,7 +573,7 @@ def search_where(
 
     # construct predicate for `before`
     if before is not None:
-        wheres.append("thread_ts < ?")
-        param_values.append(before["configurable"]["thread_ts"])
+        wheres.append("checkpoint_id < ?")
+        param_values.append(before["configurable"]["checkpoint_id"])
 
     return ("WHERE " + " AND ".join(wheres) if wheres else "", param_values)

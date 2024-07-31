@@ -138,10 +138,10 @@ CheckpointThreadId = ConfigurableFieldSpec(
     is_shared=True,
 )
 
-CheckpointThreadTs = ConfigurableFieldSpec(
-    id="thread_ts",
+CheckpointId = ConfigurableFieldSpec(
+    id="checkpoint_id",
     annotation=Optional[str],
-    name="Thread Timestamp",
+    name="Checkpoint ID",
     description="Pass to fetch a past checkpoint. If None, fetches the latest checkpoint.",
     default=None,
     is_shared=True,
@@ -178,7 +178,7 @@ class BaseCheckpointSaver(ABC):
         Returns:
             list[ConfigurableFieldSpec]: List of configuration field specs.
         """
-        return [CheckpointThreadId, CheckpointThreadTs]
+        return [CheckpointThreadId, CheckpointId]
 
     def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
         """Fetch a checkpoint using the given configuration.

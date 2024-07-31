@@ -90,8 +90,8 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         """
         configurable = config["configurable"].copy()
 
-        # remove thread_ts to make testing simpler
-        thread_ts = configurable.pop("thread_ts", None)
+        # remove checkpoint_id to make testing simpler
+        checkpoint_id = configurable.pop("checkpoint_id", None)
 
         self.storage[config["configurable"]["thread_id"]].update(
             {
@@ -99,14 +99,14 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
                     self.serde.dumps(checkpoint),
                     # merge configurable fields and metadata
                     self.serde.dumps({**configurable, **metadata}),
-                    thread_ts,
+                    checkpoint_id,
                 )
             }
         )
         return {
             "configurable": {
                 "thread_id": config["configurable"]["thread_id"],
-                "thread_ts": checkpoint["id"],
+                "checkpoint_id": checkpoint["id"],
             }
         }
 

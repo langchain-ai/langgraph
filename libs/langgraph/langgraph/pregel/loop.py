@@ -143,7 +143,7 @@ class PregelLoop:
                     **self.checkpoint_config,
                     "configurable": {
                         **self.checkpoint_config["configurable"],
-                        "thread_ts": self.checkpoint["id"],
+                        "checkpoint_id": self.checkpoint["id"],
                     },
                 },
                 writes,
@@ -315,7 +315,7 @@ class PregelLoop:
                 # this is achieved by writing child checkpoints as progress is made
                 # (so that error recovery / resuming from interrupt don't lose work)
                 # but doing so always with an id equal to that of the parent checkpoint
-                id=self.config["configurable"]["thread_ts"] if self.is_nested else None,
+                id=self.config["configurable"]["checkpoint_id"] if self.is_nested else None,
             )
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
@@ -331,7 +331,7 @@ class PregelLoop:
                 **self.checkpoint_config,
                 "configurable": {
                     **self.checkpoint_config["configurable"],
-                    "thread_ts": self.checkpoint["id"],
+                    "checkpoint_id": self.checkpoint["id"],
                 },
             }
             # produce debug output
