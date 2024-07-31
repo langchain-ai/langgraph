@@ -610,7 +610,7 @@ class CompiledStateGraph(CompiledGraph):
                 if branch.then and branch.then != END:
                     writes.append(
                         ChannelWriteEntry(
-                            f"branch:{start}:{name}:then",
+                            f"branch:{start}:{name}::then",
                             WaitForNames(
                                 {p.node if isinstance(p, Send) else p for p in filtered}
                             ),
@@ -630,12 +630,12 @@ class CompiledStateGraph(CompiledGraph):
         for end in ends:
             if end != END:
                 channel_name = f"branch:{start}:{name}:{end}"
-                self.channels[channel_name] = EphemeralValue(Any)
+                self.channels[channel_name] = EphemeralValue(Any, guard=False)
                 self.nodes[end].triggers.append(channel_name)
 
         # attach then subscriber
         if branch.then and branch.then != END:
-            channel_name = f"branch:{start}:{name}:then"
+            channel_name = f"branch:{start}:{name}::then"
             self.channels[channel_name] = DynamicBarrierValue(str)
             self.nodes[branch.then].triggers.append(channel_name)
             for end in ends:

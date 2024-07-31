@@ -1134,15 +1134,15 @@ def test_cond_edge_after_send() -> None:
             setattr(self, "__name__", name)
 
         def __call__(self, state):
-            return state + [self.name]
+            return [self.name]
 
     def send_for_fun(state):
-        return [Send("2", state)]
+        return [Send("2", state), Send("2", state)]
 
     def route_to_three(state) -> Literal["3"]:
         return "3"
 
-    builder = StateGraph(list)
+    builder = StateGraph(Annotated[list, operator.add])
     builder.add_node(Node("1"))
     builder.add_node(Node("2"))
     builder.add_node(Node("3"))
@@ -1150,7 +1150,7 @@ def test_cond_edge_after_send() -> None:
     builder.add_conditional_edges("1", send_for_fun)
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
-    assert graph.invoke(["0"]) == ["0", "1", "2", "3"]
+    assert graph.invoke(["0"]) == ["0", "1", "2", "2", "3"]
 
 
 async def test_checkpointer_null_pending_writes() -> None:
@@ -6536,10 +6536,10 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "ceada3c5-5f25-59e4-9ea5-544599ce1d2f",
+                    "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
                     "name": "finish",
                     "input": {"my_key": "value prepared slow", "market": "DE"},
-                    "triggers": ["branch:prepare:condition:then"],
+                    "triggers": ["branch:prepare:condition::then"],
                 },
             },
             {
@@ -6547,7 +6547,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "ceada3c5-5f25-59e4-9ea5-544599ce1d2f",
+                    "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
                     "name": "finish",
                     "result": [("my_key", " finished")],
                 },
@@ -9097,3 +9097,130 @@ def test_remove_message_from_node():
     output = app.invoke([HumanMessage(content="Hi")])
     assert len(output) == 2
     assert output[-1].content == "How can I help you?"
+
+
+def test_xray_lance(snapshot: SnapshotAssertion):
+    from langchain_core.messages import AnyMessage, HumanMessage
+    from langchain_core.pydantic_v1 import BaseModel, Field
+
+    class Analyst(BaseModel):
+        affiliation: str = Field(
+            description="Primary affiliation of the investment analyst.",
+        )
+        name: str = Field(
+            description="Name of the investment analyst.",
+            pattern=r"^[a-zA-Z0-9_-]{1,64}$",
+        )
+        role: str = Field(
+            description="Role of the investment analyst in the context of the topic.",
+        )
+        description: str = Field(
+            description="Description of the investment analyst focus, concerns, and motives.",
+        )
+
+        @property
+        def persona(self) -> str:
+            return f"Name: {self.name}\nRole: {self.role}\nAffiliation: {self.affiliation}\nDescription: {self.description}\n"
+
+    class Perspectives(BaseModel):
+        analysts: List[Analyst] = Field(
+            description="Comprehensive list of investment analysts with their roles and affiliations.",
+        )
+
+    class Section(BaseModel):
+        section_title: str = Field(..., title="Title of the section")
+        context: str = Field(
+            ..., title="Provide a clear summary of the focus area that you researched."
+        )
+        findings: str = Field(
+            ...,
+            title="Give a clear and detailed overview of your findings based upon the expert interview.",
+        )
+        thesis: str = Field(
+            ...,
+            title="Give a clear and specific investment thesis based upon these findings.",
+        )
+
+    class InterviewState(TypedDict):
+        messages: Annotated[List[AnyMessage], add_messages]
+        analyst: Analyst
+        section: Section
+
+    class ResearchGraphState(TypedDict):
+        analysts: List[Analyst]
+        topic: str
+        max_analysts: int
+        sections: List[Section]
+        interviews: Annotated[list, operator.add]
+
+    # Conditional edge
+    def route_messages(state):
+        return "ask_question"
+
+    def generate_question(state):
+        return ...
+
+    def generate_answer(state):
+        return ...
+
+    # Add nodes and edges
+    interview_builder = StateGraph(InterviewState)
+    interview_builder.add_node("ask_question", generate_question)
+    interview_builder.add_node("answer_question", generate_answer)
+
+    # Flow
+    interview_builder.add_edge(START, "ask_question")
+    interview_builder.add_edge("ask_question", "answer_question")
+    interview_builder.add_conditional_edges("answer_question", route_messages)
+
+    # Set up memory
+    memory = MemorySaver()
+
+    # Interview
+    interview_graph = interview_builder.compile(checkpointer=memory).with_config(
+        run_name="Conduct Interviews"
+    )
+
+    # View
+    assert interview_graph.get_graph().to_json() == snapshot
+
+    def run_all_interviews(state: ResearchGraphState):
+        """Edge to run the interview sub-graph using Send"""
+        return [
+            Send(
+                "conduct_interview",
+                {
+                    "analyst": Analyst(),
+                    "messages": [
+                        HumanMessage(
+                            content="So you said you were writing an article on ...?"
+                        )
+                    ],
+                },
+            )
+            for s in state["analysts"]
+        ]
+
+    def generate_sections(state: ResearchGraphState):
+        return ...
+
+    def generate_analysts(state: ResearchGraphState):
+        return ...
+
+    builder = StateGraph(ResearchGraphState)
+    builder.add_node("generate_analysts", generate_analysts)
+    builder.add_node("conduct_interview", interview_builder.compile())
+    builder.add_node("generate_sections", generate_sections)
+
+    builder.add_edge(START, "generate_analysts")
+    builder.add_conditional_edges(
+        "generate_analysts", run_all_interviews, ["conduct_interview"]
+    )
+    builder.add_edge("conduct_interview", "generate_sections")
+    builder.add_edge("generate_sections", END)
+
+    graph = builder.compile()
+
+    # View
+    assert graph.get_graph().to_json() == snapshot
+    assert graph.get_graph(xray=1).to_json() == snapshot
