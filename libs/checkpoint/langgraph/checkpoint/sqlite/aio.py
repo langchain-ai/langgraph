@@ -10,10 +10,10 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    TypeAlias,
     TypeVar,
 )
 
+import aiosqlite
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
@@ -25,13 +25,6 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
 )
 from langgraph.checkpoint.sqlite.utils import JsonPlusSerializerCompat, search_where
-
-try:
-    import aiosqlite
-
-    AsyncConnection: TypeAlias = aiosqlite.Connection
-except ImportError:
-    AsyncConnection: TypeAlias = Any
 
 T = TypeVar("T", bound=callable)
 
@@ -131,7 +124,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
     def __init__(
         self,
-        conn: AsyncConnection,
+        conn: aiosqlite.Connection,
         *,
         serde: Optional[SerializerProtocol] = None,
     ):
@@ -150,7 +143,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         Returns:
             AsyncSqliteSaver: A new AsyncSqliteSaver instance.
         """
-        import aiosqlite
 
         return AsyncSqliteSaver(conn=aiosqlite.connect(conn_string))
 
