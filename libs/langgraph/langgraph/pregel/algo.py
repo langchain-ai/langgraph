@@ -22,15 +22,16 @@ from langchain_core.runnables.config import (
     merge_configs,
     patch_config,
 )
-from langgraph_checkpoint.base import (
-    BaseCheckpointSaver,
-    Checkpoint,
-    copy_checkpoint,
-)
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.context import Context
-from langgraph.channels.manager import ChannelsManager, create_checkpoint
+from langgraph.channels.manager import ChannelsManager
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    copy_checkpoint,
+    create_checkpoint,
+)
 from langgraph.constants import (
     CHECKPOINT_NAMESPACE_SEPARATOR,
     CONFIG_KEY_CHECKPOINTER,

@@ -1,5 +1,3 @@
-import json
-import pickle
 import sqlite3
 import threading
 from contextlib import AbstractContextManager, contextmanager
@@ -8,52 +6,23 @@ from types import TracebackType
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
-from langgraph_checkpoint.base import (
+from typing_extensions import Self
+
+from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
+    EmptyChannelError,
     SerializerProtocol,
 )
-from langgraph_checkpoint.serde.jsonplus import JsonPlusSerializer
-from typing_extensions import Self
-
-from langgraph.channels.base import BaseChannel
-from langgraph.errors import EmptyChannelError
-
-
-class JsonPlusSerializerCompat(JsonPlusSerializer):
-    """A serializer that supports loading pickled checkpoints for backwards compatibility.
-
-    This serializer extends the JsonPlusSerializer and adds support for loading pickled
-    checkpoints. If the input data starts with b"\x80" and ends with b".", it is treated
-    as a pickled checkpoint and loaded using pickle.loads(). Otherwise, the default
-    JsonPlusSerializer behavior is used.
-
-    Examples:
-        >>> import pickle
-        >>> from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
-        >>>
-        >>> serializer = JsonPlusSerializerCompat()
-        >>> pickled_data = pickle.dumps({"key": "value"})
-        >>> loaded_data = serializer.loads(pickled_data)
-        >>> print(loaded_data)  # Output: {"key": "value"}
-        >>>
-        >>> json_data = '{"key": "value"}'.encode("utf-8")
-        >>> loaded_data = serializer.loads(json_data)
-        >>> print(loaded_data)  # Output: {"key": "value"}
-    """
-
-    def loads(self, data: bytes) -> Any:
-        if data.startswith(b"\x80") and data.endswith(b"."):
-            return pickle.loads(data)
-        return super().loads(data)
-
+from langgraph.checkpoint.serde.types import ChannelProtocol
+from langgraph.checkpoint.sqlite.utils import JsonPlusSerializerCompat, search_where
 
 _AIO_ERROR_MSG = (
     "The SqliteSaver does not support async methods. "
     "Consider using AsyncSqliteSaver instead.\n"
-    "from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver\n"
+    "from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver\n"
     "Note: AsyncSqliteSaver requires the aiosqlite package to use.\n"
     "Install with:\n`pip install aiosqlite`\n"
     "See https://langchain-ai.github.io/langgraph/reference/checkpoints/asyncsqlitesaver"
@@ -476,7 +445,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         """
         raise NotImplementedError(_AIO_ERROR_MSG)
 
-    def get_next_version(self, current: Optional[str], channel: BaseChannel) -> str:
+    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         """Generate the next version ID for a channel.
 
         This method creates a new version identifier for a channel based on its current version.

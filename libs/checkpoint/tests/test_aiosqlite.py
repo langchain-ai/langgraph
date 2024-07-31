@@ -1,9 +1,13 @@
 import pytest
 from langchain_core.runnables import RunnableConfig
-from langgraph_checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
 
-from langgraph.channels.manager import create_checkpoint
-from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+from langgraph.checkpoint.base import (
+    Checkpoint,
+    CheckpointMetadata,
+    create_checkpoint,
+    empty_checkpoint,
+)
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 
 
 class TestAsyncSqliteSaver:

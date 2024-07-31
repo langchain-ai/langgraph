@@ -1,6 +1,6 @@
 # Checkpoints
 
-You can [compile][langgraph.graph.MessageGraph.compile] any LangGraph workflow with a [CheckPointer][https://github.com/langchain-ai/langgraph/blob/main/libs/checkpoint/langgraph_checkpoint/base.py#L151] to give your agent "memory" by persisting its state. This permits things like:
+You can [compile][langgraph.graph.MessageGraph.compile] any LangGraph workflow with a [CheckPointer][basecheckpointsaver] to give your agent "memory" by persisting its state. This permits things like:
 
 - Remembering things across multiple interactions
 - Interrupting to wait for user input
@@ -9,15 +9,33 @@ You can [compile][langgraph.graph.MessageGraph.compile] any LangGraph workflow w
 
 Key checkpointer interfaces and primitives are defined in [`langgraph_checkpoint`](https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint) library.
 
+### Checkpoint
+
+::: langgraph.checkpoint.base.Checkpoint
+
+### CheckpointMetadata
+
+::: langgraph.checkpoint.base.CheckpointMetadata
+
+### BaseCheckpointSaver
+
+::: langgraph.checkpoint.base.BaseCheckpointSaver
+
+### SerializerProtocol
+
+::: langgraph.checkpoint.base.SerializerProtocol
+
 ## Implementations
 
-LangGraph natively provides the following checkpoint implementations:
+LangGraph also natively provides the following checkpoint implementations.
 
-### MemorySaver (via `langgraph_checkpoint`)
+### MemorySaver
+
+::: langgraph.checkpoint.memory.MemorySaver
 
 ### AsyncSqliteSaver
 
-::: langgraph.checkpoint.aiosqlite.AsyncSqliteSaver
+::: langgraph.checkpoint.sqlite.aio.AsyncSqliteSaver
 
 ### SqliteSaver
 

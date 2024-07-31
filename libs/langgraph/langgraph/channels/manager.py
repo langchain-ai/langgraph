@@ -1,13 +1,10 @@
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
-from datetime import datetime, timezone
-from typing import Any, AsyncGenerator, Generator, Mapping, Optional
+from typing import AsyncGenerator, Generator, Mapping
 
 from langchain_core.runnables import RunnableConfig
-from langgraph_checkpoint.base import Checkpoint
-from langgraph_checkpoint.id import uuid6
 
 from langgraph.channels.base import BaseChannel
-from langgraph.errors import EmptyChannelError
+from langgraph.checkpoint.base import Checkpoint
 
 
 @contextmanager
@@ -40,31 +37,3 @@ async def AsyncChannelsManager(
             )
             for k, v in channels.items()
         }
-
-
-def create_checkpoint(
-    checkpoint: Checkpoint,
-    channels: Mapping[str, BaseChannel],
-    step: int,
-    *,
-    id: Optional[str] = None,
-) -> Checkpoint:
-    """Create a checkpoint for the given channels."""
-    ts = datetime.now(timezone.utc).isoformat()
-    values: dict[str, Any] = {}
-    for k, v in channels.items():
-        try:
-            values[k] = v.checkpoint()
-        except EmptyChannelError:
-            pass
-    return Checkpoint(
-        v=1,
-        ts=ts,
-        id=id or str(uuid6(clock_seq=step)),
-        channel_values=values,
-        channel_versions=checkpoint["channel_versions"],
-        versions_seen=checkpoint["versions_seen"],
-        pending_sends=checkpoint.get("pending_sends", []),
-        # checkpoints are saved only at the end of a step, ie. when current tasks should be cleared
-        current_tasks={},
-    )

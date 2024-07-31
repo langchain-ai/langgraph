@@ -44,29 +44,43 @@ If the checkpointer will be used with asynchronous graph execution (i.e. executi
 
 ## Usage
 
-```shell
-export ANTHROPIC_API_KEY=sk-...
-```
-
 ```python
-from langchain_core.tools import tool
-from langchain_anthropic import ChatAnthropic
-from langgraph.prebuilt import create_react_agent
-from langgraph_checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import MemorySaver
 
-@tool
-def search(query: str):
-    """Call to surf the web."""
-    # This is a placeholder, but don't tell the LLM that...
-    if "sf" in query.lower() or "san francisco" in query.lower():
-        return "It's 60 degrees and foggy."
-    return "It's 90 degrees and sunny."
-
-llm = ChatAnthropic(model="claude-3-5-sonnet-20240620")
-tools = [search]
 checkpointer = MemorySaver()
+checkpoint = {
+  "v": 1,
+  "ts": "2024-07-31T20:14:19.804150+00:00",
+  "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
+  "channel_values": {
+    "my_key": "meow",
+    "node": "node"
+  },
+  "channel_versions": {
+    "__start__": 2,
+    "my_key": 3,
+    "start:node": 3,
+    "node": 3
+  },
+  "versions_seen": {
+    "__input__": {},
+    "__start__": {
+      "__start__": 1
+    },
+    "node": {
+      "start:node": 2
+    }
+  },
+  "pending_sends": [],
+  "current_tasks": {}
+}
 
-agent = create_react_agent(llm, tools, checkpointer=checkpointer)
-config = {"configurable": {"thread_id": "1"}}
-agent.invoke({"messages": [("human", "what's the weather in sf")]}, config)
+# store checkpoint
+checkpointer.put(thread_config, checkpoint, {})
+
+# load checkpoint
+checkpointer.get(thread_config)
+
+# list checkpoints
+list(checkpointer.list(thread_config))
 ```

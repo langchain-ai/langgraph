@@ -29,15 +29,6 @@ from langchain_core.runnables import (
     RunnablePassthrough,
     RunnablePick,
 )
-from langgraph_checkpoint.base import (
-    BaseCheckpointSaver,
-    Checkpoint,
-    CheckpointMetadata,
-    CheckpointTuple,
-)
-from langgraph_checkpoint.memory import MemorySaver
-from langgraph_checkpoint.serde.base import SerializerProtocol
-from langgraph_checkpoint.serde.jsonplus import JsonPlusSerializer
 from langsmith import traceable
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
@@ -47,6 +38,15 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+)
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
@@ -69,6 +69,7 @@ from tests.memory_assert import (
     MemorySaverNoPending,
     NoopSerializer,
 )
+from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
 
 def test_graph_validation() -> None:
@@ -235,8 +236,6 @@ def test_checkpoint_errors() -> None:
 
 
 def test_node_schemas_custom_output() -> None:
-    from langchain_core.messages import HumanMessage
-
     class State(TypedDict):
         hello: str
         bye: str
@@ -252,7 +251,7 @@ def test_node_schemas_custom_output() -> None:
     def node_a(state: StateForA) -> State:
         assert state == {
             "hello": "there",
-            "messages": [HumanMessage(content="hello", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="hello")],
         }
 
     class StateForB(TypedDict):
@@ -289,7 +288,7 @@ def test_node_schemas_custom_output() -> None:
     graph = builder.compile()
 
     assert graph.invoke({"hello": "there", "bye": "world", "messages": "hello"}) == {
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
     builder = StateGraph(input=State, output=Output)
@@ -309,13 +308,11 @@ def test_node_schemas_custom_output() -> None:
             "now": 345,  # ignored because not in input schema
         }
     ) == {
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
 
 def test_reducer_before_first_node() -> None:
-    from langchain_core.messages import HumanMessage
-
     class State(TypedDict):
         hello: str
         messages: Annotated[list[str], add_messages]
@@ -323,7 +320,7 @@ def test_reducer_before_first_node() -> None:
     def node_a(state: State) -> State:
         assert state == {
             "hello": "there",
-            "messages": [HumanMessage(content="hello", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="hello")],
         }
 
     builder = StateGraph(State)
@@ -333,7 +330,7 @@ def test_reducer_before_first_node() -> None:
     graph = builder.compile()
     assert graph.invoke({"hello": "there", "messages": "hello"}) == {
         "hello": "there",
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
     class State(TypedDict):
@@ -343,7 +340,7 @@ def test_reducer_before_first_node() -> None:
     def node_a(state: State) -> State:
         assert state == {
             "hello": "there",
-            "messages": [HumanMessage(content="hello", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="hello")],
         }
 
     builder = StateGraph(State)
@@ -353,7 +350,7 @@ def test_reducer_before_first_node() -> None:
     graph = builder.compile()
     assert graph.invoke({"hello": "there", "messages": "hello"}) == {
         "hello": "there",
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
     class State(TypedDict):
@@ -363,7 +360,7 @@ def test_reducer_before_first_node() -> None:
     def node_a(state: State) -> State:
         assert state == {
             "hello": "there",
-            "messages": [HumanMessage(content="hello", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="hello")],
         }
 
     builder = StateGraph(State)
@@ -373,7 +370,7 @@ def test_reducer_before_first_node() -> None:
     graph = builder.compile()
     assert graph.invoke({"hello": "there", "messages": "hello"}) == {
         "hello": "there",
-        "messages": [HumanMessage(content="hello", id=AnyStr())],
+        "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
 
@@ -549,172 +546,380 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 2
 
 
-def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
-    add_one = mocker.Mock(side_effect=lambda x: x + 1)
-    one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
-    two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        SqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+def test_invoke_two_processes_in_out_interrupt(
+    checkpointer: BaseCheckpointSaver, mocker: MockerFixture
+) -> None:
+    try:
+        add_one = mocker.Mock(side_effect=lambda x: x + 1)
+        one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
+        two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
 
-    memory = MemorySaverAssertImmutable()
-    app = Pregel(
-        nodes={"one": one, "two": two},
-        channels={
-            "inbox": LastValue(int),
-            "output": LastValue(int),
-            "input": LastValue(int),
-        },
-        input_channels="input",
-        output_channels="output",
-        checkpointer=memory,
-        interrupt_after_nodes=["one"],
-    )
-
-    # start execution, stop at inbox
-    assert app.invoke(2, {"configurable": {"thread_id": 1}}) is None
-
-    # inbox == 3
-    checkpoint = memory.get({"configurable": {"thread_id": 1}})
-    assert checkpoint is not None
-    assert checkpoint["channel_values"]["inbox"] == 3
-
-    # resume execution, finish
-    assert app.invoke(None, {"configurable": {"thread_id": 1}}) == 4
-
-    # start execution again, stop at inbox
-    assert app.invoke(20, {"configurable": {"thread_id": 1}}) is None
-
-    # inbox == 21
-    checkpoint = memory.get({"configurable": {"thread_id": 1}})
-    assert checkpoint is not None
-    assert checkpoint["channel_values"]["inbox"] == 21
-
-    # send a new value in, interrupting the previous execution
-    assert app.invoke(3, {"configurable": {"thread_id": 1}}) is None
-    assert app.invoke(None, {"configurable": {"thread_id": 1}}) == 5
-
-    # start execution again, stopping at inbox
-    assert app.invoke(20, {"configurable": {"thread_id": 2}}) is None
-
-    # inbox == 21
-    snapshot = app.get_state({"configurable": {"thread_id": 2}})
-    assert snapshot.values["inbox"] == 21
-    assert snapshot.next == ("two",)
-
-    # update the state, resume
-    app.update_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
-    assert app.invoke(None, {"configurable": {"thread_id": 2}}) == 26
-
-    # no pending tasks
-    snapshot = app.get_state({"configurable": {"thread_id": 2}})
-    assert snapshot.next == ()
-
-    # list history
-    thread1 = {"configurable": {"thread_id": 1}}
-    assert [c for c in app.get_state_history(thread1)] == [
-        StateSnapshot(
-            values={"inbox": 4, "output": 5, "input": 3},
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "checkpoint_id": AnyStr(),
-                }
+        app = Pregel(
+            nodes={"one": one, "two": two},
+            channels={
+                "inbox": LastValue(int),
+                "output": LastValue(int),
+                "input": LastValue(int),
             },
-            metadata={"source": "loop", "step": 6, "writes": 5},
-            created_at=AnyStr(),
-            parent_config=[*app.checkpointer.list(thread1)][1].config,
-        ),
-        StateSnapshot(
-            values={"inbox": 4, "output": 4, "input": 3},
-            next=("two",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={"source": "loop", "step": 5, "writes": None},
-            created_at=AnyStr(),
-            parent_config=[*app.checkpointer.list(thread1)][2].config,
-        ),
-        StateSnapshot(
-            values={"inbox": 21, "output": 4, "input": 3},
-            next=("one",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={"source": "input", "step": 4, "writes": 3},
-            created_at=AnyStr(),
-            parent_config=[*app.checkpointer.list(thread1)][3].config,
-        ),
-        StateSnapshot(
-            values={"inbox": 21, "output": 4, "input": 20},
-            next=("two",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={"source": "loop", "step": 3, "writes": None},
-            created_at=AnyStr(),
-            parent_config=[*app.checkpointer.list(thread1)][4].config,
-        ),
-        StateSnapshot(
-            values={"inbox": 3, "output": 4, "input": 20},
-            next=("one",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={"source": "input", "step": 2, "writes": 20},
-            created_at=AnyStr(),
-            parent_config=[*app.checkpointer.list(thread1)][5].config,
-        ),
-        StateSnapshot(
-            values={"inbox": 3, "output": 4, "input": 2},
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={"source": "loop", "step": 1, "writes": 4},
-            created_at=AnyStr(),
-            parent_config=[*app.checkpointer.list(thread1)][6].config,
-        ),
-        StateSnapshot(
-            values={"inbox": 3, "input": 2},
-            next=("two",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={"source": "loop", "step": 0, "writes": None},
-            created_at=AnyStr(),
-            parent_config=[*app.checkpointer.list(thread1)][7].config,
-        ),
-        StateSnapshot(
-            values={"input": 2},
-            next=("one",),
-            config={
-                "configurable": {
-                    "thread_id": 1,
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={"source": "input", "step": -1, "writes": 2},
-            created_at=AnyStr(),
-            parent_config=None,
-        ),
-    ]
+            input_channels="input",
+            output_channels="output",
+            checkpointer=checkpointer,
+            interrupt_after_nodes=["one"],
+        )
+        thread1 = {"configurable": {"thread_id": "1"}}
+        thread2 = {"configurable": {"thread_id": "2"}}
+
+        # start execution, stop at inbox
+        assert app.invoke(2, thread1) is None
+
+        # inbox == 3
+        checkpoint = checkpointer.get(thread1)
+        assert checkpoint is not None
+        assert checkpoint["channel_values"]["inbox"] == 3
+
+        # resume execution, finish
+        assert app.invoke(None, thread1) == 4
+
+        # start execution again, stop at inbox
+        assert app.invoke(20, thread1) is None
+
+        # inbox == 21
+        checkpoint = checkpointer.get(thread1)
+        assert checkpoint is not None
+        assert checkpoint["channel_values"]["inbox"] == 21
+
+        # send a new value in, interrupting the previous execution
+        assert app.invoke(3, thread1) is None
+        assert app.invoke(None, thread1) == 5
+
+        # start execution again, stopping at inbox
+        assert app.invoke(20, thread2) is None
+
+        # inbox == 21
+        snapshot = app.get_state(thread2)
+        assert snapshot.values["inbox"] == 21
+        assert snapshot.next == ("two",)
+
+        # update the state, resume
+        app.update_state(thread2, 25, as_node="one")
+        assert app.invoke(None, thread2) == 26
+
+        # no pending tasks
+        snapshot = app.get_state(thread2)
+        assert snapshot.next == ()
+
+        # list history
+        history = [c for c in app.get_state_history(thread1)]
+        assert history == [
+            StateSnapshot(
+                values={"inbox": 4, "output": 5, "input": 3},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 6, "writes": 5},
+                created_at=AnyStr(),
+                parent_config=history[1].config,
+            ),
+            StateSnapshot(
+                values={"inbox": 4, "output": 4, "input": 3},
+                next=("two",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 5, "writes": None},
+                created_at=AnyStr(),
+                parent_config=history[2].config,
+            ),
+            StateSnapshot(
+                values={"inbox": 21, "output": 4, "input": 3},
+                next=("one",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "input", "step": 4, "writes": 3},
+                created_at=AnyStr(),
+                parent_config=history[3].config,
+            ),
+            StateSnapshot(
+                values={"inbox": 21, "output": 4, "input": 20},
+                next=("two",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 3, "writes": None},
+                created_at=AnyStr(),
+                parent_config=history[4].config,
+            ),
+            StateSnapshot(
+                values={"inbox": 3, "output": 4, "input": 20},
+                next=("one",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "input", "step": 2, "writes": 20},
+                created_at=AnyStr(),
+                parent_config=history[5].config,
+            ),
+            StateSnapshot(
+                values={"inbox": 3, "output": 4, "input": 2},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 1, "writes": 4},
+                created_at=AnyStr(),
+                parent_config=history[6].config,
+            ),
+            StateSnapshot(
+                values={"inbox": 3, "input": 2},
+                next=("two",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 0, "writes": None},
+                created_at=AnyStr(),
+                parent_config=history[7].config,
+            ),
+            StateSnapshot(
+                values={"input": 2},
+                next=("one",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "input", "step": -1, "writes": 2},
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
+
+        # forking from any previous checkpoint w/out forking should do nothing
+        assert [
+            c for c in app.stream(None, history[0].config, stream_mode="updates")
+        ] == []
+        assert [
+            c for c in app.stream(None, history[1].config, stream_mode="updates")
+        ] == []
+        assert [
+            c for c in app.stream(None, history[2].config, stream_mode="updates")
+        ] == []
+
+        # forking and re-running from any prev checkpoint should re-run nodes
+        fork_config = app.update_state(history[0].config, None)
+        assert [c for c in app.stream(None, fork_config, stream_mode="updates")] == []
+
+        fork_config = app.update_state(history[1].config, None)
+        assert [c for c in app.stream(None, fork_config, stream_mode="updates")] == [
+            {"two": {"output": 5}}
+        ]
+
+        fork_config = app.update_state(history[2].config, None)
+        assert [c for c in app.stream(None, fork_config, stream_mode="updates")] == [
+            {"one": {"inbox": 4}}
+        ]
+    finally:
+        if hasattr(checkpointer, "__exit__"):
+            checkpointer.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        SqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+def test_fork_always_re_runs_nodes(
+    checkpointer: BaseCheckpointSaver, mocker: MockerFixture
+) -> None:
+    try:
+        add_one = mocker.Mock(side_effect=lambda _: 1)
+
+        builder = StateGraph(Annotated[int, operator.add])
+        builder.add_node("add_one", add_one)
+        builder.add_edge(START, "add_one")
+        builder.add_conditional_edges(
+            "add_one", lambda cnt: "add_one" if cnt < 6 else END
+        )
+        graph = builder.compile(checkpointer=checkpointer)
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+
+        # start execution, stop at inbox
+        assert [*graph.stream(1, thread1, stream_mode=["values", "updates"])] == [
+            ("values", 1),
+            ("updates", {"add_one": 1}),
+            ("values", 2),
+            ("updates", {"add_one": 1}),
+            ("values", 3),
+            ("updates", {"add_one": 1}),
+            ("values", 4),
+            ("updates", {"add_one": 1}),
+            ("values", 5),
+            ("updates", {"add_one": 1}),
+            ("values", 6),
+        ]
+
+        # list history
+        history = [c for c in graph.get_state_history(thread1)]
+        assert history == [
+            StateSnapshot(
+                values=6,
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 5, "writes": {"add_one": 1}},
+                created_at=AnyStr(),
+                parent_config=history[1].config,
+            ),
+            StateSnapshot(
+                values=5,
+                next=("add_one",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 4, "writes": {"add_one": 1}},
+                created_at=AnyStr(),
+                parent_config=history[2].config,
+            ),
+            StateSnapshot(
+                values=4,
+                next=("add_one",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 3, "writes": {"add_one": 1}},
+                created_at=AnyStr(),
+                parent_config=history[3].config,
+            ),
+            StateSnapshot(
+                values=3,
+                next=("add_one",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 2, "writes": {"add_one": 1}},
+                created_at=AnyStr(),
+                parent_config=history[4].config,
+            ),
+            StateSnapshot(
+                values=2,
+                next=("add_one",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 1, "writes": {"add_one": 1}},
+                created_at=AnyStr(),
+                parent_config=history[5].config,
+            ),
+            StateSnapshot(
+                values=1,
+                next=("add_one",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "step": 0, "writes": None},
+                created_at=AnyStr(),
+                parent_config=history[6].config,
+            ),
+            StateSnapshot(
+                values=0,
+                next=("__start__",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "input", "step": -1, "writes": 1},
+                created_at=AnyStr(),
+                parent_config=None,
+            ),
+        ]
+
+        # forking from any previous checkpoint w/out forking should do nothing
+        assert [
+            c for c in graph.stream(None, history[0].config, stream_mode="updates")
+        ] == []
+        assert [
+            c for c in graph.stream(None, history[1].config, stream_mode="updates")
+        ] == []
+
+        # forking and re-running from any prev checkpoint should re-run nodes
+        fork_config = graph.update_state(history[0].config, None)
+        assert [c for c in graph.stream(None, fork_config, stream_mode="updates")] == []
+
+        fork_config = graph.update_state(history[1].config, None)
+        assert [c for c in graph.stream(None, fork_config, stream_mode="updates")] == [
+            {"add_one": 1}
+        ]
+
+        fork_config = graph.update_state(history[2].config, None)
+        assert [c for c in graph.stream(None, fork_config, stream_mode="updates")] == [
+            {"add_one": 1},
+            {"add_one": 1},
+        ]
+    finally:
+        if hasattr(checkpointer, "__exit__"):
+            checkpointer.__exit__(None, None, None)
 
 
 def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
@@ -3174,7 +3379,7 @@ def test_state_graph_few_shot() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+    from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
 
@@ -3260,7 +3465,7 @@ Some examples of past conversations:
         app = workflow.compile(checkpointer=saver)
 
         first_messages = [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id=AnyStr(),
@@ -3279,7 +3484,7 @@ Some examples of past conversations:
                 id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
         actual = app.invoke(
             {"messages": "what is weather in sf"},
@@ -3313,7 +3518,7 @@ Some examples of past conversations:
         assert hiscored[0].checkpoint["channel_values"]["messages"] == first_messages
 
         second_messages = [
-            HumanMessage(content="what is weather in la", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in la"),
             AIMessage(
                 content="",
                 id=AnyStr(),
@@ -3332,7 +3537,7 @@ Some examples of past conversations:
                 id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
         assert app.invoke(
             {"messages": "what is weather in la"},
@@ -3373,7 +3578,7 @@ Some examples of past conversations:
             },
         ) == {
             "messages": [
-                HumanMessage(content="what is weather in ny", id=AnyStr()),
+                _AnyIdHumanMessage(content="what is weather in ny"),
                 AIMessage(
                     content="",
                     id=AnyStr(),
@@ -3392,7 +3597,7 @@ Some examples of past conversations:
                     id=AnyStr(),
                     tool_call_id="tool_call123",
                 ),
-                AIMessage(content="answer", id=AnyStr()),
+                _AnyIdAIMessage(content="answer"),
             ]
         }
 
@@ -3508,7 +3713,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -3554,7 +3759,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 tool_call_id="tool_call567",
                 id=AnyStr(),
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
     }
 
@@ -3564,10 +3769,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         debug=True,
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
-            AIMessage(
-                content="Sorry, need more steps to process this request.", id=AnyStr()
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
+            _AnyIdAIMessage(content="Sorry, need more steps to process this request."),
         ]
     }
 
@@ -3646,16 +3849,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 ]
             }
         },
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        content="answer",
-                        id=AnyStr(),
-                    )
-                ]
-            }
-        },
+        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
     ]
 
     assert [
@@ -3730,7 +3924,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 ]
             }
         },
-        {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
+        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
     ]
 
 
@@ -3788,7 +3982,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 id=AnyStr(),
                 content="",
@@ -3807,7 +4001,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
             FunctionMessage(
                 content="result for another", name="search_api", id=AnyStr()
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
     }
 
@@ -3864,7 +4058,7 @@ def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
                 ]
             }
         },
-        {"agent": {"messages": [AIMessage(content="answer", id=AnyStr())]}},
+        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
     ]
 
 
@@ -3977,7 +4171,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
 
     assert app.invoke({"messages": HumanMessage(content="what is weather in sf")}) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 id="ai1",
                 content="",
@@ -4133,10 +4327,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4186,10 +4377,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4265,10 +4453,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4346,10 +4531,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
             "messages": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     id="ai1",
                     content="",
@@ -4634,7 +4816,7 @@ def test_message_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 tool_calls=[
@@ -4678,7 +4860,7 @@ def test_message_graph(
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -4742,10 +4924,7 @@ def test_message_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -4806,10 +4985,7 @@ def test_message_graph(
     # replaces message even if object identity is different, as long as id is the same
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -4865,10 +5041,7 @@ def test_message_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 tool_calls=[
@@ -4912,10 +5085,7 @@ def test_message_graph(
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -4979,10 +5149,7 @@ def test_message_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5043,10 +5210,7 @@ def test_message_graph(
     # replaces message even if object identity is different, as long as id is the same
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5084,10 +5248,7 @@ def test_message_graph(
     # now the next node is "agent" per the graph edges
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5106,7 +5267,7 @@ def test_message_graph(
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
-            AIMessage(content="an extra message", id=AnyStr()),
+            _AnyIdAIMessage(content="an extra message"),
         ],
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -5365,7 +5526,7 @@ def test_root_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 tool_calls=[
@@ -5409,7 +5570,7 @@ def test_root_graph(
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5473,10 +5634,7 @@ def test_root_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5537,10 +5695,7 @@ def test_root_graph(
     # replaces message even if object identity is different, as long as id is the same
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5596,10 +5751,7 @@ def test_root_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 tool_calls=[
@@ -5643,10 +5795,7 @@ def test_root_graph(
     # message was replaced instead of appended
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5710,10 +5859,7 @@ def test_root_graph(
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5774,10 +5920,7 @@ def test_root_graph(
     # replaces message even if object identity is different, as long as id is the same
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5815,10 +5958,7 @@ def test_root_graph(
     # now the next node is "agent" per the graph edges
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values=[
-            HumanMessage(
-                content="what is weather in sf",
-                id=AnyStr(),
-            ),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id="ai1",
@@ -5837,7 +5977,7 @@ def test_root_graph(
                 id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
-            AIMessage(content="an extra message", id=AnyStr()),
+            _AnyIdAIMessage(content="an extra message"),
         ],
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -5888,10 +6028,7 @@ def test_root_graph(
     assert new_app.get_state(config) == StateSnapshot(
         values={
             "__root__": [
-                HumanMessage(
-                    content="what is weather in sf",
-                    id=AnyStr(),
-                ),
+                _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     content="",
                     id="ai1",
@@ -5910,7 +6047,7 @@ def test_root_graph(
                     id=AnyStr(),
                 ),
                 AIMessage(content="answer", id="ai2"),
-                AIMessage(content="an extra message", id=AnyStr()),
+                _AnyIdAIMessage(content="an extra message"),
             ]
         },
         next=("agent",),
@@ -6798,7 +6935,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             created_at=AnyStr(),
             metadata={
                 "source": "update",
-                "step": -1,
+                "step": 0,
                 "writes": {START: {"my_key": "key", "market": "DE"}},
             },
         )
@@ -6815,7 +6952,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
             metadata={
                 "source": "loop",
-                "step": 0,
+                "step": 1,
                 "writes": {"prepare": {"my_key": " prepared"}},
             },
             parent_config=uconfig,
@@ -6832,7 +6969,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
             metadata={
                 "source": "loop",
-                "step": 2,
+                "step": 3,
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[*tool_two.checkpointer.list(thread3, limit=2)][-1].config,
@@ -8871,7 +9008,7 @@ def test_checkpoint_metadata() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, AnyMessage, HumanMessage, ToolMessage
+    from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
 
@@ -8957,7 +9094,7 @@ def test_checkpoint_metadata() -> None:
         },
     ) == {
         "messages": [
-            HumanMessage(content="what is weather in sf", id=AnyStr()),
+            _AnyIdHumanMessage(content="what is weather in sf"),
             AIMessage(
                 content="",
                 id=AnyStr(),
@@ -8976,7 +9113,7 @@ def test_checkpoint_metadata() -> None:
                 id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
-            AIMessage(content="answer", id=AnyStr()),
+            _AnyIdAIMessage(content="answer"),
         ]
     }
 

@@ -1,41 +1,13 @@
-from datetime import datetime, timezone
-from typing import Any, Mapping, Optional
-
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from langgraph_checkpoint.base import (
+from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
+    create_checkpoint,
     empty_checkpoint,
 )
-from langgraph_checkpoint.id import uuid6
-from langgraph_checkpoint.memory import MemorySaver
-from langgraph_checkpoint.types import ChannelProtocol
-
-
-def create_checkpoint(
-    checkpoint: Checkpoint,
-    channels: Mapping[str, ChannelProtocol],
-    step: int,
-    *,
-    id: Optional[str] = None,
-) -> Checkpoint:
-    """Create a checkpoint for the given channels."""
-    ts = datetime.now(timezone.utc).isoformat()
-    values: dict[str, Any] = {}
-    for k, v in channels.items():
-        values[k] = v.checkpoint()
-    return Checkpoint(
-        v=1,
-        ts=ts,
-        id=id or str(uuid6(clock_seq=step)),
-        channel_values=values,
-        channel_versions=checkpoint["channel_versions"],
-        versions_seen=checkpoint["versions_seen"],
-        pending_sends=checkpoint.get("pending_sends", []),
-        current_tasks={},
-    )
+from langgraph.checkpoint.memory import MemorySaver
 
 
 class TestMemorySaver:

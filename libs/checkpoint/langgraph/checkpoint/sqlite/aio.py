@@ -15,16 +15,16 @@ from typing import (
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
-from langgraph_checkpoint.base import (
+from typing_extensions import Self
+
+from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
 )
-from typing_extensions import Self
-
-from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat, search_where
+from langgraph.checkpoint.sqlite.utils import JsonPlusSerializerCompat, search_where
 
 T = TypeVar("T", bound=callable)
 
@@ -84,9 +84,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
         ```pycon
         >>> import asyncio
-        >>> import aiosqlite
         >>>
-        >>> from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+        >>> from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
         >>> from langgraph.graph import StateGraph
         >>>
         >>> builder = StateGraph(int)
@@ -104,7 +103,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         ```pycon
         >>> import asyncio
         >>> import aiosqlite
-        >>> from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+        >>> from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
         >>>
         >>> async def main():
         >>>     async with aiosqlite.connect("checkpoints.db") as conn:
@@ -120,7 +119,6 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
 
     serde = JsonPlusSerializerCompat()
 
-    conn: aiosqlite.Connection
     lock: asyncio.Lock
     is_setup: bool
 
@@ -145,6 +143,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         Returns:
             AsyncSqliteSaver: A new AsyncSqliteSaver instance.
         """
+
         return AsyncSqliteSaver(conn=aiosqlite.connect(conn_string))
 
     async def __aenter__(self) -> Self:
