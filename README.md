@@ -27,7 +27,6 @@ LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [A
 - **Streaming Support**: Stream outputs as they are produced by each node (including token streaming).
 - **Integration with LangChain**: LangGraph integrates seamlessly with [LangChain](https://github.com/langchain-ai/langchain/) and [LangSmith](https://docs.smith.langchain.com/) (but does not require them).
 
-
 ## Installation
 
 ```shell
@@ -61,7 +60,7 @@ from typing import Annotated, Literal, TypedDict
 from langchain_core.messages import HumanMessage
 from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
-from langgraph.checkpoint import MemorySaver
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph, MessagesState
 from langgraph.prebuilt import ToolNode
 
@@ -165,69 +164,68 @@ final_state["messages"][-1].content
 1. <details>
     <summary>Initialize the model and tools.</summary>
 
-    - we use `ChatAnthropic` as our LLM. **NOTE:** we need make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the `.bind_tools()` method.
-    - we define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
+   - we use `ChatAnthropic` as our LLM. **NOTE:** we need make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the `.bind_tools()` method.
+   - we define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
    </details>
 
 2. <details>
     <summary>Initialize graph with state.</summary>
 
-    - we initialize graph (`StateGraph`) by passing state schema (in our case `MessagesState`)
-    - `MessagesState` is a prebuilt state schema that has one attribute -- a list of LangChain `Message` objects, as well as logic for merging the updates from each node into the state
+   - we initialize graph (`StateGraph`) by passing state schema (in our case `MessagesState`)
+   - `MessagesState` is a prebuilt state schema that has one attribute -- a list of LangChain `Message` objects, as well as logic for merging the updates from each node into the state
    </details>
 
 3. <details>
     <summary>Define graph nodes.</summary>
 
-    There are two main nodes we need:
+   There are two main nodes we need:
 
-      - The `agent` node: responsible for deciding what (if any) actions to take.
-      - The `tools` node that invokes tools: if the agent decides to take an action, this node will then execute that action.
+   - The `agent` node: responsible for deciding what (if any) actions to take.
+   - The `tools` node that invokes tools: if the agent decides to take an action, this node will then execute that action.
    </details>
 
 4. <details>
     <summary>Define entry point and graph edges.</summary>
 
-      First, we need to set the entry point for graph execution - `agent` node.
+   First, we need to set the entry point for graph execution - `agent` node.
 
-      Then we define one normal and one conditional edge. Conditional edge means that the destination depends on the contents of the graph's state (`MessageState`). In our case, the destination is not known until the agent (LLM) decides.
+   Then we define one normal and one conditional edge. Conditional edge means that the destination depends on the contents of the graph's state (`MessageState`). In our case, the destination is not known until the agent (LLM) decides.
 
-      - Conditional edge: after the agent is called, we should either:
-        - a. Run tools if the agent said to take an action, OR
-        - b. Finish (respond to the user) if the agent did not ask to run tools
-      - Normal edge: after the tools are invoked, the graph should always return to the agent to decide what to do next
+   - Conditional edge: after the agent is called, we should either:
+     - a. Run tools if the agent said to take an action, OR
+     - b. Finish (respond to the user) if the agent did not ask to run tools
+   - Normal edge: after the tools are invoked, the graph should always return to the agent to decide what to do next
    </details>
 
 5. <details>
-    <summary>Compile the graph.</summary>
+   <summary>Compile the graph.</summary>
 
-    - When we compile the graph, we turn it into a LangChain [Runnable](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface), which automatically enables calling `.invoke()`, `.stream()` and `.batch()` with your inputs
-    - We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, human-in-the-loop workflows, time travel and more. In our case we use `MemorySaver` - a simple in-memory checkpointer
-    </details>
+   - When we compile the graph, we turn it into a LangChain [Runnable](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface), which automatically enables calling `.invoke()`, `.stream()` and `.batch()` with your inputs
+   - We can also optionally pass checkpointer object for persisting state between graph runs, and enabling memory, human-in-the-loop workflows, time travel and more. In our case we use `MemorySaver` - a simple in-memory checkpointer
+   </details>
 
 6. <details>
    <summary>Execute the graph.</summary>
 
-    1. LangGraph adds the input message to the internal state, then passes the state to the entrypoint node, `"agent"`.
-    2. The `"agent"` node executes, invoking the chat model.
-    3. The chat model returns an `AIMessage`. LangGraph adds this to the state.
-    4. Graph cycles the following steps until there are no more `tool_calls` on `AIMessage`:
+   1. LangGraph adds the input message to the internal state, then passes the state to the entrypoint node, `"agent"`.
+   2. The `"agent"` node executes, invoking the chat model.
+   3. The chat model returns an `AIMessage`. LangGraph adds this to the state.
+   4. Graph cycles the following steps until there are no more `tool_calls` on `AIMessage`:
 
-        - If `AIMessage` has `tool_calls`, `"tools"` node executes
-        - The `"agent"` node executes again and returns `AIMessage`
+      - If `AIMessage` has `tool_calls`, `"tools"` node executes
+      - The `"agent"` node executes again and returns `AIMessage`
 
-    5. Execution progresses to the special `END` value and outputs the final state.
-    And as a result, we get a list of all our chat messages as output.
+   5. Execution progresses to the special `END` value and outputs the final state.
+   And as a result, we get a list of all our chat messages as output.
    </details>
-
 
 ## Documentation
 
-* [Tutorials](https://langchain-ai.github.io/langgraph/tutorials/): Learn to build with LangGraph through guided examples.
-* [How-to Guides](https://langchain-ai.github.io/langgraph/how-tos/): Accomplish specific things within LangGraph, from streaming, to adding memory & persistence, to common design patterns (branching, subgraphs, etc.), these are the place to go if you want to copy and run a specific code snippet.
-* [Conceptual Guides](https://langchain-ai.github.io/langgraph/concepts/): In-depth explanations of the key concepts and principles behind LangGraph, such as nodes, edges, state and more.
-* [API Reference](https://langchain-ai.github.io/langgraph/reference/graphs/): Review important classes and methods, simple examples of how to use the graph and checkpointing APIs, higher-level prebuilt components and more.
-* [Cloud (beta)](https://langchain-ai.github.io/langgraph/cloud/): With one click, deploy LangGraph applications to LangGraph Cloud.
+- [Tutorials](https://langchain-ai.github.io/langgraph/tutorials/): Learn to build with LangGraph through guided examples.
+- [How-to Guides](https://langchain-ai.github.io/langgraph/how-tos/): Accomplish specific things within LangGraph, from streaming, to adding memory & persistence, to common design patterns (branching, subgraphs, etc.), these are the place to go if you want to copy and run a specific code snippet.
+- [Conceptual Guides](https://langchain-ai.github.io/langgraph/concepts/): In-depth explanations of the key concepts and principles behind LangGraph, such as nodes, edges, state and more.
+- [API Reference](https://langchain-ai.github.io/langgraph/reference/graphs/): Review important classes and methods, simple examples of how to use the graph and checkpointing APIs, higher-level prebuilt components and more.
+- [Cloud (beta)](https://langchain-ai.github.io/langgraph/cloud/): With one click, deploy LangGraph applications to LangGraph Cloud.
 
 ## Contributing
 

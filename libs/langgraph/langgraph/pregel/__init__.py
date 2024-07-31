@@ -46,11 +46,6 @@ from langchain_core.runnables.utils import (
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
-from langgraph_checkpoint.base import (
-    BaseCheckpointSaver,
-    copy_checkpoint,
-    empty_checkpoint,
-)
 from typing_extensions import Self
 
 from langgraph.channels.base import (
@@ -60,7 +55,12 @@ from langgraph.channels.context import Context
 from langgraph.channels.manager import (
     AsyncChannelsManager,
     ChannelsManager,
+)
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    copy_checkpoint,
     create_checkpoint,
+    empty_checkpoint,
 )
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINTER,

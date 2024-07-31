@@ -23,7 +23,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.utils.function_calling import convert_to_openai_function
 
 from langgraph._api.deprecation import deprecated, deprecated_parameter
-from langgraph.checkpoint import BaseCheckpointSaver
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.graph.message import add_messages
@@ -472,7 +472,7 @@ def create_react_agent(
         Add "chat memory" to the graph:
 
         ```pycon
-        >>> from langgraph.checkpoint import MemorySaver
+        >>> from langgraph.checkpoint.memory import MemorySaver
         >>> graph = create_react_agent(model, tools, checkpointer=MemorySaver())
         >>> config = {"configurable": {"thread_id": "thread-1"}}
         >>> def print_stream(graph, inputs, config):

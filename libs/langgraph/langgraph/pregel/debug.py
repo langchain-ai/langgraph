@@ -7,9 +7,9 @@ from uuid import UUID, uuid5
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.utils.input import get_bolded_text, get_colored_text
-from langgraph_checkpoint.base import CheckpointMetadata
 
 from langgraph.channels.base import BaseChannel
+from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.types import PregelExecutableTask

@@ -51,7 +51,7 @@ export ANTHROPIC_API_KEY=sk-...
 from langchain_core.tools import tool
 from langchain_anthropic import ChatAnthropic
 from langgraph.prebuilt import create_react_agent
-from langgraph_checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import MemorySaver
 
 @tool
 def search(query: str):
