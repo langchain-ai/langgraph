@@ -68,6 +68,10 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(
                 obj.__class__, kwargs={"node": obj.node, "arg": obj.arg}
             )
+        elif isinstance(obj, bytes):
+            return self._encode_constructor_args(
+                obj.__class__, args=[str(obj, encoding="utf-8")], kwargs={"encoding": "utf-8"}
+            )
         else:
             raise TypeError(
                 f"Object of type {obj.__class__.__name__} is not JSON serializable"
