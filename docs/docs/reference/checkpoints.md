@@ -7,29 +7,13 @@ You can [compile][langgraph.graph.MessageGraph.compile] any LangGraph workflow w
 - Resilience for long-running, error-prone agents
 - Time travel retry and branch from a previous checkpoint
 
-### Checkpoint
-
-::: langgraph.checkpoint.base.Checkpoint
-
-### CheckpointMetadata
-
-::: langgraph.checkpoint.base.CheckpointMetadata
-
-### BaseCheckpointSaver
-
-::: langgraph.checkpoint.base.BaseCheckpointSaver
-
-### SerializerProtocol
-
-::: langgraph.checkpoint.SerializerProtocol
+Key checkpointer interfaces and primitives are defined in [`langgraph_checkpoint`](https://github.com/langchain-ai/langgraph/tree/main/libs/checkpoint) library.
 
 ## Implementations
 
-LangGraph also natively provides the following checkpoint implementations.
+LangGraph natively provides the following checkpoint implementations:
 
-### MemorySaver
-
-::: langgraph.checkpoint.memory.MemorySaver
+### MemorySaver (via `langgraph_checkpoint`)
 
 ### AsyncSqliteSaver
 
