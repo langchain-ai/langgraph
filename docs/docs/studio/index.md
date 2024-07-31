@@ -1,6 +1,5 @@
 ---
 hide:
-  - toc
   - navigation
 ---
 
@@ -14,15 +13,24 @@ LangGraph Studio is a desktop app for prototyping and debugging LangGraph Cloud 
 
 To use LangGraph Studio, make sure you have a [project with a LangGraph app](https://langchain-ai.github.io/langgraph/cloud/deployment/setup/) set up.
 
+You can get started with an existing example project [here](https://github.com/langchain-ai/langgraph-example):
+
+```shell
+git clone https://github.com/langchain-ai/langgraph-example.git
+```
+
 Once you've set up the project, you can use it in LangGraph Studio. Let's dive in!
 
 ## Open a project
 
-When you open LangGraph Studio desktop app for the first time, you need to provide LangSmith API key. See how you can obtain it [here](https://docs.smith.langchain.com/#2-create-an-api-key).
+When you open LangGraph Studio desktop app for the first time, you need to login via LangSmith.
 
-![API Key Screen](./img/api_key_screen.png)
+![Login Screen](./img/login_screen.png)
 
-Once you have the API key, you can choose the LangGraph application folder to use — you can either drag and drop or manually select it in the file picker. The application directory you select needs to contain correctly configured `langgraph.json` file. See more information on how to configure it [here](https://langchain-ai.github.io/langgraph/cloud/reference/cli/#configuration-file) and how to set up a LangGraph app [here](https://langchain-ai.github.io/langgraph/cloud/deployment/setup/).
+Once you have successfully authenticated, you can choose the LangGraph application folder to use — you can either drag and drop or manually select it in the file picker. If you are using the example project, the folder would be `langgraph-example`.
+
+!!! note Note
+    The application directory you select needs to contain correctly configured `langgraph.json` file. See more information on how to configure it [here](https://langchain-ai.github.io/langgraph/cloud/reference/cli/#configuration-file) and how to set up a LangGraph app [here](https://langchain-ai.github.io/langgraph/cloud/deployment/setup/).
 
 ![Select Project Screen](./img/select_project_screen.png)
 
@@ -107,7 +115,20 @@ The following video shows how to edit a thread in the studio:
 
 ## How to add interrupts to your graph
 
-You can add interrupts for specific nodes to your graph. An interrupt in LangGraph Studio means that the graph execution will be interrupted both before and after a given node runs.
+You might want to execute your graph step by step, or stop graph execution before/after a specific node executes. You can do so by adding interrupts. Interrupts can be set for all nodes (i.e. walk through the agent execution step by step) or for specific nodes. An interrupt in LangGraph Studio means that the graph execution will be interrupted both before and after a given node runs.
+
+### Add interrupts to a list of nodes
+
+To walk through the agent execution step by step, you can add interrupts to a all or a subset of nodes in the graph:
+
+1. In the dropdown menu (top-right corner of the left-hand pane), click `Interrupt`.
+2. Select a subset of nodes to interrupt on, or click `Interrupt on all`.
+
+The following video shows how to add interrupts to all nodes:
+
+<video controls allowfullscreen="true" poster="./img/graph_video_poster.png">
+    <source src="./img/graph_interrupts_all.mp4" type="video/mp4">
+</video>
 
 ### Add interrupt to a specific node
 
@@ -116,22 +137,13 @@ You can add interrupts for specific nodes to your graph. An interrupt in LangGra
 1. Click `+` to invoke the selected graph.
 1. Run the graph by adding `Input` / configuration and clicking `Submit`
 
-The following video shows how to add interrupts:
+The following video shows how to add interrupts to a specific node:
 
 <video controls allowfullscreen="true" poster="./img/graph_video_poster.png">
     <source src="./img/graph_interrupts.mp4" type="video/mp4">
 </video>
 
 To remove the interrupt, simply follow the same step and press `x` button on the left side of the node.
-
-### Add interrupts to a list of nodes
-
-You can also add interrupts to a all or a subset of nodes in the graph:
-
-1. In the dropdown menu (top-right corner of the left-hand pane), click `Interrupt`.
-2. Select a subset of nodes to interrupt on, or click `Interrupt on all`.
-
-![Interrupt All](./img/graph_interrupt_all.png)
 
 ## Edit project config
 
