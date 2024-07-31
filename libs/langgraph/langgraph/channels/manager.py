@@ -44,19 +44,22 @@ async def AsyncChannelsManager(
 
 def create_checkpoint(
     checkpoint: Checkpoint,
-    channels: Mapping[str, BaseChannel],
+    channels: Optional[Mapping[str, BaseChannel]],
     step: int,
     *,
     id: Optional[str] = None,
 ) -> Checkpoint:
     """Create a checkpoint for the given channels."""
     ts = datetime.now(timezone.utc).isoformat()
-    values: dict[str, Any] = {}
-    for k, v in channels.items():
-        try:
-            values[k] = v.checkpoint()
-        except EmptyChannelError:
-            pass
+    if channels is None:
+        values = checkpoint["channel_values"]
+    else:
+        values: dict[str, Any] = {}
+        for k, v in channels.items():
+            try:
+                values[k] = v.checkpoint()
+            except EmptyChannelError:
+                pass
     return Checkpoint(
         v=1,
         ts=ts,
