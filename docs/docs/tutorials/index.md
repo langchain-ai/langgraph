@@ -65,4 +65,3 @@ Learn from example implementations of graphs designed for specific scenarios and
 - [Web Navigation](web-navigation/web_voyager.ipynb): Build an agent that can navigate and interact with websites
 - [Competitive Programming](usaco/usaco.ipynb): Build an agent with few-shot "episodic memory" and human-in-the-loop collaboration to solve problems from the USA Computing Olympiad; adapted from the ["Can Language Models Solve Olympiad Programming?"](https://arxiv.org/abs/2404.10952v1) paper by Shi, Tang, Narasimhan, and Yao.
 - [Complex data extraction](extraction/retries.ipynb): Build an agent that can use function calling to do complex extraction tasks
-- 
