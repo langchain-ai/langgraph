@@ -15,7 +15,7 @@ coverage:
 		--cov-report term-missing:skip-covered
 
 test:
-	poetry run pytest
+	poetry run pytest --count=10
 
 test_watch:
 	poetry run ptw .
