@@ -30,13 +30,6 @@ from langchain_core.runnables import (
     RunnablePick,
 )
 from langchain_core.utils.aiter import aclosing
-from langgraph_checkpoint.base import (
-    BaseCheckpointSaver,
-    Checkpoint,
-    CheckpointMetadata,
-    CheckpointTuple,
-)
-from langgraph_checkpoint.memory import MemorySaver
 from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
@@ -46,7 +39,14 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
-from langgraph.checkpoint.aiosqlite import AsyncSqliteSaver
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+)
+from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph, StateGraph

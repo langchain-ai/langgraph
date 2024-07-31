@@ -3,14 +3,15 @@ from collections import defaultdict
 from typing import Any, Optional
 
 from langchain_core.runnables import RunnableConfig
-from langgraph_checkpoint.base import (
+
+from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
     copy_checkpoint,
 )
-from langgraph_checkpoint.memory import MemorySaver
+from langgraph.checkpoint.memory import MemorySaver
 
 
 class NoopSerializer(SerializerProtocol):

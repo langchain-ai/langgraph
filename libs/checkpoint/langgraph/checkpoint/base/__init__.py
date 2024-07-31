@@ -7,6 +7,7 @@ from typing import (
     Iterator,
     List,
     Literal,
+    Mapping,
     NamedTuple,
     Optional,
     Tuple,
@@ -17,10 +18,13 @@ from typing import (
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
-from langgraph_checkpoint.id import uuid6
-from langgraph_checkpoint.serde.base import SerializerProtocol
-from langgraph_checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph_checkpoint.types import ChannelProtocol, SendProtocol
+from langgraph.checkpoint.base.id import uuid6
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.serde.types import (
+    ChannelProtocol,
+    SendProtocol,
+)
 
 V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
@@ -116,6 +120,36 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         pending_sends=checkpoint.get("pending_sends", []).copy(),
         current_tasks=checkpoint.get("current_tasks", {}).copy(),
+    )
+
+
+def create_checkpoint(
+    checkpoint: Checkpoint,
+    channels: Optional[Mapping[str, ChannelProtocol]],
+    step: int,
+    *,
+    id: Optional[str] = None,
+) -> Checkpoint:
+    """Create a checkpoint for the given channels."""
+    ts = datetime.now(timezone.utc).isoformat()
+    if channels is None:
+        values = checkpoint["channel_values"]
+    else:
+        values: dict[str, Any] = {}
+        for k, v in channels.items():
+            try:
+                values[k] = v.checkpoint()
+            except EmptyChannelError:
+                pass
+    return Checkpoint(
+        v=1,
+        ts=ts,
+        id=id or str(uuid6(clock_seq=step)),
+        channel_values=values,
+        channel_versions=checkpoint["channel_versions"],
+        versions_seen=checkpoint["versions_seen"],
+        pending_sends=checkpoint.get("pending_sends", []),
+        current_tasks={},
     )
 
 
@@ -373,3 +407,10 @@ class BaseCheckpointSaver(ABC):
             V: The next version identifier, which must be increasing.
         """
         return current + 1 if current is not None else 1
+
+
+class EmptyChannelError(Exception):
+    """Raised when attempting to get the value of a channel that hasn't been updated
+    for the first time yet."""
+
+    pass
