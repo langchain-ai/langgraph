@@ -22,6 +22,10 @@ You must pass these when invoking the graph as part of the configurable part of 
 {"configurable": {"thread_id": "1", "thread_ts": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
 ```
 
+### Serde
+
+`langgraph_checkpoint` also defines protocol for serialization/deserialization (serde) and provides an default implementation (`langgraph_checkpoint.serde.jsonplus.JsonPlusSerializer`) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
+
 ### Pending writes
 
 When a graph node fails mid-execution at a given superstep, LangGraph stores pending checkpoint writes from any other nodes that completed successfully at that superstep, so that whenever we resume graph execution from that superstep we don't re-run the successful nodes.
