@@ -119,6 +119,7 @@ class MemorySaver(BaseCheckpointSaver):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        as_prefix: bool = False,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the in-memory storage.
 
@@ -134,7 +135,19 @@ class MemorySaver(BaseCheckpointSaver):
         Yields:
             Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
         """
-        thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
+        if config:
+            config_thread_id = config["configurable"]["thread_id"]
+            if as_prefix:
+                thread_ids = (
+                    thread_id
+                    for thread_id in self.storage
+                    if thread_id.startswith(config_thread_id)
+                )
+            else:
+                thread_ids = (config_thread_id,)
+        else:
+            thread_ids = self.storage.keys()
+
         for thread_id in thread_ids:
             for ts, (checkpoint, metadata_b, parent_ts) in sorted(
                 self.storage[thread_id].items(), key=lambda x: x[0], reverse=True
@@ -254,6 +267,7 @@ class MemorySaver(BaseCheckpointSaver):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        as_prefix: bool = False,
     ) -> AsyncIterator[CheckpointTuple]:
         """Asynchronous version of list.
 
@@ -268,7 +282,15 @@ class MemorySaver(BaseCheckpointSaver):
         """
         loop = asyncio.get_running_loop()
         iter = await loop.run_in_executor(
-            None, partial(self.list, before=before, limit=limit, filter=filter), config
+            None,
+            partial(
+                self.list,
+                before=before,
+                limit=limit,
+                filter=filter,
+                as_prefix=as_prefix,
+            ),
+            config,
         )
         while True:
             # handling StopIteration exception inside coroutine won't work

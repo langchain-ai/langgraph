@@ -214,6 +214,7 @@ class BaseCheckpointSaver(ABC):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        as_prefix: bool = False,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints that match the given criteria.
 

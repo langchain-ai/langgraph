@@ -306,6 +306,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        as_prefix: bool = False,
     ) -> AsyncIterator[CheckpointTuple]:
         """List checkpoints from the database asynchronously.
 
@@ -322,7 +323,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
             AsyncIterator[CheckpointTuple]: An asynchronous iterator of matching checkpoint tuples.
         """
         await self.setup()
-        where, param_values = search_where(config, filter, before)
+        where, param_values = search_where(config, filter, before, as_prefix=as_prefix)
         query = f"""SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata
         FROM checkpoints
         {where}

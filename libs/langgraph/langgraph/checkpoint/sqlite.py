@@ -301,6 +301,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        as_prefix: bool = False,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the database.
 
@@ -331,7 +332,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
             >>> print(checkpoints)
             [CheckpointTuple(...), ...]
         """
-        where, param_values = search_where(config, filter, before)
+        where, param_values = search_where(config, filter, before, as_prefix=as_prefix)
         query = f"""SELECT thread_id, thread_ts, parent_ts, checkpoint, metadata
         FROM checkpoints
         {where}
@@ -548,6 +549,7 @@ def search_where(
     config: Optional[RunnableConfig],
     filter: Optional[Dict[str, Any]],
     before: Optional[RunnableConfig] = None,
+    as_prefix: bool = False,
 ) -> Tuple[str, Sequence[Any]]:
     """Return WHERE clause predicates for (a)search() given metadata filter
     and `before` config.
@@ -562,7 +564,9 @@ def search_where(
 
     # construct predicate for config filter
     if config is not None:
-        wheres.append("thread_id = ?")
+        thread_filter = "thread_id LIKE ? || '%'" if as_prefix else "thread_id = ?"
+        wheres.append(thread_filter)
+
         param_values.append(config["configurable"]["thread_id"])
 
     # construct predicate for metadata filter

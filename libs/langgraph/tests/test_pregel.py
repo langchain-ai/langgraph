@@ -569,53 +569,53 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
     )
 
     # start execution, stop at inbox
-    assert app.invoke(2, {"configurable": {"thread_id": 1}}) is None
+    assert app.invoke(2, {"configurable": {"thread_id": "1"}}) is None
 
     # inbox == 3
-    checkpoint = memory.get({"configurable": {"thread_id": 1}})
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"]["inbox"] == 3
 
     # resume execution, finish
-    assert app.invoke(None, {"configurable": {"thread_id": 1}}) == 4
+    assert app.invoke(None, {"configurable": {"thread_id": "1"}}) == 4
 
     # start execution again, stop at inbox
-    assert app.invoke(20, {"configurable": {"thread_id": 1}}) is None
+    assert app.invoke(20, {"configurable": {"thread_id": "1"}}) is None
 
     # inbox == 21
-    checkpoint = memory.get({"configurable": {"thread_id": 1}})
+    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
     assert checkpoint["channel_values"]["inbox"] == 21
 
     # send a new value in, interrupting the previous execution
-    assert app.invoke(3, {"configurable": {"thread_id": 1}}) is None
-    assert app.invoke(None, {"configurable": {"thread_id": 1}}) == 5
+    assert app.invoke(3, {"configurable": {"thread_id": "1"}}) is None
+    assert app.invoke(None, {"configurable": {"thread_id": "1"}}) == 5
 
     # start execution again, stopping at inbox
-    assert app.invoke(20, {"configurable": {"thread_id": 2}}) is None
+    assert app.invoke(20, {"configurable": {"thread_id": "2"}}) is None
 
     # inbox == 21
-    snapshot = app.get_state({"configurable": {"thread_id": 2}})
+    snapshot = app.get_state({"configurable": {"thread_id": "2"}})
     assert snapshot.values["inbox"] == 21
     assert snapshot.next == ("two",)
 
     # update the state, resume
-    app.update_state({"configurable": {"thread_id": 2}}, 25, as_node="one")
-    assert app.invoke(None, {"configurable": {"thread_id": 2}}) == 26
+    app.update_state({"configurable": {"thread_id": "2"}}, 25, as_node="one")
+    assert app.invoke(None, {"configurable": {"thread_id": "2"}}) == 26
 
     # no pending tasks
-    snapshot = app.get_state({"configurable": {"thread_id": 2}})
+    snapshot = app.get_state({"configurable": {"thread_id": "2"}})
     assert snapshot.next == ()
 
     # list history
-    thread1 = {"configurable": {"thread_id": 1}}
+    thread1 = {"configurable": {"thread_id": "1"}}
     assert [c for c in app.get_state_history(thread1)] == [
         StateSnapshot(
             values={"inbox": 4, "output": 5, "input": 3},
             next=(),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -628,7 +628,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("two",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -641,7 +641,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("one",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -654,7 +654,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("two",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -667,7 +667,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("one",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -680,7 +680,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=(),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -693,7 +693,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("two",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -706,7 +706,7 @@ def test_invoke_two_processes_in_out_interrupt(mocker: MockerFixture) -> None:
             next=("one",),
             config={
                 "configurable": {
-                    "thread_id": 1,
+                    "thread_id": "1",
                     "thread_ts": AnyStr(),
                 }
             },
@@ -1081,7 +1081,7 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         builder.add_edge(START, "two")
         graph = builder.compile(checkpointer=checkpointer)
 
-        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
         with pytest.raises(ConnectionError, match="I'm not good"):
             graph.invoke({"value": 1}, thread1)
 
@@ -8373,7 +8373,8 @@ def test_nested_graph_interrupts(
             ),
         ]
         child_state_history = [
-            c for c in app.get_state_history({"configurable": {"thread_id": "6-inner"}})
+            c
+            for c in app.get_state_history({"configurable": {"thread_id": "6__inner"}})
         ]
         assert child_state_history == [
             StateSnapshot(
@@ -8381,7 +8382,7 @@ def test_nested_graph_interrupts(
                 next=(),
                 config={
                     "configurable": {
-                        "thread_id": "6-inner",
+                        "thread_id": "6__inner",
                         "thread_ts": AnyStr(),
                     }
                 },
@@ -8398,7 +8399,7 @@ def test_nested_graph_interrupts(
                 created_at=AnyStr(),
                 parent_config={
                     "configurable": {
-                        "thread_id": "6-inner",
+                        "thread_id": "6__inner",
                         "thread_ts": AnyStr(),
                     }
                 },
@@ -8814,6 +8815,575 @@ def test_doubly_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> No
                 "my_key": "hi my value here and there and back again",
             },
         ]
+    finally:
+        if hasattr(checkpointer, "__exit__"):
+            checkpointer.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "checkpointer_fct",
+    [
+        lambda: MemorySaverAssertImmutable(put_sleep=0.2),
+        lambda: SqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+def test_nested_graph_state(
+    checkpointer_fct: Callable[[], BaseCheckpointSaver],
+) -> None:
+    try:
+        checkpointer = checkpointer_fct()
+
+        class InnerState(TypedDict):
+            my_key: str
+            my_other_key: str
+
+        def inner_1(state: InnerState):
+            return {
+                "my_key": state["my_key"] + " here",
+                "my_other_key": state["my_key"],
+            }
+
+        def inner_2(state: InnerState):
+            return {
+                "my_key": state["my_key"] + " and there",
+                "my_other_key": state["my_key"],
+            }
+
+        inner = StateGraph(InnerState)
+        inner.add_node("inner_1", inner_1)
+        inner.add_node("inner_2", inner_2)
+        inner.add_edge("inner_1", "inner_2")
+        inner.set_entry_point("inner_1")
+        inner.set_finish_point("inner_2")
+
+        class State(TypedDict):
+            my_key: str
+
+        def outer_1(state: State):
+            return {"my_key": "hi " + state["my_key"]}
+
+        def outer_2(state: State):
+            return {"my_key": state["my_key"] + " and back again"}
+
+        graph = StateGraph(State)
+        graph.add_node("outer_1", outer_1)
+        graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
+        graph.add_node("outer_2", outer_2)
+        graph.set_entry_point("outer_1")
+        graph.add_edge("outer_1", "inner")
+        graph.add_edge("inner", "outer_2")
+        graph.set_finish_point("outer_2")
+
+        app = graph.compile(checkpointer=checkpointer)
+
+        config = {"configurable": {"thread_id": "1"}}
+        app.invoke({"my_key": "my value"}, config, debug=True)
+        # test state w/ nested subgraph state (right after interrupt)
+        assert app.get_state(config, include_subgraph_state=False) == StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("inner",),
+            config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            metadata={
+                "source": "loop",
+                "writes": {"outer_1": {"my_key": "hi my value"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            subgraph_state_snapshots=None,
+        )
+        assert app.get_state(config, include_subgraph_state=True) == StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("inner",),
+            config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            metadata={
+                "source": "loop",
+                "writes": {"outer_1": {"my_key": "hi my value"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={"my_key": "hi my value here"},
+                    next=(),
+                    config={
+                        "configurable": {"thread_id": "1__inner", "thread_ts": AnyStr()}
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi my value here",
+                                "my_other_key": "hi my value",
+                            }
+                        },
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {"thread_id": "1__inner", "thread_ts": AnyStr()}
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        )
+        assert list(app.get_state_history(config, include_subgraph_state=True)) == [
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                },
+                subgraph_state_snapshots={
+                    "inner": StateSnapshot(
+                        values={"my_key": "hi my value here"},
+                        next=(),
+                        config={
+                            "configurable": {
+                                "thread_id": "1__inner",
+                                "thread_ts": AnyStr(),
+                            }
+                        },
+                        metadata={
+                            "source": "loop",
+                            "writes": {
+                                "inner_1": {
+                                    "my_key": "hi my value here",
+                                    "my_other_key": "hi my value",
+                                }
+                            },
+                            "step": 1,
+                        },
+                        created_at=AnyStr(),
+                        parent_config={
+                            "configurable": {
+                                "thread_id": "1__inner",
+                                "thread_ts": AnyStr(),
+                            }
+                        },
+                        subgraph_state_snapshots=None,
+                    )
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                },
+                subgraph_state_snapshots=None,
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+                subgraph_state_snapshots=None,
+            ),
+        ]
+        app.invoke(None, config, debug=True)
+        # test state w/ nested subgraph state (after resuming from interrupt)
+        assert app.get_state(config, include_subgraph_state=True) == StateSnapshot(
+            values={"my_key": "hi my value here and there and back again"},
+            next=(),
+            config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "outer_2": {"my_key": "hi my value here and there and back again"}
+                },
+                "step": 3,
+            },
+            created_at=AnyStr(),
+            parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={"my_key": "hi my value here and there"},
+                    next=(),
+                    config={
+                        "configurable": {"thread_id": "1__inner", "thread_ts": AnyStr()}
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_2": {
+                                "my_key": "hi my value here and there",
+                                "my_other_key": "hi my value here",
+                            }
+                        },
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {"thread_id": "1__inner", "thread_ts": AnyStr()}
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        )
+        assert list(app.get_state_history(config, include_subgraph_state=True)) == [
+            StateSnapshot(
+                values={"my_key": "hi my value here and there and back again"},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {
+                        "outer_2": {
+                            "my_key": "hi my value here and there and back again"
+                        }
+                    },
+                    "step": 3,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                next=("outer_2",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"inner": {"my_key": "hi my value here and there"}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=("inner",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"outer_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                # TODO: this is likely very confusing for an end user, and we'll probably need to update this.
+                # right now this is happening due to us overwriting the
+                # subgraph snapshot after we finish the graph with while the thread_ts
+                # is the same as when we interrupted
+                subgraph_state_snapshots={
+                    "inner": StateSnapshot(
+                        values={"my_key": "hi my value here and there"},
+                        next=(),
+                        config={
+                            "configurable": {
+                                "thread_id": "1__inner",
+                                "thread_ts": AnyStr(),
+                            }
+                        },
+                        metadata={
+                            "source": "loop",
+                            "writes": {
+                                "inner_2": {
+                                    "my_key": "hi my value here and there",
+                                    "my_other_key": "hi my value here",
+                                }
+                            },
+                            "step": 2,
+                        },
+                        created_at=AnyStr(),
+                        parent_config={
+                            "configurable": {
+                                "thread_id": "1__inner",
+                                "thread_ts": AnyStr(),
+                            }
+                        },
+                        subgraph_state_snapshots=None,
+                    )
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("outer_1",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "thread_ts": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+                subgraph_state_snapshots=None,
+            ),
+        ]
+    finally:
+        if hasattr(checkpointer, "__exit__"):
+            checkpointer.__exit__(None, None, None)
+
+
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        SqliteSaver.from_conn_string(":memory:"),
+    ],
+    ids=[
+        "memory",
+        "sqlite",
+    ],
+)
+def test_doubly_nested_graph_state(checkpointer: BaseCheckpointSaver) -> None:
+    try:
+
+        class State(TypedDict):
+            my_key: str
+
+        class ChildState(TypedDict):
+            my_key: str
+
+        class GrandChildState(TypedDict):
+            my_key: str
+
+        def grandchild_1(state: ChildState):
+            return {"my_key": state["my_key"] + " here"}
+
+        def grandchild_2(state: ChildState):
+            return {
+                "my_key": state["my_key"] + " and there",
+            }
+
+        grandchild = StateGraph(GrandChildState)
+        grandchild.add_node("grandchild_1", grandchild_1)
+        grandchild.add_node("grandchild_2", grandchild_2)
+        grandchild.add_edge("grandchild_1", "grandchild_2")
+        grandchild.set_entry_point("grandchild_1")
+        grandchild.set_finish_point("grandchild_2")
+
+        child = StateGraph(ChildState)
+        child.add_node("child_1", grandchild.compile(interrupt_before=["grandchild_2"]))
+        child.set_entry_point("child_1")
+        child.set_finish_point("child_1")
+
+        def parent_1(state: State):
+            return {"my_key": "hi " + state["my_key"]}
+
+        def parent_2(state: State):
+            return {"my_key": state["my_key"] + " and back again"}
+
+        graph = StateGraph(State)
+        graph.add_node("parent_1", parent_1)
+        graph.add_node("child", child.compile())
+        graph.add_node("parent_2", parent_2)
+        graph.set_entry_point("parent_1")
+        graph.add_edge("parent_1", "child")
+        graph.add_edge("child", "parent_2")
+        graph.set_finish_point("parent_2")
+
+        app = graph.compile(checkpointer=checkpointer)
+
+        # test invoke w/ nested interrupt
+        config = {"configurable": {"thread_id": "1"}}
+        app.invoke({"my_key": "my value"}, config, debug=True)
+        assert app.get_state(config) == StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("child",),
+            config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            metadata={
+                "source": "loop",
+                "writes": {"parent_1": {"my_key": "hi my value"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            subgraph_state_snapshots=None,
+        )
+        assert app.get_state(config, include_subgraph_state=True) == StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("child",),
+            config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            metadata={
+                "source": "loop",
+                "writes": {"parent_1": {"my_key": "hi my value"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            subgraph_state_snapshots={
+                "child": StateSnapshot(
+                    values={"my_key": "hi my value"},
+                    next=(),
+                    config={
+                        "configurable": {"thread_id": "1__child", "thread_ts": AnyStr()}
+                    },
+                    metadata={"source": "loop", "writes": None, "step": 0},
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {"thread_id": "1__child", "thread_ts": AnyStr()}
+                    },
+                    subgraph_state_snapshots={
+                        "child_1": StateSnapshot(
+                            values={"my_key": "hi my value here"},
+                            next=(),
+                            config={
+                                "configurable": {
+                                    "thread_id": "1__child__child_1",
+                                    "thread_ts": AnyStr(),
+                                }
+                            },
+                            metadata={
+                                "source": "loop",
+                                "writes": {
+                                    "grandchild_1": {"my_key": "hi my value here"}
+                                },
+                                "step": 1,
+                            },
+                            created_at=AnyStr(),
+                            parent_config={
+                                "configurable": {
+                                    "thread_id": "1__child__child_1",
+                                    "thread_ts": AnyStr(),
+                                }
+                            },
+                            subgraph_state_snapshots=None,
+                        )
+                    },
+                )
+            },
+        )
+        app.invoke(None, config, debug=True)
+        assert app.get_state(config, include_subgraph_state=True) == StateSnapshot(
+            values={"my_key": "hi my value here and there and back again"},
+            next=(),
+            config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "parent_2": {"my_key": "hi my value here and there and back again"}
+                },
+                "step": 3,
+            },
+            created_at=AnyStr(),
+            parent_config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+            subgraph_state_snapshots={
+                "child": StateSnapshot(
+                    values={"my_key": "hi my value here and there"},
+                    next=(),
+                    config={
+                        "configurable": {"thread_id": "1__child", "thread_ts": AnyStr()}
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {"child_1": {"my_key": "hi my value here and there"}},
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {"thread_id": "1__child", "thread_ts": AnyStr()}
+                    },
+                    subgraph_state_snapshots={
+                        "child_1": StateSnapshot(
+                            values={"my_key": "hi my value here and there"},
+                            next=(),
+                            config={
+                                "configurable": {
+                                    "thread_id": "1__child__child_1",
+                                    "thread_ts": AnyStr(),
+                                }
+                            },
+                            metadata={
+                                "source": "loop",
+                                "writes": {
+                                    "grandchild_2": {
+                                        "my_key": "hi my value here and there"
+                                    }
+                                },
+                                "step": 2,
+                            },
+                            created_at=AnyStr(),
+                            parent_config={
+                                "configurable": {
+                                    "thread_id": "1__child__child_1",
+                                    "thread_ts": AnyStr(),
+                                }
+                            },
+                            subgraph_state_snapshots=None,
+                        )
+                    },
+                )
+            },
+        )
+
     finally:
         if hasattr(checkpointer, "__exit__"):
             checkpointer.__exit__(None, None, None)

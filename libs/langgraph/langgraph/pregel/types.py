@@ -85,6 +85,8 @@ class StateSnapshot(NamedTuple):
     """Timestamp of snapshot creation"""
     parent_config: Optional[RunnableConfig] = None
     """Config used to fetch the parent snapshot, if any"""
+    subgraph_state_snapshots: Optional[dict[str, "StateSnapshot"]] = None
+    """State snapshots of subgraphs represented as a mapping from thread ID suffix to snapshot."""
 
 
 All = Literal["*"]

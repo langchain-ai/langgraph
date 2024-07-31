@@ -18,6 +18,8 @@ RESERVED = {
 }
 TAG_HIDDEN = "langsmith:hidden"
 
+THREAD_ID_SEPARATOR = "__"
+
 START = "__start__"
 END = "__end__"
 
