@@ -6,7 +6,7 @@ on:
       working-directory:
         required: true
         type: string
-        default: 'libs/langgraph'
+        default: "libs/langgraph"
 
 env:
   PYTHON_VERSION: "3.11"
@@ -137,8 +137,7 @@ jobs:
       - build
       - release-notes
     permissions: write-all
-    uses:
-      ./.github/workflows/_test_release.yml
+    uses: ./.github/workflows/_test_release.yml
     with:
       working-directory: ${{ inputs.working-directory }}
     secrets: inherit
