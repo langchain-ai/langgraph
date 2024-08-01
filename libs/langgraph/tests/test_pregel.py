@@ -6611,7 +6611,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
+                    "id": "e211790d-5627-5cf9-b074-126589107c15",
                     "name": "prepare",
                     "result": [("my_key", " prepared")],
                 },
@@ -6659,7 +6659,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
+                    "id": "33b3e822-1951-578c-b395-1ae19800963f",
                     "name": "tool_two_slow",
                     "result": [("my_key", " slow")],
                 },
@@ -6707,7 +6707,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
+                    "id": "391ddb7a-a925-5260-bdb8-28256a786e0a",
                     "name": "finish",
                     "result": [("my_key", " finished")],
                 },
