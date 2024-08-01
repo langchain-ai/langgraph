@@ -94,13 +94,19 @@ class JsonPlusSerializer(SerializerProtocol):
 
         return LC_REVIVER(value)
 
-    def dumps(self, obj: Any) -> tuple[str, bytes]:
-        return "json", json.dumps(
-            obj, default=self._default, ensure_ascii=False
-        ).encode("utf-8", "ignore")
+    def dumps(self, obj: Any) -> bytes:
+        return json.dumps(obj, default=self._default, ensure_ascii=False).encode(
+            "utf-8", "ignore"
+        )
 
-    def loads(self, data: tuple[str, bytes]) -> Any:
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        return "json", self.dumps(obj)
+
+    def loads(self, data: bytes) -> Any:
+        return json.loads(data, object_hook=self._reviver)
+
+    def loads_typed(self, data: tuple[str, bytes]) -> Any:
         type_, data_ = data
         if type_ != "json":
             raise ValueError("JsonPlusSerializer can only deserialize `json` data")
-        return json.loads(data_, object_hook=self._reviver)
+        return self.loads(data_)

@@ -10,12 +10,9 @@ Checkpoint is a snapshot of the graph state at a given point in time. Checkpoint
 
 ### Thread
 
-Threads enable the checkpointing of multiple different runs, making them essential for multi-tenant chat applications and other scenarios where maintaining separate states is necessary. A thread is a unique ID assigned to a series of checkpoints saved by a checkpointer. When using a checkpointer, you must specify a `thread_id` and optionally `checkpoint_ns` / `checkpoint_id` when running the graph.
+Threads enable the checkpointing of multiple different runs, making them essential for multi-tenant chat applications and other scenarios where maintaining separate states is necessary. A thread is a unique ID assigned to a series of checkpoints saved by a checkpointer. When using a checkpointer, you must specify a `thread_id` and optionally `checkpoint_id` when running the graph.
 
 - `thread_id` is simply the ID of a thread. This is always required
-- `checkpoint_ns` can optionally be passed. This is a path to the subgraph the checkpoint originates from, separated by `|` character. Defaults to "" (root graph). Examples:
-  - for a parent graph node (called "child") with a child subgraph, `checkpoint_ns` for the child subgraph will be `"child"`
-  - for a parent graph node with a child subgraph node "child" that itself has a subgraph node "grandchild", `checkpoint_ns` for the grandchild subgraph will be `"child|grandchild"`
 - `checkpoint_id` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to kick of a run of a graph from some point halfway through a thread.
 
 You must pass these when invoking the graph as part of the configurable part of the config, e.g.
@@ -23,7 +20,6 @@ You must pass these when invoking the graph as part of the configurable part of 
 ```python
 {"configurable": {"thread_id": "1"}}  # valid config
 {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
-{"configurable": {"thread_id": "1", "checkpoint_ns": "child"}}  # also valid config
 ```
 
 ### Serde
