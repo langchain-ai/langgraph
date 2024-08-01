@@ -70,6 +70,7 @@ from tests.memory_assert import (
     NoopSerializer,
 )
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
+from tests.pydantic_utils import _schema
 
 
 def test_graph_validation() -> None:
@@ -395,11 +396,11 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
+    assert _schema(app.input_schema) == {"title": "LangGraphInput", "type": "integer"}
+    assert _schema(app.output_schema) == {"title": "LangGraphOutput", "type": "integer"}
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # raise warnings as errors
-        assert app.config_schema().schema() == {
+        assert _schema(app.config_schema()) == {
             "properties": {},
             "title": "LangGraphConfig",
             "type": "object",
@@ -444,8 +445,8 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
         input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
+    assert _schema(app.input_schema) == {"title": "LangGraphInput", "type": "integer"}
+    assert _schema(app.output_schema) == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
@@ -468,8 +469,8 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
+    assert _schema(app.input_schema) == {"title": "LangGraphInput", "type": "integer"}
+    assert _schema(app.output_schema) == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {"output": {"title": "Output", "type": "integer"}},
@@ -488,12 +489,12 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {
+    assert _schema(app.input_schema) == {
         "title": "LangGraphInput",
         "type": "object",
         "properties": {"input": {"title": "Input", "type": "integer"}},
     }
-    assert app.output_schema.schema() == {
+    assert _schema(app.output_schema) == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {"output": {"title": "Output", "type": "integer"}},
@@ -7253,8 +7254,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     app = workflow.compile()
 
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_input_schema().schema() == snapshot
-    assert app.get_output_schema().schema() == snapshot
+    assert _schema(app.get_input_schema()) == snapshot
+    assert _schema(app.get_output_schema()) == snapshot
 
     with pytest.raises(ValidationError):
         app.invoke({"query": {}})
