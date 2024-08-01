@@ -1,4 +1,3 @@
-import json
 import sqlite3
 import threading
 from contextlib import AbstractContextManager, contextmanager
@@ -503,47 +502,3 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         except EmptyChannelError:
             next_h = ""
         return f"{next_v:032}.{next_h}"
-
-
-def _metadata_predicate(
-    metadata_filter: Dict[str, Any],
-) -> Tuple[Sequence[str], Sequence[Any]]:
-    """Return WHERE clause predicates for (a)search() given metadata filter.
-
-    This method returns a tuple of a string and a tuple of values. The string
-    is the parametered WHERE clause predicate (excluding the WHERE keyword):
-    "column1 = ? AND column2 IS ?". The tuple of values contains the values
-    for each of the corresponding parameters.
-    """
-
-    def _where_value(query_value: Any) -> Tuple[str, Any]:
-        """Return tuple of operator and value for WHERE clause predicate."""
-        if query_value is None:
-            return ("IS ?", None)
-        elif (
-            isinstance(query_value, str)
-            or isinstance(query_value, int)
-            or isinstance(query_value, float)
-        ):
-            return ("= ?", query_value)
-        elif isinstance(query_value, bool):
-            return ("= ?", 1 if query_value else 0)
-        elif isinstance(query_value, dict) or isinstance(query_value, list):
-            # query value for JSON object cannot have trailing space after separators (, :)
-            # SQLite json_extract() returns JSON string without whitespace
-            return ("= ?", json.dumps(query_value, separators=(",", ":")))
-        else:
-            return ("= ?", str(query_value))
-
-    predicates = []
-    param_values = []
-
-    # process metadata query
-    for query_key, query_value in metadata_filter.items():
-        operator, param_value = _where_value(query_value)
-        predicates.append(
-            f"json_extract(CAST(metadata AS TEXT), '$.{query_key}') {operator}"
-        )
-        param_values.append(param_value)
-
-    return (predicates, param_values)

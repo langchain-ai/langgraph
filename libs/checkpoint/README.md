@@ -21,6 +21,7 @@ You must pass these when invoking the graph as part of the configurable part of 
 ```python
 {"configurable": {"thread_id": "1"}}  # valid config
 {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}  # also valid config
+{"configurable": {"thread_id": "1", "checkpoint_ns": "inner"}}  # also valid config
 ```
 
 ### Serde
