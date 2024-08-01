@@ -6278,7 +6278,7 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     assert times_called == 1
 
 
-# @pytest.mark.repeat(10)
+@pytest.mark.repeat(10)
 @pytest.mark.parametrize(
     "checkpointer_fct",
     [
