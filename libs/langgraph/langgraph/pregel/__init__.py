@@ -748,7 +748,7 @@ class Pregel(
         if (
             config is not None
             and config.get("configurable", {}).get(CONFIG_KEY_CHECKPOINTER)
-            and (interrupt_before or interrupt_after)
+            and (interrupt_after or interrupt_before)
         ):
             checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
                 CONFIG_KEY_CHECKPOINTER
