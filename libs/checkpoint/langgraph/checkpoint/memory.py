@@ -11,8 +11,8 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
+    get_checkpoint_id,
 )
-from langgraph.checkpoint.base.utils import get_checkpoint_id
 
 
 class MemorySaver(BaseCheckpointSaver):

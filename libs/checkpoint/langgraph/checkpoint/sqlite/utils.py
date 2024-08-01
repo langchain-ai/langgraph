@@ -3,7 +3,7 @@ from typing import Any, Dict, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
-from langgraph.checkpoint.base.utils import get_checkpoint_id
+from langgraph.checkpoint.base import get_checkpoint_id
 
 
 def _metadata_predicate(

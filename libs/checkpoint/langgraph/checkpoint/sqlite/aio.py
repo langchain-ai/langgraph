@@ -23,8 +23,8 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
+    get_checkpoint_id,
 )
-from langgraph.checkpoint.base.utils import get_checkpoint_id
 from langgraph.checkpoint.sqlite.utils import search_where
 
 T = TypeVar("T", bound=callable)

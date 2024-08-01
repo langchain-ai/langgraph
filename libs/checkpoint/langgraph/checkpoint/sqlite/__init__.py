@@ -15,8 +15,8 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     EmptyChannelError,
     SerializerProtocol,
+    get_checkpoint_id,
 )
-from langgraph.checkpoint.base.utils import get_checkpoint_id
 from langgraph.checkpoint.serde.types import ChannelProtocol
 from langgraph.checkpoint.sqlite.utils import search_where
 
