@@ -428,9 +428,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             ChannelsManager(self.graph.channels, self.checkpoint, self.config)
         )
         self.managed = self.stack.enter_context(
-            ManagedValuesManager(
-                self.graph.managed_values_dict, self.config, self.graph
-            )
+            ManagedValuesManager(self.graph.managed_values_dict, self.config)
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
@@ -507,9 +505,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             AsyncChannelsManager(self.graph.channels, self.checkpoint, self.config)
         )
         self.managed = await self.stack.enter_async_context(
-            AsyncManagedValuesManager(
-                self.graph.managed_values_dict, self.config, self.graph
-            )
+            AsyncManagedValuesManager(self.graph.managed_values_dict, self.config)
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1

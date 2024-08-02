@@ -189,11 +189,12 @@ nav:
           - Quick Start: "cloud/quick_start.md"
       - How-to Guides: 
           - "cloud/how-tos/index.md"
-          - Deployment:
+          - Setup:
               - Setup App: "cloud/deployment/setup.md"
               - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
               - Rebuild Graph at Runtime: "cloud/deployment/graph_rebuild.md"
               - Test App Locally: "cloud/deployment/test_locally.md"
+          - Deployment:
               - Deploy to Cloud: "cloud/deployment/cloud.md"
               - Self-Host: "cloud/deployment/self_hosted.md"
           - Streaming:
