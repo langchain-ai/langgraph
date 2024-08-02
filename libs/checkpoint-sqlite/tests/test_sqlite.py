@@ -14,8 +14,6 @@ from langgraph.checkpoint.sqlite.utils import _metadata_predicate, search_where
 class TestSqliteSaver:
     @pytest.fixture(autouse=True)
     def setup(self):
-        self.sqlite_saver = SqliteSaver.from_conn_string(":memory:")
-
         # objects for test setup
         self.config_1: RunnableConfig = {
             "configurable": {
@@ -59,52 +57,63 @@ class TestSqliteSaver:
         self.metadata_3: CheckpointMetadata = {}
 
     def test_search(self):
-        # set up test
-        # save checkpoints
-        self.sqlite_saver.put(self.config_1, self.chkpnt_1, self.metadata_1)
-        self.sqlite_saver.put(self.config_2, self.chkpnt_2, self.metadata_2)
-        self.sqlite_saver.put(self.config_3, self.chkpnt_3, self.metadata_3)
+        saver = SqliteSaver.from_conn_string(":memory:")
+        try:
+            # set up test
+            # save checkpoints
+            saver.put(self.config_1, self.chkpnt_1, self.metadata_1)
+            saver.put(self.config_2, self.chkpnt_2, self.metadata_2)
+            saver.put(self.config_3, self.chkpnt_3, self.metadata_3)
 
-        # call method / assertions
-        query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
-        query_2: CheckpointMetadata = {
-            "step": 1,
-            "writes": {"foo": "bar"},
-        }  # search by multiple keys
-        query_3: CheckpointMetadata = {}  # search by no keys, return all checkpoints
-        query_4: CheckpointMetadata = {"source": "update", "step": 1}  # no match
+            # call method / assertions
+            query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
+            query_2: CheckpointMetadata = {
+                "step": 1,
+                "writes": {"foo": "bar"},
+            }  # search by multiple keys
+            query_3: CheckpointMetadata = {}  # search by no keys, return all checkpoints
+            query_4: CheckpointMetadata = {"source": "update", "step": 1}  # no match
 
-        search_results_1 = list(self.sqlite_saver.list(None, filter=query_1))
-        assert len(search_results_1) == 1
-        assert search_results_1[0].metadata == self.metadata_1
+            search_results_1 = list(saver.list(None, filter=query_1))
+            assert len(search_results_1) == 1
+            assert search_results_1[0].metadata == self.metadata_1
 
-        search_results_2 = list(self.sqlite_saver.list(None, filter=query_2))
-        assert len(search_results_2) == 1
-        assert search_results_2[0].metadata == self.metadata_2
+            search_results_2 = list(saver.list(None, filter=query_2))
+            assert len(search_results_2) == 1
+            assert search_results_2[0].metadata == self.metadata_2
 
-        search_results_3 = list(self.sqlite_saver.list(None, filter=query_3))
-        assert len(search_results_3) == 3
+            search_results_3 = list(saver.list(None, filter=query_3))
+            assert len(search_results_3) == 3
 
-        search_results_4 = list(self.sqlite_saver.list(None, filter=query_4))
-        assert len(search_results_4) == 0
+            search_results_4 = list(saver.list(None, filter=query_4))
+            assert len(search_results_4) == 0
 
-        # search by config (defaults to root graph checkpoints)
-        search_results_5 = list(
-            self.sqlite_saver.list({"configurable": {"thread_id": "thread-2"}})
-        )
-        assert len(search_results_5) == 1
-        assert search_results_5[0].config["configurable"]["checkpoint_ns"] == ""
-
-        # search by config and checkpoint_ns
-        search_results_6 = list(
-            self.sqlite_saver.list(
-                {"configurable": {"thread_id": "thread-2", "checkpoint_ns": "inner"}}
+            # search by config (defaults to root graph checkpoints)
+            search_results_5 = list(
+                saver.list({"configurable": {"thread_id": "thread-2"}})
             )
-        )
-        assert len(search_results_6) == 1
-        assert search_results_6[0].config["configurable"]["checkpoint_ns"] == "inner"
+            assert len(search_results_5) == 1
+            assert search_results_5[0].config["configurable"]["checkpoint_ns"] == ""
 
-        # TODO: test before and limit params
+            # search by config and checkpoint_ns
+            search_results_6 = list(
+                saver.list(
+                    {
+                        "configurable": {
+                            "thread_id": "thread-2",
+                            "checkpoint_ns": "inner",
+                        }
+                    }
+                )
+            )
+            assert len(search_results_6) == 1
+            assert (
+                search_results_6[0].config["configurable"]["checkpoint_ns"] == "inner"
+            )
+
+            # TODO: test before and limit params
+        finally:
+            saver.__exit__(None, None, None)
 
     def test_search_where(self):
         # call method / assertions
@@ -149,11 +158,15 @@ class TestSqliteSaver:
         )
 
     async def test_informative_async_errors(self):
-        # call method / assertions
-        with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
-            await self.sqlite_saver.aget(self.config_1)
-        with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
-            await self.sqlite_saver.aget_tuple(self.config_1)
-        with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
-            async for _ in self.sqlite_saver.alist(self.config_1):
-                pass
+        saver = SqliteSaver.from_conn_string(":memory:")
+        try:
+            # call method / assertions
+            with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
+                await saver.aget(self.config_1)
+            with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
+                await saver.aget_tuple(self.config_1)
+            with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
+                async for _ in saver.alist(self.config_1):
+                    pass
+        finally:
+            saver.__exit__(None, None, None)

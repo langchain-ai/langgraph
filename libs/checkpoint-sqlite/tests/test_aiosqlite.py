@@ -13,8 +13,6 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 class TestAsyncSqliteSaver:
     @pytest.fixture(autouse=True)
     def setup(self):
-        self.sqlite_saver = AsyncSqliteSaver.from_conn_string(":memory:")
-
         # objects for test setup
         self.config_1: RunnableConfig = {
             "configurable": {
@@ -58,50 +56,39 @@ class TestAsyncSqliteSaver:
         self.metadata_3: CheckpointMetadata = {}
 
     async def test_asearch(self):
-        # set up test
-        # save checkpoints
-        await self.sqlite_saver.aput(self.config_1, self.chkpnt_1, self.metadata_1)
-        await self.sqlite_saver.aput(self.config_2, self.chkpnt_2, self.metadata_2)
-        await self.sqlite_saver.aput(self.config_3, self.chkpnt_3, self.metadata_3)
+        saver = AsyncSqliteSaver.from_conn_string(":memory:")
+        try:
+            await saver.aput(self.config_1, self.chkpnt_1, self.metadata_1)
+            await saver.aput(self.config_2, self.chkpnt_2, self.metadata_2)
+            await saver.aput(self.config_3, self.chkpnt_3, self.metadata_3)
 
-        # call method / assertions
-        query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
-        query_2: CheckpointMetadata = {
-            "step": 1,
-            "writes": {"foo": "bar"},
-        }  # search by multiple keys
-        query_3: CheckpointMetadata = {}  # search by no keys, return all checkpoints
-        query_4: CheckpointMetadata = {"source": "update", "step": 1}  # no match
+            # call method / assertions
+            query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
+            query_2: CheckpointMetadata = {
+                "step": 1,
+                "writes": {"foo": "bar"},
+            }  # search by multiple keys
+            query_3: CheckpointMetadata = {}  # search by no keys, return all checkpoints
+            query_4: CheckpointMetadata = {"source": "update", "step": 1}  # no match
 
-        async with self.sqlite_saver as sqlite_saver:
-            search_results_1 = [
-                c async for c in sqlite_saver.alist(None, filter=query_1)
-            ]
+            search_results_1 = [c async for c in saver.alist(None, filter=query_1)]
             assert len(search_results_1) == 1
             assert search_results_1[0].metadata == self.metadata_1
 
-            search_results_2 = [
-                c async for c in sqlite_saver.alist(None, filter=query_2)
-            ]
+            search_results_2 = [c async for c in saver.alist(None, filter=query_2)]
             assert len(search_results_2) == 1
             assert search_results_2[0].metadata == self.metadata_2
 
-            search_results_3 = [
-                c async for c in sqlite_saver.alist(None, filter=query_3)
-            ]
+            search_results_3 = [c async for c in saver.alist(None, filter=query_3)]
             assert len(search_results_3) == 3
 
-            search_results_4 = [
-                c async for c in sqlite_saver.alist(None, filter=query_4)
-            ]
+            search_results_4 = [c async for c in saver.alist(None, filter=query_4)]
             assert len(search_results_4) == 0
 
             # search by config (defaults to root graph checkpoints)
             search_results_5 = [
                 c
-                async for c in self.sqlite_saver.alist(
-                    {"configurable": {"thread_id": "thread-2"}}
-                )
+                async for c in saver.alist({"configurable": {"thread_id": "thread-2"}})
             ]
             assert len(search_results_5) == 1
             assert search_results_5[0].config["configurable"]["checkpoint_ns"] == ""
@@ -109,7 +96,7 @@ class TestAsyncSqliteSaver:
             # search by config and checkpoint_ns
             search_results_6 = [
                 c
-                async for c in self.sqlite_saver.alist(
+                async for c in saver.alist(
                     {
                         "configurable": {
                             "thread_id": "thread-2",
@@ -124,3 +111,5 @@ class TestAsyncSqliteSaver:
             )
 
             # TODO: test before and limit params
+        finally:
+            await saver.__aexit__(None, None, None)
