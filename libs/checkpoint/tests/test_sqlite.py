@@ -1,14 +1,14 @@
 import pytest
 from langchain_core.runnables import RunnableConfig
 
-from langgraph.channels.manager import create_checkpoint
-from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, empty_checkpoint
-from langgraph.checkpoint.sqlite import (
-    _AIO_ERROR_MSG,
-    SqliteSaver,
-    _metadata_predicate,
-    search_where,
+from langgraph.checkpoint.base import (
+    Checkpoint,
+    CheckpointMetadata,
+    create_checkpoint,
+    empty_checkpoint,
 )
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.utils import _metadata_predicate, search_where
 
 
 class TestSqliteSaver:
@@ -18,14 +18,31 @@ class TestSqliteSaver:
 
         # objects for test setup
         self.config_1: RunnableConfig = {
-            "configurable": {"thread_id": "thread-1", "thread_ts": "1"}
+            "configurable": {
+                "thread_id": "thread-1",
+                # for backwards compatibility testing
+                "thread_ts": "1",
+                "checkpoint_ns": "",
+            }
         }
         self.config_2: RunnableConfig = {
-            "configurable": {"thread_id": "thread-2", "thread_ts": "2"}
+            "configurable": {
+                "thread_id": "thread-2",
+                "checkpoint_id": "2",
+                "checkpoint_ns": "",
+            }
+        }
+        self.config_3: RunnableConfig = {
+            "configurable": {
+                "thread_id": "thread-2",
+                "checkpoint_id": "2-inner",
+                "checkpoint_ns": "inner",
+            }
         }
 
         self.chkpnt_1: Checkpoint = empty_checkpoint()
         self.chkpnt_2: Checkpoint = create_checkpoint(self.chkpnt_1, {}, 1)
+        self.chkpnt_3: Checkpoint = empty_checkpoint()
 
         self.metadata_1: CheckpointMetadata = {
             "source": "input",
@@ -46,6 +63,7 @@ class TestSqliteSaver:
         # save checkpoints
         self.sqlite_saver.put(self.config_1, self.chkpnt_1, self.metadata_1)
         self.sqlite_saver.put(self.config_2, self.chkpnt_2, self.metadata_2)
+        self.sqlite_saver.put(self.config_3, self.chkpnt_3, self.metadata_3)
 
         # call method / assertions
         query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
@@ -65,16 +83,32 @@ class TestSqliteSaver:
         assert search_results_2[0].metadata == self.metadata_2
 
         search_results_3 = list(self.sqlite_saver.list(None, filter=query_3))
-        assert len(search_results_3) == 2
+        assert len(search_results_3) == 3
 
         search_results_4 = list(self.sqlite_saver.list(None, filter=query_4))
         assert len(search_results_4) == 0
+
+        # search by config (defaults to root graph checkpoints)
+        search_results_5 = list(
+            self.sqlite_saver.list({"configurable": {"thread_id": "thread-2"}})
+        )
+        assert len(search_results_5) == 1
+        assert search_results_5[0].config["configurable"]["checkpoint_ns"] == ""
+
+        # search by config and checkpoint_ns
+        search_results_6 = list(
+            self.sqlite_saver.list(
+                {"configurable": {"thread_id": "thread-2", "checkpoint_ns": "inner"}}
+            )
+        )
+        assert len(search_results_6) == 1
+        assert search_results_6[0].config["configurable"]["checkpoint_ns"] == "inner"
 
         # TODO: test before and limit params
 
     def test_search_where(self):
         # call method / assertions
-        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND thread_ts < ?"
+        expected_predicate_1 = "WHERE json_extract(CAST(metadata AS TEXT), '$.source') = ? AND json_extract(CAST(metadata AS TEXT), '$.step') = ? AND json_extract(CAST(metadata AS TEXT), '$.writes') = ? AND json_extract(CAST(metadata AS TEXT), '$.score') = ? AND checkpoint_id < ?"
         expected_param_values_1 = ["input", 2, "{}", 1, "1"]
         assert search_where(None, self.metadata_1, self.config_1) == (
             expected_predicate_1,
@@ -116,10 +150,10 @@ class TestSqliteSaver:
 
     async def test_informative_async_errors(self):
         # call method / assertions
-        with pytest.raises(NotImplementedError, match=_AIO_ERROR_MSG):
+        with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
             await self.sqlite_saver.aget(self.config_1)
-        with pytest.raises(NotImplementedError, match=_AIO_ERROR_MSG):
+        with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
             await self.sqlite_saver.aget_tuple(self.config_1)
-        with pytest.raises(NotImplementedError, match=_AIO_ERROR_MSG):
+        with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
             async for _ in self.sqlite_saver.alist(self.config_1):
                 pass

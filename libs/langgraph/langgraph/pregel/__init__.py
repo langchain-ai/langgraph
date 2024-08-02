@@ -55,11 +55,11 @@ from langgraph.channels.context import Context
 from langgraph.channels.manager import (
     AsyncChannelsManager,
     ChannelsManager,
-    create_checkpoint,
 )
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     copy_checkpoint,
+    create_checkpoint,
     empty_checkpoint,
 )
 from langgraph.constants import (
@@ -361,7 +361,7 @@ class Pregel(
         with ChannelsManager(
             self.channels, checkpoint, config
         ) as channels, ManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
             next_tasks = prepare_next_tasks(
                 checkpoint,
@@ -393,7 +393,7 @@ class Pregel(
         async with AsyncChannelsManager(
             self.channels, checkpoint, config
         ) as channels, AsyncManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
             next_tasks = prepare_next_tasks(
                 checkpoint,
@@ -435,7 +435,7 @@ class Pregel(
             with ChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, ManagedValuesManager(
-                self.managed_values_dict, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config)
             ) as managed:
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -481,7 +481,7 @@ class Pregel(
             async with AsyncChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, AsyncManagedValuesManager(
-                self.managed_values_dict, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config)
             ) as managed:
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -519,7 +519,14 @@ class Pregel(
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
-        checkpoint_config = config
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                # TODO: add proper support for updating nested subgraph state
+                "checkpoint_ns": "",
+            },
+        }
         if saved:
             checkpoint_config = {
                 "configurable": {
@@ -622,7 +629,14 @@ class Pregel(
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
-        checkpoint_config = config
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                # TODO: add proper support for updating nested subgraph state
+                "checkpoint_ns": "",
+            },
+        }
         if saved:
             checkpoint_config = {
                 "configurable": {

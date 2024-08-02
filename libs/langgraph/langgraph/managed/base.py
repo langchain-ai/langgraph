@@ -17,26 +17,23 @@ from typing import (
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self, TypeGuard
 
-from langgraph.pregel.types import PregelTaskDescription
-
 if TYPE_CHECKING:
-    from langgraph.pregel import Pregel
+    from langgraph.pregel.types import PregelTaskDescription
 
 V = TypeVar("V")
 
 
 class ManagedValue(ABC, Generic[V]):
-    def __init__(self, config: RunnableConfig, graph: "Pregel") -> None:
+    def __init__(self, config: RunnableConfig) -> None:
         self.config = config
-        self.graph = graph
 
     @classmethod
     @contextmanager
     def enter(
-        cls, config: RunnableConfig, graph: "Pregel", **kwargs: Any
+        cls, config: RunnableConfig, **kwargs: Any
     ) -> Generator[Self, None, None]:
         try:
-            value = cls(config, graph, **kwargs)
+            value = cls(config, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -49,10 +46,10 @@ class ManagedValue(ABC, Generic[V]):
     @classmethod
     @asynccontextmanager
     async def aenter(
-        cls, config: RunnableConfig, graph: "Pregel", **kwargs: Any
+        cls, config: RunnableConfig, **kwargs: Any
     ) -> AsyncGenerator[Self, None]:
         try:
-            value = cls(config, graph, **kwargs)
+            value = cls(config, **kwargs)
             yield value
         finally:
             # because managed value and Pregel have reference to each other
@@ -63,7 +60,7 @@ class ManagedValue(ABC, Generic[V]):
                 pass
 
     @abstractmethod
-    def __call__(self, step: int, task: PregelTaskDescription) -> V:
+    def __call__(self, step: int, task: "PregelTaskDescription") -> V:
         ...
 
 
@@ -87,15 +84,14 @@ def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
 def ManagedValuesManager(
     values: dict[str, ManagedValueSpec],
     config: RunnableConfig,
-    graph: "Pregel",
 ) -> Generator[ManagedValueMapping, None, None]:
     if values:
         with ExitStack() as stack:
             yield {
                 key: stack.enter_context(
-                    value.cls.enter(config, graph, **value.kwargs)
+                    value.cls.enter(config, **value.kwargs)
                     if isinstance(value, ConfiguredManagedValue)
-                    else value.enter(config, graph)
+                    else value.enter(config)
                 )
                 for key, value in values.items()
             }
@@ -107,7 +103,6 @@ def ManagedValuesManager(
 async def AsyncManagedValuesManager(
     values: dict[str, ManagedValueSpec],
     config: RunnableConfig,
-    graph: "Pregel",
 ) -> AsyncGenerator[ManagedValueMapping, None]:
     if values:
         async with AsyncExitStack() as stack:
@@ -115,9 +110,9 @@ async def AsyncManagedValuesManager(
             tasks = {
                 asyncio.create_task(
                     stack.enter_async_context(
-                        value.cls.aenter(config, graph, **value.kwargs)
+                        value.cls.aenter(config, **value.kwargs)
                         if isinstance(value, ConfiguredManagedValue)
-                        else value.aenter(config, graph)
+                        else value.aenter(config)
                     )
                 ): key
                 for key, value in values.items()

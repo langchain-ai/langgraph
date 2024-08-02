@@ -9,8 +9,8 @@ from uuid import UUID
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
 
-from langgraph.constants import Send
-from langgraph.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.types import SendProtocol
 
 LC_REVIVER = Reviver()
 
@@ -64,7 +64,7 @@ class JsonPlusSerializer(SerializerProtocol):
             )
         elif isinstance(obj, Enum):
             return self._encode_constructor_args(obj.__class__, args=[obj.value])
-        elif isinstance(obj, Send):
+        elif isinstance(obj, SendProtocol):
             return self._encode_constructor_args(
                 obj.__class__, kwargs={"node": obj.node, "arg": obj.arg}
             )
@@ -99,5 +99,14 @@ class JsonPlusSerializer(SerializerProtocol):
             "utf-8", "ignore"
         )
 
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        return "json", self.dumps(obj)
+
     def loads(self, data: bytes) -> Any:
         return json.loads(data, object_hook=self._reviver)
+
+    def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        type_, data_ = data
+        if type_ != "json":
+            raise ValueError("JsonPlusSerializer can only deserialize `json` data")
+        return self.loads(data_)

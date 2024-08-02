@@ -21,6 +21,8 @@ TAG_HIDDEN = "langsmith:hidden"
 START = "__start__"
 END = "__end__"
 
+CHECKPOINT_NAMESPACE_SEPARATOR = "|"
+
 
 class Send:
     """A message or packet to send to a specific node in the graph.

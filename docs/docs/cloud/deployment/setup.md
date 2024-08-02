@@ -1,6 +1,9 @@
 # How to Set Up a LangGraph Application for Deployment
 
-A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `requirements.txt` to specify project dependencies. If you prefer using poetry for dependency management, check out [this how-to guide](./setup_pyproject.md) on using `pyproject.toml` for LangGraph Cloud.
+A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `requirements.txt` to specify project dependencies. 
+
+!!! tip "Setup with pyproject.toml"
+    If you prefer using poetry for dependency management, check out [this how-to guide](./setup_pyproject.md) on using `pyproject.toml` for LangGraph Cloud.
 
 The final repo structure will look something like this:
 
@@ -21,13 +24,11 @@ Dependencies can optionally be specified in one of the following files: `pyproje
 
 The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
 ```
-langgraph>=0.1.7
-langchain-core>=0.2.7
-orjson>=3.10.1
-langsmith>=0.1.50
-httpx>=0.27.0
-langchain-core>=0.2.8
+langgraph>=0.1.19,<0.2.0
+langchain-core>=0.2.8,<0.3.0
 langsmith>=0.1.63
+orjson>=3.10.1
+httpx>=0.27.0
 tenacity>=8.3.0
 uvicorn>=0.29.0
 sse-starlette>=2.1.0
@@ -133,10 +134,6 @@ my-app/
 |-- langgraph.json      # configuration file for LangGraph
 ```
 
-## Upload to GitHub
-
-To deploy the LangGraph application to LangGraph Cloud, the code must be uploaded to a GitHub repository.
-
 ## Next
 
-After you setup your repo, it's time to [deploy your app](./cloud.md).
+After you setup your project and place it in a github repo, it's time to [deploy your app](./cloud.md).

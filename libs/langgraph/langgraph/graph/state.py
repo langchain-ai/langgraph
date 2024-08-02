@@ -29,8 +29,8 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.constants import TAG_HIDDEN
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.constants import CHECKPOINT_NAMESPACE_SEPARATOR, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph.graph import (
     END,
@@ -85,7 +85,7 @@ class StateGraph(Graph):
     Examples:
         >>> from langchain_core.runnables import RunnableConfig
         >>> from typing_extensions import Annotated, TypedDict
-        >>> from langgraph.checkpoint import MemorySaver
+        >>> from langgraph.checkpoint.memory import MemorySaver
         >>> from langgraph.graph import StateGraph
         >>>
         >>> def reducer(a: list, b: int | None) -> int:
@@ -311,6 +311,12 @@ class StateGraph(Graph):
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
             raise ValueError(f"Node `{node}` is reserved.")
+
+        if CHECKPOINT_NAMESPACE_SEPARATOR in node:
+            raise ValueError(
+                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
+            )
+
         try:
             if isfunction(action) and (
                 hints := get_type_hints(action.__call__) or get_type_hints(action)

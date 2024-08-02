@@ -7,6 +7,7 @@ from typing import (
     Iterator,
     List,
     Literal,
+    Mapping,
     NamedTuple,
     Optional,
     Tuple,
@@ -17,11 +18,13 @@ from typing import (
 
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
-from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.id import uuid6
-from langgraph.constants import Send
-from langgraph.serde.base import SerializerProtocol
-from langgraph.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.base.id import uuid6
+from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+from langgraph.checkpoint.serde.types import (
+    ChannelProtocol,
+    SendProtocol,
+)
 
 V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
@@ -50,7 +53,7 @@ class CheckpointMetadata(TypedDict, total=False):
     """
     score: Optional[int]
     """The score of the checkpoint.
-    
+
     The score can be used to mark a checkpoint as "good".
     """
 
@@ -65,29 +68,29 @@ class Checkpoint(TypedDict):
     v: int
     """The version of the checkpoint format. Currently 1."""
     id: str
-    """The ID of the checkpoint. This is both unique and monotonically 
+    """The ID of the checkpoint. This is both unique and monotonically
     increasing, so can be used for sorting checkpoints from first to last."""
     ts: str
     """The timestamp of the checkpoint in ISO 8601 format."""
     channel_values: dict[str, Any]
     """The values of the channels at the time of the checkpoint.
-    
+
     Mapping from channel name to channel snapshot value.
     """
     channel_versions: dict[str, Union[str, int, float]]
     """The versions of the channels at the time of the checkpoint.
-    
+
     The keys are channel names and the values are the logical time step
     at which the channel was last updated.
     """
     versions_seen: dict[str, dict[str, Union[str, int, float]]]
     """Map from node ID to map from channel name to version seen.
-    
+
     This keeps track of the versions of the channels that each node has seen.
-    
+
     Used to determine which nodes to execute next.
     """
-    pending_sends: List[Send]
+    pending_sends: List[SendProtocol]
     """List of packets sent to nodes but not yet processed.
     Cleared by the next checkpoint."""
     current_tasks: Dict[str, TaskInfo]
@@ -120,6 +123,36 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
     )
 
 
+def create_checkpoint(
+    checkpoint: Checkpoint,
+    channels: Optional[Mapping[str, ChannelProtocol]],
+    step: int,
+    *,
+    id: Optional[str] = None,
+) -> Checkpoint:
+    """Create a checkpoint for the given channels."""
+    ts = datetime.now(timezone.utc).isoformat()
+    if channels is None:
+        values = checkpoint["channel_values"]
+    else:
+        values: dict[str, Any] = {}
+        for k, v in channels.items():
+            try:
+                values[k] = v.checkpoint()
+            except EmptyChannelError:
+                pass
+    return Checkpoint(
+        v=1,
+        ts=ts,
+        id=id or str(uuid6(clock_seq=step)),
+        channel_values=values,
+        channel_versions=checkpoint["channel_versions"],
+        versions_seen=checkpoint["versions_seen"],
+        pending_sends=checkpoint.get("pending_sends", []),
+        current_tasks={},
+    )
+
+
 class CheckpointTuple(NamedTuple):
     """A tuple containing a checkpoint and its associated data."""
 
@@ -139,10 +172,19 @@ CheckpointThreadId = ConfigurableFieldSpec(
     is_shared=True,
 )
 
-CheckpointThreadTs = ConfigurableFieldSpec(
-    id="thread_ts",
+CheckpointNS = ConfigurableFieldSpec(
+    id="checkpoint_ns",
+    annotation=str,
+    name="Checkpoint NS",
+    description='Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from, separated by `|` character, e.g. `"child|grandchild"`. Defaults to "" (root graph).',
+    default=None,
+    is_shared=True,
+)
+
+CheckpointId = ConfigurableFieldSpec(
+    id="checkpoint_id",
     annotation=Optional[str],
-    name="Thread Timestamp",
+    name="Checkpoint ID",
     description="Pass to fetch a past checkpoint. If None, fetches the latest checkpoint.",
     default=None,
     is_shared=True,
@@ -170,7 +212,7 @@ class BaseCheckpointSaver(ABC):
         *,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
-        self.serde = serde or self.serde
+        self.serde = maybe_add_typed_methods(serde or self.serde)
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -179,7 +221,7 @@ class BaseCheckpointSaver(ABC):
         Returns:
             list[ConfigurableFieldSpec]: List of configuration field specs.
         """
-        return [CheckpointThreadId, CheckpointThreadTs]
+        return [CheckpointThreadId, CheckpointNS, CheckpointId]
 
     def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
         """Fetch a checkpoint using the given configuration.
@@ -268,9 +310,7 @@ class BaseCheckpointSaver(ABC):
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
         """
-        raise NotImplementedError(
-            "This method was added in langgraph 0.1.7. Please update your checkpoint saver to implement it."
-        )
+        raise NotImplementedError
 
     async def aget(self, config: RunnableConfig) -> Optional[Checkpoint]:
         """Asynchronously fetch a checkpoint using the given configuration.
@@ -360,11 +400,9 @@ class BaseCheckpointSaver(ABC):
         Raises:
             NotImplementedError: Implement this method in your custom checkpoint saver.
         """
-        raise NotImplementedError(
-            "This method was added in langgraph 0.1.7. Please update your checkpoint saver to implement it."
-        )
+        raise NotImplementedError
 
-    def get_next_version(self, current: Optional[V], channel: BaseChannel) -> V:
+    def get_next_version(self, current: Optional[V], channel: ChannelProtocol) -> V:
         """Generate the next version ID for a channel.
 
         Default is to use integer versions, incrementing by 1. If you override, you can use str/int/float versions,
@@ -378,3 +416,17 @@ class BaseCheckpointSaver(ABC):
             V: The next version identifier, which must be increasing.
         """
         return current + 1 if current is not None else 1
+
+
+class EmptyChannelError(Exception):
+    """Raised when attempting to get the value of a channel that hasn't been updated
+    for the first time yet."""
+
+    pass
+
+
+def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
+    """Get checkpoint ID in a backwards-compatible manner (fallback on thread_ts)."""
+    return config["configurable"].get(
+        "checkpoint_id", config["configurable"].get("thread_ts")
+    )
