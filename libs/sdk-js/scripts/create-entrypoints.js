@@ -97,11 +97,15 @@ const updateConfig = () => {
   const endMarker = "## END GENERATED create-entrypoints.js";
   const startIdx = lines.findIndex((line) => line.includes(startMarker));
   const endIdx = lines.findIndex((line) => line.includes(endMarker));
-  const newLines = [
-    ...lines.slice(0, startIdx + 1),
-    ...filenames.map((fname) => `/${fname}`),
-    ...lines.slice(endIdx),
-  ];
+  const newLines = lines.slice(0, startIdx + 1);
+  if (startIdx === -1) {
+    newLines.push(startMarker);
+  }
+  newLines.push(...filenames.map((fname) => `/${fname}`));
+  if (endIdx === -1) {
+    newLines.push(endMarker);
+  }
+  newLines.push(...lines.slice(endIdx));
   fs.writeFileSync("./.gitignore", newLines.join("\n"));
 };
 

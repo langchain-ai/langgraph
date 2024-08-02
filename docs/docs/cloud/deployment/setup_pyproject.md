@@ -22,13 +22,11 @@ Dependencies can optionally be specified in one of the following files: `pyproje
 
 The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
 ```
-langgraph>=0.1.7
-langchain-core>=0.2.7
-orjson>=3.10.1
-langsmith>=0.1.50
-httpx>=0.27.0
-langchain-core>=0.2.8
+langgraph>=0.1.19,<0.2.0
+langchain-core>=0.2.8,<0.3.0
 langsmith>=0.1.63
+orjson>=3.10.1
+httpx>=0.27.0
 tenacity>=8.3.0
 uvicorn>=0.29.0
 sse-starlette>=2.1.0

@@ -25,7 +25,13 @@ from langchain_core.runnables.graph import Node as DrawableNode
 
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import END, START, TAG_HIDDEN, Send
+from langgraph.constants import (
+    CHECKPOINT_NAMESPACE_SEPARATOR,
+    END,
+    START,
+    TAG_HIDDEN,
+    Send,
+)
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
@@ -154,6 +160,11 @@ class Graph:
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
+        if isinstance(node, str) and CHECKPOINT_NAMESPACE_SEPARATOR in node:
+            raise ValueError(
+                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
+            )
+
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "

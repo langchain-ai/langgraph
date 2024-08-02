@@ -19,7 +19,7 @@ from typing import (
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
 from langgraph.checkpoint.base.id import uuid6
-from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
     ChannelProtocol,
@@ -172,10 +172,19 @@ CheckpointThreadId = ConfigurableFieldSpec(
     is_shared=True,
 )
 
-CheckpointThreadTs = ConfigurableFieldSpec(
-    id="thread_ts",
+CheckpointNS = ConfigurableFieldSpec(
+    id="checkpoint_ns",
+    annotation=str,
+    name="Checkpoint NS",
+    description='Checkpoint namespace. Denotes the path to the subgraph node the checkpoint originates from, separated by `|` character, e.g. `"child|grandchild"`. Defaults to "" (root graph).',
+    default=None,
+    is_shared=True,
+)
+
+CheckpointId = ConfigurableFieldSpec(
+    id="checkpoint_id",
     annotation=Optional[str],
-    name="Thread Timestamp",
+    name="Checkpoint ID",
     description="Pass to fetch a past checkpoint. If None, fetches the latest checkpoint.",
     default=None,
     is_shared=True,
@@ -203,7 +212,7 @@ class BaseCheckpointSaver(ABC):
         *,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
-        self.serde = serde or self.serde
+        self.serde = maybe_add_typed_methods(serde or self.serde)
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:
@@ -212,7 +221,7 @@ class BaseCheckpointSaver(ABC):
         Returns:
             list[ConfigurableFieldSpec]: List of configuration field specs.
         """
-        return [CheckpointThreadId, CheckpointThreadTs]
+        return [CheckpointThreadId, CheckpointNS, CheckpointId]
 
     def get(self, config: RunnableConfig) -> Optional[Checkpoint]:
         """Fetch a checkpoint using the given configuration.
@@ -414,3 +423,10 @@ class EmptyChannelError(Exception):
     for the first time yet."""
 
     pass
+
+
+def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
+    """Get checkpoint ID in a backwards-compatible manner (fallback on thread_ts)."""
+    return config["configurable"].get(
+        "checkpoint_id", config["configurable"].get("thread_ts")
+    )

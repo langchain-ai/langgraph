@@ -42,10 +42,15 @@ class GraphSchema(TypedDict):
 
     graph_id: str
     """The ID of the graph."""
-    state_schema: dict
-    """The schema for the graph state."""
-    config_schema: dict
-    """The schema for the graph config."""
+    input_schema: Optional[dict]
+    """The schema for the graph state.
+    Missing if unable to generate JSON schema from graph."""
+    state_schema: Optional[dict]
+    """The schema for the graph state.
+    Missing if unable to generate JSON schema from graph."""
+    config_schema: Optional[dict]
+    """The schema for the graph config.
+    Missing if unable to generate JSON schema from graph."""
 
 
 class Assistant(TypedDict):
