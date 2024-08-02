@@ -7,6 +7,9 @@
 test:
 	poetry run pytest tests
 
+test_watch:
+	poetry run ptw .
+
 ######################
 # LINTING AND FORMATTING
 ######################
