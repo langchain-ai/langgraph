@@ -14,7 +14,6 @@ from typing import (
     List,
     Literal,
     Optional,
-    Sequence,
     Tuple,
     TypedDict,
     Union,
@@ -52,7 +51,6 @@ from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
-from langgraph.managed.few_shot import FewShotExamples
 from langgraph.prebuilt.chat_agent_executor import (
     create_function_calling_executor,
     create_tool_calling_executor,
@@ -3240,187 +3238,6 @@ async def test_conditional_graph_state() -> None:
             c async for c in app_w_interrupt.checkpointer.alist(config, limit=2)
         ][-1].config,
     )
-
-
-async def test_state_graph_few_shot() -> None:
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
-    from langchain_core.messages import (
-        AIMessage,
-        AnyMessage,
-        ToolCall,
-        ToolMessage,
-    )
-    from langchain_core.prompts import ChatPromptTemplate
-    from langchain_core.tools import tool
-
-    def filter_by_source(config: RunnableConfig) -> Dict[str, Any]:
-        """This function is a trivial example that demonstrates that passing
-        a Callable to metadata_filter works as expected.
-        """
-        return {"source": "loop"}
-
-    class BaseState(TypedDict):
-        messages: Annotated[list[AnyMessage], add_messages]
-
-    class AgentState(BaseState):
-        examples: Annotated[
-            Sequence[BaseState],
-            FewShotExamples[BaseState].configure(k=1, metadata_filter=filter_by_source),
-        ]
-
-    # Assemble the tools
-    @tool()
-    def search_api(query: str) -> str:
-        """Searches the API for the query."""
-        return f"result for {query}"
-
-    tools = [search_api]
-    tools_by_name = {t.name: t for t in tools}
-
-    prompt = ChatPromptTemplate.from_messages(
-        [
-            (
-                "system",
-                """You are a nice assistant.
-Some examples of past conversations:
-{examples}""",
-            ),
-            ("placeholder", "{messages}"),
-        ]
-    )
-
-    model = FakeMessagesListChatModel(
-        responses=[
-            AIMessage(
-                content="",
-                tool_calls=[
-                    {
-                        "id": "tool_call123",
-                        "name": "search_api",
-                        "args": {"query": "query"},
-                    },
-                ],
-            ),
-            AIMessage(content="answer"),
-        ]
-    )
-
-    async def agent(state: AgentState, config: RunnableConfig) -> AgentState:
-        # begin: testing code
-        assert state["examples"] == config["configurable"]["expected_examples"]
-        # end: testing code
-        formatted = await prompt.ainvoke(state)
-        response = await model.ainvoke(formatted)
-        return {"messages": response}
-
-    # Define decision-making logic
-    def should_continue(data: AgentState) -> str:
-        # Logic to decide whether to continue in the loop or exit
-        if tool_calls := data["messages"][-1].tool_calls:
-            return [Send("tools", tool_call) for tool_call in tool_calls]
-        else:
-            return "exit"
-
-    def tools_node(tool_call: ToolCall, config: RunnableConfig) -> AgentState:
-        output = tools_by_name[tool_call["name"]].invoke(tool_call["args"], config)
-        return {
-            "messages": ToolMessage(
-                content=output, name=tool_call["name"], tool_call_id=tool_call["id"]
-            )
-        }
-
-    # Define a new graph
-    workflow = StateGraph(AgentState)
-
-    workflow.add_node("agent", agent)
-    workflow.add_node("tools", tools_node)
-    workflow.set_entry_point("agent")
-    workflow.add_conditional_edges(
-        "agent", should_continue, {"continue": "tools", "exit": END}
-    )
-    workflow.add_edge("tools", "agent")
-
-    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-        app = workflow.compile(checkpointer=saver)
-
-        first_messages = [
-            _AnyIdHumanMessage(content="what is weather in sf"),
-            AIMessage(
-                content="",
-                id=AnyStr(),
-                tool_calls=[
-                    {
-                        "name": "search_api",
-                        "args": {"query": "query"},
-                        "id": "tool_call123",
-                    }
-                ],
-            ),
-            ToolMessage(
-                content="result for query",
-                name="search_api",
-                id=AnyStr(),
-                tool_call_id="tool_call123",
-            ),
-            _AnyIdAIMessage(content="answer"),
-        ]
-        assert await app.ainvoke(
-            {"messages": "what is weather in sf"},
-            {"configurable": {"thread_id": "1", "expected_examples": []}},
-        ) == {"messages": first_messages}
-
-        # get first checkpoint
-        chkpnt_tuple_1 = await saver.aget_tuple({"configurable": {"thread_id": "1"}})
-        config = chkpnt_tuple_1.config
-        checkpoint = chkpnt_tuple_1.checkpoint
-        metadata = chkpnt_tuple_1.metadata
-
-        # not needed in application code, only for testing
-        assert [c async for c in saver.alist(None, filter={"score": 1})] == []
-
-        # mark as "good"
-        metadata["score"] = 1
-        await saver.aput(config, checkpoint, metadata)
-
-        # not needed in application code, only for testing
-        hiscored = [c async for c in saver.alist(None, filter={"score": 1})]
-        assert len(hiscored) == 1
-        assert hiscored[0].checkpoint["channel_values"]["messages"] == first_messages
-
-        assert await app.ainvoke(
-            {"messages": "what is weather in la"},
-            {
-                "configurable": {
-                    "thread_id": "2",
-                    # below is only for testing purposes, not part of few shot api
-                    "expected_examples": [{"messages": first_messages}],
-                }
-            },
-        ) == {
-            "messages": [
-                _AnyIdHumanMessage(content="what is weather in la"),
-                AIMessage(
-                    content="",
-                    id=AnyStr(),
-                    tool_calls=[
-                        {
-                            "name": "search_api",
-                            "args": {"query": "query"},
-                            "id": "tool_call123",
-                        }
-                    ],
-                ),
-                ToolMessage(
-                    content="result for query",
-                    name="search_api",
-                    id=AnyStr(),
-                    tool_call_id="tool_call123",
-                ),
-                _AnyIdAIMessage(content="answer"),
-            ]
-        }
 
 
 async def test_conditional_entrypoint_graph() -> None:
