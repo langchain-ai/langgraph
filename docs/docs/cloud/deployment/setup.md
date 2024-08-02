@@ -1,6 +1,9 @@
 # How to Set Up a LangGraph Application for Deployment
 
-A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `requirements.txt` to specify project dependencies. If you prefer using poetry for dependency management, check out [this how-to guide](./setup_pyproject.md) on using `pyproject.toml` for LangGraph Cloud.
+A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `requirements.txt` to specify project dependencies. 
+
+!!! tip "Setup with pyproject.toml"
+    If you prefer using poetry for dependency management, check out [this how-to guide](./setup_pyproject.md) on using `pyproject.toml` for LangGraph Cloud.
 
 The final repo structure will look something like this:
 
@@ -131,10 +134,6 @@ my-app/
 |-- langgraph.json      # configuration file for LangGraph
 ```
 
-## Upload to GitHub
-
-To deploy the LangGraph application to LangGraph Cloud, the code must be uploaded to a GitHub repository.
-
 ## Next
 
-After you setup your repo, it's time to [deploy your app](./cloud.md).
+After you setup your project and place it in a github repo, it's time to [deploy your app](./cloud.md).

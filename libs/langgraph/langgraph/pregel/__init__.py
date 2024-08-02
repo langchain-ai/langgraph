@@ -361,7 +361,7 @@ class Pregel(
         with ChannelsManager(
             self.channels, checkpoint, config
         ) as channels, ManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
             next_tasks = prepare_next_tasks(
                 checkpoint,
@@ -393,7 +393,7 @@ class Pregel(
         async with AsyncChannelsManager(
             self.channels, checkpoint, config
         ) as channels, AsyncManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
             next_tasks = prepare_next_tasks(
                 checkpoint,
@@ -435,7 +435,7 @@ class Pregel(
             with ChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, ManagedValuesManager(
-                self.managed_values_dict, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config)
             ) as managed:
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -481,7 +481,7 @@ class Pregel(
             async with AsyncChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, AsyncManagedValuesManager(
-                self.managed_values_dict, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config)
             ) as managed:
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -627,8 +627,35 @@ class Pregel(
         # get last checkpoint
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        step = saved.metadata.get("step", -1) if saved else -1
+        # merge configurable fields with previous checkpoint config
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                # TODO: add proper support for updating nested subgraph state
+                "checkpoint_ns": "",
+            },
+        }
+        if saved:
+            checkpoint_config = {
+                "configurable": {
+                    **config.get("configurable", {}),
+                    **saved.config["configurable"],
+                }
+            }
         # find last node that updated the state, if not provided
-        if as_node is None and not saved:
+        if values is None and as_node is None:
+            return await self.checkpointer.aput(
+                checkpoint_config,
+                create_checkpoint(checkpoint, None, step),
+                {
+                    "source": "update",
+                    "step": step,
+                    "writes": {},
+                },
+            )
+        elif as_node is None and not saved:
             if (
                 isinstance(self.input_channels, str)
                 and self.input_channels in self.nodes
@@ -685,31 +712,13 @@ class Pregel(
             apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-            step = saved.metadata.get("step", -2) + 1 if saved else -1
-
-            # merge configurable fields with previous checkpoint config
-            checkpoint_config = {
-                **config,
-                "configurable": {
-                    **config["configurable"],
-                    # TODO: add proper support for updating nested subgraph state
-                    "checkpoint_ns": "",
-                },
-            }
-            if saved:
-                checkpoint_config = {
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    }
-                }
 
             return await self.checkpointer.aput(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step),
+                create_checkpoint(checkpoint, channels, step + 1),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {as_node: values},
                 },
             )

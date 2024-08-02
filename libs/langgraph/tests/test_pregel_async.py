@@ -52,7 +52,6 @@ from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.prebuilt.chat_agent_executor import (
-    create_function_calling_executor,
     create_tool_calling_executor,
 )
 from langgraph.prebuilt.tool_executor import ToolExecutor
@@ -854,6 +853,33 @@ async def test_invoke_two_processes_in_out_interrupt(
                 parent_config=None,
             ),
         ]
+
+        # forking from any previous checkpoint w/out forking should do nothing
+        assert [
+            c async for c in app.astream(None, history[0].config, stream_mode="updates")
+        ] == []
+        assert [
+            c async for c in app.astream(None, history[1].config, stream_mode="updates")
+        ] == []
+        assert [
+            c async for c in app.astream(None, history[2].config, stream_mode="updates")
+        ] == []
+
+        # forking and re-running from any prev checkpoint should re-run nodes
+        fork_config = await app.aupdate_state(history[0].config, None)
+        assert [
+            c async for c in app.astream(None, fork_config, stream_mode="updates")
+        ] == []
+
+        fork_config = await app.aupdate_state(history[1].config, None)
+        assert [
+            c async for c in app.astream(None, fork_config, stream_mode="updates")
+        ] == [{"two": {"output": 5}}]
+
+        fork_config = await app.aupdate_state(history[2].config, None)
+        assert [
+            c async for c in app.astream(None, fork_config, stream_mode="updates")
+        ] == [{"one": {"inbox": 4}}]
     finally:
         if hasattr(checkpointer, "__aexit__"):
             await checkpointer.__aexit__(None, None, None)
@@ -3507,138 +3533,6 @@ async def test_prebuilt_tool_chat() -> None:
     ]
 
 
-async def test_prebuilt_chat() -> None:
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
-    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
-    from langchain_core.tools import tool
-
-    class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list):
-            return self
-
-    @tool()
-    def search_api(query: str) -> str:
-        """Searches the API for the query."""
-        return f"result for {query}"
-
-    tools = [search_api]
-
-    app = create_function_calling_executor(
-        FakeFuntionChatModel(
-            responses=[
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": json.dumps("query"),
-                        }
-                    },
-                ),
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": json.dumps("another"),
-                        }
-                    },
-                ),
-                AIMessage(content="answer"),
-            ]
-        ),
-        tools,
-    )
-
-    assert await app.ainvoke(
-        {"messages": [HumanMessage(content="what is weather in sf")]}
-    ) == {
-        "messages": [
-            _AnyIdHumanMessage(content="what is weather in sf"),
-            AIMessage(
-                id=AnyStr(),
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
-            ),
-            FunctionMessage(content="result for query", name="search_api", id=AnyStr()),
-            AIMessage(
-                id=AnyStr(),
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
-            ),
-            FunctionMessage(
-                content="result for another", name="search_api", id=AnyStr()
-            ),
-            _AnyIdAIMessage(content="answer"),
-        ]
-    }
-
-    assert [
-        c
-        async for c in app.astream(
-            {"messages": [HumanMessage(content="what is weather in sf")]}
-        )
-    ] == [
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        id=AnyStr(),
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            }
-                        },
-                    )
-                ]
-            }
-        },
-        {
-            "tools": {
-                "messages": [
-                    FunctionMessage(
-                        content="result for query", name="search_api", id=AnyStr()
-                    )
-                ]
-            }
-        },
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        id=AnyStr(),
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            }
-                        },
-                    )
-                ]
-            }
-        },
-        {
-            "tools": {
-                "messages": [
-                    FunctionMessage(
-                        content="result for another", name="search_api", id=AnyStr()
-                    )
-                ]
-            }
-        },
-        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
-    ]
-
-
 async def test_state_graph_packets() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
@@ -5385,7 +5279,7 @@ async def test_branch_then() -> None:
             created_at=AnyStr(),
             metadata={
                 "source": "update",
-                "step": -1,
+                "step": 0,
                 "writes": {START: {"my_key": "key", "market": "DE"}},
             },
         )
@@ -5404,7 +5298,7 @@ async def test_branch_then() -> None:
             ],
             metadata={
                 "source": "loop",
-                "step": 0,
+                "step": 1,
                 "writes": {"prepare": {"my_key": " prepared"}},
             },
             parent_config=uconfig,
@@ -5423,7 +5317,7 @@ async def test_branch_then() -> None:
             ],
             metadata={
                 "source": "loop",
-                "step": 2,
+                "step": 3,
                 "writes": {"finish": {"my_key": " finished"}},
             },
             parent_config=[

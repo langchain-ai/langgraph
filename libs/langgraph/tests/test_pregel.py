@@ -55,7 +55,6 @@ from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
 from langgraph.prebuilt.chat_agent_executor import (
-    create_function_calling_executor,
     create_tool_calling_executor,
 )
 from langgraph.prebuilt.tool_node import ToolNode
@@ -1932,6 +1931,9 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     )
     config = {"configurable": {"thread_id": "1"}}
 
+    assert app_w_interrupt.get_graph().to_json() == snapshot
+    assert app_w_interrupt.get_graph().draw_mermaid() == snapshot
+
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
     ] == [
@@ -3712,140 +3714,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                         tool_call_id="tool_call567",
                         id=AnyStr(),
                     ),
-                ]
-            }
-        },
-        {"agent": {"messages": [_AnyIdAIMessage(content="answer")]}},
-    ]
-
-
-def test_prebuilt_chat(snapshot: SnapshotAssertion) -> None:
-    from langchain_core.language_models.fake_chat_models import (
-        FakeMessagesListChatModel,
-    )
-    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
-    from langchain_core.tools import tool
-
-    class FakeFuntionChatModel(FakeMessagesListChatModel):
-        def bind_functions(self, functions: list):
-            return self
-
-    @tool()
-    def search_api(query: str) -> str:
-        """Searches the API for the query."""
-        return f"result for {query}"
-
-    tools = [search_api]
-
-    app = create_function_calling_executor(
-        FakeFuntionChatModel(
-            responses=[
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": json.dumps("query"),
-                        }
-                    },
-                ),
-                AIMessage(
-                    content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": json.dumps("another"),
-                        }
-                    },
-                ),
-                AIMessage(content="answer"),
-            ]
-        ),
-        tools,
-    )
-
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-
-    assert app.invoke(
-        {"messages": [HumanMessage(content="what is weather in sf")]}
-    ) == {
-        "messages": [
-            _AnyIdHumanMessage(content="what is weather in sf"),
-            AIMessage(
-                id=AnyStr(),
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
-            ),
-            FunctionMessage(content="result for query", name="search_api", id=AnyStr()),
-            AIMessage(
-                id=AnyStr(),
-                content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
-            ),
-            FunctionMessage(
-                content="result for another", name="search_api", id=AnyStr()
-            ),
-            _AnyIdAIMessage(content="answer"),
-        ]
-    }
-
-    assert [
-        *app.stream({"messages": [HumanMessage(content="what is weather in sf")]})
-    ] == [
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        id=AnyStr(),
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"query"',
-                            }
-                        },
-                    )
-                ]
-            }
-        },
-        {
-            "tools": {
-                "messages": [
-                    FunctionMessage(
-                        content="result for query", name="search_api", id=AnyStr()
-                    )
-                ]
-            }
-        },
-        {
-            "agent": {
-                "messages": [
-                    AIMessage(
-                        id=AnyStr(),
-                        content="",
-                        additional_kwargs={
-                            "function_call": {
-                                "name": "search_api",
-                                "arguments": '"another"',
-                            }
-                        },
-                    )
-                ]
-            }
-        },
-        {
-            "tools": {
-                "messages": [
-                    FunctionMessage(
-                        content="result for another", name="search_api", id=AnyStr()
-                    )
                 ]
             }
         },
