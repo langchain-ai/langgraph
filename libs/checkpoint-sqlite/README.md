@@ -81,11 +81,11 @@ checkpoint = {
 }
 
 # store checkpoint
-await checkpointer.put(thread_config, checkpoint, {})
+await checkpointer.aput(thread_config, checkpoint, {})
 
 # load checkpoint
-await checkpointer.get(thread_config)
+await checkpointer.aget(thread_config)
 
 # list checkpoints
-[c async for c in checkpointer.list(thread_config)]
+[c async for c in checkpointer.alist(thread_config)]
 ```
