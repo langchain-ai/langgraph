@@ -1,5 +1,6 @@
 import asyncio
 import functools
+import json
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
 from typing import (
@@ -25,6 +26,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     get_checkpoint_id,
 )
+from langgraph.checkpoint.serde.base import maybe_add_typed_methods
 from langgraph.checkpoint.sqlite.utils import search_where
 
 T = TypeVar("T", bound=callable)
@@ -128,6 +130,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         serde: Optional[SerializerProtocol] = None,
     ):
         super().__init__(serde=serde)
+        self.serde = maybe_add_typed_methods(self.serde)
         self.conn = conn
         self.lock = asyncio.Lock()
         self.is_setup = False
@@ -296,9 +299,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 return CheckpointTuple(
                     config,
                     self.serde.loads_typed((type, checkpoint)),
-                    self.serde.loads_typed((type, metadata))
-                    if metadata is not None
-                    else {},
+                    json.loads(metadata) if metadata is not None else {},
                     (
                         {
                             "configurable": {
@@ -340,7 +341,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         """
         await self.setup()
         where, param_values = search_where(config, filter, before)
-        query = f"""SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata
+        query = f"""SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata
         FROM checkpoints
         {where}
         ORDER BY checkpoint_id DESC"""
@@ -352,7 +353,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 checkpoint_ns,
                 checkpoint_id,
                 parent_checkpoint_id,
-                value,
+                type,
+                checkpoint,
                 metadata,
             ) in cursor:
                 yield CheckpointTuple(
@@ -363,10 +365,8 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                             "checkpoint_id": checkpoint_id,
                         }
                     },
-                    self.serde.loads_typed(("json", value)),
-                    self.serde.loads_typed(("json", metadata))
-                    if metadata is not None
-                    else {},
+                    self.serde.loads_typed((type, checkpoint)),
+                    json.loads(metadata) if metadata is not None else {},
                     (
                         {
                             "configurable": {
@@ -403,7 +403,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
-        serialized_metadata = self.serde.dumps_typed(metadata)[1]
+        serialized_metadata = json.dumps(metadata)
         async with self.conn.execute(
             "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (

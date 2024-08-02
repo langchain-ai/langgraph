@@ -1,4 +1,4 @@
-from typing import Any, Protocol
+from typing import Any, Protocol, TypeVar
 
 
 class SerializerProtocol(Protocol):
@@ -23,3 +23,26 @@ class SerializerProtocol(Protocol):
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
         ...
+
+
+T = TypeVar("T", bound=SerializerProtocol)
+
+
+def maybe_add_typed_methods(serde: T) -> T:
+    """Add loads_typed and dumps_typed to old serde implementations for backwards compatibility."""
+
+    if not hasattr(serde, "loads_typed"):
+
+        def loads_typed(data: tuple[str, bytes]) -> Any:
+            return serde.loads(data[1])
+
+        serde.loads_typed = loads_typed
+
+    if not hasattr(serde, "dumps_typed"):
+
+        def dumps_typed(obj: Any) -> tuple[str, bytes]:
+            return "type", serde.dumps(obj)
+
+        serde.dumps_typed = dumps_typed
+
+    return serde

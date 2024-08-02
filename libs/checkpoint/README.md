@@ -24,7 +24,7 @@ You must pass these when invoking the graph as part of the configurable part of 
 
 ### Serde
 
-`langgraph_checkpoint` also defines protocol for serialization/deserialization (serde) and provides an default implementation (`langgraph_checkpoint.serde.jsonplus.JsonPlusSerializer`) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
+`langgraph_checkpoint` also defines protocol for serialization/deserialization (serde) and provides an default implementation (`langgraph.checkpoint.serde.jsonplus.JsonPlusSerializer`) that handles a wide variety of types, including LangChain and LangGraph primitives, datetimes, enums and more.
 
 ### Pending writes
 
@@ -32,7 +32,7 @@ When a graph node fails mid-execution at a given superstep, LangGraph stores pen
 
 ## Interface
 
-Each checkpointer should conform to `langgraph_checkpoint.BaseCheckpointSaver` interface and must implement the following methods:
+Each checkpointer should conform to `langgraph.checkpoint.base.BaseCheckpointSaver` interface and must implement the following methods:
 
 - `.put` - Store a checkpoint with its configuration and metadata.
 - `.put_writes` - Store intermediate writes linked to a checkpoint (i.e. pending writes).

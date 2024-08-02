@@ -1,3 +1,4 @@
+import json
 import sqlite3
 import threading
 from contextlib import AbstractContextManager, contextmanager
@@ -17,6 +18,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     get_checkpoint_id,
 )
+from langgraph.checkpoint.serde.base import maybe_add_typed_methods
 from langgraph.checkpoint.serde.types import ChannelProtocol
 from langgraph.checkpoint.sqlite.utils import search_where
 
@@ -75,6 +77,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
+        self.serde = maybe_add_typed_methods(self.serde)
         self.conn = conn
         self.is_setup = False
         self.lock = threading.Lock()
@@ -261,9 +264,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                 return CheckpointTuple(
                     config,
                     self.serde.loads_typed((type, checkpoint)),
-                    self.serde.loads_typed((type, metadata))
-                    if metadata is not None
-                    else {},
+                    json.loads(metadata) if metadata is not None else {},
                     (
                         {
                             "configurable": {
@@ -345,9 +346,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
                         }
                     },
                     self.serde.loads_typed((type, checkpoint)),
-                    self.serde.loads_typed((type, metadata))
-                    if metadata is not None
-                    else {},
+                    json.loads(metadata) if metadata is not None else {},
                     (
                         {
                             "configurable": {
@@ -394,7 +393,7 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
-        serialized_metadata = self.serde.dumps_typed(metadata)[1]
+        serialized_metadata = json.dumps(metadata)
         with self.lock, self.cursor() as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
