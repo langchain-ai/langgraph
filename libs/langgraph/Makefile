@@ -21,7 +21,7 @@ test_watch:
 	poetry run ptw .
 
 test_watch_all:
-	npx concurrently -n langgraph,checkpoint "make test_watch" "make -C ../checkpoint test_watch"
+	npx concurrently -n langgraph,checkpoint,checkpoint-sqlite "make test_watch" "make -C ../checkpoint test_watch" "make -C ../checkpoint-sqlite test_watch"
 
 ######################
 # LINTING AND FORMATTING

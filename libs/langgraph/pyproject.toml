@@ -32,6 +32,7 @@ langchain-anthropic = ">=0.1.8"
 pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
 pytest-repeat = "^0.9.3"
 langgraph-checkpoint = {path = "../checkpoint", develop = true}
+langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 aiosqlite = "^0.20.0"
 
 [tool.poetry.group.dev]

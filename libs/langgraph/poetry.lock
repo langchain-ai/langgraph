@@ -1820,7 +1820,7 @@ types-requests = ">=2.31.0.2,<3.0.0.0"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "0.1.0"
+version = "1.0.0"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1833,6 +1833,22 @@ langchain-core = ">=0.2.22,<0.3"
 [package.source]
 type = "directory"
 url = "../checkpoint"
+
+[[package]]
+name = "langgraph-checkpoint-sqlite"
+version = "1.0.0"
+description = "Library with a SQLite implementation of LangGraph checkpoint saver."
+optional = false
+python-versions = "^3.9.0,<4.0"
+files = []
+develop = true
+
+[package.dependencies]
+aiosqlite = "^0.20.0"
+
+[package.source]
+type = "directory"
+url = "../checkpoint-sqlite"
 
 [[package]]
 name = "langsmith"
@@ -4150,4 +4166,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "cd715a85af9a3883a45a8f7cf2944aee0e003954c93921d4f13dcd69fce51e42"
+content-hash = "a56e3014df2efaffc29a3d70e029b59223e32bc6f42d9cb8eea8d0d1b715f2d9"
