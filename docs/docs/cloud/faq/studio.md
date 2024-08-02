@@ -10,7 +10,7 @@ LangGraph Studio requires Docker Desktop version 4.24 or higher. Please make sur
 
 ### Configuration or environment issues
 
-Another reason your project might fail to start is because your configuraiton file is defined incorrectly, or you are missing required environment variables. 
+Another reason your project might fail to start is because your configuration file is defined incorrectly, or you are missing required environment variables. 
 
 ## How does interrupt work?
 
@@ -39,7 +39,7 @@ The LangGraph studio works by making API calls to the LangGraph API, and this AP
 
 ## Why are extra edges showing up in my graph?
 
-If you don't define your conditional edges carefully, you might notice extra edges appearing in your graph. This is because without proper definition, LangGraph Studoi assumes the conditional edge could access all other nodes. In order for this to not be the case, you need to be explicit about how you define conditional edges. There are two ways you can do this:
+If you don't define your conditional edges carefully, you might notice extra edges appearing in your graph. This is because without proper definition, LangGraph Studio assumes the conditional edge could access all other nodes. In order for this to not be the case, you need to be explicit about how you define conditional edges. There are two ways you can do this:
 
 ### Solution 1: Include a path map
 
