@@ -1,4 +1,4 @@
-from typing import Any, Protocol, TypeVar
+from typing import Any, Protocol
 
 
 class SerializerProtocol(Protocol):
@@ -25,24 +25,21 @@ class SerializerProtocol(Protocol):
         ...
 
 
-T = TypeVar("T", bound=SerializerProtocol)
+class SerializerCompat(SerializerProtocol):
+    def __init__(self, serde: SerializerProtocol) -> None:
+        self.serde = serde
+
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        return type(obj).__name__, self.serde.dumps(obj)
+
+    def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        return self.serde.loads(data[1])
 
 
-def maybe_add_typed_methods(serde: T) -> T:
-    """Add loads_typed and dumps_typed to old serde implementations for backwards compatibility."""
+def maybe_add_typed_methods(serde: SerializerProtocol) -> SerializerProtocol:
+    """Wrap serde old serde implementations in a class with loads_typed and dumps_typed for backwards compatibility."""
 
-    if not hasattr(serde, "loads_typed"):
-
-        def loads_typed(data: tuple[str, bytes]) -> Any:
-            return serde.loads(data[1])
-
-        serde.loads_typed = loads_typed
-
-    if not hasattr(serde, "dumps_typed"):
-
-        def dumps_typed(obj: Any) -> tuple[str, bytes]:
-            return "type", serde.dumps(obj)
-
-        serde.dumps_typed = dumps_typed
+    if not hasattr(serde, "loads_typed") or not hasattr(serde, "dumps_typed"):
+        return SerializerCompat(serde)
 
     return serde

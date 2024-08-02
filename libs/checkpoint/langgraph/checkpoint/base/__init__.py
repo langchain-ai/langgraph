@@ -19,7 +19,7 @@ from typing import (
 from langchain_core.runnables import ConfigurableFieldSpec, RunnableConfig
 
 from langgraph.checkpoint.base.id import uuid6
-from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
     ChannelProtocol,
@@ -212,7 +212,7 @@ class BaseCheckpointSaver(ABC):
         *,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
-        self.serde = serde or self.serde
+        self.serde = maybe_add_typed_methods(serde or self.serde)
 
     @property
     def config_specs(self) -> list[ConfigurableFieldSpec]:

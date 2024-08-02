@@ -13,7 +13,6 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.serde.base import maybe_add_typed_methods
 
 
 class MemorySaver(BaseCheckpointSaver):
@@ -55,7 +54,6 @@ class MemorySaver(BaseCheckpointSaver):
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
-        self.serde = maybe_add_typed_methods(self.serde)
         self.storage = defaultdict(lambda: defaultdict(dict))
         self.writes = defaultdict(list)
 

@@ -1,6 +1,5 @@
 import asyncio
 import functools
-import json
 from contextlib import AbstractAsyncContextManager
 from types import TracebackType
 from typing import (
@@ -26,7 +25,7 @@ from langgraph.checkpoint.base import (
     SerializerProtocol,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.serde.base import maybe_add_typed_methods
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite.utils import search_where
 
 T = TypeVar("T", bound=callable)
@@ -130,7 +129,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         serde: Optional[SerializerProtocol] = None,
     ):
         super().__init__(serde=serde)
-        self.serde = maybe_add_typed_methods(self.serde)
+        self.jsonplus_serde = JsonPlusSerializer()
         self.conn = conn
         self.lock = asyncio.Lock()
         self.is_setup = False
@@ -299,7 +298,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                 return CheckpointTuple(
                     config,
                     self.serde.loads_typed((type, checkpoint)),
-                    json.loads(metadata) if metadata is not None else {},
+                    self.jsonplus_serde.loads(metadata) if metadata is not None else {},
                     (
                         {
                             "configurable": {
@@ -366,7 +365,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
                         }
                     },
                     self.serde.loads_typed((type, checkpoint)),
-                    json.loads(metadata) if metadata is not None else {},
+                    self.jsonplus_serde.loads(metadata) if metadata is not None else {},
                     (
                         {
                             "configurable": {
@@ -403,7 +402,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
-        serialized_metadata = json.dumps(metadata)
+        serialized_metadata = self.jsonplus_serde.dumps(metadata)
         async with self.conn.execute(
             "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
