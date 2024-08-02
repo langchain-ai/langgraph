@@ -20,6 +20,9 @@ test:
 test_watch:
 	poetry run ptw .
 
+test_watch_all:
+	npx concurrently -n langgraph,checkpoint "make test_watch" "make -C ../checkpoint test_watch"
+
 ######################
 # LINTING AND FORMATTING
 ######################
