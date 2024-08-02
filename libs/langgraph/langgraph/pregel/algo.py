@@ -33,6 +33,7 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
 )
 from langgraph.constants import (
+    CHECKPOINT_NAMESPACE_SEPARATOR,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
@@ -256,6 +257,7 @@ def prepare_next_tasks(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[list[PregelTaskDescription], list[PregelExecutableTask]]:
+    parent_ns = config.get("configurable", {}).get("checkpoint_ns", "")
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
     # Consume pending packets
     for packet in checkpoint["pending_sends"]:
@@ -275,7 +277,14 @@ def prepare_next_tasks(
                     "langgraph_triggers": triggers,
                     "langgraph_task_idx": len(tasks),
                 }
-                task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
+                checkpoint_ns = (
+                    f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}"
+                    if parent_ns
+                    else packet.node
+                )
+                task_id = str(
+                    uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
+                )
                 writes = deque()
                 tasks.append(
                     PregelExecutableTask(
@@ -349,13 +358,18 @@ def prepare_next_tasks(
                         "langgraph_triggers": triggers,
                         "langgraph_task_idx": len(tasks),
                     }
-                    task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
-                    if parent_thread_id := config.get("configurable", {}).get(
-                        "thread_id"
-                    ):
-                        thread_id: Optional[str] = f"{parent_thread_id}-{name}"
-                    else:
-                        thread_id = None
+                    checkpoint_ns = (
+                        f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
+                        if parent_ns
+                        else name
+                    )
+                    task_id = str(
+                        uuid5(
+                            UUID(checkpoint["id"]),
+                            json.dumps((checkpoint_ns, metadata)),
+                        )
+                    )
+
                     writes = deque()
                     tasks.append(
                         PregelExecutableTask(
@@ -389,8 +403,8 @@ def prepare_next_tasks(
                                     ),
                                     CONFIG_KEY_CHECKPOINTER: checkpointer,
                                     CONFIG_KEY_RESUMING: is_resuming,
-                                    "thread_id": thread_id,
-                                    "thread_ts": checkpoint["id"],
+                                    "checkpoint_id": checkpoint["id"],
+                                    "checkpoint_ns": checkpoint_ns,
                                 },
                             ),
                             triggers,

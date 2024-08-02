@@ -99,5 +99,14 @@ class JsonPlusSerializer(SerializerProtocol):
             "utf-8", "ignore"
         )
 
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        return "json", self.dumps(obj)
+
     def loads(self, data: bytes) -> Any:
         return json.loads(data, object_hook=self._reviver)
+
+    def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        type_, data_ = data
+        if type_ != "json":
+            raise ValueError("JsonPlusSerializer can only deserialize `json` data")
+        return self.loads(data_)

@@ -11,6 +11,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     SerializerProtocol,
+    get_checkpoint_id,
 )
 
 
@@ -44,7 +45,8 @@ class MemorySaver(BaseCheckpointSaver):
             asyncio.run(coro)  # Output: 2
     """
 
-    storage: defaultdict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]
+    # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping
+    storage: defaultdict[str, dict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]]
 
     def __init__(
         self,
@@ -52,14 +54,14 @@ class MemorySaver(BaseCheckpointSaver):
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
-        self.storage = defaultdict(dict)
+        self.storage = defaultdict(lambda: defaultdict(dict))
         self.writes = defaultdict(list)
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the in-memory storage.
 
         This method retrieves a checkpoint tuple from the in-memory storage based on the
-        provided config. If the config contains a "thread_ts" key, the checkpoint with
+        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
         the matching thread ID and timestamp is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
@@ -70,45 +72,54 @@ class MemorySaver(BaseCheckpointSaver):
             Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
         """
         thread_id = config["configurable"]["thread_id"]
-        if ts := config["configurable"].get("thread_ts"):
-            if saved := self.storage[thread_id].get(ts):
-                checkpoint, metadata, parent_ts = saved
-                writes = self.writes[(thread_id, ts)]
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        if checkpoint_id := get_checkpoint_id(config):
+            if saved := self.storage[thread_id][checkpoint_ns].get(checkpoint_id):
+                checkpoint, metadata, parent_checkpoint_id = saved
+                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)]
                 return CheckpointTuple(
                     config=config,
-                    checkpoint=self.serde.loads(checkpoint),
-                    metadata=self.serde.loads(metadata),
+                    checkpoint=self.serde.loads_typed(checkpoint),
+                    metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
-                        (id, c, self.serde.loads(v)) for id, c, v in writes
+                        (id, c, self.serde.loads_typed(v)) for id, c, v in writes
                     ],
                     parent_config={
                         "configurable": {
                             "thread_id": thread_id,
-                            "thread_ts": parent_ts,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": parent_checkpoint_id,
                         }
                     }
-                    if parent_ts
+                    if parent_checkpoint_id
                     else None,
                 )
         else:
-            if checkpoints := self.storage[thread_id]:
-                ts = max(checkpoints.keys())
-                checkpoint, metadata, parent_ts = checkpoints[ts]
-                writes = self.writes[(thread_id, ts)]
+            if checkpoints := self.storage[thread_id][checkpoint_ns]:
+                checkpoint_id = max(checkpoints.keys())
+                checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
+                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)]
                 return CheckpointTuple(
-                    config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
-                    checkpoint=self.serde.loads(checkpoint),
-                    metadata=self.serde.loads(metadata),
+                    config={
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": checkpoint_id,
+                        }
+                    },
+                    checkpoint=self.serde.loads_typed(checkpoint),
+                    metadata=self.serde.loads_typed(metadata),
                     pending_writes=[
-                        (id, c, self.serde.loads(v)) for id, c, v in writes
+                        (id, c, self.serde.loads_typed(v)) for id, c, v in writes
                     ],
                     parent_config={
                         "configurable": {
                             "thread_id": thread_id,
-                            "thread_ts": parent_ts,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": parent_checkpoint_id,
                         }
                     }
-                    if parent_ts
+                    if parent_checkpoint_id
                     else None,
                 )
 
@@ -135,16 +146,25 @@ class MemorySaver(BaseCheckpointSaver):
             Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
         """
         thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
+        checkpoint_ns = (
+            config["configurable"].get("checkpoint_ns", "") if config else ""
+        )
         for thread_id in thread_ids:
-            for ts, (checkpoint, metadata_b, parent_ts) in sorted(
-                self.storage[thread_id].items(), key=lambda x: x[0], reverse=True
+            for checkpoint_id, (checkpoint, metadata_b, parent_checkpoint_id) in sorted(
+                self.storage[thread_id][checkpoint_ns].items(),
+                key=lambda x: x[0],
+                reverse=True,
             ):
-                # filter by thread_ts
-                if before and ts >= before["configurable"]["thread_ts"]:
+                # filter by checkpoint ID
+                if (
+                    before
+                    and (before_checkpoint_id := get_checkpoint_id(before))
+                    and checkpoint_id >= before_checkpoint_id
+                ):
                     continue
 
                 # filter by metadata
-                metadata = self.serde.loads(metadata_b)
+                metadata = self.serde.loads_typed(metadata_b)
                 if filter and not all(
                     query_value == metadata[query_key]
                     for query_key, query_value in filter.items()
@@ -158,16 +178,23 @@ class MemorySaver(BaseCheckpointSaver):
                     limit -= 1
 
                 yield CheckpointTuple(
-                    config={"configurable": {"thread_id": thread_id, "thread_ts": ts}},
-                    checkpoint=self.serde.loads(checkpoint),
+                    config={
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": checkpoint_id,
+                        }
+                    },
+                    checkpoint=self.serde.loads_typed(checkpoint),
                     metadata=metadata,
                     parent_config={
                         "configurable": {
                             "thread_id": thread_id,
-                            "thread_ts": parent_ts,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": parent_checkpoint_id,
                         }
                     }
-                    if parent_ts
+                    if parent_checkpoint_id
                     else None,
                 )
 
@@ -190,19 +217,22 @@ class MemorySaver(BaseCheckpointSaver):
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
-        self.storage[config["configurable"]["thread_id"]].update(
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        self.storage[thread_id][checkpoint_ns].update(
             {
                 checkpoint["id"]: (
-                    self.serde.dumps(checkpoint),
-                    self.serde.dumps(metadata),
-                    config["configurable"].get("thread_ts"),  # parent
+                    self.serde.dumps_typed(checkpoint),
+                    self.serde.dumps_typed(metadata),
+                    config["configurable"].get("checkpoint_id"),  # parent
                 )
             }
         )
         return {
             "configurable": {
-                "thread_id": config["configurable"]["thread_id"],
-                "thread_ts": checkpoint["id"],
+                "thread_id": thread_id,
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint["id"],
             }
         }
 
@@ -226,9 +256,11 @@ class MemorySaver(BaseCheckpointSaver):
             RunnableConfig: The updated config containing the saved writes' timestamp.
         """
         thread_id = config["configurable"]["thread_id"]
-        ts = config["configurable"]["thread_ts"]
-        self.writes[(thread_id, ts)].extend(
-            [(task_id, c, self.serde.dumps(v)) for c, v in writes]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        checkpoint_id = config["configurable"]["checkpoint_id"]
+        key = (thread_id, checkpoint_ns, checkpoint_id)
+        self.writes[key].extend(
+            [(task_id, c, self.serde.dumps_typed(v)) for c, v in writes]
         )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:

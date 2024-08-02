@@ -1,38 +1,9 @@
 import json
-import pickle
 from typing import Any, Dict, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-
-
-class JsonPlusSerializerCompat(JsonPlusSerializer):
-    """A serializer that supports loading pickled checkpoints for backwards compatibility.
-
-    This serializer extends the JsonPlusSerializer and adds support for loading pickled
-    checkpoints. If the input data starts with b"\x80" and ends with b".", it is treated
-    as a pickled checkpoint and loaded using pickle.loads(). Otherwise, the default
-    JsonPlusSerializer behavior is used.
-
-    Examples:
-        >>> import pickle
-        >>> from langgraph.checkpoint.sqlite import JsonPlusSerializerCompat
-        >>>
-        >>> serializer = JsonPlusSerializerCompat()
-        >>> pickled_data = pickle.dumps({"key": "value"})
-        >>> loaded_data = serializer.loads(pickled_data)
-        >>> print(loaded_data)  # Output: {"key": "value"}
-        >>>
-        >>> json_data = '{"key": "value"}'.encode("utf-8")
-        >>> loaded_data = serializer.loads(json_data)
-        >>> print(loaded_data)  # Output: {"key": "value"}
-    """
-
-    def loads(self, data: bytes) -> Any:
-        if data.startswith(b"\x80") and data.endswith(b"."):
-            return pickle.loads(data)
-        return super().loads(data)
+from langgraph.checkpoint.base import get_checkpoint_id
 
 
 def _metadata_predicate(
@@ -99,6 +70,9 @@ def search_where(
     if config is not None:
         wheres.append("thread_id = ?")
         param_values.append(config["configurable"]["thread_id"])
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        wheres.append("checkpoint_ns = ?")
+        param_values.append(checkpoint_ns)
 
     # construct predicate for metadata filter
     if filter:
@@ -108,7 +82,7 @@ def search_where(
 
     # construct predicate for `before`
     if before is not None:
-        wheres.append("thread_ts < ?")
-        param_values.append(before["configurable"]["thread_ts"])
+        wheres.append("checkpoint_id < ?")
+        param_values.append(get_checkpoint_id(before))
 
     return ("WHERE " + " AND ".join(wheres) if wheres else "", param_values)

@@ -628,7 +628,8 @@ def test_invoke_two_processes_in_out_interrupt(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 6, "writes": 5},
@@ -641,7 +642,8 @@ def test_invoke_two_processes_in_out_interrupt(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 5, "writes": None},
@@ -654,7 +656,8 @@ def test_invoke_two_processes_in_out_interrupt(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "input", "step": 4, "writes": 3},
@@ -667,7 +670,8 @@ def test_invoke_two_processes_in_out_interrupt(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 3, "writes": None},
@@ -680,7 +684,8 @@ def test_invoke_two_processes_in_out_interrupt(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "input", "step": 2, "writes": 20},
@@ -693,7 +698,8 @@ def test_invoke_two_processes_in_out_interrupt(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 1, "writes": 4},
@@ -706,7 +712,8 @@ def test_invoke_two_processes_in_out_interrupt(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 0, "writes": None},
@@ -719,7 +726,8 @@ def test_invoke_two_processes_in_out_interrupt(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "input", "step": -1, "writes": 2},
@@ -808,7 +816,8 @@ def test_fork_always_re_runs_nodes(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 5, "writes": {"add_one": 1}},
@@ -821,7 +830,8 @@ def test_fork_always_re_runs_nodes(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 4, "writes": {"add_one": 1}},
@@ -834,7 +844,8 @@ def test_fork_always_re_runs_nodes(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 3, "writes": {"add_one": 1}},
@@ -847,7 +858,8 @@ def test_fork_always_re_runs_nodes(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 2, "writes": {"add_one": 1}},
@@ -860,7 +872,8 @@ def test_fork_always_re_runs_nodes(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 1, "writes": {"add_one": 1}},
@@ -873,7 +886,8 @@ def test_fork_always_re_runs_nodes(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "loop", "step": 0, "writes": None},
@@ -886,7 +900,8 @@ def test_fork_always_re_runs_nodes(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={"source": "input", "step": -1, "writes": 1},
@@ -1416,13 +1431,17 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         assert state is not None
         assert state.values.get("total") == 2
         assert state.next == ()
-        assert state.config["configurable"]["thread_ts"] == memory.get(thread_1)["id"]
+        assert (
+            state.config["configurable"]["checkpoint_id"] == memory.get(thread_1)["id"]
+        )
         # total is now 2, so output is 2+3=5
         assert app.invoke(3, thread_1) == 5
         state = app.get_state(thread_1)
         assert state is not None
         assert state.values.get("total") == 7
-        assert state.config["configurable"]["thread_ts"] == memory.get(thread_1)["id"]
+        assert (
+            state.config["configurable"]["checkpoint_id"] == memory.get(thread_1)["id"]
+        )
         # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
         with pytest.raises(ValueError):
             app.invoke(4, thread_1)
@@ -1462,8 +1481,8 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         }
         # sorted descending
         assert (
-            thread_1_history[0].config["configurable"]["thread_ts"]
-            > thread_1_history[1].config["configurable"]["thread_ts"]
+            thread_1_history[0].config["configurable"]["checkpoint_id"]
+            > thread_1_history[1].config["configurable"]["checkpoint_id"]
         )
         # cursor pagination
         cursored = list(
@@ -1478,18 +1497,18 @@ def test_invoke_checkpoint_sqlite(mocker: MockerFixture) -> None:
         # can get each checkpoint using aget with config
         assert (
             memory.get(thread_1_history[0].config)["id"]
-            == thread_1_history[0].config["configurable"]["thread_ts"]
+            == thread_1_history[0].config["configurable"]["checkpoint_id"]
         )
         assert (
             memory.get(thread_1_history[1].config)["id"]
-            == thread_1_history[1].config["configurable"]["thread_ts"]
+            == thread_1_history[1].config["configurable"]["checkpoint_id"]
         )
 
         thread_1_next_config = app.update_state(thread_1_history[1].config, 10)
         # update creates a new checkpoint
         assert (
-            thread_1_next_config["configurable"]["thread_ts"]
-            > thread_1_history[0].config["configurable"]["thread_ts"]
+            thread_1_next_config["configurable"]["checkpoint_id"]
+            > thread_1_history[0].config["configurable"]["checkpoint_id"]
         )
         # update makes new checkpoint child of the previous one
         assert (
@@ -1957,7 +1976,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     )
     assert (
         app_w_interrupt.checkpointer.get_tuple(config).config["configurable"][
-            "thread_ts"
+            "checkpoint_id"
         ]
         is not None
     )
@@ -6537,7 +6556,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "recursion_limit": 25,
                         "configurable": {
                             "thread_id": "10",
-                            "thread_ts": AnyStr(),
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
                         },
                     },
                     "values": {"my_key": ""},
@@ -6560,7 +6580,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "recursion_limit": 25,
                         "configurable": {
                             "thread_id": "10",
-                            "thread_ts": AnyStr(),
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
                         },
                     },
                     "values": {
@@ -6607,7 +6628,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "recursion_limit": 25,
                         "configurable": {
                             "thread_id": "10",
-                            "thread_ts": AnyStr(),
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
                         },
                     },
                     "values": {
@@ -6654,7 +6676,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "recursion_limit": 25,
                         "configurable": {
                             "thread_id": "10",
-                            "thread_ts": AnyStr(),
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
                         },
                     },
                     "values": {
@@ -6701,7 +6724,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "recursion_limit": 25,
                         "configurable": {
                             "thread_id": "10",
-                            "thread_ts": AnyStr(),
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
                         },
                     },
                     "values": {
@@ -7920,7 +7944,13 @@ def test_nested_graph_interrupts(
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -7928,23 +7958,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -7964,7 +8014,8 @@ def test_nested_graph_interrupts(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -7980,7 +8031,8 @@ def test_nested_graph_interrupts(
                 parent_config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
@@ -7990,7 +8042,8 @@ def test_nested_graph_interrupts(
                 config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -8002,14 +8055,21 @@ def test_nested_graph_interrupts(
                 parent_config={
                     "configurable": {
                         "thread_id": "1",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8017,23 +8077,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "1", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "1", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -8088,7 +8168,13 @@ def test_nested_graph_interrupts(
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8096,23 +8182,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -8128,7 +8234,13 @@ def test_nested_graph_interrupts(
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8136,23 +8248,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -8177,7 +8309,8 @@ def test_nested_graph_interrupts(
                 config={
                     "configurable": {
                         "thread_id": "4",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -8193,7 +8326,8 @@ def test_nested_graph_interrupts(
                 parent_config={
                     "configurable": {
                         "thread_id": "4",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
@@ -8203,7 +8337,8 @@ def test_nested_graph_interrupts(
                 config={
                     "configurable": {
                         "thread_id": "4",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -8215,14 +8350,21 @@ def test_nested_graph_interrupts(
                 parent_config={
                     "configurable": {
                         "thread_id": "4",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8230,23 +8372,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "4", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "4", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "4",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -8273,7 +8435,13 @@ def test_nested_graph_interrupts(
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8281,23 +8449,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -8319,7 +8507,8 @@ def test_nested_graph_interrupts(
                 config={
                     "configurable": {
                         "thread_id": "5",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -8331,14 +8520,21 @@ def test_nested_graph_interrupts(
                 parent_config={
                     "configurable": {
                         "thread_id": "5",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8346,23 +8542,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -8384,7 +8600,8 @@ def test_nested_graph_interrupts(
                 config={
                     "configurable": {
                         "thread_id": "5",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -8400,7 +8617,8 @@ def test_nested_graph_interrupts(
                 parent_config={
                     "configurable": {
                         "thread_id": "5",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
@@ -8410,7 +8628,8 @@ def test_nested_graph_interrupts(
                 config={
                     "configurable": {
                         "thread_id": "5",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -8422,14 +8641,21 @@ def test_nested_graph_interrupts(
                 parent_config={
                     "configurable": {
                         "thread_id": "5",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8437,23 +8663,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "5", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "5", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "5",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -8464,7 +8710,7 @@ def test_nested_graph_interrupts(
             ),
         ]
 
-        # test restarting from thread_ts
+        # test restarting from checkpoint_id
         config = {"configurable": {"thread_id": "6"}}
         app = graph.compile(checkpointer=checkpointer)
         assert app.invoke({"my_key": "my value"}, config, debug=True) == {
@@ -8475,7 +8721,13 @@ def test_nested_graph_interrupts(
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8483,23 +8735,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -8510,7 +8782,10 @@ def test_nested_graph_interrupts(
             ),
         ]
         child_state_history = [
-            c for c in app.get_state_history({"configurable": {"thread_id": "6-inner"}})
+            c
+            for c in app.get_state_history(
+                {"configurable": {"thread_id": "6", "checkpoint_ns": "inner"}}
+            )
         ]
         assert child_state_history == [
             StateSnapshot(
@@ -8518,8 +8793,9 @@ def test_nested_graph_interrupts(
                 next=(),
                 config={
                     "configurable": {
-                        "thread_id": "6-inner",
-                        "thread_ts": AnyStr(),
+                        "thread_id": "6",
+                        "checkpoint_ns": "inner",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -8535,8 +8811,9 @@ def test_nested_graph_interrupts(
                 created_at=AnyStr(),
                 parent_config={
                     "configurable": {
-                        "thread_id": "6-inner",
-                        "thread_ts": AnyStr(),
+                        "thread_id": "6",
+                        "checkpoint_ns": "inner",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
@@ -8547,10 +8824,10 @@ def test_nested_graph_interrupts(
         # check that child snapshot matches id of parent
         child_snapshot = child_state_history[0]
         assert (
-            child_snapshot.config["configurable"]["thread_ts"]
-            == state_history[0].config["configurable"]["thread_ts"]
+            child_snapshot.config["configurable"]["checkpoint_id"]
+            == state_history[0].config["configurable"]["checkpoint_id"]
         )
-        # check resuming from interrupt w/ thread_ts
+        # check resuming from interrupt w/ checkpoint_id
         interrupt_state_snapshot, before_interrupt_state_snapshot = state_history[:2]
         before_interrupt_config = before_interrupt_state_snapshot.config
         # going to get to interrupt again here, so the output is None
@@ -8562,7 +8839,13 @@ def test_nested_graph_interrupts(
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8570,13 +8853,23 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8584,23 +8877,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
@@ -8622,7 +8935,8 @@ def test_nested_graph_interrupts(
                 config={
                     "configurable": {
                         "thread_id": "6",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -8638,7 +8952,8 @@ def test_nested_graph_interrupts(
                 parent_config={
                     "configurable": {
                         "thread_id": "6",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
@@ -8648,7 +8963,8 @@ def test_nested_graph_interrupts(
                 config={
                     "configurable": {
                         "thread_id": "6",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
                 metadata={
@@ -8660,14 +8976,21 @@ def test_nested_graph_interrupts(
                 parent_config={
                     "configurable": {
                         "thread_id": "6",
-                        "thread_ts": AnyStr(),
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
                     }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8675,13 +8998,23 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "hi my value"},
                 next=("inner",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "loop",
                     "writes": {"outer_1": {"my_key": "hi my value"}},
@@ -8689,23 +9022,43 @@ def test_nested_graph_interrupts(
                 },
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={"my_key": "my value"},
                 next=("outer_1",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={"source": "loop", "writes": None, "step": 0},
                 created_at=AnyStr(),
                 parent_config={
-                    "configurable": {"thread_id": "6", "thread_ts": AnyStr()}
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
             ),
             StateSnapshot(
                 values={},
                 next=("__start__",),
-                config={"configurable": {"thread_id": "6", "thread_ts": AnyStr()}},
+                config={
+                    "configurable": {
+                        "thread_id": "6",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
                 metadata={
                     "source": "input",
                     "writes": {"my_key": "my value"},
