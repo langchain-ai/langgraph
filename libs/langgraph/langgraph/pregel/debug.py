@@ -99,7 +99,6 @@ def map_debug_task_results(
         metadata = config["metadata"].copy()
         metadata.pop("checkpoint_id", None)
         # TODO: make task IDs deterministic in tests and reuse task IDs for payload ID
-        metadata.pop("checkpoint_ns", None)
 
         yield {
             "type": "task_result",
