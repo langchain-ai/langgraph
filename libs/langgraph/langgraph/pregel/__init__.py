@@ -361,7 +361,7 @@ class Pregel(
         with ChannelsManager(
             self.channels, checkpoint, config
         ) as channels, ManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
             next_tasks = prepare_next_tasks(
                 checkpoint,
@@ -393,7 +393,7 @@ class Pregel(
         async with AsyncChannelsManager(
             self.channels, checkpoint, config
         ) as channels, AsyncManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
             next_tasks = prepare_next_tasks(
                 checkpoint,
@@ -435,7 +435,7 @@ class Pregel(
             with ChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, ManagedValuesManager(
-                self.managed_values_dict, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config)
             ) as managed:
                 next_tasks = prepare_next_tasks(
                     checkpoint,
@@ -481,7 +481,7 @@ class Pregel(
             async with AsyncChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, AsyncManagedValuesManager(
-                self.managed_values_dict, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config)
             ) as managed:
                 next_tasks = prepare_next_tasks(
                     checkpoint,
