@@ -1,4 +1,4 @@
-.PHONY: test lint format
+.PHONY: test test_watch lint format
 
 ######################
 # TESTING AND COVERAGE

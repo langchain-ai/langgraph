@@ -1,4 +1,4 @@
-.PHONY: test lint format
+.PHONY: test test_watch lint format
 
 ######################
 # TESTING AND COVERAGE
@@ -6,6 +6,9 @@
 
 test:
 	poetry run pytest tests
+
+test_watch:
+	poetry run ptw .
 
 ######################
 # LINTING AND FORMATTING
