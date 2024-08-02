@@ -197,7 +197,7 @@ jobs:
               "$PKG_NAME==$VERSION" \
           )
 
-          if [[ "$variable" == *checkpoint* ]]; then
+          if [[ "$PKG_NAME" == *checkpoint* ]]; then
             # since checkpoint packages are namespace packages, import them with . convention
             # i.e. import langgraph.checkpoint or langgraph.checkpoint.sqlite
             IMPORT_NAME="$(echo "$PKG_NAME" | sed s/-/./g)"
