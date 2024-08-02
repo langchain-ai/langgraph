@@ -57,8 +57,7 @@ class TestSqliteSaver:
         self.metadata_3: CheckpointMetadata = {}
 
     def test_search(self):
-        saver = SqliteSaver.from_conn_string(":memory:")
-        try:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
             # set up test
             # save checkpoints
             saver.put(self.config_1, self.chkpnt_1, self.metadata_1)
@@ -112,8 +111,6 @@ class TestSqliteSaver:
             )
 
             # TODO: test before and limit params
-        finally:
-            saver.__exit__(None, None, None)
 
     def test_search_where(self):
         # call method / assertions
@@ -158,8 +155,7 @@ class TestSqliteSaver:
         )
 
     async def test_informative_async_errors(self):
-        saver = SqliteSaver.from_conn_string(":memory:")
-        try:
+        with SqliteSaver.from_conn_string(":memory:") as saver:
             # call method / assertions
             with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
                 await saver.aget(self.config_1)
@@ -168,5 +164,3 @@ class TestSqliteSaver:
             with pytest.raises(NotImplementedError, match="AsyncSqliteSaver"):
                 async for _ in saver.alist(self.config_1):
                     pass
-        finally:
-            saver.__exit__(None, None, None)

@@ -56,8 +56,7 @@ class TestAsyncSqliteSaver:
         self.metadata_3: CheckpointMetadata = {}
 
     async def test_asearch(self):
-        saver = AsyncSqliteSaver.from_conn_string(":memory:")
-        try:
+        async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
             await saver.aput(self.config_1, self.chkpnt_1, self.metadata_1)
             await saver.aput(self.config_2, self.chkpnt_2, self.metadata_2)
             await saver.aput(self.config_3, self.chkpnt_3, self.metadata_3)
@@ -111,5 +110,3 @@ class TestAsyncSqliteSaver:
             )
 
             # TODO: test before and limit params
-        finally:
-            await saver.__aexit__(None, None, None)
