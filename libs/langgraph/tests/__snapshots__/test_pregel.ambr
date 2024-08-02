@@ -435,6 +435,10 @@
             "RunnableCallable"
           ],
           "name": "tools"
+        },
+        "metadata": {
+          "version": 2,
+          "variant": "b"
         }
       },
       {
