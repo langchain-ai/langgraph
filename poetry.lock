@@ -945,13 +945,13 @@ test-ui = ["calysto-bash"]
 
 [[package]]
 name = "langchain-core"
-version = "0.2.26"
+version = "0.2.27"
 description = "Building applications with LLMs through composability"
 optional = false
 python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langchain_core-0.2.26-py3-none-any.whl", hash = "sha256:ab7bc58d8037349d06ad8c3eee2ea776e26af7f57cce330eecbed5b98e1c4d56"},
-    {file = "langchain_core-0.2.26.tar.gz", hash = "sha256:20c7792eb6c256dc50892d41f07f7fd8e12e5868dbb059fa316a278977bdf4f6"},
+    {file = "langchain_core-0.2.27-py3-none-any.whl", hash = "sha256:b12f58d4e3590e8e0b4b727acb0457b00e80862d1bf8b9d1ae36128adb08a7d0"},
+    {file = "langchain_core-0.2.27.tar.gz", hash = "sha256:5d2e4b9bc84285bbfe19864363b1a21dd04c2eed12d4a6b39f239ee02237ce40"},
 ]
 
 [package.dependencies]
@@ -976,7 +976,7 @@ files = []
 develop = true
 
 [package.dependencies]
-langchain-core = ">=0.2.22,<0.3"
+langchain-core = ">=0.2.27,<0.3"
 
 [package.source]
 type = "directory"
