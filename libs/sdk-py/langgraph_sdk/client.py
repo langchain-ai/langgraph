@@ -11,7 +11,6 @@ from typing import (
     List,
     NamedTuple,
     Optional,
-    TypedDict,
     Union,
     overload,
 )
@@ -31,6 +30,7 @@ from langgraph_sdk.schema import (
     MultitaskStrategy,
     OnConflictBehavior,
     Run,
+    RunCreate,
     StreamMode,
     Thread,
     ThreadState,
@@ -40,23 +40,8 @@ from langgraph_sdk.schema import (
 logger = logging.getLogger(__name__)
 
 
-class RunCreate(TypedDict):
-    """Payload for creating a background run."""
-
-    thread_id: Optional[str]
-    assistant_id: str
-    input: Optional[dict]
-    metadata: Optional[dict]
-    config: Optional[Config]
-    checkpoint_id: Optional[str]
-    interrupt_before: Optional[list[str]]
-    interrupt_after: Optional[list[str]]
-    webhook: Optional[str]
-    multitask_strategy: Optional[MultitaskStrategy]
-
-
 def get_client(
-    *, url: str = "http://localhost:8123", api_key: Optional[str] = None
+    *, url: Optional[str] = None, api_key: Optional[str] = None
 ) -> LangGraphClient:
     """Get a LangGraphClient instance.
 
@@ -69,6 +54,17 @@ def get_client(
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
     """
+    transport: Optional[httpx.AsyncBaseTransport] = None
+    if url is None:
+        try:
+            from langgraph_api.server import app  # type: ignore
+
+            url = "http://api"
+            transport = httpx.ASGITransport(app)
+        except Exception:
+            url = "http://localhost:8123"
+    if transport is None:
+        transport = httpx.AsyncHTTPTransport(retries=5)
     headers = {
         "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
     }
@@ -77,7 +73,7 @@ def get_client(
         headers["x-api-key"] = api_key
     client = httpx.AsyncClient(
         base_url=url,
-        transport=httpx.AsyncHTTPTransport(retries=5),
+        transport=transport,
         timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
         headers=headers,
     )
