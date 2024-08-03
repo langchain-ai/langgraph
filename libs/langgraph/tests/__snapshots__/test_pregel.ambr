@@ -435,6 +435,10 @@
             "RunnableCallable"
           ],
           "name": "tools"
+        },
+        "metadata": {
+          "version": 2,
+          "variant": "b"
         }
       },
       {
@@ -505,6 +509,95 @@
   	tools --> Parallel_agent_outcome_Input;
   	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
   	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph.5
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'agent',
+      }),
+      dict({
+        'source': 'tools',
+        'target': 'agent',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'continue',
+        'source': 'agent',
+        'target': 'tools',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'exit',
+        'source': 'agent',
+        'target': '__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnableAssign',
+          ]),
+          'name': 'agent',
+        }),
+        'id': 'agent',
+        'metadata': dict({
+          '__interrupt': 'after',
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'tools',
+        }),
+        'id': 'tools',
+        'metadata': dict({
+          'variant': 'b',
+          'version': 2,
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+    ]),
+  })
+# ---
+# name: test_conditional_graph.6
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent<hr/><small><em>__interrupt = after</em></small>)
+  	tools(tools<hr/><small><em>version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
   
   '''
 # ---

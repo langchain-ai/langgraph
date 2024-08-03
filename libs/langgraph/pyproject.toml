@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph"
-version = "0.1.17"
+version = "0.1.19"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-langchain-core = ">=0.2.22,<0.3"
+langchain-core = ">=0.2.27,<0.3"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -32,6 +32,7 @@ langchain-anthropic = ">=0.1.8"
 pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
 pytest-repeat = "^0.9.3"
 langgraph-checkpoint = {path = "../checkpoint", develop = true}
+langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 aiosqlite = "^0.20.0"
 
 [tool.poetry.group.dev]

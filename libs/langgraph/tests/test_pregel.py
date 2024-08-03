@@ -1931,6 +1931,9 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
     )
     config = {"configurable": {"thread_id": "1"}}
 
+    assert app_w_interrupt.get_graph().to_json() == snapshot
+    assert app_w_interrupt.get_graph().draw_mermaid() == snapshot
+
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
     ] == [
