@@ -133,3 +133,18 @@ class Cron(TypedDict):
     """The last time the cron was updated."""
     payload: dict
     """The run payload to use for creating new run."""
+
+
+class RunCreate(TypedDict):
+    """Payload for creating a background run."""
+
+    thread_id: Optional[str]
+    assistant_id: str
+    input: Optional[dict]
+    metadata: Optional[dict]
+    config: Optional[Config]
+    checkpoint_id: Optional[str]
+    interrupt_before: Optional[list[str]]
+    interrupt_after: Optional[list[str]]
+    webhook: Optional[str]
+    multitask_strategy: Optional[MultitaskStrategy]
