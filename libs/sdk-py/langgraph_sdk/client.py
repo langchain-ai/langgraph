@@ -60,7 +60,7 @@ def get_client(
             from langgraph_api.server import app  # type: ignore
 
             url = "http://api"
-            transport = httpx.ASGITransport(app)
+            transport = httpx.ASGITransport(app, root_path="/noauth")
         except Exception:
             url = "http://localhost:8123"
     if transport is None:
