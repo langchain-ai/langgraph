@@ -13,6 +13,7 @@ from langgraph.checkpoint.base import (
     CheckpointMetadata,
     CheckpointTuple,
     EmptyChannelError,
+    get_checkpoint_id,
 )
 from langgraph.checkpoint.postgres.serde import JsonAndBinarySerializer
 from langgraph.checkpoint.serde.types import ChannelProtocol
@@ -23,6 +24,7 @@ SELECT_SQL = """
 select
     thread_id,
     checkpoint,
+    checkpoint_ns,
     checkpoint_id,
     parent_checkpoint_id,
     metadata,
@@ -39,6 +41,7 @@ select
         array_agg(array[cw.task_id::text::bytea, cw.channel::bytea, cw.type::bytea, cw.blob])
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
+            and cw.checkpoint_ns = checkpoints.checkpoint_ns
             and cw.checkpoint_id = checkpoints.checkpoint_id
     ) as pending_writes
 from checkpoints """
@@ -77,38 +80,44 @@ class PostgresSaver(BaseCheckpointSaver):
         async with self.lock:
             if self.is_setup:
                 return
-            async with self.conn.execute(
-                """
-                CREATE TABLE IF NOT EXISTS checkpoints (
+
+            create_table_queries = [
+                """CREATE TABLE IF NOT EXISTS checkpoints (
                     thread_id TEXT NOT NULL,
-                    checkpoint_ns TEXT NOT NULL,
+                    checkpoint_ns TEXT NOT NULL DEFAULT '',
                     checkpoint_id TEXT NOT NULL,
                     parent_checkpoint_id TEXT,
-                    checkpoint BYTEA,
-                    metadata JSONB,
+                    type TEXT,
+                    checkpoint JSONB NOT NULL,
+                    metadata JSONB NOT NULL DEFAULT '{}',
                     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
-                );
-                CREATE TABLE IF NOT EXISTS checkpoint_blobs (
+                )""",
+                """CREATE TABLE IF NOT EXISTS checkpoint_blobs (
                     thread_id TEXT NOT NULL,
                     channel TEXT NOT NULL,
                     version TEXT NOT NULL,
                     type TEXT NOT NULL,
                     blob BYTEA NOT NULL,
                     PRIMARY KEY (thread_id, channel, version)
-                );
-                CREATE TABLE IF NOT EXISTS writes (
+                );""",
+                """CREATE TABLE IF NOT EXISTS checkpoint_writes (
                     thread_id TEXT NOT NULL,
-                    checkpoint_ns TEXT NOT NULL,
+                    checkpoint_ns TEXT NOT NULL DEFAULT '',
                     checkpoint_id TEXT NOT NULL,
                     task_id TEXT NOT NULL,
                     idx INTEGER NOT NULL,
                     channel TEXT NOT NULL,
-                    value BYTEA NOT NULL,
+                    type TEXT,
+                    blob BYTEA NOT NULL,
                     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
                 );
-                """
-            ):
-                await self.conn.commit()
+                """,
+            ]
+            for query in create_table_queries:
+                await self.conn.execute(query)
+
+            if self.pipe:
+                await self.pipe.sync()
 
             self.is_setup = True
 
@@ -130,7 +139,8 @@ class PostgresSaver(BaseCheckpointSaver):
                 {
                     "configurable": {
                         "thread_id": value["thread_id"],
-                        "thread_ts": value["checkpoint_id"],
+                        "checkpoint_ns": value["checkpoint_ns"],
+                        "checkpoint_id": value["checkpoint_id"],
                     }
                 },
                 {
@@ -143,7 +153,8 @@ class PostgresSaver(BaseCheckpointSaver):
                 {
                     "configurable": {
                         "thread_id": value["thread_id"],
-                        "thread_ts": value["parent_checkpoint_id"],
+                        "checkpoint_ns": value["checkpoint_ns"],
+                        "checkpoint_id": value["parent_checkpoint_id"],
                     }
                 }
                 if value["parent_checkpoint_id"]
@@ -153,13 +164,14 @@ class PostgresSaver(BaseCheckpointSaver):
     async def aget_iter(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
         await self.setup()
         thread_id = config["configurable"]["thread_id"]
-        thread_ts = config["configurable"].get("thread_ts")
-        if thread_ts:
-            args = (thread_id, thread_ts)
-            where = "WHERE thread_id = %s AND checkpoint_id = %s"
+        checkpoint_id = get_checkpoint_id(config)
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        if checkpoint_id:
+            args = (thread_id, checkpoint_ns, checkpoint_id)
+            where = "WHERE thread_id = %s AND checkpoint_ns = %s AND checkpoint_id = %s"
         else:
-            args = (thread_id,)
-            where = "WHERE thread_id = %s ORDER BY checkpoint_id DESC LIMIT 1"
+            args = (thread_id, checkpoint_ns)
+            where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
 
         cur = await self.conn.execute(
             SELECT_SQL + where,
@@ -172,7 +184,8 @@ class PostgresSaver(BaseCheckpointSaver):
                 {
                     "configurable": {
                         "thread_id": thread_id,
-                        "thread_ts": value["checkpoint_id"],
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": value["checkpoint_id"],
                     }
                 },
                 {
@@ -185,7 +198,8 @@ class PostgresSaver(BaseCheckpointSaver):
                 {
                     "configurable": {
                         "thread_id": thread_id,
-                        "thread_ts": value["parent_checkpoint_id"],
+                        "checkpoint_ns": checkpoint_ns,
+                        "checkpoint_id": value["parent_checkpoint_id"],
                     }
                 }
                 if value["parent_checkpoint_id"]
@@ -226,22 +240,28 @@ class PostgresSaver(BaseCheckpointSaver):
     ) -> RunnableConfig:
         await self.setup()
         configurable = config["configurable"].copy()
-        run_id = configurable.pop("run_id", None)
         thread_id = configurable.pop("thread_id")
-        thread_ts = configurable.pop("thread_ts", None)
+        checkpoint_ns = configurable.pop("checkpoint_ns")
+        checkpoint_id = configurable.pop(
+            "checkpoint_id", configurable.pop("thread_ts", None)
+        )
         copy = checkpoint.copy()
         next_config = {
             "configurable": {
                 "thread_id": thread_id,
-                "thread_ts": checkpoint["id"],
+                "checkpoint_ns": checkpoint_ns,
+                "checkpoint_id": checkpoint["id"],
             }
         }
         previous = (
             self.latest_tuple
             if self.latest_tuple
-            and thread_ts
+            and checkpoint_id
             and self.latest_tuple.config["configurable"]["thread_id"] == thread_id
-            and self.latest_tuple.config["configurable"]["thread_ts"] == thread_ts
+            and self.latest_tuple.config["configurable"]["checkpoint_ns"]
+            == checkpoint_ns
+            and self.latest_tuple.config["configurable"]["checkpoint_id"]
+            == checkpoint_id
             else None
         )
         self.latest_tuple = CheckpointTuple(
@@ -265,17 +285,17 @@ class PostgresSaver(BaseCheckpointSaver):
         )
         await self.conn.execute(
             """
-            INSERT INTO checkpoints (run_id, thread_id, checkpoint_id, parent_checkpoint_id, checkpoint, metadata)
+            INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata)
             VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (thread_id, checkpoint_id)
+            ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id)
             DO UPDATE SET
                 checkpoint = EXCLUDED.checkpoint,
                 metadata = EXCLUDED.metadata;""",
             (
-                run_id,
                 thread_id,
+                checkpoint_ns,
                 checkpoint["id"],
-                thread_ts,
+                checkpoint_id,
                 Jsonb(self._dump_checkpoint(copy)),
                 # Merging `configurable` and `metadata` will persist graph_id,
                 # assistant_id, and all assistant and run configurable fields
@@ -296,13 +316,14 @@ class PostgresSaver(BaseCheckpointSaver):
     ) -> None:
         await self.setup()
         await self.conn.cursor(binary=True).executemany(
-            """INSERT INTO checkpoint_writes (thread_id, checkpoint_id, task_id, idx,channel, type, blob)
-            VALUES (%s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (thread_id, checkpoint_id, task_id, idx) DO NOTHING""",
+            """INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
+            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+            ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING""",
             await asyncio.to_thread(
                 self._dump_writes,
                 config["configurable"]["thread_id"],
-                config["configurable"]["thread_ts"],
+                config["configurable"]["checkpoint_ns"],
+                config["configurable"]["checkpoint_id"],
                 task_id,
                 writes,
             ),
@@ -436,6 +457,9 @@ class PostgresSaver(BaseCheckpointSaver):
         if config:
             wheres.append("thread_id = %s ")
             param_values.append(config["configurable"]["thread_id"])
+            checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+            wheres.append("checkpoint_ns = %s")
+            param_values.append(checkpoint_ns)
 
         # construct predicate for metadata filter
         if filter:
@@ -445,7 +469,7 @@ class PostgresSaver(BaseCheckpointSaver):
         # construct predicate for `before`
         if before is not None:
             wheres.append("checkpoint_id < %s ")
-            param_values.append(before["configurable"]["thread_ts"])
+            param_values.append(get_checkpoint_id(before))
 
         return (
             "WHERE " + " AND ".join(wheres) if wheres else "",

@@ -15,7 +15,7 @@ def create_pool() -> AsyncConnectionPool[AsyncConnection[DictRow]]:
     params = conninfo_to_dict(
         os.environ.get(
             "POSTGRES_URI",
-            "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable",
+            "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable",
         )
     )
     params.setdefault("options", "")
@@ -43,12 +43,20 @@ async def connect() -> AsyncIterator[AsyncConnection[DictRow]]:
             yield conn
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 def anyio_backend():
     return "asyncio"
 
 
-@pytest.fixture(scope="session")
+@pytest.fixture(scope="function")
 async def conn(anyio_backend):
     async with connect() as conn:
         yield conn
+
+
+@pytest.fixture(scope="function", autouse=True)
+async def clear_test_db(anyio_backend, conn):
+    """Delete all tables before each test."""
+    await conn.execute("DELETE FROM checkpoints")
+    await conn.execute("DELETE FROM checkpoint_blobs")
+    await conn.execute("DELETE FROM checkpoint_writes")
