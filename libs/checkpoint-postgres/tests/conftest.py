@@ -16,6 +16,6 @@ async def conn():
 @pytest.fixture(scope="function", autouse=True)
 async def clear_test_db(conn):
     """Delete all tables before each test."""
-    await conn.execute("DELETE FROM checkpoints")
-    await conn.execute("DELETE FROM checkpoint_blobs")
-    await conn.execute("DELETE FROM checkpoint_writes")
+    await conn.execute("DROP TABLE IF EXISTS checkpoints")
+    await conn.execute("DROP TABLE IF EXISTS checkpoint_blobs")
+    await conn.execute("DROP TABLE IF EXISTS checkpoint_writes")

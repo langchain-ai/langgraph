@@ -439,6 +439,7 @@ class PostgresSaver(BaseCheckpointSaver):
     def _dump_writes(
         self,
         thread_id: str,
+        checkpoint_ns: str,
         checkpoint_id: str,
         task_id: str,
         writes: list[tuple[str, Any]],
@@ -446,6 +447,7 @@ class PostgresSaver(BaseCheckpointSaver):
         return [
             (
                 thread_id,
+                checkpoint_ns,
                 checkpoint_id,
                 task_id,
                 idx,
