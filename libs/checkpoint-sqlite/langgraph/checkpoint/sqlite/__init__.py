@@ -1,12 +1,10 @@
 import sqlite3
 import threading
-from contextlib import AbstractContextManager, contextmanager
+from contextlib import contextmanager
 from hashlib import md5
-from types import TracebackType
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
-from typing_extensions import Self
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -32,7 +30,7 @@ _AIO_ERROR_MSG = (
 )
 
 
-class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
+class SqliteSaver(BaseCheckpointSaver):
     """A checkpoint saver that stores checkpoints in a SQLite database.
 
     Note:
@@ -82,43 +80,34 @@ class SqliteSaver(BaseCheckpointSaver, AbstractContextManager):
         self.lock = threading.Lock()
 
     @classmethod
-    def from_conn_string(cls, conn_string: str) -> "SqliteSaver":
+    @contextmanager
+    def from_conn_string(cls, conn_string: str) -> Iterator["SqliteSaver"]:
         """Create a new SqliteSaver instance from a connection string.
 
         Args:
             conn_string (str): The SQLite connection string.
 
-        Returns:
+        Yields:
             SqliteSaver: A new SqliteSaver instance.
 
         Examples:
 
             In memory:
 
-                memory = SqliteSaver.from_conn_string(":memory:")
+                with SqliteSaver.from_conn_string(":memory:") as memory:
+                    ...
 
             To disk:
 
-                memory = SqliteSaver.from_conn_string("checkpoints.sqlite")
+                with SqliteSaver.from_conn_string("checkpoints.sqlite") as memory:
+                    ...
         """
-        return SqliteSaver(
-            conn=sqlite3.connect(
-                conn_string,
-                # https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
-                check_same_thread=False,
-            )
-        )
-
-    def __enter__(self) -> Self:
-        return self
-
-    def __exit__(
-        self,
-        __exc_type: Optional[type[BaseException]],
-        __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
-        return self.conn.close()
+        with sqlite3.connect(
+            conn_string,
+            # https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
+            check_same_thread=False,
+        ) as conn:
+            yield SqliteSaver(conn)
 
     def setup(self) -> None:
         """Set up the checkpoint database.

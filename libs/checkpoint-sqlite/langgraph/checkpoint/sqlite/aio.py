@@ -1,7 +1,6 @@
 import asyncio
 import functools
-from contextlib import AbstractAsyncContextManager
-from types import TracebackType
+from contextlib import asynccontextmanager
 from typing import (
     Any,
     AsyncIterator,
@@ -15,7 +14,6 @@ from typing import (
 
 import aiosqlite
 from langchain_core.runnables import RunnableConfig
-from typing_extensions import Self
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -45,7 +43,7 @@ def not_implemented_sync_method(func: T) -> T:
     return wrapper
 
 
-class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
+class AsyncSqliteSaver(BaseCheckpointSaver):
     """An asynchronous checkpoint saver that stores checkpoints in a SQLite database.
 
     This class provides an asynchronous interface for saving and retrieving checkpoints
@@ -135,29 +133,20 @@ class AsyncSqliteSaver(BaseCheckpointSaver, AbstractAsyncContextManager):
         self.is_setup = False
 
     @classmethod
-    def from_conn_string(cls, conn_string: str) -> "AsyncSqliteSaver":
+    @asynccontextmanager
+    async def from_conn_string(
+        cls, conn_string: str
+    ) -> AsyncIterator["AsyncSqliteSaver"]:
         """Create a new AsyncSqliteSaver instance from a connection string.
 
         Args:
             conn_string (str): The SQLite connection string.
 
-        Returns:
+        Yields:
             AsyncSqliteSaver: A new AsyncSqliteSaver instance.
         """
-
-        return AsyncSqliteSaver(conn=aiosqlite.connect(conn_string))
-
-    async def __aenter__(self) -> Self:
-        return self
-
-    async def __aexit__(
-        self,
-        __exc_type: Optional[type[BaseException]],
-        __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
-        if self.is_setup:
-            return await self.conn.close()
+        async with aiosqlite.connect(conn_string) as conn:
+            yield AsyncSqliteSaver(conn)
 
     @not_implemented_sync_method
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:

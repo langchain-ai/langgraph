@@ -2,7 +2,8 @@ import asyncio
 import json
 import operator
 from collections import Counter
-from contextlib import asynccontextmanager, contextmanager
+from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
+from types import TracebackType
 from typing import (
     Annotated,
     Any,
@@ -64,6 +65,19 @@ from tests.memory_assert import (
     MemorySaverAssertImmutable,
 )
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
+
+
+class NoneContextManager(AbstractAsyncContextManager):
+    async def __aenter__(self) -> None:
+        return None
+
+    async def __aexit__(
+        self,
+        __exc_type: Optional[type[BaseException]],
+        __exc_value: Optional[BaseException],
+        __traceback: Optional[TracebackType],
+    ) -> Optional[bool]:
+        return
 
 
 async def test_checkpoint_errors() -> None:
@@ -236,7 +250,7 @@ async def test_step_timeout_on_stream_hang() -> None:
     [
         MemorySaverAssertImmutable(),
         AsyncSqliteSaver.from_conn_string(":memory:"),
-        None,
+        NoneContextManager(),
     ],
     ids=[
         "memory",
@@ -247,7 +261,7 @@ async def test_step_timeout_on_stream_hang() -> None:
 async def test_cancel_graph_astream(
     checkpointer: Optional[BaseCheckpointSaver],
 ) -> None:
-    try:
+    async with checkpointer as checkpointer:
 
         class State(TypedDict):
             value: Annotated[int, operator.add]
@@ -311,9 +325,6 @@ async def test_cancel_graph_astream(
                 "alittlewhile",
             )
             assert state.metadata == {"source": "loop", "step": 0, "writes": None}
-    finally:
-        if getattr(checkpointer, "__aexit__", None):
-            await checkpointer.__aexit__(None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -321,7 +332,7 @@ async def test_cancel_graph_astream(
     [
         MemorySaverAssertImmutable(),
         AsyncSqliteSaver.from_conn_string(":memory:"),
-        None,
+        NoneContextManager(),
     ],
     ids=[
         "memory",
@@ -332,7 +343,7 @@ async def test_cancel_graph_astream(
 async def test_cancel_graph_astream_events_v2(
     checkpointer: Optional[BaseCheckpointSaver],
 ) -> None:
-    try:
+    async with checkpointer as checkpointer:
 
         class State(TypedDict):
             value: int
@@ -402,9 +413,6 @@ async def test_cancel_graph_astream_events_v2(
                 "step": 1,
                 "writes": {"alittlewhile": {"value": 2}},
             }
-    finally:
-        if getattr(checkpointer, "__aexit__", None):
-            await checkpointer.__aexit__(None, None, None)
 
 
 async def test_node_schemas_custom_output() -> None:
@@ -679,7 +687,7 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 async def test_invoke_two_processes_in_out_interrupt(
     checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
-    try:
+    async with checkpointer as checkpointer:
         add_one = mocker.Mock(side_effect=lambda x: x + 1)
         one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
         two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
@@ -880,9 +888,6 @@ async def test_invoke_two_processes_in_out_interrupt(
         assert [
             c async for c in app.astream(None, fork_config, stream_mode="updates")
         ] == [{"one": {"inbox": 4}}]
-    finally:
-        if hasattr(checkpointer, "__aexit__"):
-            await checkpointer.__aexit__(None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -899,7 +904,7 @@ async def test_invoke_two_processes_in_out_interrupt(
 async def test_fork_always_re_runs_nodes(
     checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
-    try:
+    async with checkpointer as checkpointer:
         add_one = mocker.Mock(side_effect=lambda _: 1)
 
         builder = StateGraph(Annotated[int, operator.add])
@@ -1061,9 +1066,6 @@ async def test_fork_always_re_runs_nodes(
             {"add_one": 1},
             {"add_one": 1},
         ]
-    finally:
-        if hasattr(checkpointer, "__aexit__"):
-            await checkpointer.__aexit__(None, None, None)
 
 
 async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
@@ -1406,7 +1408,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     ],
 )
 async def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
-    try:
+    async with checkpointer as checkpointer:
 
         class State(TypedDict):
             value: Annotated[int, operator.add]
@@ -1478,9 +1480,6 @@ async def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         two.rtn = {"value": 3}
         # both the pending write and the new write were applied, 1 + 2 + 3 = 6
         assert await graph.ainvoke(None, thread1) == {"value": 6}
-    finally:
-        if getattr(checkpointer, "__aexit__", None):
-            await checkpointer.__aexit__(None, None, None)
 
 
 async def test_cond_edge_after_send() -> None:
@@ -5606,6 +5605,145 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
+    assert await app_w_interrupt.aupdate_state(
+        config, {"docs": ["doc5"]}, as_node="rewrite_query"
+    ) == {
+        "configurable": {
+            "thread_id": "1",
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
+        }
+    }
+
+
+async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
+    snapshot: SnapshotAssertion,
+) -> None:
+    from pydantic import BaseModel, ValidationError
+
+    def sorted_add(
+        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+    ) -> list[str]:
+        if isinstance(y[0], tuple):
+            for rem, _ in y:
+                x.remove(rem)
+            y = [t[1] for t in y]
+        return sorted(operator.add(x, y))
+
+    class InnerObject(BaseModel):
+        yo: int
+
+    class State(BaseModel):
+        query: str
+        inner: InnerObject
+        answer: Optional[str] = None
+        docs: Annotated[list[str], sorted_add]
+
+    class StateUpdate(BaseModel):
+        query: Optional[str] = None
+        answer: Optional[str] = None
+        docs: Optional[list[str]] = None
+
+    async def rewrite_query(data: State) -> State:
+        return {"query": f"query: {data.query}"}
+
+    async def analyzer_one(data: State) -> State:
+        return StateUpdate(query=f"analyzed: {data.query}")
+
+    async def retriever_one(data: State) -> State:
+        return {"docs": ["doc1", "doc2"]}
+
+    async def retriever_two(data: State) -> State:
+        await asyncio.sleep(0.1)
+        return {"docs": ["doc3", "doc4"]}
+
+    async def qa(data: State) -> State:
+        return {"answer": ",".join(data.docs)}
+
+    async def decider(data: State) -> str:
+        assert isinstance(data, State)
+        return "retriever_two"
+
+    workflow = StateGraph(State)
+
+    workflow.add_node("rewrite_query", rewrite_query)
+    workflow.add_node("analyzer_one", analyzer_one)
+    workflow.add_node("retriever_one", retriever_one)
+    workflow.add_node("retriever_two", retriever_two)
+    workflow.add_node("qa", qa)
+
+    workflow.set_entry_point("rewrite_query")
+    workflow.add_edge("rewrite_query", "analyzer_one")
+    workflow.add_edge("analyzer_one", "retriever_one")
+    workflow.add_conditional_edges(
+        "rewrite_query", decider, {"retriever_two": "retriever_two"}
+    )
+    workflow.add_edge(["retriever_one", "retriever_two"], "qa")
+    workflow.set_finish_point("qa")
+
+    app = workflow.compile()
+
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    assert app.get_input_schema().schema() == snapshot
+    assert app.get_output_schema().schema() == snapshot
+
+    with pytest.raises(ValidationError):
+        await app.ainvoke({"query": {}})
+
+    assert await app.ainvoke(
+        {"query": "what is weather in sf", "inner": {"yo": 1}}
+    ) == {
+        "query": "analyzed: query: what is weather in sf",
+        "docs": ["doc1", "doc2", "doc3", "doc4"],
+        "answer": "doc1,doc2,doc3,doc4",
+        "inner": {"yo": 1},
+    }
+
+    assert [
+        c
+        async for c in app.astream(
+            {"query": "what is weather in sf", "inner": {"yo": 1}}
+        )
+    ] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=MemorySaverAssertImmutable(),
+        interrupt_after=["retriever_one"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    assert [
+        c
+        async for c in app_w_interrupt.astream(
+            {"query": "what is weather in sf", "inner": {"yo": 1}}, config
+        )
+    ] == [
+        {"rewrite_query": {"query": "query: what is weather in sf"}},
+        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+        {"retriever_two": {"docs": ["doc3", "doc4"]}},
+        {"retriever_one": {"docs": ["doc1", "doc2"]}},
+    ]
+
+    assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+    ]
+
+    assert await app_w_interrupt.aupdate_state(
+        config, {"docs": ["doc5"]}, as_node="rewrite_query"
+    ) == {
+        "configurable": {
+            "thread_id": "1",
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
+        }
+    }
+
 
 async def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
     def sorted_add(
@@ -6004,8 +6142,7 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 async def test_nested_graph_interrupts(
     checkpointer_fct: Callable[[], BaseCheckpointSaver],
 ) -> None:
-    try:
-        checkpointer = checkpointer_fct()
+    async with checkpointer_fct() as checkpointer:
 
         class InnerState(TypedDict):
             my_key: str
@@ -7196,9 +7333,6 @@ async def test_nested_graph_interrupts(
                 parent_config=None,
             ),
         ]
-    finally:
-        if hasattr(checkpointer, "__aexit__"):
-            await checkpointer.__aexit__(None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -7215,7 +7349,7 @@ async def test_nested_graph_interrupts(
 async def test_nested_graph_interrupts_parallel(
     checkpointer: BaseCheckpointSaver,
 ) -> None:
-    try:
+    async with checkpointer as checkpointer:
 
         class InnerState(TypedDict):
             my_key: Annotated[str, operator.add]
@@ -7332,9 +7466,6 @@ async def test_nested_graph_interrupts_parallel(
                 "my_key": "got here and there and parallel and back again",
             },
         ]
-    finally:
-        if hasattr(checkpointer, "__aexit__"):
-            await checkpointer.__aexit__(None, None, None)
 
 
 @pytest.mark.skip
@@ -7352,7 +7483,7 @@ async def test_nested_graph_interrupts_parallel(
 async def test_doubly_nested_graph_interrupts(
     checkpointer: BaseCheckpointSaver,
 ) -> None:
-    try:
+    async with checkpointer as checkpointer:
 
         class State(TypedDict):
             my_key: str
@@ -7443,9 +7574,6 @@ async def test_doubly_nested_graph_interrupts(
                 "my_key": "hi my value here and there and back again",
             },
         ]
-    finally:
-        if hasattr(checkpointer, "__aexit__"):
-            await checkpointer.__aexit__(None, None, None)
 
 
 async def test_checkpoint_metadata() -> None:
