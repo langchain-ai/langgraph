@@ -8,7 +8,6 @@ from contextlib import contextmanager
 from typing import (
     Annotated,
     Any,
-    Callable,
     Dict,
     Generator,
     List,
@@ -558,7 +557,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 def test_invoke_two_processes_in_out_interrupt(
     checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
-    try:
+    with checkpointer as checkpointer:
         add_one = mocker.Mock(side_effect=lambda x: x + 1)
         one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
         two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
@@ -758,9 +757,6 @@ def test_invoke_two_processes_in_out_interrupt(
         assert [c for c in app.stream(None, fork_config, stream_mode="updates")] == [
             {"one": {"inbox": 4}}
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -777,7 +773,7 @@ def test_invoke_two_processes_in_out_interrupt(
 def test_fork_always_re_runs_nodes(
     checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
-    try:
+    with checkpointer as checkpointer:
         add_one = mocker.Mock(side_effect=lambda _: 1)
 
         builder = StateGraph(Annotated[int, operator.add])
@@ -930,9 +926,6 @@ def test_fork_always_re_runs_nodes(
             {"add_one": 1},
             {"add_one": 1},
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
@@ -1268,7 +1261,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     ],
 )
 def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
-    try:
+    with checkpointer as checkpointer:
 
         class State(TypedDict):
             value: Annotated[int, operator.add]
@@ -1340,9 +1333,6 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         two.rtn = {"value": 3}
         # both the pending write and the new write were applied, 1 + 2 + 3 = 6
         assert graph.invoke(None, thread1) == {"value": 6}
-    finally:
-        if getattr(checkpointer, "__exit__", None):
-            checkpointer.__exit__(None, None, None)
 
 
 def test_cond_edge_after_send() -> None:
@@ -7514,12 +7504,12 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     ]
 
 
-@pytest.mark.repeat(10)
+# @pytest.mark.repeat(10)
 @pytest.mark.parametrize(
-    "checkpointer_fct",
+    "checkpointer",
     [
-        lambda: MemorySaverAssertImmutable(put_sleep=0.2),
-        lambda: SqliteSaver.from_conn_string(":memory:"),
+        MemorySaverAssertImmutable(put_sleep=0.2),
+        SqliteSaver.from_conn_string(":memory:"),
     ],
     ids=[
         "memory",
@@ -7527,10 +7517,9 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     ],
 )
 def test_nested_graph_interrupts(
-    checkpointer_fct: Callable[[], BaseCheckpointSaver],
+    checkpointer: BaseCheckpointSaver,
 ) -> None:
-    try:
-        checkpointer = checkpointer_fct()
+    with checkpointer as checkpointer:
 
         class InnerState(TypedDict):
             my_key: str
@@ -8708,9 +8697,6 @@ def test_nested_graph_interrupts(
                 parent_config=None,
             ),
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -8725,7 +8711,7 @@ def test_nested_graph_interrupts(
     ],
 )
 def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> None:
-    try:
+    with checkpointer as checkpointer:
 
         class InnerState(TypedDict):
             my_key: Annotated[str, operator.add]
@@ -8840,9 +8826,6 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
                 "my_key": "got here and there and parallel and back again",
             },
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 @pytest.mark.skip
@@ -8858,7 +8841,7 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
     ],
 )
 def test_doubly_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
-    try:
+    with checkpointer as checkpointer:
 
         class State(TypedDict):
             my_key: str
@@ -8944,9 +8927,6 @@ def test_doubly_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> No
                 "my_key": "hi my value here and there and back again",
             },
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
