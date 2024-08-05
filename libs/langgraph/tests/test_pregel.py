@@ -6894,6 +6894,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         return {"answer": ",".join(data.docs)}
 
     def decider(data: State) -> str:
+        print("decider", data)
         assert isinstance(data, State)
         return "retriever_two"
 
@@ -6959,6 +6960,16 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
+
+    assert app_w_interrupt.update_state(
+        config, {"docs": ["doc5"]}, as_node="rewrite_query"
+    ) == {
+        "configurable": {
+            "thread_id": "1",
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
+        }
+    }
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
@@ -7071,6 +7082,16 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
+
+    assert app_w_interrupt.update_state(
+        config, {"docs": ["doc5"]}, as_node="rewrite_query"
+    ) == {
+        "configurable": {
+            "thread_id": "1",
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
+        }
+    }
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
