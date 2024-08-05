@@ -25,9 +25,15 @@ from langchain_core.runnables.config import (
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.context import Context
-from langgraph.channels.manager import ChannelsManager, create_checkpoint
-from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, copy_checkpoint
+from langgraph.channels.manager import ChannelsManager
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    copy_checkpoint,
+    create_checkpoint,
+)
 from langgraph.constants import (
+    CHECKPOINT_NAMESPACE_SEPARATOR,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
@@ -214,6 +220,7 @@ def prepare_next_tasks(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    *,
     for_execution: Literal[False],
     is_resuming: bool = False,
     checkpointer: Literal[None] = None,
@@ -230,6 +237,7 @@ def prepare_next_tasks(
     managed: ManagedValueMapping,
     config: RunnableConfig,
     step: int,
+    *,
     for_execution: Literal[True],
     is_resuming: bool,
     checkpointer: Optional[BaseCheckpointSaver],
@@ -251,6 +259,7 @@ def prepare_next_tasks(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[list[PregelTaskDescription], list[PregelExecutableTask]]:
+    parent_ns = config.get("configurable", {}).get("checkpoint_ns", "")
     tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
     # Consume pending packets
     for packet in checkpoint["pending_sends"]:
@@ -270,7 +279,14 @@ def prepare_next_tasks(
                     "langgraph_triggers": triggers,
                     "langgraph_task_idx": len(tasks),
                 }
-                task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
+                checkpoint_ns = (
+                    f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}"
+                    if parent_ns
+                    else packet.node
+                )
+                task_id = str(
+                    uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
+                )
                 writes = deque()
                 tasks.append(
                     PregelExecutableTask(
@@ -344,13 +360,18 @@ def prepare_next_tasks(
                         "langgraph_triggers": triggers,
                         "langgraph_task_idx": len(tasks),
                     }
-                    task_id = str(uuid5(UUID(checkpoint["id"]), json.dumps(metadata)))
-                    if parent_thread_id := config.get("configurable", {}).get(
-                        "thread_id"
-                    ):
-                        thread_id: Optional[str] = f"{parent_thread_id}-{name}"
-                    else:
-                        thread_id = None
+                    checkpoint_ns = (
+                        f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
+                        if parent_ns
+                        else name
+                    )
+                    task_id = str(
+                        uuid5(
+                            UUID(checkpoint["id"]),
+                            json.dumps((checkpoint_ns, metadata)),
+                        )
+                    )
+
                     writes = deque()
                     tasks.append(
                         PregelExecutableTask(
@@ -384,8 +405,8 @@ def prepare_next_tasks(
                                     ),
                                     CONFIG_KEY_CHECKPOINTER: checkpointer,
                                     CONFIG_KEY_RESUMING: is_resuming,
-                                    "thread_id": thread_id,
-                                    "thread_ts": checkpoint["id"],
+                                    "checkpoint_id": checkpoint["id"],
+                                    "checkpoint_ns": checkpoint_ns,
                                 },
                             ),
                             triggers,

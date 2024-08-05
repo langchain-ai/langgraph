@@ -28,7 +28,6 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.manager import (
     AsyncChannelsManager,
     ChannelsManager,
-    create_checkpoint,
 )
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -37,6 +36,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     PendingWrite,
     copy_checkpoint,
+    create_checkpoint,
     empty_checkpoint,
 )
 from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_RESUMING, INPUT, INTERRUPT
@@ -143,7 +143,10 @@ class PregelLoop:
                     **self.checkpoint_config,
                     "configurable": {
                         **self.checkpoint_config["configurable"],
-                        "thread_ts": self.checkpoint["id"],
+                        "checkpoint_ns": self.config["configurable"].get(
+                            "checkpoint_ns", ""
+                        ),
+                        "checkpoint_id": self.checkpoint["id"],
                     },
                 },
                 writes,
@@ -315,8 +318,19 @@ class PregelLoop:
                 # this is achieved by writing child checkpoints as progress is made
                 # (so that error recovery / resuming from interrupt don't lose work)
                 # but doing so always with an id equal to that of the parent checkpoint
-                id=self.config["configurable"]["thread_ts"] if self.is_nested else None,
+                id=self.config["configurable"]["checkpoint_id"]
+                if self.is_nested
+                else None,
             )
+            self.checkpoint_config = {
+                **self.checkpoint_config,
+                "configurable": {
+                    **self.checkpoint_config["configurable"],
+                    "checkpoint_ns": self.config["configurable"].get(
+                        "checkpoint_ns", ""
+                    ),
+                },
+            }
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
             # ensuring checkpointers receive checkpoints in order
@@ -331,7 +345,7 @@ class PregelLoop:
                 **self.checkpoint_config,
                 "configurable": {
                     **self.checkpoint_config["configurable"],
-                    "thread_ts": self.checkpoint["id"],
+                    "checkpoint_id": self.checkpoint["id"],
                 },
             }
             # produce debug output
@@ -414,9 +428,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             ChannelsManager(self.graph.channels, self.checkpoint, self.config)
         )
         self.managed = self.stack.enter_context(
-            ManagedValuesManager(
-                self.graph.managed_values_dict, self.config, self.graph
-            )
+            ManagedValuesManager(self.graph.managed_values_dict, self.config)
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
@@ -493,9 +505,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             AsyncChannelsManager(self.graph.channels, self.checkpoint, self.config)
         )
         self.managed = await self.stack.enter_async_context(
-            AsyncManagedValuesManager(
-                self.graph.managed_values_dict, self.config, self.graph
-            )
+            AsyncManagedValuesManager(self.graph.managed_values_dict, self.config)
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1

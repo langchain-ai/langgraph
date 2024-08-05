@@ -1,0 +1,55 @@
+[tool.poetry]
+name = "langgraph-checkpoint-sqlite"
+version = "1.0.0"
+description = "Library with a SQLite implementation of LangGraph checkpoint saver."
+authors = []
+license = "MIT"
+readme = "README.md"
+repository = "https://www.github.com/langchain-ai/langgraph"
+packages = [{ include = "langgraph" }]
+
+[tool.poetry.dependencies]
+python = "^3.9.0"
+langgraph-checkpoint = "^1.0.0"
+aiosqlite = "^0.20.0"
+
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.1.4"
+codespell = "^2.2.0"
+pytest = "^7.2.1"
+pytest-asyncio = "^0.21.1"
+pytest-mock = "^3.11.1"
+pytest-watcher = "^0.4.1"
+mypy = "^1.10.0"
+langgraph-checkpoint = {path = "../checkpoint", develop = true}
+
+[tool.pytest.ini_options]
+# --strict-markers will raise errors on unknown marks.
+# https://docs.pytest.org/en/7.1.x/how-to/mark.html#raising-errors-on-unknown-marks
+#
+# https://docs.pytest.org/en/7.1.x/reference/reference.html
+# --strict-config       any warnings encountered while parsing the `pytest`
+#                       section of the configuration file raise errors.
+addopts = "--strict-markers --strict-config --durations=5 -vv"
+asyncio_mode = "auto"
+
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"
+
+[tool.ruff]
+lint.select = [
+  "E",  # pycodestyle
+  "F",  # Pyflakes
+  "UP", # pyupgrade
+  "B",  # flake8-bugbear
+  "I",  # isort
+]
+lint.ignore = ["E501", "B008", "UP007", "UP006"]
+
+[tool.pytest-watcher]
+now = true
+delay = 0.1
+runner_args = ["--ff", "-v", "--tb", "short"]
+patterns = ["*.py"]

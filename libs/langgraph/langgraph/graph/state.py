@@ -29,8 +29,8 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.constants import TAG_HIDDEN
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.constants import CHECKPOINT_NAMESPACE_SEPARATOR, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph.graph import (
     END,
@@ -85,7 +85,7 @@ class StateGraph(Graph):
     Examples:
         >>> from langchain_core.runnables import RunnableConfig
         >>> from typing_extensions import Annotated, TypedDict
-        >>> from langgraph.checkpoint import MemorySaver
+        >>> from langgraph.checkpoint.memory import MemorySaver
         >>> from langgraph.graph import StateGraph
         >>>
         >>> def reducer(a: list, b: int | None) -> int:
@@ -311,6 +311,12 @@ class StateGraph(Graph):
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
             raise ValueError(f"Node `{node}` is reserved.")
+
+        if CHECKPOINT_NAMESPACE_SEPARATOR in node:
+            raise ValueError(
+                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
+            )
+
         try:
             if isfunction(action) and (
                 hints := get_type_hints(action.__call__) or get_type_hints(action)
@@ -452,7 +458,11 @@ class CompiledStateGraph(CompiledGraph):
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> type[BaseModel]:
-        if isclass(self.builder.input) and issubclass(self.builder.input, BaseModel):
+        from pydantic import BaseModel as BaseModelP
+
+        if isclass(self.builder.input) and issubclass(
+            self.builder.input, (BaseModel, BaseModelP)
+        ):
             return self.builder.input
         else:
             keys = list(self.builder.schemas[self.builder.input].keys())
@@ -475,7 +485,11 @@ class CompiledStateGraph(CompiledGraph):
     def get_output_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> type[BaseModel]:
-        if isclass(self.builder.input) and issubclass(self.builder.output, BaseModel):
+        from pydantic import BaseModel as BaseModelP
+
+        if isclass(self.builder.input) and issubclass(
+            self.builder.output, (BaseModel, BaseModelP)
+        ):
             return self.builder.output
 
         return super().get_output_schema(config)
@@ -497,7 +511,7 @@ class CompiledStateGraph(CompiledGraph):
                 return SKIP_WRITE
             elif isinstance(input, dict):
                 return input.get(key, SKIP_WRITE)
-            elif get_type_hints(type(input)).get(key):
+            elif get_type_hints(type(input)):
                 value = getattr(input, key, SKIP_WRITE)
                 return value if value is not None else SKIP_WRITE
             else:
@@ -602,7 +616,7 @@ class CompiledStateGraph(CompiledGraph):
                 if branch.then and branch.then != END:
                     writes.append(
                         ChannelWriteEntry(
-                            f"branch:{start}:{name}:then",
+                            f"branch:{start}:{name}::then",
                             WaitForNames(
                                 {p.node if isinstance(p, Send) else p for p in filtered}
                             ),
@@ -622,12 +636,12 @@ class CompiledStateGraph(CompiledGraph):
         for end in ends:
             if end != END:
                 channel_name = f"branch:{start}:{name}:{end}"
-                self.channels[channel_name] = EphemeralValue(Any)
+                self.channels[channel_name] = EphemeralValue(Any, guard=False)
                 self.nodes[end].triggers.append(channel_name)
 
         # attach then subscriber
         if branch.then and branch.then != END:
-            channel_name = f"branch:{start}:{name}:then"
+            channel_name = f"branch:{start}:{name}::then"
             self.channels[channel_name] = DynamicBarrierValue(str)
             self.nodes[branch.then].triggers.append(channel_name)
             for end in ends:

@@ -71,7 +71,7 @@ def map_debug_tasks(
             continue
 
         metadata = config["metadata"].copy()
-        metadata.pop("thread_ts", None)
+        metadata.pop("checkpoint_id", None)
 
         yield {
             "type": "task",
@@ -97,7 +97,8 @@ def map_debug_task_results(
             continue
 
         metadata = config["metadata"].copy()
-        metadata.pop("thread_ts", None)
+        metadata.pop("checkpoint_id", None)
+        # TODO: make task IDs deterministic in tests and reuse task IDs for payload ID
 
         yield {
             "type": "task_result",

@@ -24,8 +24,14 @@ from langchain_core.runnables.graph import Graph as DrawableGraph
 from langchain_core.runnables.graph import Node as DrawableNode
 
 from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.constants import END, START, TAG_HIDDEN, Send
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.constants import (
+    CHECKPOINT_NAMESPACE_SEPARATOR,
+    END,
+    START,
+    TAG_HIDDEN,
+    Send,
+)
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
@@ -154,6 +160,11 @@ class Graph:
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
+        if isinstance(node, str) and CHECKPOINT_NAMESPACE_SEPARATOR in node:
+            raise ValueError(
+                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
+            )
+
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "
@@ -482,6 +493,11 @@ class CompiledGraph(Pregel):
 
         for key, n in self.builder.nodes.items():
             node = n.runnable
+            metadata = n.metadata or {}
+            if key in self.interrupt_before_nodes:
+                metadata["__interrupt"] = "before"
+            elif key in self.interrupt_after_nodes:
+                metadata["__interrupt"] = "after"
             if xray:
                 subgraph = (
                     node.get_graph(
@@ -498,11 +514,11 @@ class CompiledGraph(Pregel):
                         subgraph, prefix=key
                     )
                 else:
-                    n = graph.add_node(node, key)
+                    n = graph.add_node(node, key, metadata=metadata or None)
                     start_nodes[key] = n
                     end_nodes[key] = n
             else:
-                n = graph.add_node(node, key, metadata=n.metadata)
+                n = graph.add_node(node, key, metadata=metadata or None)
                 start_nodes[key] = n
                 end_nodes[key] = n
         for start, end in sorted(self.builder._all_edges):

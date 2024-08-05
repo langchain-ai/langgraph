@@ -36,7 +36,9 @@
             working-directory: [
                 "libs/langgraph",
                 "libs/sdk-py",
-                "libs/cli"
+                "libs/cli",
+                "libs/checkpoint",
+                "libs/checkpoint-sqlite"
             ]
         uses: ./.github/workflows/_lint.yml
         with:
@@ -50,7 +52,9 @@
           matrix:
             working-directory: [
                 "libs/langgraph",
-                "libs/cli"
+                "libs/cli",
+                "libs/checkpoint",
+                "libs/checkpoint-sqlite"
             ]
         uses: ./.github/workflows/_test.yml
         with:
