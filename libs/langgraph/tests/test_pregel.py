@@ -7504,7 +7504,7 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     ]
 
 
-# @pytest.mark.repeat(10)
+@pytest.mark.repeat(10)
 @pytest.mark.parametrize(
     "checkpointer",
     [
