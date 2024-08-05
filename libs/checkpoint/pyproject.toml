@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint"
-version = "0.1.0"
+version = "1.0.0"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 authors = []
 license = "MIT"
@@ -18,10 +18,9 @@ codespell = "^2.2.0"
 pytest = "^7.2.1"
 pytest-asyncio = "^0.21.1"
 pytest-mock = "^3.11.1"
-pytest-watch = "^4.2.0"
+pytest-watcher = "^0.4.1"
 mypy = "^1.10.0"
 dataclasses-json = "^0.6.7"
-aiosqlite = "^0.20.0"
 
 [tool.pytest.ini_options]
 # --strict-markers will raise errors on unknown marks.
@@ -47,3 +46,9 @@ lint.select = [
   "I",  # isort
 ]
 lint.ignore = ["E501", "B008", "UP007", "UP006"]
+
+[tool.pytest-watcher]
+now = true
+delay = 0.1
+runner_args = ["--ff", "-v", "--tb", "short"]
+patterns = ["*.py"]

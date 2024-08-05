@@ -10,6 +10,7 @@ packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
+langgraph-checkpoint = "^1.0.0"
 orjson = ">=3.10.1"
 psycopg = {extras = ["binary"], version = ">=3.1.19"}
 

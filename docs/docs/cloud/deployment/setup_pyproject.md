@@ -164,10 +164,6 @@ my-app/
 └── pyproject.toml
 ```
 
-## Upload to GitHub
-
-To deploy the LangGraph application to LangGraph Cloud, the code must be uploaded to a GitHub repository.
-
 ## Next
 
-After you setup your repo, it's time to [deploy your app](./cloud.md).
+After you setup your project and place it in a github repo, it's time to [deploy your app](./cloud.md).
