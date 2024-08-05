@@ -8,6 +8,7 @@ from contextlib import contextmanager
 from typing import (
     Annotated,
     Any,
+    Callable,
     Dict,
     Generator,
     List,
@@ -7506,10 +7507,10 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
 @pytest.mark.repeat(10)
 @pytest.mark.parametrize(
-    "checkpointer",
+    "checkpointer_fct",
     [
-        MemorySaverAssertImmutable(put_sleep=0.2),
-        SqliteSaver.from_conn_string(":memory:"),
+        lambda: MemorySaverAssertImmutable(put_sleep=0.2),
+        lambda: SqliteSaver.from_conn_string(":memory:"),
     ],
     ids=[
         "memory",
@@ -7517,9 +7518,9 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     ],
 )
 def test_nested_graph_interrupts(
-    checkpointer: BaseCheckpointSaver,
+    checkpointer_fct: Callable[[], BaseCheckpointSaver],
 ) -> None:
-    with checkpointer as checkpointer:
+    with checkpointer_fct() as checkpointer:
 
         class InnerState(TypedDict):
             my_key: str

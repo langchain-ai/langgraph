@@ -9,6 +9,7 @@ from typing import (
     Any,
     AsyncGenerator,
     AsyncIterator,
+    Callable,
     Dict,
     Generator,
     List,
@@ -5989,10 +5990,10 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
 @pytest.mark.repeat(10)
 @pytest.mark.parametrize(
-    "checkpointer",
+    "checkpointer_fct",
     [
-        MemorySaverAssertImmutable(put_sleep=0.2),
-        AsyncSqliteSaver.from_conn_string(":memory:"),
+        lambda: MemorySaverAssertImmutable(put_sleep=0.2),
+        lambda: AsyncSqliteSaver.from_conn_string(":memory:"),
     ],
     ids=[
         "memory",
@@ -6000,9 +6001,9 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     ],
 )
 async def test_nested_graph_interrupts(
-    checkpointer: BaseCheckpointSaver,
+    checkpointer_fct: Callable[[], BaseCheckpointSaver],
 ) -> None:
-    async with checkpointer as checkpointer:
+    async with checkpointer_fct() as checkpointer:
 
         class InnerState(TypedDict):
             my_key: str
