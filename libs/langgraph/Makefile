@@ -14,6 +14,16 @@ coverage:
 		--cov-report xml \
 		--cov-report term-missing:skip-covered
 
+start-postgres:
+	if [ -n "$$(docker ps -a | grep postgres-test)" ]; then \
+		docker start postgres-test; \
+	else \
+		docker run --name postgres-test -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres; \
+	fi
+
+stop-postgres:
+	docker stop postgres-test
+
 test:
 	poetry run pytest
 
