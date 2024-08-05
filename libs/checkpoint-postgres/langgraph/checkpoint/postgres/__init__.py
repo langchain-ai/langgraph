@@ -1,10 +1,12 @@
 import asyncio
 from base64 import b64decode, b64encode
+from contextlib import asynccontextmanager
 from hashlib import md5
 from typing import Any, AsyncIterator, List, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncPipeline
+from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from langgraph.checkpoint.base import (
@@ -69,6 +71,22 @@ class PostgresSaver(BaseCheckpointSaver):
         self.latest_iter = latest
         self.latest_tuple: Optional[CheckpointTuple] = None
         self.is_setup = False
+
+    @classmethod
+    @asynccontextmanager
+    async def from_conn_string(cls, conn_string: str) -> AsyncIterator["PostgresSaver"]:
+        """Create a new PostgresSaver instance from a connection string.
+
+        Args:
+            conn_string (str): The Postgres connection info string.
+
+        Returns:
+            PostgresSaver: A new PostgresSaver instance.
+        """
+        async with await AsyncConnection.connect(
+            conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
+        ) as conn:
+            yield PostgresSaver(conn)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
