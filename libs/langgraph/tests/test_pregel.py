@@ -45,6 +45,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.postgres import PostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
@@ -61,6 +62,7 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from tests.any_str import AnyStr
+from tests.conftest import DEFAULT_POSTGRES_URI
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
@@ -549,11 +551,9 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     [
         MemorySaverAssertImmutable(),
         SqliteSaver.from_conn_string(":memory:"),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
     ],
-    ids=[
-        "memory",
-        "sqlite",
-    ],
+    ids=["memory", "sqlite", "postgres"],
 )
 def test_invoke_two_processes_in_out_interrupt(
     checkpointer: BaseCheckpointSaver, mocker: MockerFixture

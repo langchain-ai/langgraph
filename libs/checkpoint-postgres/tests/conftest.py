@@ -1,5 +1,6 @@
 import pytest
 from psycopg import AsyncConnection
+from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 
 DEFAULT_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
@@ -16,6 +17,9 @@ async def conn():
 @pytest.fixture(scope="function", autouse=True)
 async def clear_test_db(conn):
     """Delete all tables before each test."""
-    await conn.execute("DROP TABLE IF EXISTS checkpoints")
-    await conn.execute("DROP TABLE IF EXISTS checkpoint_blobs")
-    await conn.execute("DROP TABLE IF EXISTS checkpoint_writes")
+    try:
+        await conn.execute("DELETE FROM checkpoints")
+        await conn.execute("DELETE FROM checkpoint_blobs")
+        await conn.execute("DELETE FROM checkpoint_writes")
+    except UndefinedTable:
+        pass

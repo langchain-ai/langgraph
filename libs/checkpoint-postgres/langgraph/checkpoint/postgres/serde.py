@@ -46,6 +46,7 @@ class JsonAndBinarySerializer(JsonPlusSerializer):
             )
         return super()._default(obj)
 
+    # TODO: rename this to dumps_typed / loads_typed for consistency
     def dumps(self, obj: Any) -> tuple[str, bytes]:
         if isinstance(obj, bytes):
             return "bytes", obj
