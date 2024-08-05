@@ -4,11 +4,18 @@ from hashlib import md5
 from typing import Any, AsyncIterator, List, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
-from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, CheckpointMetadata, CheckpointTuple, EmptyChannelError
-from langgraph.checkpoint.serde.types import ChannelProtocol
-from langgraph.checkpoint.postgres.serde import JsonAndBinarySerializer
 from psycopg import AsyncConnection, AsyncPipeline
 from psycopg.types.json import Jsonb
+
+from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
+    Checkpoint,
+    CheckpointMetadata,
+    CheckpointTuple,
+    EmptyChannelError,
+)
+from langgraph.checkpoint.postgres.serde import JsonAndBinarySerializer
+from langgraph.checkpoint.serde.types import ChannelProtocol
 
 MetadataInput = Optional[dict[str, Any]]
 
@@ -44,6 +51,8 @@ class PostgresSaver(BaseCheckpointSaver):
     latest_iter: Optional[AsyncIterator[CheckpointTuple]]
     latest_tuple: Optional[CheckpointTuple]
 
+    is_setup: bool
+
     def __init__(
         self,
         conn: AsyncConnection,
@@ -56,6 +65,7 @@ class PostgresSaver(BaseCheckpointSaver):
         self.lock = asyncio.Lock()
         self.latest_iter = latest
         self.latest_tuple: Optional[CheckpointTuple] = None
+        self.is_setup = False
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -110,6 +120,7 @@ class PostgresSaver(BaseCheckpointSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
+        await self.setup()
         where, args = self._search_where(config, filter, before)
         query = SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
         if limit:
@@ -140,6 +151,7 @@ class PostgresSaver(BaseCheckpointSaver):
             )
 
     async def aget_iter(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
+        await self.setup()
         thread_id = config["configurable"]["thread_id"]
         thread_ts = config["configurable"].get("thread_ts")
         if thread_ts:
@@ -184,6 +196,7 @@ class PostgresSaver(BaseCheckpointSaver):
         )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        await self.setup()
         if (
             self.latest_tuple is not None
             and self.latest_tuple.config["configurable"]["thread_id"]
@@ -211,6 +224,7 @@ class PostgresSaver(BaseCheckpointSaver):
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
     ) -> RunnableConfig:
+        await self.setup()
         configurable = config["configurable"].copy()
         run_id = configurable.pop("run_id", None)
         thread_id = configurable.pop("thread_id")
@@ -280,6 +294,7 @@ class PostgresSaver(BaseCheckpointSaver):
         writes: list[tuple[str, Any]],
         task_id: str,
     ) -> None:
+        await self.setup()
         await self.conn.cursor(binary=True).executemany(
             """INSERT INTO checkpoint_writes (thread_id, checkpoint_id, task_id, idx,channel, type, blob)
             VALUES (%s, %s, %s, %s, %s, %s, %s)

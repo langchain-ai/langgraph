@@ -11,7 +11,6 @@ from langgraph.checkpoint.postgres import PostgresSaver
 
 
 class TestAsyncPostgresSaver:
-    @pytest.fixture(scope="session", autouse=True)
     def setup(self, conn):
         self.saver = PostgresSaver(conn)
 
@@ -72,34 +71,24 @@ class TestAsyncPostgresSaver:
         query_3: CheckpointMetadata = {}  # search by no keys, return all checkpoints
         query_4: CheckpointMetadata = {"source": "update", "step": 1}  # no match
 
-        search_results_1 = [
-            c async for c in self.saver.alist(None, filter=query_1)
-        ]
+        search_results_1 = [c async for c in self.saver.alist(None, filter=query_1)]
         assert len(search_results_1) == 1
         assert search_results_1[0].metadata == self.metadata_1
 
-        search_results_2 = [
-            c async for c in self.saver.alist(None, filter=query_2)
-        ]
+        search_results_2 = [c async for c in self.saver.alist(None, filter=query_2)]
         assert len(search_results_2) == 1
         assert search_results_2[0].metadata == self.metadata_2
 
-        search_results_3 = [
-            c async for c in self.saver.alist(None, filter=query_3)
-        ]
+        search_results_3 = [c async for c in self.saver.alist(None, filter=query_3)]
         assert len(search_results_3) == 3
 
-        search_results_4 = [
-            c async for c in self.saver.alist(None, filter=query_4)
-        ]
+        search_results_4 = [c async for c in self.saver.alist(None, filter=query_4)]
         assert len(search_results_4) == 0
 
         # search by config (defaults to root graph checkpoints)
         search_results_5 = [
             c
-            async for c in self.saver.alist(
-                {"configurable": {"thread_id": "thread-2"}}
-            )
+            async for c in self.saver.alist({"configurable": {"thread_id": "thread-2"}})
         ]
         assert len(search_results_5) == 1
         assert search_results_5[0].config["configurable"]["checkpoint_ns"] == ""
@@ -117,8 +106,6 @@ class TestAsyncPostgresSaver:
             )
         ]
         assert len(search_results_6) == 1
-        assert (
-            search_results_6[0].config["configurable"]["checkpoint_ns"] == "inner"
-        )
+        assert search_results_6[0].config["configurable"]["checkpoint_ns"] == "inner"
 
         # TODO: test before and limit params

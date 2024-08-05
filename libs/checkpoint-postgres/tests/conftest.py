@@ -1,18 +1,23 @@
 import asyncio
+import os
 from contextlib import asynccontextmanager
 from typing import AsyncIterator
-import os
 
-from psycopg import AsyncConnection
-from psycopg.rows import DictRow, dict_row
-from psycopg.conninfo import conninfo_to_dict
-from psycopg_pool import AsyncConnectionPool
 import pytest
+from psycopg import AsyncConnection
+from psycopg.conninfo import conninfo_to_dict
+from psycopg.rows import DictRow, dict_row
+from psycopg_pool import AsyncConnectionPool
 
 
 def create_pool() -> AsyncConnectionPool[AsyncConnection[DictRow]]:
     # parse connection string
-    params = conninfo_to_dict(os.environ.get("POSTGRES_URI", "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable"))
+    params = conninfo_to_dict(
+        os.environ.get(
+            "POSTGRES_URI",
+            "postgres://postgres:postgres@localhost:5433/postgres?sslmode=disable",
+        )
+    )
     params.setdefault("options", "")
     params["options"] += " -c lock_timeout=1000"  # ms
     # create connection pool
@@ -47,8 +52,3 @@ def anyio_backend():
 async def conn(anyio_backend):
     async with connect() as conn:
         yield conn
-
-
-# @pytest.fixture(scope="session")
-# def event_loop():
-#     return asyncio.get_event_loop()

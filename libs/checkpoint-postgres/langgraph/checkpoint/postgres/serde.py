@@ -2,6 +2,7 @@ from base64 import b64encode
 from typing import Any
 
 import orjson
+
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 
