@@ -14,7 +14,7 @@ Another reason your project might fail to start is because your configuration fi
 
 ## How does interrupt work?
 
-When you select the `Interrupts` dropdown and select a node to interrupt the graph will pause execution before and after (unless the node goes straight to `END`) that node has run. This means that you will be able to both edit the input to the node and the output of the node. This is intended to allow developers more fine-grained control over the behavior of a node and make it easier to observe how the node is behaving. You will not be able to edit the output if the node is the final node in the graph.
+When you select the `Interrupts` dropdown and select a node to interrupt the graph will pause execution before and after (unless the node goes straight to `END`) that node has run. This means that you will be able to both edit the state before the node is ran and the state after the node has ran. This is intended to allow developers more fine-grained control over the behavior of a node and make it easier to observe how the node is behaving. You will not be able to edit the state after the node has ran if the node is the final node in the graph.
 
 ## How do I reload the app?
 
@@ -35,7 +35,7 @@ If you edit your graph configuration file (`langgraph.json`) or the dependencies
 
 ## Why is my graph taking so long to startup?
 
-The LangGraph studio works by making API calls to the LangGraph API, and this API must be rebuilt regularly to keep up with the changes made to it. For this reason, you might notice that occasionally your graphs take a little longer to startup. 
+The LangGraph Studio interacts with the LangGraph API through API calls. To stay aligned with ongoing updates, the API requires regular rebuilding. As a result, you may occasionally experience slight delays when starting up your graphs.
 
 ## Why are extra edges showing up in my graph?
 
