@@ -35,6 +35,7 @@ select
         from jsonb_each_text(checkpoint -> 'channel_versions')
         inner join checkpoint_blobs bl
             on bl.thread_id = checkpoints.thread_id
+            and bl.checkpoint_ns = checkpoints.checkpoint_ns
             and bl.channel = jsonb_each_text.key
             and bl.version = jsonb_each_text.value
     ) as channel_values,
@@ -77,16 +78,16 @@ class BasePostgresSaver(BaseCheckpointSaver):
         return {
             k.decode(): self.serde.loads_typed((t.decode(), v))
             for k, t, v in blob_values
-            if t.decode() != "empty"
         }
 
     def _dump_blobs(
         self,
         thread_id: str,
+        checkpoint_ns: str,
         values: dict[str, Any],
         versions: dict[str, str],
         previous_versions: Optional[dict[str, str]],
-    ) -> list[tuple[str, str, str, str, bytes]]:
+    ) -> list[tuple[str, str, str, str, str, bytes]]:
         if not versions:
             return []
         if previous_versions is not None:
@@ -100,15 +101,13 @@ class BasePostgresSaver(BaseCheckpointSaver):
         return [
             (
                 thread_id,
+                checkpoint_ns,
                 k,
                 ver,
-                *(
-                    self.serde.dumps_typed(values[k])
-                    if k in values
-                    else ("empty", None)
-                ),
+                *self.serde.dumps_typed(values[k]),
             )
             for k, ver in versions.items()
+            if k in values
         ]
 
     def _load_writes(
@@ -204,7 +203,6 @@ class BasePostgresSaver(BaseCheckpointSaver):
 
 class PostgresSaver(BasePostgresSaver):
     lock: threading.Lock
-    latest_iter: Optional[Iterator[CheckpointTuple]]
     latest_tuple: Optional[CheckpointTuple]
 
     is_setup: bool
@@ -213,14 +211,12 @@ class PostgresSaver(BasePostgresSaver):
         self,
         conn: Connection,
         pipe: Pipeline | None = None,
-        latest: Optional[Iterator[CheckpointTuple]] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
-        self.latest_iter = latest
         self.latest_tuple: Optional[CheckpointTuple] = None
         self.is_setup = False
 
@@ -266,11 +262,12 @@ class PostgresSaver(BasePostgresSaver):
                 )""",
                 """CREATE TABLE IF NOT EXISTS checkpoint_blobs (
                     thread_id TEXT NOT NULL,
+                    checkpoint_ns TEXT NOT NULL DEFAULT '',
                     channel TEXT NOT NULL,
                     version TEXT NOT NULL,
                     type TEXT NOT NULL,
                     blob BYTEA NOT NULL,
-                    PRIMARY KEY (thread_id, channel, version)
+                    PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
                 );""",
                 """CREATE TABLE IF NOT EXISTS checkpoint_writes (
                     thread_id TEXT NOT NULL,
@@ -333,7 +330,7 @@ class PostgresSaver(BasePostgresSaver):
                 else None,
             )
 
-    def get_iter(self, config: RunnableConfig) -> Iterator[CheckpointTuple]:
+    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         self.setup()
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
@@ -351,8 +348,8 @@ class PostgresSaver(BasePostgresSaver):
             binary=True,
         )
 
-        return (
-            CheckpointTuple(
+        for value in cur:
+            return CheckpointTuple(
                 {
                     "configurable": {
                         "thread_id": thread_id,
@@ -376,33 +373,6 @@ class PostgresSaver(BasePostgresSaver):
                 else None,
                 self._load_writes(value["pending_writes"]),
             )
-            for value in cur
-        )
-
-    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        if (
-            self.latest_tuple is not None
-            and self.latest_tuple.config["configurable"]["thread_id"]
-            == config["configurable"]["thread_id"]
-            and self.latest_tuple.config["configurable"].get("checkpoint_ns", "")
-            == config["configurable"].get("checkpoint_ns", "")
-        ):
-            return self.latest_tuple
-        elif self.latest_iter is not None:
-            try:
-                self.latest_tuple = next(self.latest_iter, None)
-                if not self.latest_tuple:
-                    return None
-                elif self.latest_tuple.config["configurable"]["thread_id"] == config[
-                    "configurable"
-                ]["thread_id"] and self.latest_tuple.config["configurable"].get(
-                    "checkpoint_ns", ""
-                ) == config["configurable"].get("checkpoint_ns", ""):
-                    return self.latest_tuple
-            finally:
-                self.latest_iter = None
-
-        return next(self.get_iter(config), None)
 
     def put(
         self,
@@ -416,10 +386,6 @@ class PostgresSaver(BasePostgresSaver):
         checkpoint_id = configurable.pop(
             "checkpoint_id", configurable.pop("thread_ts", None)
         )
-
-        # remove thread ID from config metadata
-        config_metadata = config.get("metadata", {}).copy()
-        config_metadata.pop("thread_id", None)
 
         copy = checkpoint.copy()
         next_config = {
@@ -449,11 +415,12 @@ class PostgresSaver(BasePostgresSaver):
 
         with self._cursor(pipeline=True) as cur:
             cur.executemany(
-                """INSERT INTO checkpoint_blobs (thread_id, channel, version, type, blob)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (thread_id, channel, version) DO NOTHING""",
+                """INSERT INTO checkpoint_blobs (thread_id, checkpoint_ns, channel, version, type, blob)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (thread_id, checkpoint_ns, channel, version) DO NOTHING""",
                 self._dump_blobs(
                     thread_id,
+                    checkpoint_ns,
                     copy.pop("channel_values"),
                     copy["channel_versions"],
                     previous.checkpoint["channel_versions"] if previous else None,
@@ -473,10 +440,7 @@ class PostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(self._dump_checkpoint(copy)),
-                    # Merging `configurable` and `metadata` will persist graph_id,
-                    # assistant_id, and all assistant and run configurable fields
-                    # to the checkpoint metadata.
-                    Jsonb({**configurable, **config_metadata, **metadata}),
+                    Jsonb(metadata),
                 ),
             )
         return next_config

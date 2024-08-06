@@ -21,7 +21,6 @@ MetadataInput = Optional[dict[str, Any]]
 
 class AsyncPostgresSaver(BasePostgresSaver):
     lock: asyncio.Lock
-    latest_iter: Optional[AsyncIterator[CheckpointTuple]]
     latest_tuple: Optional[CheckpointTuple]
 
     is_setup: bool
@@ -30,14 +29,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self,
         conn: AsyncConnection,
         pipe: AsyncPipeline | None = None,
-        latest: Optional[AsyncIterator[CheckpointTuple]] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
         self.conn = conn
         self.pipe = pipe
         self.lock = asyncio.Lock()
-        self.latest_iter = latest
         self.latest_tuple: Optional[CheckpointTuple] = None
         self.is_setup = False
 
@@ -69,9 +66,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         if self.is_setup:
             return
         async with self.lock:
-            if self.is_setup:
-                return
-
             create_table_queries = [
                 """CREATE TABLE IF NOT EXISTS checkpoints (
                     thread_id TEXT NOT NULL,
@@ -85,11 +79,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 )""",
                 """CREATE TABLE IF NOT EXISTS checkpoint_blobs (
                     thread_id TEXT NOT NULL,
+                    checkpoint_ns TEXT NOT NULL DEFAULT '',
                     channel TEXT NOT NULL,
                     version TEXT NOT NULL,
                     type TEXT NOT NULL,
                     blob BYTEA NOT NULL,
-                    PRIMARY KEY (thread_id, channel, version)
+                    PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
                 );""",
                 """CREATE TABLE IF NOT EXISTS checkpoint_writes (
                     thread_id TEXT NOT NULL,
@@ -154,7 +149,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 else None,
             )
 
-    async def aget_iter(self, config: RunnableConfig) -> AsyncIterator[CheckpointTuple]:
+    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         await self.setup()
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
@@ -172,8 +167,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
             binary=True,
         )
 
-        return (
-            CheckpointTuple(
+        async for value in cur:
+            return CheckpointTuple(
                 {
                     "configurable": {
                         "thread_id": thread_id,
@@ -199,33 +194,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 else None,
                 await asyncio.to_thread(self._load_writes, value["pending_writes"]),
             )
-            async for value in cur
-        )
-
-    async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        if (
-            self.latest_tuple is not None
-            and self.latest_tuple.config["configurable"]["thread_id"]
-            == config["configurable"]["thread_id"]
-            and self.latest_tuple.config["configurable"].get("checkpoint_ns", "")
-            == config["configurable"].get("checkpoint_ns", "")
-        ):
-            return self.latest_tuple
-        elif self.latest_iter is not None:
-            try:
-                self.latest_tuple = await anext(self.latest_iter, None)
-                if not self.latest_tuple:
-                    return None
-                elif self.latest_tuple.config["configurable"]["thread_id"] == config[
-                    "configurable"
-                ]["thread_id"] and self.latest_tuple.config["configurable"].get(
-                    "checkpoint_ns", ""
-                ) == config["configurable"].get("checkpoint_ns", ""):
-                    return self.latest_tuple
-            finally:
-                self.latest_iter = None
-
-        return await anext(await self.aget_iter(config), None)
 
     async def aput(
         self,
@@ -240,10 +208,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         checkpoint_id = configurable.pop(
             "checkpoint_id", configurable.pop("thread_ts", None)
         )
-
-        # remove thread ID from config metadata
-        config_metadata = config.get("metadata", {}).copy()
-        config_metadata.pop("thread_id", None)
 
         copy = checkpoint.copy()
         next_config = {
@@ -273,12 +237,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(
-                """INSERT INTO checkpoint_blobs (thread_id, channel, version, type, blob)
-                VALUES (%s, %s, %s, %s, %s)
-                ON CONFLICT (thread_id, channel, version) DO NOTHING""",
+                """INSERT INTO checkpoint_blobs (thread_id, checkpoint_ns, channel, version, type, blob)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (thread_id, checkpoint_ns, channel, version) DO NOTHING""",
                 await asyncio.to_thread(
                     self._dump_blobs,
                     thread_id,
+                    checkpoint_ns,
                     copy.pop("channel_values"),
                     copy["channel_versions"],
                     previous.checkpoint["channel_versions"] if previous else None,
@@ -298,10 +263,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(self._dump_checkpoint(copy)),
-                    # Merging `configurable` and `metadata` will persist graph_id,
-                    # assistant_id, and all assistant and run configurable fields
-                    # to the checkpoint metadata.
-                    Jsonb({**configurable, **config_metadata, **metadata}),
+                    Jsonb(metadata),
                 ),
             )
         return next_config
@@ -313,7 +275,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         task_id: str,
     ) -> None:
         async with self._cursor() as cur:
-            cur.executemany(
+            await cur.executemany(
                 """INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING""",

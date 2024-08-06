@@ -1255,11 +1255,9 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     [
         MemorySaverAssertImmutable(),
         SqliteSaver.from_conn_string(":memory:"),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
     ],
-    ids=[
-        "memory",
-        "sqlite",
-    ],
+    ids=["memory", "sqlite", "postgres"],
 )
 def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
     with checkpointer as checkpointer:
@@ -1293,7 +1291,7 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         builder.add_edge(START, "two")
         graph = builder.compile(checkpointer=checkpointer)
 
-        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
         with pytest.raises(ConnectionError, match="I'm not good"):
             graph.invoke({"value": 1}, thread1)
 
@@ -8726,10 +8724,12 @@ def test_nested_graph_interrupts(
     [
         MemorySaverAssertImmutable(),
         SqliteSaver.from_conn_string(":memory:"),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI)
     ],
     ids=[
         "memory",
         "sqlite",
+        "postgres"
     ],
 )
 def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> None:
