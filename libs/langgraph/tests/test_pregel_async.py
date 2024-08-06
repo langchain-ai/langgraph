@@ -6141,7 +6141,9 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
         lambda: MemorySaverAssertImmutable(put_sleep=0.2),
         lambda: AsyncSqliteSaver.from_conn_string(":memory:"),
         lambda: AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
-        lambda: AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
+        lambda: AsyncPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI, pipeline=True
+        ),
     ],
     ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
 )

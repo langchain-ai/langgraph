@@ -3,7 +3,7 @@ from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union
 
 from langchain_core.runnables import RunnableConfig
 
@@ -229,6 +229,7 @@ class MemorySaver(
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
     ) -> RunnableConfig:
         """Save a checkpoint to the in-memory storage.
 
@@ -239,6 +240,7 @@ class MemorySaver(
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
             metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (dict): New versions as of this write
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
@@ -341,6 +343,7 @@ class MemorySaver(
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
     ) -> RunnableConfig:
         """Asynchronous version of put.
 
@@ -348,6 +351,7 @@ class MemorySaver(
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
             metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (dict): New versions as of this write
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.

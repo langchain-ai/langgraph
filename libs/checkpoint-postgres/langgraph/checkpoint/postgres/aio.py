@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
@@ -174,6 +174,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
     ) -> RunnableConfig:
         await self.setup()
         configurable = config["configurable"].copy()
@@ -201,6 +202,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint_ns,
                     copy.pop("channel_values"),
                     copy["channel_versions"],
+                    new_versions
                 ),
             )
             await cur.execute(

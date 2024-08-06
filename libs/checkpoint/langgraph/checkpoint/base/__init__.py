@@ -278,6 +278,7 @@ class BaseCheckpointSaver(ABC):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
     ) -> RunnableConfig:
         """Store a checkpoint with its configuration and metadata.
 
@@ -285,6 +286,7 @@ class BaseCheckpointSaver(ABC):
             config (RunnableConfig): Configuration for the checkpoint.
             checkpoint (Checkpoint): The checkpoint to store.
             metadata (CheckpointMetadata): Additional metadata for the checkpoint.
+            new_versions (dict): New versions as of this write
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -368,6 +370,7 @@ class BaseCheckpointSaver(ABC):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
     ) -> RunnableConfig:
         """Asynchronously store a checkpoint with its configuration and metadata.
 
@@ -375,6 +378,7 @@ class BaseCheckpointSaver(ABC):
             config (RunnableConfig): Configuration for the checkpoint.
             checkpoint (Checkpoint): The checkpoint to store.
             metadata (CheckpointMetadata): Additional metadata for the checkpoint.
+            new_versions (dict): New versions as of this write
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.

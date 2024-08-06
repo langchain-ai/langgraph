@@ -145,9 +145,14 @@ class BasePostgresSaver(BaseCheckpointSaver):
         checkpoint_ns: str,
         values: dict[str, Any],
         versions: dict[str, str],
+        new_versions: Optional[dict[str, str]],
     ) -> list[tuple[str, str, str, str, str, bytes]]:
         if not versions:
             return []
+
+        if new_versions:
+            versions = new_versions
+
         return [
             (
                 thread_id,

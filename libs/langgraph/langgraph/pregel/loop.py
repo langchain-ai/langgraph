@@ -100,6 +100,10 @@ class PregelLoop:
     checkpoint_config: RunnableConfig
     checkpoint_metadata: CheckpointMetadata
     checkpoint_pending_writes: List[PendingWrite]
+    # (thread_id, checkpoint_ns -> channel_versions)
+    checkpoint_previous_versions: dict[
+        tuple[str, str], dict[str, Union[str, float, int]]
+    ]
 
     step: int
     stop: int
@@ -128,6 +132,7 @@ class PregelLoop:
         # TODO if managed values no longer needs graph we can replace with
         # managed_specs, channel_specs
         self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
+        self.checkpoint_previous_versions = {}
 
     def mark_tasks_scheduled(self, tasks: Sequence[PregelExecutableTask]) -> None:
         """Mark tasks as scheduled, to be used by queue-based executors."""
@@ -228,6 +233,7 @@ class PregelLoop:
         # if no more tasks, we're done
         if not self.tasks:
             self.status = "done"
+            self.checkpoint_previous_versions.clear()
             return False
 
         # if there are pending writes from a previous loop, apply them
@@ -322,15 +328,32 @@ class PregelLoop:
                 if self.is_nested
                 else None,
             )
+
+            thread_id = self.config["configurable"]["thread_id"]
+            checkpoint_ns = self.config["configurable"].get("checkpoint_ns", "")
             self.checkpoint_config = {
                 **self.checkpoint_config,
                 "configurable": {
                     **self.checkpoint_config["configurable"],
-                    "checkpoint_ns": self.config["configurable"].get(
-                        "checkpoint_ns", ""
-                    ),
+                    "checkpoint_ns": checkpoint_ns,
                 },
             }
+
+            if previous_versions := self.checkpoint_previous_versions.get(
+                (thread_id, checkpoint_ns)
+            ):
+                new_versions = {
+                    k: v
+                    for k, v in self.checkpoint["channel_versions"].items()
+                    if k in previous_versions and v > previous_versions[k]
+                }
+            else:
+                new_versions = None
+
+            self.checkpoint_previous_versions[
+                (thread_id, checkpoint_ns)
+            ] = self.checkpoint["channel_versions"].copy()
+
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
             # ensuring checkpointers receive checkpoints in order
@@ -340,6 +363,7 @@ class PregelLoop:
                 self.checkpoint_config,
                 copy_checkpoint(self.checkpoint),
                 self.checkpoint_metadata,
+                new_versions,
             )
             self.checkpoint_config = {
                 **self.checkpoint_config,
@@ -398,12 +422,13 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, float, int]]],
     ) -> RunnableConfig:
         try:
             if prev is not None:
                 prev.result()
         finally:
-            self.checkpointer.put(config, checkpoint, metadata)
+            self.checkpointer.put(config, checkpoint, metadata, new_versions)
 
     # context manager
 
@@ -473,12 +498,13 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, float, int]]],
     ) -> RunnableConfig:
         try:
             if prev is not None:
                 await prev
         finally:
-            await self.checkpointer.aput(config, checkpoint, metadata)
+            await self.checkpointer.aput(config, checkpoint, metadata, new_versions)
 
     # context manager
 

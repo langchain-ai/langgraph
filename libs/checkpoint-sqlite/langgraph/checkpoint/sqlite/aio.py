@@ -10,6 +10,7 @@ from typing import (
     Sequence,
     Tuple,
     TypeVar,
+    Union,
 )
 
 import aiosqlite
@@ -373,6 +374,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
     ) -> RunnableConfig:
         """Save a checkpoint to the database asynchronously.
 
@@ -383,6 +385,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
             metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (dict): New versions as of this write
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.

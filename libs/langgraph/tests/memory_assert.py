@@ -1,6 +1,6 @@
 import asyncio
 from collections import defaultdict
-from typing import Any, Optional
+from typing import Any, Optional, Union
 
 from langchain_core.runnables import RunnableConfig
 
@@ -42,6 +42,7 @@ class MemorySaverAssertImmutable(MemorySaver):
         config: dict,
         checkpoint: Checkpoint,
         metadata: Optional[CheckpointMetadata] = None,
+        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
     ) -> None:
         if self.put_sleep:
             import time
@@ -86,6 +87,7 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: Optional[CheckpointMetadata] = None,
+        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
     ) -> None:
         """The implementation of put() merges config["configurable"] (a run's
         configurable fields) with the metadata field. The state of the
@@ -120,6 +122,7 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
     ) -> RunnableConfig:
         return await asyncio.get_running_loop().run_in_executor(
             None, self.put, config, checkpoint, metadata
