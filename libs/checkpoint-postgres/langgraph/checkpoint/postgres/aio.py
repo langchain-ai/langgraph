@@ -28,7 +28,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
     def __init__(
         self,
         conn: AsyncConnection,
-        pipe: AsyncPipeline | None = None,
+        pipe: Optional[AsyncPipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)

@@ -210,7 +210,7 @@ class PostgresSaver(BasePostgresSaver):
     def __init__(
         self,
         conn: Connection,
-        pipe: Pipeline | None = None,
+        pipe: Optional[Pipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
