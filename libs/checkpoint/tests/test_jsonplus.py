@@ -110,3 +110,23 @@ def test_serde_jsonplus() -> None:
         **to_serialize,
         "text": [v.encode("utf-8", "ignore").decode() for v in to_serialize["text"]],
     }
+
+
+def test_serde_jsonplus_bytes() -> None:
+    serde = JsonPlusSerializer()
+
+    some_bytes = b"my bytes"
+    dumped = serde.dumps_typed(some_bytes)
+
+    assert dumped == ("bytes", some_bytes)
+    assert serde.loads_typed(dumped) == some_bytes
+
+
+def test_serde_jsonplus_bytearray() -> None:
+    serde = JsonPlusSerializer()
+
+    some_bytearray = bytearray([42])
+    dumped = serde.dumps_typed(some_bytearray)
+
+    assert dumped == ("bytearray", some_bytearray)
+    assert serde.loads_typed(dumped) == some_bytearray

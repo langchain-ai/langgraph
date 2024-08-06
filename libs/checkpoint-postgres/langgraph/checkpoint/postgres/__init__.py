@@ -17,7 +17,7 @@ from langgraph.checkpoint.base import (
     EmptyChannelError,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.postgres.serde import JsonAndBinarySerializer
+from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import ChannelProtocol
 
 MetadataInput = Optional[dict[str, Any]]
@@ -49,9 +49,160 @@ select
 from checkpoints """
 
 
-class PostgresSaver(BaseCheckpointSaver):
-    serde: JsonAndBinarySerializer
+class BasePostgresSaver(BaseCheckpointSaver):
+    def _load_checkpoint(self, checkpoint: dict[str, Any]) -> Checkpoint:
+        if len(checkpoint["pending_sends"]) == 2 and all(
+            isinstance(a, str) for a in checkpoint["pending_sends"]
+        ):
+            type, bs = checkpoint["pending_sends"]
+            return {
+                **checkpoint,
+                "pending_sends": self.serde.loads_typed((type, b64decode(bs))),
+            }
 
+        return checkpoint
+
+    def _dump_checkpoint(self, checkpoint: Checkpoint) -> dict[str, Any]:
+        type, bs = self.serde.dumps_typed(checkpoint["pending_sends"])
+        return {
+            **checkpoint,
+            "pending_sends": (type, b64encode(bs).decode()),
+        }
+
+    def _load_blobs(
+        self, blob_values: list[tuple[bytes, bytes, bytes]]
+    ) -> dict[str, Any]:
+        if not blob_values:
+            return {}
+        return {
+            k.decode(): self.serde.loads_typed((t.decode(), v))
+            for k, t, v in blob_values
+            if t.decode() != "empty"
+        }
+
+    def _dump_blobs(
+        self,
+        thread_id: str,
+        values: dict[str, Any],
+        versions: dict[str, str],
+        previous_versions: Optional[dict[str, str]],
+    ) -> list[tuple[str, str, str, str, bytes]]:
+        if not versions:
+            return []
+        if previous_versions is not None:
+            version_type = type(next(iter(versions.values()), None))
+            null_version = version_type()
+            versions = {
+                k: v
+                for k, v in versions.items()
+                if v > previous_versions.get(k, null_version)
+            }
+        return [
+            (
+                thread_id,
+                k,
+                ver,
+                *(
+                    self.serde.dumps_typed(values[k])
+                    if k in values
+                    else ("empty", None)
+                ),
+            )
+            for k, ver in versions.items()
+        ]
+
+    def _load_writes(
+        self, writes: list[tuple[bytes, bytes, bytes, bytes]]
+    ) -> list[tuple[str, str, Any]]:
+        return (
+            [
+                (
+                    tid.decode(),
+                    channel.decode(),
+                    self.serde.loads_typed((t.decode(), v)),
+                )
+                for tid, channel, t, v in writes
+            ]
+            if writes
+            else []
+        )
+
+    def _dump_writes(
+        self,
+        thread_id: str,
+        checkpoint_ns: str,
+        checkpoint_id: str,
+        task_id: str,
+        writes: list[tuple[str, Any]],
+    ) -> list[tuple[str, str, str, int, str, str, bytes]]:
+        return [
+            (
+                thread_id,
+                checkpoint_ns,
+                checkpoint_id,
+                task_id,
+                idx,
+                channel,
+                *self.serde.dumps_typed(value),
+            )
+            for idx, (channel, value) in enumerate(writes)
+        ]
+
+    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
+        if current is None:
+            current_v = 0
+        elif isinstance(current, int):
+            current_v = current
+        else:
+            current_v = int(current.split(".")[0])
+        next_v = current_v + 1
+        try:
+            next_h = md5(self.serde.dumps_typed(channel.checkpoint())[1]).hexdigest()
+        except EmptyChannelError:
+            next_h = ""
+        return f"{next_v:032}.{next_h}"
+
+    def _search_where(
+        self,
+        config: Optional[RunnableConfig],
+        filter: MetadataInput,
+        before: Optional[RunnableConfig] = None,
+    ) -> Tuple[str, List[Any]]:
+        """Return WHERE clause predicates for alist() given config, filter, cursor.
+
+        This method returns a tuple of a string and a tuple of values. The string
+        is the parametered WHERE clause predicate (including the WHERE keyword):
+        "WHERE column1 = $1 AND column2 IS $2". The list of values contains the
+        values for each of the corresponding parameters.
+        """
+        wheres = []
+        param_values = []
+
+        # construct predicate for config filter
+        if config:
+            wheres.append("thread_id = %s ")
+            param_values.append(config["configurable"]["thread_id"])
+            checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+            wheres.append("checkpoint_ns = %s")
+            param_values.append(checkpoint_ns)
+
+        # construct predicate for metadata filter
+        if filter:
+            wheres.append("metadata @> %s ")
+            param_values.append(Jsonb(filter))
+
+        # construct predicate for `before`
+        if before is not None:
+            wheres.append("checkpoint_id < %s ")
+            param_values.append(get_checkpoint_id(before))
+
+        return (
+            "WHERE " + " AND ".join(wheres) if wheres else "",
+            param_values,
+        )
+
+
+class PostgresSaver(BasePostgresSaver):
     lock: threading.Lock
     latest_iter: Optional[Iterator[CheckpointTuple]]
     latest_tuple: Optional[CheckpointTuple]
@@ -63,8 +214,9 @@ class PostgresSaver(BaseCheckpointSaver):
         conn: Connection,
         pipe: Pipeline | None = None,
         latest: Optional[Iterator[CheckpointTuple]] = None,
+        serde: Optional[SerializerProtocol] = None,
     ) -> None:
-        super().__init__(serde=JsonAndBinarySerializer())
+        super().__init__(serde=serde)
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
@@ -349,20 +501,6 @@ class PostgresSaver(BaseCheckpointSaver):
                 ),
             )
 
-    def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
-        if current is None:
-            current_v = 0
-        elif isinstance(current, int):
-            current_v = current
-        else:
-            current_v = int(current.split(".")[0])
-        next_v = current_v + 1
-        try:
-            next_h = md5(self.serde.dumps(channel.checkpoint())[1]).hexdigest()
-        except EmptyChannelError:
-            next_h = ""
-        return f"{next_v:032}.{next_h}"
-
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor]:
         self.setup()
@@ -383,138 +521,3 @@ class PostgresSaver(BaseCheckpointSaver):
         else:
             with self.lock, self.conn.cursor(binary=True) as cur:
                 yield cur
-
-    # TODO: factor this out
-
-    def _load_checkpoint(self, checkpoint: dict[str, Any]) -> Checkpoint:
-        if len(checkpoint["pending_sends"]) == 2 and all(
-            isinstance(a, str) for a in checkpoint["pending_sends"]
-        ):
-            type, bs = checkpoint["pending_sends"]
-            return {
-                **checkpoint,
-                "pending_sends": self.serde.loads((type, b64decode(bs))),
-            }
-
-        return checkpoint
-
-    def _dump_checkpoint(self, checkpoint: Checkpoint) -> dict[str, Any]:
-        type, bs = self.serde.dumps(checkpoint["pending_sends"])
-        return {
-            **checkpoint,
-            "pending_sends": (type, b64encode(bs).decode()),
-        }
-
-    def _load_blobs(
-        self, blob_values: List[tuple[bytes, bytes, bytes]]
-    ) -> dict[str, Any]:
-        if not blob_values:
-            return {}
-        return {
-            k.decode(): self.serde.loads((t.decode(), v))
-            for k, t, v in blob_values
-            if t.decode() != "empty"
-        }
-
-    def _dump_blobs(
-        self,
-        thread_id: str,
-        values: dict[str, Any],
-        versions: dict[str, str],
-        previous_versions: Optional[dict[str, str]],
-    ) -> List[tuple[str, str, str, str, bytes]]:
-        if not versions:
-            return []
-        if previous_versions is not None:
-            version_type = type(next(iter(versions.values()), None))
-            null_version = version_type()
-            versions = {
-                k: v
-                for k, v in versions.items()
-                if v > previous_versions.get(k, null_version)
-            }
-        return [
-            (
-                thread_id,
-                k,
-                ver,
-                *(self.serde.dumps(values[k]) if k in values else ("empty", None)),
-            )
-            for k, ver in versions.items()
-        ]
-
-    def _load_writes(
-        self, writes: List[tuple[bytes, bytes, bytes, bytes]]
-    ) -> List[tuple[str, str, Any]]:
-        return (
-            [
-                (
-                    tid.decode(),
-                    channel.decode(),
-                    self.serde.loads((t.decode(), v)),
-                )
-                for tid, channel, t, v in writes
-            ]
-            if writes
-            else []
-        )
-
-    def _dump_writes(
-        self,
-        thread_id: str,
-        checkpoint_ns: str,
-        checkpoint_id: str,
-        task_id: str,
-        writes: List[tuple[str, Any]],
-    ) -> List[tuple[str, str, str, int, str, str, bytes]]:
-        return [
-            (
-                thread_id,
-                checkpoint_ns,
-                checkpoint_id,
-                task_id,
-                idx,
-                channel,
-                *self.serde.dumps(value),
-            )
-            for idx, (channel, value) in enumerate(writes)
-        ]
-
-    def _search_where(
-        self,
-        config: Optional[RunnableConfig],
-        filter: MetadataInput,
-        before: Optional[RunnableConfig] = None,
-    ) -> Tuple[str, List[Any]]:
-        """Return WHERE clause predicates for alist() given config, filter, cursor.
-
-        This method returns a tuple of a string and a tuple of values. The string
-        is the parametered WHERE clause predicate (including the WHERE keyword):
-        "WHERE column1 = $1 AND column2 IS $2". The list of values contains the
-        values for each of the corresponding parameters.
-        """
-        wheres = []
-        param_values = []
-
-        # construct predicate for config filter
-        if config:
-            wheres.append("thread_id = %s ")
-            param_values.append(config["configurable"]["thread_id"])
-            checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-            wheres.append("checkpoint_ns = %s")
-            param_values.append(checkpoint_ns)
-
-        # construct predicate for metadata filter
-        if filter:
-            wheres.append("metadata @> %s ")
-            param_values.append(Jsonb(filter))
-
-        # construct predicate for `before`
-        if before is not None:
-            wheres.append("checkpoint_id < %s ")
-            param_values.append(get_checkpoint_id(before))
-
-        return (
-            "WHERE " + " AND ".join(wheres) if wheres else "",
-            param_values,
-        )
