@@ -41,12 +41,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
     @classmethod
     @asynccontextmanager
     async def from_conn_string(
-        cls, conn_string: str
+        cls, conn_string: str, *, pipeline: bool = False
     ) -> AsyncIterator["AsyncPostgresSaver"]:
         """Create a new PostgresSaver instance from a connection string.
 
         Args:
             conn_string (str): The Postgres connection info string.
+            pipeline (bool): whether to use AsyncPipeline
 
         Returns:
             PostgresSaver: A new PostgresSaver instance.
@@ -54,7 +55,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
         async with await AsyncConnection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
-            yield AsyncPostgresSaver(conn)
+            if pipeline:
+                async with conn.pipeline() as pipe:
+                    yield AsyncPostgresSaver(conn, pipe)
+            else:
+                yield AsyncPostgresSaver(conn)
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -161,39 +166,40 @@ class AsyncPostgresSaver(BasePostgresSaver):
             args = (thread_id, checkpoint_ns)
             where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
 
-        cur = await self.conn.execute(
-            SELECT_SQL + where,
-            args,
-            binary=True,
-        )
-
-        async for value in cur:
-            return CheckpointTuple(
-                {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": checkpoint_ns,
-                        "checkpoint_id": value["checkpoint_id"],
-                    }
-                },
-                {
-                    **self._load_checkpoint(value["checkpoint"]),
-                    "channel_values": await asyncio.to_thread(
-                        self._load_blobs, value["channel_values"]
-                    ),
-                },
-                value["metadata"],
-                {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": checkpoint_ns,
-                        "checkpoint_id": value["parent_checkpoint_id"],
-                    }
-                }
-                if value["parent_checkpoint_id"]
-                else None,
-                await asyncio.to_thread(self._load_writes, value["pending_writes"]),
+        async with self._cursor() as cur:
+            cur = await self.conn.execute(
+                SELECT_SQL + where,
+                args,
+                binary=True,
             )
+
+            async for value in cur:
+                return CheckpointTuple(
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": value["checkpoint_id"],
+                        }
+                    },
+                    {
+                        **self._load_checkpoint(value["checkpoint"]),
+                        "channel_values": await asyncio.to_thread(
+                            self._load_blobs, value["channel_values"]
+                        ),
+                    },
+                    value["metadata"],
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": value["parent_checkpoint_id"],
+                        }
+                    }
+                    if value["parent_checkpoint_id"]
+                    else None,
+                    await asyncio.to_thread(self._load_writes, value["pending_writes"]),
+                )
 
     async def aput(
         self,

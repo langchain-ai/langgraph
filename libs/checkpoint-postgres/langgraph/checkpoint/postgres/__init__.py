@@ -222,11 +222,14 @@ class PostgresSaver(BasePostgresSaver):
 
     @classmethod
     @contextmanager
-    def from_conn_string(cls, conn_string: str) -> Iterator["PostgresSaver"]:
+    def from_conn_string(
+        cls, conn_string: str, *, pipeline: bool = False
+    ) -> Iterator["PostgresSaver"]:
         """Create a new PostgresSaver instance from a connection string.
 
         Args:
             conn_string (str): The Postgres connection info string.
+            pipeline (bool): whether to use Pipeline
 
         Returns:
             PostgresSaver: A new PostgresSaver instance.
@@ -234,7 +237,11 @@ class PostgresSaver(BasePostgresSaver):
         with Connection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
         ) as conn:
-            yield PostgresSaver(conn)
+            if pipeline:
+                with conn.pipeline() as pipe:
+                    yield PostgresSaver(conn, pipe)
+            else:
+                yield PostgresSaver(conn)
 
     def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
@@ -342,37 +349,38 @@ class PostgresSaver(BasePostgresSaver):
             args = (thread_id, checkpoint_ns)
             where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
 
-        cur = self.conn.execute(
-            SELECT_SQL + where,
-            args,
-            binary=True,
-        )
-
-        for value in cur:
-            return CheckpointTuple(
-                {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": checkpoint_ns,
-                        "checkpoint_id": value["checkpoint_id"],
-                    }
-                },
-                {
-                    **self._load_checkpoint(value["checkpoint"]),
-                    "channel_values": self._load_blobs(value["channel_values"]),
-                },
-                value["metadata"],
-                {
-                    "configurable": {
-                        "thread_id": thread_id,
-                        "checkpoint_ns": checkpoint_ns,
-                        "checkpoint_id": value["parent_checkpoint_id"],
-                    }
-                }
-                if value["parent_checkpoint_id"]
-                else None,
-                self._load_writes(value["pending_writes"]),
+        with self._cursor() as cur:
+            cur = self.conn.execute(
+                SELECT_SQL + where,
+                args,
+                binary=True,
             )
+
+            for value in cur:
+                return CheckpointTuple(
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": value["checkpoint_id"],
+                        }
+                    },
+                    {
+                        **self._load_checkpoint(value["checkpoint"]),
+                        "channel_values": self._load_blobs(value["channel_values"]),
+                    },
+                    value["metadata"],
+                    {
+                        "configurable": {
+                            "thread_id": thread_id,
+                            "checkpoint_ns": checkpoint_ns,
+                            "checkpoint_id": value["parent_checkpoint_id"],
+                        }
+                    }
+                    if value["parent_checkpoint_id"]
+                    else None,
+                    self._load_writes(value["pending_writes"]),
+                )
 
     def put(
         self,
