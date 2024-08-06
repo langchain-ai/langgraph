@@ -39,10 +39,16 @@ export interface GraphSchema {
   graph_id: string;
 
   /**
-   * The schema for the graph state.
+   * The schema for the input state.
    * Missing if unable to generate JSON schema from graph.
    */
   input_schema?: JSONSchema7;
+
+  /**
+   * The schema for the output state.
+   * Missing if unable to generate JSON schema from graph.
+   */
+  output_schema?: JSONSchema7;
 
   /**
    * The schema for the graph state.
