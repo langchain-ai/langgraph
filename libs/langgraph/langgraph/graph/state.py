@@ -418,6 +418,15 @@ class StateGraph(Graph):
                 if not isinstance(val, Context) and not is_managed_value(val)
             ]
         )
+        stream_channels = (
+            "__root__"
+            if len(self.channels) == 1 and "__root__" in self.channels
+            else [
+                key
+                for key, val in self.channels.items()
+                if not isinstance(val, Context) and not is_managed_value(val)
+            ]
+        )
 
         compiled = CompiledStateGraph(
             builder=self,
@@ -427,7 +436,7 @@ class StateGraph(Graph):
             input_channels=START,
             stream_mode="updates",
             output_channels=output_channels,
-            stream_channels=output_channels,
+            stream_channels=stream_channels,
             checkpointer=checkpointer,
             interrupt_before_nodes=interrupt_before,
             interrupt_after_nodes=interrupt_after,

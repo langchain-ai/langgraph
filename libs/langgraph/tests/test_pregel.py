@@ -311,6 +311,20 @@ def test_node_schemas_custom_output() -> None:
         "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
+    assert [
+        c
+        for c in graph.stream(
+            {
+                "hello": "there",
+                "bye": "world",
+                "messages": "hello",
+                "now": 345,  # ignored because not in input schema
+            }
+        )
+    ] == [
+        {"b": {"hello": "again", "now": 123}},
+    ]
+
 
 def test_reducer_before_first_node() -> None:
     class State(TypedDict):
