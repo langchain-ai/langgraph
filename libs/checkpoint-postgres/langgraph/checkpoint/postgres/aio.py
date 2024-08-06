@@ -13,15 +13,12 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     get_checkpoint_id,
 )
-from langgraph.checkpoint.postgres import SELECT_SQL, BasePostgresSaver
+from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
-
-MetadataInput = Optional[dict[str, Any]]
 
 
 class AsyncPostgresSaver(BasePostgresSaver):
     lock: asyncio.Lock
-    latest_tuple: Optional[CheckpointTuple]
 
     is_setup: bool
 
@@ -35,7 +32,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = asyncio.Lock()
-        self.latest_tuple: Optional[CheckpointTuple] = None
         self.is_setup = False
 
     @classmethod
@@ -72,37 +68,9 @@ class AsyncPostgresSaver(BasePostgresSaver):
             return
         async with self.lock:
             create_table_queries = [
-                """CREATE TABLE IF NOT EXISTS checkpoints (
-                    thread_id TEXT NOT NULL,
-                    checkpoint_ns TEXT NOT NULL DEFAULT '',
-                    checkpoint_id TEXT NOT NULL,
-                    parent_checkpoint_id TEXT,
-                    type TEXT,
-                    checkpoint JSONB NOT NULL,
-                    metadata JSONB NOT NULL DEFAULT '{}',
-                    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
-                )""",
-                """CREATE TABLE IF NOT EXISTS checkpoint_blobs (
-                    thread_id TEXT NOT NULL,
-                    checkpoint_ns TEXT NOT NULL DEFAULT '',
-                    channel TEXT NOT NULL,
-                    version TEXT NOT NULL,
-                    type TEXT NOT NULL,
-                    blob BYTEA NOT NULL,
-                    PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
-                );""",
-                """CREATE TABLE IF NOT EXISTS checkpoint_writes (
-                    thread_id TEXT NOT NULL,
-                    checkpoint_ns TEXT NOT NULL DEFAULT '',
-                    checkpoint_id TEXT NOT NULL,
-                    task_id TEXT NOT NULL,
-                    idx INTEGER NOT NULL,
-                    channel TEXT NOT NULL,
-                    type TEXT,
-                    blob BYTEA NOT NULL,
-                    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
-                );
-                """,
+                self.CREATE_CHECKPOINTS_SQL,
+                self.CREATE_CHECKPOINT_BLOBS_SQL,
+                self.CREATE_CHECKPOINT_WRITES_SQL,
             ]
             async with self.conn.cursor() as cur:
                 for query in create_table_queries:
@@ -123,7 +91,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
     ) -> AsyncIterator[CheckpointTuple]:
         await self.setup()
         where, args = self._search_where(config, filter, before)
-        query = SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
+        query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
         if limit:
             query += f" LIMIT {limit}"
         # if we change this to use .stream() we need to make sure to close the cursor
@@ -168,7 +136,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
         async with self._cursor() as cur:
             cur = await self.conn.execute(
-                SELECT_SQL + where,
+                self.SELECT_SQL + where,
                 args,
                 binary=True,
             )
@@ -223,23 +191,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 "checkpoint_id": checkpoint["id"],
             }
         }
-        previous = (
-            self.latest_tuple
-            if self.latest_tuple
-            and checkpoint_id
-            and self.latest_tuple.config["configurable"]["thread_id"] == thread_id
-            and self.latest_tuple.config["configurable"]["checkpoint_ns"]
-            == checkpoint_ns
-            and self.latest_tuple.config["configurable"]["checkpoint_id"]
-            == checkpoint_id
-            else None
-        )
-        self.latest_tuple = CheckpointTuple(
-            config=next_config,
-            checkpoint=checkpoint,
-            metadata=metadata,
-            parent_config=config,
-        )
 
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(
@@ -252,7 +203,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint_ns,
                     copy.pop("channel_values"),
                     copy["channel_versions"],
-                    previous.checkpoint["channel_versions"] if previous else None,
                 ),
             )
             await cur.execute(

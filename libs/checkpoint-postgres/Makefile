@@ -4,11 +4,25 @@
 # TESTING AND COVERAGE
 ######################
 
+start-postgres:
+	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait
+
+stop-postgres:
+	docker compose -f tests/compose-postgres.yml down
+
 test:
-	poetry run pytest tests
+	make start-postgres; \
+	poetry run pytest; \
+	EXIT_CODE=$$?; \
+	make stop-postgres; \
+	exit $$EXIT_CODE
 
 test_watch:
-	poetry run ptw .
+	make start-postgres; \
+	poetry run ptw .; \
+	EXIT_CODE=$$?; \
+	make stop-postgres; \
+	exit $$EXIT_CODE
 
 ######################
 # LINTING AND FORMATTING
