@@ -93,6 +93,7 @@ async def test_checkpoint_errors() -> None:
             config: RunnableConfig,
             checkpoint: Checkpoint,
             metadata: CheckpointMetadata,
+            new_versions: Optional[dict[str, Union[str, int, float]]] = None,
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 

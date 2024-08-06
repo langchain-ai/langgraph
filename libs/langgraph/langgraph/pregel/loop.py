@@ -344,7 +344,9 @@ class PregelLoop:
                 new_versions = {
                     k: v
                     for k, v in self.checkpoint["channel_versions"].items()
-                    if k in previous_versions and v > previous_versions[k]
+                    if k not in previous_versions
+                    or k in previous_versions
+                    and v > previous_versions[k]
                 }
             else:
                 new_versions = None
@@ -457,6 +459,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
+        self.checkpoint_previous_versions = {}
 
         return self
 
@@ -535,6 +538,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
+        self.checkpoint_previous_versions = {}
 
         return self
 
