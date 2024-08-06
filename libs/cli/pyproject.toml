@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gigagraph-cli"
-version = "0.1.47"
+version = "0.1.50"
 description = "CLI for interacting with GigaGraph API"
 authors = []
 license = "MIT"

@@ -7,6 +7,7 @@ from langchain_core.runnables import RunnableConfig
 from langgraph.checkpoint.base import (
     Checkpoint,
     CheckpointMetadata,
+    CheckpointTuple,
     SerializerProtocol,
     copy_checkpoint,
 )
@@ -14,25 +15,27 @@ from langgraph.checkpoint.memory import MemorySaver
 
 
 class NoopSerializer(SerializerProtocol):
-    def loads(self, data: bytes) -> Any:
-        return data
+    def loads_typed(self, data: tuple[str, bytes]) -> Any:
+        return data[1]
 
-    def dumps(self, obj: Any) -> bytes:
-        return obj
+    def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
+        return "type", obj
 
 
 class MemorySaverAssertImmutable(MemorySaver):
     serde = NoopSerializer()
 
-    storage_for_copies: defaultdict[str, dict[str, Checkpoint]]
+    storage_for_copies: defaultdict[str, dict[str, dict[str, Checkpoint]]]
 
     def __init__(
         self,
         *,
         serde: Optional[SerializerProtocol] = None,
+        put_sleep: Optional[float] = None,
     ) -> None:
         super().__init__(serde=serde)
-        self.storage_for_copies = defaultdict(dict)
+        self.storage_for_copies = defaultdict(lambda: defaultdict(dict))
+        self.put_sleep = put_sleep
 
     def put(
         self,
@@ -40,16 +43,23 @@ class MemorySaverAssertImmutable(MemorySaver):
         checkpoint: Checkpoint,
         metadata: Optional[CheckpointMetadata] = None,
     ) -> None:
+        if self.put_sleep:
+            import time
+
+            time.sleep(self.put_sleep)
         # assert checkpoint hasn't been modified since last written
         thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
         if saved := super().get(config):
             assert (
-                self.serde.loads(self.storage_for_copies[thread_id][saved["id"]])
+                self.serde.loads_typed(
+                    self.storage_for_copies[thread_id][checkpoint_ns][saved["id"]]
+                )
                 == saved
             )
-        self.storage_for_copies[thread_id][checkpoint["id"]] = self.serde.dumps(
-            copy_checkpoint(checkpoint)
-        )
+        self.storage_for_copies[thread_id][checkpoint_ns][
+            checkpoint["id"]
+        ] = self.serde.dumps_typed(copy_checkpoint(checkpoint))
         # call super to write checkpoint
         return super().put(config, checkpoint, metadata)
 
@@ -84,22 +94,24 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         """
         configurable = config["configurable"].copy()
 
-        # remove thread_ts to make testing simpler
-        configurable.pop("thread_ts", None)
-
-        self.storage[config["configurable"]["thread_id"]].update(
+        # remove checkpoint_id to make testing simpler
+        checkpoint_id = configurable.pop("checkpoint_id", None)
+        thread_id = config["configurable"]["thread_id"]
+        checkpoint_ns = config["configurable"]["checkpoint_ns"]
+        self.storage[thread_id][checkpoint_ns].update(
             {
                 checkpoint["id"]: (
-                    self.serde.dumps(checkpoint),
+                    self.serde.dumps_typed(checkpoint),
                     # merge configurable fields and metadata
-                    self.serde.dumps({**configurable, **metadata}),
+                    self.serde.dumps_typed({**configurable, **metadata}),
+                    checkpoint_id,
                 )
             }
         )
         return {
             "configurable": {
                 "thread_id": config["configurable"]["thread_id"],
-                "thread_ts": checkpoint["id"],
+                "checkpoint_id": checkpoint["id"],
             }
         }
 
@@ -112,3 +124,11 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         return await asyncio.get_running_loop().run_in_executor(
             None, self.put, config, checkpoint, metadata
         )
+
+
+class MemorySaverNoPending(MemorySaver):
+    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        result = super().get_tuple(config)
+        if result:
+            return CheckpointTuple(result.config, result.checkpoint, result.metadata)
+        return result

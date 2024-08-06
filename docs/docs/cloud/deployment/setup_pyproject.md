@@ -20,6 +20,22 @@ After each step, an example file directory is provided to demonstrate how code c
 
 Dependencies can optionally be specified in one of the following files: `pyproject.toml`, `setup.py`, or `requirements.txt`. If none of these files is created, then dependencies can be specified later in the [LangGraph API configuration file](#create-langgraph-api-config).
 
+The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
+```
+langgraph>=0.1.19,<0.2.0
+langchain-core>=0.2.8,<0.3.0
+langsmith>=0.1.63
+orjson>=3.10.1
+httpx>=0.27.0
+tenacity>=8.3.0
+uvicorn>=0.29.0
+sse-starlette>=2.1.0
+uvloop>=0.19.0
+httptools>=0.6.1
+jsonschema-rs>=0.18.0
+croniter>=1.0.1
+```
+
 Example `pyproject.toml` file:
 
 ```toml
@@ -33,7 +49,7 @@ readme = "README.md"
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<3.13"
-langgraph = "^0.1.0"
+langgraph = "^0.1.7"
 langchain-fireworks = "^0.1.3"
 
 
@@ -102,7 +118,7 @@ agent = graph_workflow.compile()
 ```
 
 !!! warning "Assign `CompiledGraph` to Variable"
-The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module.
+    The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module.
 
 Example file directory:
 
@@ -133,6 +149,9 @@ Example `langgraph.json` file:
 
 Note that the variable name of the `CompiledGraph` appears at the end of the value of each subkey in the top-level `graphs` key (i.e. `:<variable_name>`).
 
+!!! warning "Configuration Location"
+    The LangGraph API configuration file must be placed in a directory that is at the same level or higher than the Python files that contain compiled graphs and associated dependencies.
+
 Example file directory:
 
 ```bash
@@ -145,10 +164,6 @@ my-app/
 └── pyproject.toml
 ```
 
-## Upload to GitHub
-
-To deploy the LangGraph application to LangGraph Cloud, the code must be uploaded to a GitHub repository.
-
 ## Next
 
-After you setup your repo, it's time to [deploy your app](./cloud.md).
+After you setup your project and place it in a github repo, it's time to [deploy your app](./cloud.md).

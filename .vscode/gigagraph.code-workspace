@@ -19,6 +19,12 @@
 		{
 			"name": "sdk-py",
 			"path": "../libs/sdk-py"
+		},
+		{
+			"path": "../libs/checkpoint"
+		},
+		{
+			"path": "../libs/checkpoint-sqlite"
 		}
 	],
 	"settings": {}

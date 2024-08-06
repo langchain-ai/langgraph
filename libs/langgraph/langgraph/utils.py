@@ -18,9 +18,16 @@ from langchain_core.runnables.config import (
     run_in_executor,
     var_child_runnable_config,
 )
-from langchain_core.runnables.graph import Edge, Graph, Node, is_uuid
 from langchain_core.runnables.utils import accepts_config
 from typing_extensions import TypeGuard
+
+try:
+    from langchain_core.runnables.config import _set_config_context
+except ImportError:
+    # For forwards compatibility
+    def _set_config_context(context: RunnableConfig) -> None:  # type: ignore
+        """Set the context for the current thread."""
+        var_child_runnable_config.set(context)
 
 
 # Before Python 3.11 native StrEnum is not available
@@ -89,7 +96,7 @@ class RunnableCallable(Runnable):
         else:
             config = merge_configs(self.config, config)
             context = copy_context()
-            context.run(var_child_runnable_config.set, config)
+            context.run(_set_config_context, config)
             if accepts_config(self.func):
                 kwargs["config"] = config
             ret = context.run(self.func, input, **kwargs)
@@ -110,7 +117,7 @@ class RunnableCallable(Runnable):
         else:
             config = merge_configs(self.config, config)
             context = copy_context()
-            context.run(var_child_runnable_config.set, config)
+            context.run(_set_config_context, config)
             if accepts_config(self.afunc):
                 kwargs["config"] = config
             if sys.version_info >= (3, 11):
@@ -122,37 +129,6 @@ class RunnableCallable(Runnable):
         if isinstance(ret, Runnable) and self.recurse:
             return await ret.ainvoke(input, config)
         return ret
-
-
-class DrawableGraph(Graph):
-    def extend(
-        self, graph: Graph, prefix: str = ""
-    ) -> tuple[Optional[Node], Optional[Node]]:
-        if all(is_uuid(node.id) for node in graph.nodes.values()):
-            super().extend(graph)
-            return graph.first_node(), graph.last_node()
-
-        new_nodes = {
-            f"{prefix}:{k}": Node(f"{prefix}:{k}", v.data)
-            for k, v in graph.nodes.items()
-        }
-        new_edges = [
-            Edge(
-                f"{prefix}:{edge.source}",
-                f"{prefix}:{edge.target}",
-                edge.data,
-                edge.conditional,
-            )
-            for edge in graph.edges
-        ]
-        self.nodes.update(new_nodes)
-        self.edges.extend(new_edges)
-        first = graph.first_node()
-        last = graph.last_node()
-        return (
-            Node(f"{prefix}:{first.id}", first.data) if first else None,
-            Node(f"{prefix}:{last.id}", last.data) if last else None,
-        )
 
 
 def is_async_callable(
