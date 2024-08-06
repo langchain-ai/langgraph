@@ -18,6 +18,7 @@ from typing import (
     Tuple,
     TypedDict,
     Union,
+    get_type_hints,
 )
 
 import httpx
@@ -3299,16 +3300,24 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     ]
 
 
-def test_state_graph_w_config(snapshot: SnapshotAssertion) -> None:
+def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
 
-    class AgentState(TypedDict, total=False):
+    class BaseState(TypedDict):
         input: str
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
+
+    class AgentState(BaseState, total=False):
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+
+    assert get_type_hints(AgentState).keys() == {
+        "input",
+        "agent_outcome",
+        "intermediate_steps",
+    }
 
     class Config(TypedDict, total=False):
         tools: list[str]
@@ -3367,22 +3376,49 @@ def test_state_graph_w_config(snapshot: SnapshotAssertion) -> None:
             return "continue"
 
     # Define a new graph
-    workflow = StateGraph(AgentState, Config)
+    builder = StateGraph(AgentState, Config)
 
-    workflow.add_node("agent", agent)
-    workflow.add_node("tools", execute_tools)
+    builder.add_node("agent", agent)
+    builder.add_node("tools", execute_tools)
 
-    workflow.set_entry_point("agent")
+    builder.set_entry_point("agent")
 
-    workflow.add_conditional_edges(
+    builder.add_conditional_edges(
         "agent", should_continue, {"continue": "tools", "exit": END}
     )
 
-    workflow.add_edge("tools", "agent")
+    builder.add_edge("tools", "agent")
 
-    app = workflow.compile()
+    app = builder.compile()
 
     assert app.config_schema().schema_json() == snapshot
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+
+    assert builder.channels.keys() == {"input", "agent_outcome", "intermediate_steps"}
+
+    assert app.invoke({"input": "what is weather in sf"}) == {
+        "agent_outcome": AgentFinish(
+            return_values={"answer": "answer"}, log="finish:answer"
+        ),
+        "input": "what is weather in sf",
+        "intermediate_steps": [
+            (
+                AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+                "result for query",
+            ),
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+                "result for another",
+            ),
+        ],
+    }
 
 
 def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None:
