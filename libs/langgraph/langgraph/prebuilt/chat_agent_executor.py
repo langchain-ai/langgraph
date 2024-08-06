@@ -474,7 +474,7 @@ def create_react_agent(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("tools", ToolNode(tools))
+    workflow.add_node("tools", ToolNode(tool_classes))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
