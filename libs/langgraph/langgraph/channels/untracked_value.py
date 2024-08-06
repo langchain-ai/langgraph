@@ -49,7 +49,7 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
             return False
         if len(values) != 1 and self.guard:
             raise InvalidUpdateError(
-                "EphemeralValue can only receive one value per step."
+                "UntrackedValue can only receive one value per step."
             )
 
         self.value = values[-1]
