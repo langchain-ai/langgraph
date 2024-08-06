@@ -5,7 +5,7 @@ from hashlib import md5
 from typing import Any, AsyncIterator, List, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import AsyncConnection, AsyncPipeline
+from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -97,6 +97,8 @@ class AsyncPostgresSaver(BaseCheckpointSaver):
         already exist. It is called automatically when needed and should not be called
         directly by the user.
         """
+        if self.is_setup:
+            return
         async with self.lock:
             if self.is_setup:
                 return
@@ -133,8 +135,9 @@ class AsyncPostgresSaver(BaseCheckpointSaver):
                 );
                 """,
             ]
-            for query in create_table_queries:
-                await self.conn.execute(query)
+            async with self.conn.cursor() as cur:
+                for query in create_table_queries:
+                    await cur.execute(query)
 
             if self.pipe:
                 await self.pipe.sync()
@@ -154,6 +157,7 @@ class AsyncPostgresSaver(BaseCheckpointSaver):
         query = SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
         if limit:
             query += f" LIMIT {limit}"
+        # if we change this to use .stream() we need to make sure to close the cursor
         async for value in await self.conn.execute(query, args, binary=True):
             yield CheckpointTuple(
                 {
@@ -230,11 +234,12 @@ class AsyncPostgresSaver(BaseCheckpointSaver):
         )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        await self.setup()
         if (
             self.latest_tuple is not None
             and self.latest_tuple.config["configurable"]["thread_id"]
             == config["configurable"]["thread_id"]
+            and self.latest_tuple.config["configurable"].get("checkpoint_ns", "")
+            == config["configurable"].get("checkpoint_ns", "")
         ):
             return self.latest_tuple
         elif self.latest_iter is not None:
@@ -242,10 +247,11 @@ class AsyncPostgresSaver(BaseCheckpointSaver):
                 self.latest_tuple = await anext(self.latest_iter, None)
                 if not self.latest_tuple:
                     return None
-                elif (
-                    self.latest_tuple.config["configurable"]["thread_id"]
-                    == config["configurable"]["thread_id"]
-                ):
+                elif self.latest_tuple.config["configurable"]["thread_id"] == config[
+                    "configurable"
+                ]["thread_id"] and self.latest_tuple.config["configurable"].get(
+                    "checkpoint_ns", ""
+                ) == config["configurable"].get("checkpoint_ns", ""):
                     return self.latest_tuple
             finally:
                 self.latest_iter = None
@@ -296,41 +302,39 @@ class AsyncPostgresSaver(BaseCheckpointSaver):
             parent_config=config,
         )
 
-        await self.conn.cursor(binary=True).executemany(
-            """INSERT INTO checkpoint_blobs (thread_id, channel, version, type, blob)
-            VALUES (%s, %s, %s, %s, %s)
-            ON CONFLICT (thread_id, channel, version) DO NOTHING""",
-            await asyncio.to_thread(
-                self._dump_blobs,
-                thread_id,
-                copy.pop("channel_values"),
-                copy["channel_versions"],
-                previous.checkpoint["channel_versions"] if previous else None,
-            ),
-        )
-        await self.conn.execute(
-            """
-            INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata)
-            VALUES (%s, %s, %s, %s, %s, %s)
-            ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id)
-            DO UPDATE SET
-                checkpoint = EXCLUDED.checkpoint,
-                metadata = EXCLUDED.metadata;""",
-            (
-                thread_id,
-                checkpoint_ns,
-                checkpoint["id"],
-                checkpoint_id,
-                Jsonb(self._dump_checkpoint(copy)),
-                # Merging `configurable` and `metadata` will persist graph_id,
-                # assistant_id, and all assistant and run configurable fields
-                # to the checkpoint metadata.
-                Jsonb({**configurable, **config.get("metadata", {}), **metadata}),
-            ),
-            binary=True,
-        )
-        if self.pipe:
-            await self.pipe.sync()
+        async with self._cursor(pipeline=True) as cur:
+            await cur.executemany(
+                """INSERT INTO checkpoint_blobs (thread_id, channel, version, type, blob)
+                VALUES (%s, %s, %s, %s, %s)
+                ON CONFLICT (thread_id, channel, version) DO NOTHING""",
+                await asyncio.to_thread(
+                    self._dump_blobs,
+                    thread_id,
+                    copy.pop("channel_values"),
+                    copy["channel_versions"],
+                    previous.checkpoint["channel_versions"] if previous else None,
+                ),
+            )
+            await cur.execute(
+                """
+                INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata)
+                VALUES (%s, %s, %s, %s, %s, %s)
+                ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id)
+                DO UPDATE SET
+                    checkpoint = EXCLUDED.checkpoint,
+                    metadata = EXCLUDED.metadata;""",
+                (
+                    thread_id,
+                    checkpoint_ns,
+                    checkpoint["id"],
+                    checkpoint_id,
+                    Jsonb(self._dump_checkpoint(copy)),
+                    # Merging `configurable` and `metadata` will persist graph_id,
+                    # assistant_id, and all assistant and run configurable fields
+                    # to the checkpoint metadata.
+                    Jsonb({**configurable, **config.get("metadata", {}), **metadata}),
+                ),
+            )
         return next_config
 
     async def aput_writes(
@@ -339,22 +343,20 @@ class AsyncPostgresSaver(BaseCheckpointSaver):
         writes: list[tuple[str, Any]],
         task_id: str,
     ) -> None:
-        await self.setup()
-        await self.conn.cursor(binary=True).executemany(
-            """INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
+        async with self._cursor() as cur:
+            cur.executemany(
+                """INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
             VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
             ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING""",
-            await asyncio.to_thread(
-                self._dump_writes,
-                config["configurable"]["thread_id"],
-                config["configurable"]["checkpoint_ns"],
-                config["configurable"]["checkpoint_id"],
-                task_id,
-                writes,
-            ),
-        )
-        if self.pipe:
-            await self.pipe.sync()
+                await asyncio.to_thread(
+                    self._dump_writes,
+                    config["configurable"]["thread_id"],
+                    config["configurable"]["checkpoint_ns"],
+                    config["configurable"]["checkpoint_id"],
+                    task_id,
+                    writes,
+                ),
+            )
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:
@@ -369,6 +371,29 @@ class AsyncPostgresSaver(BaseCheckpointSaver):
         except EmptyChannelError:
             next_h = ""
         return f"{next_v:032}.{next_h}"
+
+    @asynccontextmanager
+    async def _cursor(self, *, pipeline: bool = False) -> AsyncIterator[AsyncCursor]:
+        await self.setup()
+        if self.pipe:
+            # a connection in pipeline mode can be used concurrently
+            # in multiple threads/coroutines, but only one cursor can be
+            # used at a time
+            try:
+                async with self.conn.cursor(binary=True) as cur:
+                    yield cur
+            finally:
+                await self.pipe.sync()
+        elif pipeline:
+            # a connection not in pipeline mode can only be used by one
+            # thread/coroutine at a time, so we acquire a lock
+            async with self.lock, self.conn.pipeline(), self.conn.cursor(
+                binary=True
+            ) as cur:
+                yield cur
+        else:
+            async with self.lock, self.conn.cursor(binary=True) as cur:
+                yield cur
 
     def _load_checkpoint(self, checkpoint: dict[str, Any]) -> Checkpoint:
         if len(checkpoint["pending_sends"]) == 2 and all(

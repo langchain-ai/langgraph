@@ -1,43 +1,9 @@
-from base64 import b64encode
 from typing import Any
-
-import orjson
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 
-def default(obj):
-    if hasattr(obj, "model_dump") and callable(obj.model_dump):
-        return obj.model_dump()
-    elif hasattr(obj, "dict") and callable(obj.dict):
-        return obj.dict()
-    elif isinstance(obj, (set, frozenset)):
-        return list(obj)
-    elif isinstance(obj, (bytes, bytearray)):
-        return b64encode(obj).decode()
-    return None
-
-
-def json_dumpb(obj):
-    return orjson.dumps(
-        obj,
-        default=default,
-        option=orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS,
-    )
-
-
-def json_dumps(obj):
-    return (
-        orjson.dumps(
-            obj,
-            default=default,
-            option=orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS,
-        )
-        .replace(b"\u0000", b"")  # null unicode char not allowed in json
-        .decode()
-    )
-
-
+# TODO move this to JsonPlusSerializer
 class JsonAndBinarySerializer(JsonPlusSerializer):
     def _default(self, obj):
         if isinstance(obj, (bytes, bytearray)):
