@@ -504,6 +504,20 @@ async def test_node_schemas_custom_output() -> None:
         "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
+    assert [
+        c
+        async for c in graph.astream(
+            {
+                "hello": "there",
+                "bye": "world",
+                "messages": "hello",
+                "now": 345,  # ignored because not in input schema
+            }
+        )
+    ] == [
+        {"b": {"hello": "again", "now": 123}},
+    ]
+
 
 async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)

@@ -10,9 +10,6 @@
 > [!NOTE]
 > Looking for the JS version? Click [here](https://github.com/langchain-ai/langgraphjs) ([JS docs](https://langchain-ai.github.io/langgraphjs/)).
 
-> [!TIP]
-> Looking to deploy your LangGraph application? [Join the waitlist](https://www.langchain.com/langgraph-cloud-beta) for [LangGraph Cloud](https://langchain-ai.github.io/langgraph/cloud/), our managed service for deploying and hosting LangGraph applications.
-
 ## Overview
 
 [LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs, used to create agent and multi-agent workflows. Compared to other LLM frameworks, it offers these core benefits: cycles, controllability, and persistence. LangGraph allows you to define flows that involve cycles, essential for most agentic architectures, differentiating it from DAG-based solutions. As a very low-level framework, it provides fine-grained control over both the flow and state of your application, crucial for creating reliable agents. Additionally, LangGraph includes built-in persistence, enabling advanced human-in-the-loop and memory features.
