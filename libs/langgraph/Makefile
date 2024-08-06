@@ -15,23 +15,27 @@ coverage:
 		--cov-report term-missing:skip-covered
 
 start-postgres:
-	if [ -n "$$(docker ps -a | grep postgres-test)" ]; then \
-		docker start postgres-test; \
-	else \
-		docker run --name postgres-test -e POSTGRES_PASSWORD=postgres -p 5432:5432 -d postgres; \
-	fi
+	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait
 
 stop-postgres:
-	docker stop postgres-test
+	docker compose -f tests/compose-postgres.yml down
 
 test:
-	poetry run pytest
+	make start-postgres; \
+	poetry run pytest; \
+	EXIT_CODE=$$?; \
+	make stop-postgres; \
+	exit $$EXIT_CODE
 
 test_watch:
-	poetry run ptw .
+	make start-postgres; \
+	poetry run ptw .; \
+	EXIT_CODE=$$?; \
+	make stop-postgres; \
+	exit $$EXIT_CODE
 
 test_watch_all:
-	npx concurrently -n langgraph,checkpoint,checkpoint-sqlite "make test_watch" "make -C ../checkpoint test_watch" "make -C ../checkpoint-sqlite test_watch"
+	npx concurrently -n langgraph,checkpoint,checkpoint-sqlite,postgres "make test_watch" "make -C ../checkpoint test_watch" "make -C ../checkpoint-sqlite test_watch" "make -C ../checkpoint-postgres test_watch"
 
 ######################
 # LINTING AND FORMATTING
