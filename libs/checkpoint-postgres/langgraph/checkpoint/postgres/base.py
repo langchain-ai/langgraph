@@ -79,12 +79,36 @@ CREATE_CHECKPOINT_WRITES_SQL = """
 );
 """
 
+UPSERT_CHECKPOINT_BLOBS_SQL = """
+    INSERT INTO checkpoint_blobs (thread_id, checkpoint_ns, channel, version, type, blob)
+    VALUES (%s, %s, %s, %s, %s, %s)
+    ON CONFLICT (thread_id, checkpoint_ns, channel, version) DO NOTHING
+"""
+
+UPSERT_CHECKPOINTS_SQL = """
+    INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata)
+    VALUES (%s, %s, %s, %s, %s, %s)
+    ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id)
+    DO UPDATE SET
+        checkpoint = EXCLUDED.checkpoint,
+        metadata = EXCLUDED.metadata;
+"""
+
+UPSERT_CHECKPOINT_WRITES_SQL = """
+    INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
+    VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
+    ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
+"""
+
 
 class BasePostgresSaver(BaseCheckpointSaver):
     SELECT_SQL = SELECT_SQL
     CREATE_CHECKPOINTS_SQL = CREATE_CHECKPOINTS_SQL
     CREATE_CHECKPOINT_BLOBS_SQL = CREATE_CHECKPOINT_BLOBS_SQL
     CREATE_CHECKPOINT_WRITES_SQL = CREATE_CHECKPOINT_WRITES_SQL
+    UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
+    UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
+    UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
 
     def _load_checkpoint(self, checkpoint: dict[str, Any]) -> Checkpoint:
         if len(checkpoint["pending_sends"]) == 2 and all(

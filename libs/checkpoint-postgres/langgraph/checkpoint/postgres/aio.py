@@ -194,9 +194,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(
-                """INSERT INTO checkpoint_blobs (thread_id, checkpoint_ns, channel, version, type, blob)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (thread_id, checkpoint_ns, channel, version) DO NOTHING""",
+                self.UPSERT_CHECKPOINT_BLOBS_SQL,
                 await asyncio.to_thread(
                     self._dump_blobs,
                     thread_id,
@@ -206,13 +204,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 ),
             )
             await cur.execute(
-                """
-                INSERT INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, checkpoint, metadata)
-                VALUES (%s, %s, %s, %s, %s, %s)
-                ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id)
-                DO UPDATE SET
-                    checkpoint = EXCLUDED.checkpoint,
-                    metadata = EXCLUDED.metadata;""",
+                self.UPSERT_CHECKPOINTS_SQL,
                 (
                     thread_id,
                     checkpoint_ns,
@@ -232,9 +224,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
     ) -> None:
         async with self._cursor() as cur:
             await cur.executemany(
-                """INSERT INTO checkpoint_writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, blob)
-            VALUES (%s, %s, %s, %s, %s, %s, %s, %s)
-            ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING""",
+                self.UPSERT_CHECKPOINT_WRITES_SQL,
                 await asyncio.to_thread(
                     self._dump_writes,
                     config["configurable"]["thread_id"],
