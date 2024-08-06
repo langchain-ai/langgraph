@@ -19,6 +19,7 @@ import {
   RunsWaitPayload,
   StreamEvent,
   CronsCreatePayload,
+  OnConflictBehavior,
 } from "./types.mjs";
 
 interface ClientConfig {
@@ -106,7 +107,7 @@ class BaseClient {
   }
 }
 
-class CronsClient extends BaseClient {
+export class CronsClient extends BaseClient {
   /**
    *
    * @param threadId The ID of the thread.
@@ -194,7 +195,7 @@ class CronsClient extends BaseClient {
   }
 }
 
-class AssistantsClient extends BaseClient {
+export class AssistantsClient extends BaseClient {
   /**
    * Get an assistant by ID.
    *
@@ -301,7 +302,7 @@ class AssistantsClient extends BaseClient {
   }
 }
 
-class ThreadsClient extends BaseClient {
+export class ThreadsClient extends BaseClient {
   /**
    * Get a thread by ID.
    *
@@ -323,10 +324,16 @@ class ThreadsClient extends BaseClient {
      * Metadata for the thread.
      */
     metadata?: Metadata;
+    threadId?: string;
+    ifExists?: OnConflictBehavior;
   }): Promise<Thread> {
     return this.fetch<Thread>(`/threads`, {
       method: "POST",
-      json: { metadata: payload?.metadata },
+      json: {
+        metadata: payload?.metadata,
+        thread_id: payload?.threadId,
+        if_exists: payload?.ifExists,
+      },
     });
   }
 
@@ -420,15 +427,18 @@ class ThreadsClient extends BaseClient {
   async updateState<ValuesType = DefaultValues>(
     threadId: string,
     options: { values: ValuesType; checkpointId?: string; asNode?: string },
-  ): Promise<void> {
-    return this.fetch<void>(`/threads/${threadId}/state`, {
-      method: "POST",
-      json: {
-        values: options.values,
-        checkpoint_id: options.checkpointId,
-        as_node: options?.asNode,
+  ): Promise<Pick<Config, "configurable">> {
+    return this.fetch<Pick<Config, "configurable">>(
+      `/threads/${threadId}/state`,
+      {
+        method: "POST",
+        json: {
+          values: options.values,
+          checkpoint_id: options.checkpointId,
+          as_node: options?.asNode,
+        },
       },
-    });
+    );
   }
 
   /**
@@ -489,7 +499,7 @@ class ThreadsClient extends BaseClient {
   }
 }
 
-class RunsClient extends BaseClient {
+export class RunsClient extends BaseClient {
   stream(
     threadId: null,
     assistantId: string,

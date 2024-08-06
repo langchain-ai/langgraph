@@ -1,4 +1,4 @@
-name: Check Links
+name: Check Docs & Links
 
 on:
   pull_request:
@@ -26,7 +26,7 @@ jobs:
       - name: Check links in Markdown files
         uses: gaurav-nelson/github-action-markdown-link-check@v1
         with:
-          folder-path: "examples/"
+          folder-path: "examples/,docs/"
           check-modified-files-only: ${{ github.event_name != 'schedule' }}
           file-path: "./README.md"
           config-file: "./.markdown-link-check.config.json"
@@ -60,7 +60,7 @@ jobs:
             echo "Fetching changes from origin/main..."
             git fetch origin main
             echo "Checking for changed notebook files..."
-            CHANGED_FILES=$(git diff --name-only origin/main | grep '\.ipynb$' || true)
+            CHANGED_FILES=$(git diff --name-only --diff-filter=d origin/main | grep '\.ipynb$' || true)
             echo "Changed files: ${CHANGED_FILES}"
             if [ -n "${CHANGED_FILES}" ]; then
               echo "Running link check on changed notebook files..."
@@ -69,3 +69,19 @@ jobs:
               echo "No notebook files changed."
             fi
           fi
+  check-readmes-synced:
+    # This checks that the repo README.md is identical to the libs/langgraph/README.md
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 1
+
+      - name: Check README.md is in sync
+        run: |
+            if ! diff -q README.md libs/langgraph/README.md >/dev/null; then
+            echo "README.md is out of sync with libs/langgraph/README.md"
+            diff -C 3 README.md libs/langgraph/README.md
+            exit 1
+            fi

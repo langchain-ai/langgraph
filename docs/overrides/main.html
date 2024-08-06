@@ -21,12 +21,6 @@
       background-color: #FFFFFF;
     }
 
-    .navbar {
-      background-color: #FFFFFF;
-      color: #333333;
-      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-    }
-
     .md-footer {
       background-color: #F5F5F5;
       color: #666666;
@@ -100,6 +94,29 @@
       color: #BDBDBD;
     }
 
+    [data-md-color-scheme="slate"] .md-header {
+      background-color: #1E1E1E;
+      color: #BDBDBD;
+    }
+
+    [data-md-color-scheme="slate"] .md-tabs {
+      background-color: #1E1E1E;
+      color: #BDBDBD;
+    }
+
+    [data-md-color-scheme="slate"] .md-search__input {
+      background-color: #F5F5F5;
+      color: #333333;
+    }
+
+    [data-md-color-scheme="slate"] .md-search__icon {
+      color: #333333;
+    }
+
+    [data-md-color-scheme="slate"] .md-search__input::placeholder {
+      color: #333333;
+    }
+
     [data-md-color-scheme="slate"] .md-footer-meta {
       background-color: #1E1E1E;
     }
@@ -111,6 +128,7 @@
     [data-md-color-scheme="slate"] .md-typeset a:hover {
       color: #90CAF9;
     }
+
     .notebook-links {
       display: flex;
       justify-content: flex-end;
@@ -119,7 +137,22 @@
     .notebook-links .md-content__button {
       margin-left: 0.5rem;
     }
-    
+
+    [data-md-color-scheme=default] .logo-dark {
+      display: none !important;
+    }
+
+    [data-md-color-scheme=slate] .logo-light {
+      display: none !important;
+    }
+
+    .jupyter-wrapper .jp-CodeCell .jp-Cell-inputWrapper .jp-InputPrompt.jp-InputArea-prompt {
+      display: none !important;
+    }
+
+    .jupyter-wrapper .jp-Notebook .jp-Cell .jp-OutputPrompt {
+      display: none !important;
+    }
   </style>
 {% endblock %}
 
@@ -135,3 +168,14 @@
 
 {{ super() }}
 {% endblock content %}
+
+
+{% block htmltitle %}
+  {% if page.meta and page.meta.title %}
+    <title>{{ page.meta.title }}</title>
+  {% elif page.title and not page.is_homepage %}
+    <title>{{ page.title | striptags }}</title>
+  {% else %}
+    <title>{{ config.site_name }}</title>
+  {% endif %}
+{% endblock %}

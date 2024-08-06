@@ -2,7 +2,11 @@
   "extends": "@tsconfig/recommended",
   "compilerOptions": {
     "target": "ES2021",
-    "lib": ["ES2021", "ES2022.Object", "DOM"],
+    "lib": [
+      "ES2021",
+      "ES2022.Object",
+      "DOM"
+    ],
     "module": "NodeNext",
     "moduleResolution": "nodenext",
     "esModuleInterop": true,
@@ -17,19 +21,26 @@
     "strict": true,
     "outDir": "dist"
   },
-  "include": ["src/**/*"],
-  "exclude": ["node_modules", "dist", "coverage"],
+  "include": [
+    "src/**/*"
+  ],
+  "exclude": [
+    "node_modules",
+    "dist",
+    "coverage"
+  ],
   "includeVersion": true,
   "typedocOptions": {
     "entryPoints": [
-      "src/client.mts",
-      "src/schema.ts",
-      "src/types.mts"
+      "src/client.mts"
     ],
     "readme": "none",
     "out": "docs",
     "plugin": [
       "typedoc-plugin-markdown"
-    ]
+    ],
+    "excludePrivate": true,
+    "excludeProtected": true,
+    "excludeExternals": false
   }
 }

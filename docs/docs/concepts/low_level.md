@@ -14,7 +14,9 @@ By composing `Nodes` and `Edges`, you can create complex, looping workflows that
 
 In short: _nodes do the work. edges tell what to do next_.
 
-LangGraph's underlying graph algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a general program. When a `Node` completes, it sends a message along one or more edges to other node(s). These nodes run their functions, pass the resulting messages to the next set of nodes, and on and on it goes. Inspired by [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/), the program proceeds in discrete "super-steps" that are all executed conceptually in parallel. Whenever the graph is run, all the nodes start in an `inactive` state. Whenever an incoming edge (or "channel") receives a new message (state), the node becomes `active`, runs the function, and responds with updates. At the end of each superstep, each node votes to `halt` by marking itself as `inactive` if it has no more incoming messages. The graph terminates when all nodes are `inactive` and when no messages are in transit.
+LangGraph's underlying graph algorithm uses [message passing](https://en.wikipedia.org/wiki/Message_passing) to define a general program. When a Node completes its operation, it sends messages along one or more edges to other node(s). These recipient nodes then execute their functions, pass the resulting messages to the next set of nodes, and the process continues. Inspired by Google's [Pregel](https://research.google/pubs/pregel-a-system-for-large-scale-graph-processing/) system, the program proceeds in discrete "super-steps."
+
+A super-step can be considered a single iteration over the graph nodes. Nodes that run in parallel are part of the same super-step, while nodes that run sequentially belong to separate super-steps. At the start of graph execution, all nodes begin in an `inactive` state. A node becomes `active` when it receives a new message (state) on any of its incoming edges (or "channels"). The active node then runs its function and responds with updates. At the end of each super-step, nodes with no incoming messages vote to `halt` by marking themselves as `inactive`. The graph execution terminates when all nodes are `inactive` and no messages are in transit.
 
 ### StateGraph
 
@@ -43,6 +45,10 @@ The first thing you do when you define a graph is define the `State` of the grap
 ### Schema
 
 The main documented way to specify the schema of a graph is by using `TypedDict`. However, we also support [using a Pydantic BaseModel](../how-tos/state-model.ipynb) as your graph state to add **default values** and additional data validation.
+
+By default, the graph will have the same input and output schemas. If you want to change this, you can also specify explicit input and output schemas directly. This is useful when you have a lot of keys, and some are explicitly for input and others for output. See the [notebook here](../how-tos/input_output_schema.ipynb) for how to use.
+
+By default, all nodes in the graph will share the same state. This means that they will read and write to the same state channels. It is possible to have nodes write to private state channels inside the graph for internal node communication - see [this notebook](../how-tos/pass_private_state.ipynb) for how to do that.
 
 ### Reducers
 
@@ -73,22 +79,44 @@ class State(TypedDict):
 
 In this example, we've used the `Annotated` type to specify a reducer function (`operator.add`) for the second key (`bar`). Note that the first key remains unchanged. Let's assume the input to the graph is `{"foo": 1, "bar": ["hi"]}`. Let's then assume the first `Node` returns `{"foo": 2}`. This is treated as an update to the state. Notice that the `Node` does not need to return the whole `State` schema - just an update. After applying this update, the `State` would then be `{"foo": 2, "bar": ["hi"]}`. If the second node returns `{"bar": ["bye"]}` then the `State` would then be `{"foo": 2, "bar": ["hi", "bye"]}`. Notice here that the `bar` key is updated by adding the two lists together.
 
-### MessageState
+### Working with Messages in Graph State
 
-`MessageState` is one of the few opinionated components in LangGraph. `MessageState` is a special state designed to make it easy to use a list of messages as a key in your state. Specifically, `MessageState` is defined as:
+#### Why use messages?
+
+Most modern LLM providers have a chat model interface that accepts a list of messages as input. LangChain's [`ChatModel`](https://python.langchain.com/v0.2/docs/concepts/#chat-models) in particular accepts a list of `Message` objects as inputs. These messages come in a variety of forms such as `HumanMessage` (user input) or `AIMessage` (LLM response). To read more about what message objects are, please refer to [this](https://python.langchain.com/v0.2/docs/concepts/#messages) conceptual guide.
+
+#### Using Messages in your Graph
+
+In many cases, it is helpful to store prior conversation history as a list of messages in your graph state. To do so, we can add a key (channel) to the graph state that stores a list of `Message` objects and annotate it with a reducer function (see `messages` key in the example below). The reducer function is vital to telling the graph how to update the list of `Message` objects in the state with each state update (for example, when a node sends an update). If you don't specify a reducer, every state update will overwrite the list of messages with the most recently provided value. If you wanted to simply append messages to the existing list, you could use `operator.add` as a reducer.
+
+However, you might also want to manually update messages in your graph state (e.g. human-in-the-loop). If you were to use `operator.add`, the manual state updates you send to the graph would be appended to the existing list of messages, instead of updating existing messages. To avoid that, you need a reducer that can keep track of message IDs and overwrite existing messages, if updated. To achieve this, you can use the prebuilt `add_messages` function. For brand new messages, it will simply append to existing list, but it will also handle the updates for existing messages correctly.
+
+#### Serialization
+
+In addition to keeping track of message IDs, the `add_messages` function will also try to deserialize messages into LangChain `Message` objects whenever a state update is received on the `messages` channel. See more information on LangChain serialization/deserialization [here](https://python.langchain.com/v0.2/docs/how_to/serialization/). This allows sending graph inputs / state updates in the following format:
+
+```python
+# this is supported
+{"messages": [HumanMessage(content="message")]}
+
+# and this is also supported
+{"messages": [{"type": "human", "content": "message"}]}
+```
+
+Since the state updates are always deserialized into LangChain `Messages` when using `add_messages`, you should use dot notation to access message attributes, like `state["messages"][-1].content`. Below is an example of a graph that uses `add_messages` as it's reducer function.
 
 ```python
 from langchain_core.messages import AnyMessage
 from langgraph.graph.message import add_messages
 from typing import Annotated, TypedDict
 
-class MessagesState(TypedDict):
+class GraphState(TypedDict):
     messages: Annotated[list[AnyMessage], add_messages]
 ```
 
-What this is doing is creating a `TypedDict` with a single key: `messages`. This is a list of `Message` objects, with `add_messages` as a reducer. `add_messages` basically adds messages to the existing list (it also does some nice extra things, like convert from OpenAI message format to the standard LangChain message format, handle updates based on message IDs, etc).
+#### MessagesState
 
-We often see a list of messages being a key component of state, so this prebuilt state is intended to make it easy to use messages. Typically, there is more state to track than just messages, so we see people subclass this state and add more fields, like:
+Since having a list of messages in your state is so common, there exists a prebuilt state called `MessagesState` which makes it easy to use messages. `MessagesState` is defined with a single `messages` key which is a list of `AnyMessage` objects and uses the `add_messages` reducer. Typically, there is more state to track than just messages, so we see people subclass this state and add more fields, like:
 
 ```python
 from langgraph.graph import MessagesState
@@ -178,7 +206,7 @@ graph.add_edge("node_a", "node_b")
 If you want to **optionally** route to 1 or more edges (or optionally terminate), you can use the [add_conditional_edges][langgraph.graph.StateGraph.add_conditional_edges] method. This method accepts the name of a node and a "routing function" to call after that node is executed:
 
 ```python
-graph.add_edge("node_a", routing_function)
+graph.add_conditional_edges("node_a", routing_function)
 ```
 
 Similar to nodes, the `routing_function` accept the current `state` of the graph and return a value.
@@ -188,18 +216,12 @@ By default, the return value `routing_function` is used as the name of the node 
 You can optionally provide a dictionary that maps the `routing_function`'s output to the name of the next node.
 
 ```python
-graph.add_edge("node_a", routing_function, {True: "node_b", False: "node_c"})
+graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
 ```
 
 ### Entry Point
 
-The entry point is first node to call when the graph starts. You can use [`set_entry_point`][langgraph.graph.StateGraph.set_entry_point] to specify this.
-
-```python
-graph.set_entry_point("node_a")
-```
-
-This is equivalent to adding an edge between the `START` node and this node. You may want to use `START` directly when you want to have **multiple** nodes be called first.
+The entry point is the first node(s) that are run when the graph starts. You can use the [`add_edge`][langgraph.graph.StateGraph.add_edge] method from the virtual [`START`][start] node to the first node to execute to specify where to enter the graph.
 
 ```python
 from langgraph.graph import START
@@ -209,17 +231,18 @@ graph.add_edge(START, "node_a")
 
 ### Conditional Entry Point
 
-The conditional entry point is used when you want to specify a function to call to determine which node(s) should be called first.
-You can use [`set_conditional_entry_point`][langgraph.graph.StateGraph.set_conditional_entry_point] to specify this.
+A conditional entry point lets you start at different nodes depending on custom logic. You can use [`add_conditional_edges`][langgraph.graph.StateGraph.add_conditional_edges] from the virtual [`START`][start] node to accomplish this.
 
 ```python
-graph.set_conditional_entry_point(routing_function)
+from langgraph.graph import START
+
+graph.add_conditional_edges(START, routing_function)
 ```
 
 You can optionally provide a dictionary that maps the `routing_function`'s output to the name of the next node.
 
 ```python
-graph.set_conditional_entry_point(routing_function, {True: "node_b", False: "node_c"})
+graph.add_conditional_edges(START, routing_function, {True: "node_b", False: "node_c"})
 ```
 
 ## `Send`
@@ -237,11 +260,9 @@ graph.add_conditional_edges("node_a", continue_to_jokes)
 
 ## Checkpointer
 
-One of the main benefits of LangGraph is that it comes backed by a persistence layer. This is accomplished via [checkpointers][basecheckpointsaver].
+LangGraph has a built-in persistence layer, implemented through [checkpointers][basecheckpointsaver]. When you use a checkpointer with a graph, you can interact with the state of that graph. When you use a checkpointer with a graph, you can interact with and manage the graph's state. The checkpointer saves a _checkpoint_ of the graph state at every super-step, enabling several powerful capabilities:
 
-Checkpointers can be used to save a _checkpoint_ of the state of a graph after all steps of the graph. This allows for several things.
-
-First, it allows for [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop), as it allows humans to inspect, interrupt, and approve steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
+First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve steps.Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
 
 Second, it allows for ["memory"](agentic_concepts.md#memory) between interactions. You can use checkpointers to create threads and save the state of a thread after a graph executes. In the case of repeated human interactions (like conversations) any follow up messages can be sent to that checkpoint, which will retain its memory of previous ones.
 
@@ -249,8 +270,7 @@ See [this guide](../how-tos/persistence.ipynb) for how to add a checkpointer to 
 
 ## Threads
 
-When using a checkpointer, you must specify a `thread_id` or `thread_ts` when running the graph.
-Threads are used to checkpoint multiple different runs. This can be used to enable a multi-tenant chat applications.
+Threads enable the checkpointing of multiple different runs, making them essential for multi-tenant chat applications and other scenarios where maintaining separate states is necessary. A thread is a unique ID assigned to a series of checkpoints saved by a checkpointer. When using a checkpointer, you must specify a `thread_id` or `thread_ts` when running the graph.
 
 `thread_id` is simply the ID of a thread. This is always required
 
@@ -267,14 +287,7 @@ See [this guide](../how-tos/persistence.ipynb) for how to use threads.
 
 ## Checkpointer state
 
-When you use a checkpointer with a graph, you can interact with the state of that graph.
-This usually done when enabling different human-in-the-loop interaction patterns.
-Each time you run the graph, the checkpointer creates several checkpoints every time a
-node or set of nodes finishes running.
-The most recent checkpoint is the current state of the thread.
-When interacting with the checkpointer state, you must specify a [thread identifier](#threads).
-
-Each checkpoint has two properties:
+ When interacting with the checkpointer state, you must specify a [thread identifier](#threads).Each checkpoint saved by the checkpointer has two properties:
 
 - **values**: This is the value of the state at this point in time.
 - **next**: This is a tuple of the nodes to execute next in the graph.
@@ -339,6 +352,16 @@ The `foo` key is completely changed (because there is no reducer specified for t
 The final thing you specify when calling `update_state` is `as_node`. This update will be applied as if it came from node `as_node`. If `as_node` is not provided, it will be set to the last node that updated the state, if not ambiguous.
 
 The reason this matters is that the next steps in the graph to execute depend on the last node to have given an update, so this can be used to control which node executes next.
+
+## Graph Migrations
+
+LangGraph can easily handle migrations of graph definitions (nodes, edges, and state) even when using a checkpointer to track state.
+
+- For threads at the end of the graph (i.e. not interrupted) you can change the entire topology of the graph (i.e. all nodes and edges, remove, add, rename, etc)
+- For threads currently interrupted, we support all topology changes other than renaming / removing nodes (as that thread could now be about to enter a node that no longer exists) -- if this is a blocker please reach out and we can prioritize a solution.
+- For modifying state, we have full backwards and forwards compatibility for adding and removing keys
+- State keys that are renamed lose their saved state in existing threads
+- State keys whose types change in incompatible ways could currently cause issues in threads with state from before the change -- if this is a blocker please reach out and we can prioritize a solution.
 
 ## Configuration
 

@@ -1,14 +1,27 @@
 from typing import Any
 
+INPUT = "__input__"
 CONFIG_KEY_SEND = "__pregel_send"
 CONFIG_KEY_READ = "__pregel_read"
+CONFIG_KEY_CHECKPOINTER = "__pregel_checkpointer"
+CONFIG_KEY_RESUMING = "__pregel_resuming"
 INTERRUPT = "__interrupt__"
 TASKS = "__pregel_tasks"
-RESERVED = {INTERRUPT, TASKS, CONFIG_KEY_SEND, CONFIG_KEY_READ}
+RESERVED = {
+    INTERRUPT,
+    TASKS,
+    CONFIG_KEY_SEND,
+    CONFIG_KEY_READ,
+    CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_RESUMING,
+    INPUT,
+}
 TAG_HIDDEN = "langsmith:hidden"
 
 START = "__start__"
 END = "__end__"
+
+CHECKPOINT_NAMESPACE_SEPARATOR = "|"
 
 
 class Send:

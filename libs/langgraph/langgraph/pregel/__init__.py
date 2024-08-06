@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import concurrent.futures
 import time
-from collections import defaultdict, deque
+from collections import deque
 from functools import partial
 from inspect import signature
 from typing import (
@@ -13,7 +13,6 @@ from typing import (
     Callable,
     Dict,
     Iterator,
-    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -23,8 +22,8 @@ from typing import (
     get_type_hints,
     overload,
 )
+from uuid import UUID, uuid5
 
-from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.globals import get_debug
 from langchain_core.load.dump import dumpd
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
@@ -39,8 +38,6 @@ from langchain_core.runnables.config import (
     ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
-    get_executor_for_config,
-    merge_configs,
     patch_config,
 )
 from langchain_core.runnables.utils import (
@@ -53,61 +50,55 @@ from typing_extensions import Self
 
 from langgraph.channels.base import (
     BaseChannel,
-    EmptyChannelError,
 )
 from langgraph.channels.context import Context
 from langgraph.channels.manager import (
     AsyncChannelsManager,
     ChannelsManager,
-    create_checkpoint,
 )
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
-    Checkpoint,
-    CheckpointMetadata,
     copy_checkpoint,
+    create_checkpoint,
     empty_checkpoint,
 )
 from langgraph.constants import (
+    CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
+    CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     INTERRUPT,
-    TAG_HIDDEN,
-    TASKS,
-    Send,
 )
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
-    ManagedValueMapping,
     ManagedValuesManager,
     ManagedValueSpec,
     is_managed_value,
 )
+from langgraph.pregel.algo import (
+    apply_writes,
+    local_read,
+    prepare_next_tasks,
+)
 from langgraph.pregel.debug import (
-    map_debug_checkpoint,
     map_debug_task_results,
-    map_debug_tasks,
     print_step_checkpoint,
     print_step_tasks,
     print_step_writes,
 )
 from langgraph.pregel.io import (
-    map_input,
     map_output_updates,
-    map_output_values,
-    read_channel,
     read_channels,
-    single,
 )
-from langgraph.pregel.log import logger
+from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy, arun_with_retry, run_with_retry
 from langgraph.pregel.types import (
     All,
     PregelExecutableTask,
-    PregelTaskDescription,
     StateSnapshot,
+    StreamMode,
 )
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
@@ -192,16 +183,6 @@ class Channel:
                 for k, v in kwargs.items()
             ]
         )
-
-
-StreamMode = Literal["values", "updates", "debug"]
-"""How the stream method should emit outputs.
-
-- 'values': Emit all values of the state for each step.
-- 'updates': Emit only the node name(s) and updates
-    that were returned by the node(s) **after** each step.
-- 'debug': Emit debug events for each step.
-"""
 
 
 class Pregel(
@@ -302,7 +283,13 @@ class Pregel(
                 )
             )
             # these are provided by the Pregel class
-            if spec.id not in [CONFIG_KEY_READ, CONFIG_KEY_SEND]
+            if spec.id
+            not in [
+                CONFIG_KEY_READ,
+                CONFIG_KEY_SEND,
+                CONFIG_KEY_CHECKPOINTER,
+                CONFIG_KEY_RESUMING,
+            ]
         ]
 
     @property
@@ -374,9 +361,9 @@ class Pregel(
         with ChannelsManager(
             self.channels, checkpoint, config
         ) as channels, ManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
-            _, next_tasks = _prepare_next_tasks(
+            next_tasks = prepare_next_tasks(
                 checkpoint,
                 self.nodes,
                 channels,
@@ -406,9 +393,9 @@ class Pregel(
         async with AsyncChannelsManager(
             self.channels, checkpoint, config
         ) as channels, AsyncManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
-            _, next_tasks = _prepare_next_tasks(
+            next_tasks = prepare_next_tasks(
                 checkpoint,
                 self.nodes,
                 channels,
@@ -442,15 +429,15 @@ class Pregel(
             and signature(self.checkpointer.list).parameters.get("filter") is None
         ):
             raise ValueError("Checkpointer does not support filtering")
-        for config, checkpoint, metadata, parent_config in self.checkpointer.list(
+        for config, checkpoint, metadata, parent_config, _ in self.checkpointer.list(
             config, before=before, limit=limit, filter=filter
         ):
             with ChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, ManagedValuesManager(
-                self.managed_values_dict, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config)
             ) as managed:
-                _, next_tasks = _prepare_next_tasks(
+                next_tasks = prepare_next_tasks(
                     checkpoint,
                     self.nodes,
                     channels,
@@ -489,13 +476,14 @@ class Pregel(
             checkpoint,
             metadata,
             parent_config,
+            _,
         ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             async with AsyncChannelsManager(
                 self.channels, checkpoint, config
             ) as channels, AsyncManagedValuesManager(
-                self.managed_values_dict, ensure_config(config), self
+                self.managed_values_dict, ensure_config(config)
             ) as managed:
-                _, next_tasks = _prepare_next_tasks(
+                next_tasks = prepare_next_tasks(
                     checkpoint,
                     self.nodes,
                     channels,
@@ -516,7 +504,7 @@ class Pregel(
     def update_state(
         self,
         config: RunnableConfig,
-        values: dict[str, Any] | Any,
+        values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
         """Update the state of the graph with the given values, as if they came from
@@ -529,8 +517,35 @@ class Pregel(
         # get last checkpoint
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        step = saved.metadata.get("step", -1) if saved else -1
+        # merge configurable fields with previous checkpoint config
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                # TODO: add proper support for updating nested subgraph state
+                "checkpoint_ns": "",
+            },
+        }
+        if saved:
+            checkpoint_config = {
+                "configurable": {
+                    **config.get("configurable", {}),
+                    **saved.config["configurable"],
+                }
+            }
         # find last node that updated the state, if not provided
-        if as_node is None and not any(
+        if values is None and as_node is None:
+            return self.checkpointer.put(
+                checkpoint_config,
+                create_checkpoint(checkpoint, None, step),
+                {
+                    "source": "update",
+                    "step": step,
+                    "writes": {},
+                },
+            )
+        elif as_node is None and not any(
             v for vv in checkpoint["versions_seen"].values() for v in vv.values()
         ):
             if (
@@ -552,6 +567,8 @@ class Pregel(
                     as_node = last_seen_by_node[-1][1]
         if as_node is None:
             raise InvalidUpdateError("Ambiguous update, specify as_node")
+        if as_node not in self.nodes:
+            raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels
         with ChannelsManager(self.channels, checkpoint, config) as channels:
             # create task to run all writers of the chosen node
@@ -565,6 +582,8 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                None,
+                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
             task.proc.invoke(
@@ -576,33 +595,22 @@ class Pregel(
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: task.writes.extend,
                         CONFIG_KEY_READ: partial(
-                            _local_read, checkpoint, channels, task.writes, config
+                            local_read, checkpoint, channels, task, config
                         ),
                     },
                 ),
             )
             # apply to checkpoint and save
-            _apply_writes(
-                checkpoint, channels, task.writes, self.checkpointer.get_next_version
+            apply_writes(
+                checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-            step = saved.metadata.get("step", -2) + 1 if saved else -1
-
-            # merge configurable fields with previous checkpoint config
-            checkpoint_config = config
-            if saved:
-                checkpoint_config = {
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    }
-                }
 
             return self.checkpointer.put(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step),
+                create_checkpoint(checkpoint, channels, step + 1),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {as_node: values},
                 },
             )
@@ -619,8 +627,35 @@ class Pregel(
         # get last checkpoint
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        step = saved.metadata.get("step", -1) if saved else -1
+        # merge configurable fields with previous checkpoint config
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                # TODO: add proper support for updating nested subgraph state
+                "checkpoint_ns": "",
+            },
+        }
+        if saved:
+            checkpoint_config = {
+                "configurable": {
+                    **config.get("configurable", {}),
+                    **saved.config["configurable"],
+                }
+            }
         # find last node that updated the state, if not provided
-        if as_node is None and not saved:
+        if values is None and as_node is None:
+            return await self.checkpointer.aput(
+                checkpoint_config,
+                create_checkpoint(checkpoint, None, step),
+                {
+                    "source": "update",
+                    "step": step,
+                    "writes": {},
+                },
+            )
+        elif as_node is None and not saved:
             if (
                 isinstance(self.input_channels, str)
                 and self.input_channels in self.nodes
@@ -640,6 +675,8 @@ class Pregel(
                     as_node = last_seen_by_node[-1][1]
         if as_node is None:
             raise InvalidUpdateError("Ambiguous update, specify as_node")
+        if as_node not in self.nodes:
+            raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels, acting as the chosen node
         async with AsyncChannelsManager(self.channels, checkpoint, config) as channels:
             # create task to run all writers of the chosen node
@@ -653,6 +690,8 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                None,
+                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
             await task.proc.ainvoke(
@@ -664,33 +703,22 @@ class Pregel(
                         # deque.extend is thread-safe
                         CONFIG_KEY_SEND: task.writes.extend,
                         CONFIG_KEY_READ: partial(
-                            _local_read, checkpoint, channels, task.writes, config
+                            local_read, checkpoint, channels, task, config
                         ),
                     },
                 ),
             )
             # apply to checkpoint and save
-            _apply_writes(
-                checkpoint, channels, task.writes, self.checkpointer.get_next_version
+            apply_writes(
+                checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-            step = saved.metadata.get("step", -2) + 1 if saved else -1
-
-            # merge configurable fields with previous checkpoint config
-            checkpoint_config = config
-            if saved:
-                checkpoint_config = {
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    }
-                }
 
             return await self.checkpointer.aput(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step),
+                create_checkpoint(checkpoint, channels, step + 1),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {as_node: values},
                 },
             )
@@ -700,7 +728,6 @@ class Pregel(
         config: Optional[RunnableConfig] = None,
         *,
         stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
@@ -712,31 +739,38 @@ class Pregel(
         Union[str, Sequence[str]],
         Optional[Sequence[str]],
         Optional[Sequence[str]],
+        Optional[BaseCheckpointSaver],
     ]:
         debug = debug if debug is not None else self.debug
         if output_keys is None:
             output_keys = self.stream_channels_asis
         else:
             validate_keys(output_keys, self.channels)
-        if input_keys is None:
-            input_keys = self.input_channels
-        else:
-            validate_keys(input_keys, self.channels)
         interrupt_before = interrupt_before or self.interrupt_before_nodes
         interrupt_after = interrupt_after or self.interrupt_after_nodes
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        if config is not None and config.get("configurable", {}).get(CONFIG_KEY_READ):
+        if config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None:
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
+        if (
+            config is not None
+            and config.get("configurable", {}).get(CONFIG_KEY_CHECKPOINTER)
+            and (interrupt_after or interrupt_before)
+        ):
+            checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
+                CONFIG_KEY_CHECKPOINTER
+            ]
+        else:
+            checkpointer = self.checkpointer
         return (
             debug,
             stream_mode,
-            input_keys,
             output_keys,
             interrupt_before,
             interrupt_after,
+            checkpointer,
         )
 
     def stream(
@@ -746,7 +780,6 @@ class Pregel(
         *,
         stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
@@ -756,14 +789,13 @@ class Pregel(
         Args:
             input: The input to the graph.
             config: The configuration to use for the run.
-            stream_mode: The mode to stream output, defaults to 'values'.
+            stream_mode: The mode to stream output, defaults to self.stream_mode.
                 Options are 'values', 'updates', and 'debug'.
                 values: Emit the current values of the state for each step.
                 updates: Emit only the updates to the state for each step.
                     Output is a dict with the node name as key and the updated values as value.
                 debug: Emit debug events for each step.
             output_keys: The keys to stream, defaults to all non-context channels.
-            input_keys: The keys to use from the input, defaults to all input channels.
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             debug: Whether to print debug information during execution, defaults to False.
@@ -777,7 +809,7 @@ class Pregel(
             >>> import operator
             >>> from typing_extensions import Annotated, TypedDict
             >>> from langgraph.graph import StateGraph
-            >>> from libs.langgraph.langgraph.constants import START
+            >>> from langgraph.constants import START
             ...
             >>> class State(TypedDict):
             ...     alist: Annotated[list, operator.add]
@@ -827,7 +859,6 @@ class Pregel(
             run_id=config.get("run_id"),
         )
         try:
-            bg: list[concurrent.futures.Future] = []
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
             if self.checkpointer and not config.get("configurable"):
@@ -838,201 +869,71 @@ class Pregel(
             (
                 debug,
                 stream_modes,
-                input_keys,
                 output_keys,
                 interrupt_before,
                 interrupt_after,
+                checkpointer,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
-                input_keys=input_keys,
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
-            # copy nodes to ignore mutations during execution
-            processes = {**self.nodes}
-            # get checkpoint from saver, or create an empty one
-            saved = self.checkpointer.get_tuple(config) if self.checkpointer else None
-            checkpoint = saved.checkpoint if saved else empty_checkpoint()
 
-            # merge configurable fields with previous checkpoint config
-            checkpoint_config = config
-            if saved:
-                checkpoint_config = {
-                    **config,
-                    **saved.config,
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    },
-                }
-
-            start = saved.metadata.get("step", -2) + 1 if saved else -1
-            # create channels from checkpoint
-            with ChannelsManager(
-                self.channels, checkpoint, config
-            ) as channels, get_executor_for_config(
-                config
-            ) as executor, ManagedValuesManager(
-                self.managed_values_dict, config, self
-            ) as managed:
-
-                def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
-                    nonlocal checkpoint, checkpoint_config, channels
-
-                    if self.checkpointer is None:
-                        return
-                    if debug:
-                        print_step_checkpoint(
-                            metadata["step"], channels, self.stream_channels_list
-                        )
-
-                    # create new checkpoint
-                    checkpoint = create_checkpoint(
-                        checkpoint, channels, metadata["step"]
-                    )
-                    # save it, without blocking
-                    bg.append(
-                        executor.submit(
-                            self.checkpointer.put,
-                            checkpoint_config,
-                            copy_checkpoint(checkpoint),
-                            metadata,
-                        )
-                    )
-                    # update checkpoint config
-                    checkpoint_config = {
-                        **checkpoint_config,
-                        "configurable": {
-                            **checkpoint_config["configurable"],
-                            "thread_ts": checkpoint["id"],
-                        },
-                    }
-                    # yield debug checkpoint event
-                    if "debug" in stream_modes:
-                        yield from _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_checkpoint(
-                                metadata["step"],
-                                checkpoint_config,
-                                channels,
-                                self.stream_channels_asis,
-                                metadata,
-                            ),
-                        )
-
-                # map inputs to channel updates
-                if input_writes := deque(map_input(input_keys, input)):
-                    # discard any unfinished tasks from previous checkpoint
-                    checkpoint, _ = _prepare_next_tasks(
-                        checkpoint,
-                        processes,
-                        channels,
-                        managed,
-                        config,
-                        -1,
-                        for_execution=True,
-                        get_next_version=(
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
-                    )
-                    # apply input writes
-                    _apply_writes(
-                        checkpoint,
-                        channels,
-                        input_writes,
-                        (
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
-                    )
-                    # save input checkpoint
-                    yield from put_checkpoint(
-                        {
-                            "source": "input",
-                            "step": start,
-                            "writes": input,
-                        }
-                    )
-                    # increment start to 0
-                    start += 1
-                else:
-                    # if received no input, take that as signal to proceed
-                    # past previous interrupt, if any
-                    checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.stream_channels_list:
-                        if k in checkpoint["channel_versions"]:
-                            version = checkpoint["channel_versions"][k]
-                            checkpoint["versions_seen"][INTERRUPT][k] = version
-
+            with SyncPregelLoop(
+                input, config=config, checkpointer=checkpointer, graph=self
+            ) as loop:
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                stop = start + config["recursion_limit"] + 1
-                for step in range(start, stop):
-                    next_checkpoint, next_tasks = _prepare_next_tasks(
-                        checkpoint,
-                        processes,
-                        channels,
-                        managed,
-                        config,
-                        step,
-                        for_execution=True,
-                        manager=run_manager,
-                        get_next_version=(
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
-                    )
-
-                    # if no more tasks, we're done
-                    if not next_tasks:
-                        if step == start:
-                            raise ValueError("No tasks to run in graph.")
-                        else:
-                            break
-
-                    # before execution, check if we should interrupt
-                    if _should_interrupt(
-                        checkpoint,
-                        interrupt_before,
-                        self.stream_channels_list,
-                        next_tasks,
-                    ):
-                        break
-                    else:
-                        checkpoint = next_checkpoint
-
-                    if debug:
-                        print_step_tasks(step, next_tasks)
-                    if "debug" in stream_modes:
-                        yield from _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_tasks(step, next_tasks),
+                while loop.tick(
+                    output_keys=output_keys,
+                    interrupt_before=interrupt_before,
+                    interrupt_after=interrupt_after,
+                    manager=run_manager,
+                ):
+                    # debug flag
+                    if self.debug:
+                        print_step_checkpoint(
+                            loop.checkpoint_metadata,
+                            loop.channels,
+                            self.stream_channels_list,
                         )
+                    # emit output
+                    while loop.stream:
+                        mode, payload = loop.stream.popleft()
+                        if mode in stream_modes:
+                            if isinstance(stream_mode, list):
+                                yield (mode, payload)
+                            else:
+                                yield payload
+                    # debug flag
+                    if debug:
+                        print_step_tasks(loop.step, loop.tasks)
 
                     # execute tasks, and wait for one to fail or all to finish.
                     # each task is independent from all other concurrent tasks
                     # yield updates/debug output as each task finishes
                     futures = {
-                        executor.submit(run_with_retry, task, self.retry_policy): task
-                        for task in next_tasks
+                        loop.submit(
+                            run_with_retry,
+                            task,
+                            self.retry_policy,
+                        ): task
+                        for task in loop.tasks
+                        if not task.writes
                     }
                     end_time = (
                         self.step_timeout + time.monotonic()
                         if self.step_timeout
                         else None
                     )
+                    if not futures:
+                        done, inflight = set(), set()
                     while futures:
                         done, inflight = concurrent.futures.wait(
                             futures,
@@ -1043,6 +944,8 @@ class Pregel(
                                 else None
                             ),
                         )
+                        if not done:
+                            break  # timed out
                         for fut in done:
                             task = futures.pop(fut)
                             if fut.exception() is not None:
@@ -1050,6 +953,8 @@ class Pregel(
                                 # exception will be handled in panic_or_proceed
                                 futures.clear()
                             else:
+                                # save task writes to checkpointer
+                                loop.put_writes(task.id, task.writes)
                                 # yield updates output for the finished task
                                 if "updates" in stream_modes:
                                     yield from _with_mode(
@@ -1062,7 +967,9 @@ class Pregel(
                                         "debug",
                                         isinstance(stream_mode, list),
                                         map_debug_task_results(
-                                            step, [task], self.stream_channels_list
+                                            loop.step,
+                                            [task],
+                                            self.stream_channels_list,
                                         ),
                                     )
                         else:
@@ -1070,90 +977,36 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    _panic_or_proceed(done, inflight, step)
+                    _panic_or_proceed(done, inflight, loop.step)
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
-
-                    # combine pending writes from all tasks
-                    pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _ in next_tasks:
-                        pending_writes.extend(writes)
-
+                    # debug flag
                     if debug:
                         print_step_writes(
-                            step, pending_writes, self.stream_channels_list
+                            loop.step,
+                            [w for t in loop.tasks for w in t.writes],
+                            self.stream_channels_list,
                         )
-
-                    # apply writes to channels
-                    _apply_writes(
-                        checkpoint,
-                        channels,
-                        pending_writes,
-                        (
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
-                    )
-
-                    # yield values output
-                    if "values" in stream_modes:
-                        yield from _with_mode(
-                            "values",
-                            isinstance(stream_mode, list),
-                            map_output_values(output_keys, pending_writes, channels),
-                        )
-
-                    # save end of step checkpoint
-                    yield from put_checkpoint(
-                        {
-                            "source": "loop",
-                            "step": step,
-                            "writes": (
-                                single(map_output_updates(output_keys, next_tasks))
-                                if self.stream_mode == "updates"
-                                else single(
-                                    map_output_values(
-                                        output_keys, pending_writes, channels
-                                    ),
-                                )
-                            ),
-                        }
-                    )
-
-                    # after execution, check if we should interrupt
-                    if _should_interrupt(
-                        checkpoint,
-                        interrupt_after,
-                        self.stream_channels_list,
-                        next_tasks,
-                    ):
-                        break
-                else:
+                # emit output
+                while loop.stream:
+                    mode, payload = loop.stream.popleft()
+                    if mode in stream_modes:
+                        if isinstance(stream_mode, list):
+                            yield (mode, payload)
+                        else:
+                            yield payload
+                # handle exit
+                if loop.status == "out_of_steps":
                     raise GraphRecursionError(
-                        f"Recursion limit of {config['recursion_limit']} reached"
+                        f"Recursion limit of {config['recursion_limit']} reached "
                         "without hitting a stop condition. You can increase the "
                         "limit by setting the `recursion_limit` config key."
                     )
-
                 # set final channel values as run output
-                run_manager.on_chain_end(read_channels(channels, output_keys))
+                run_manager.on_chain_end(read_channels(loop.channels, output_keys))
         except BaseException as e:
             run_manager.on_chain_error(e)
             raise
-        finally:
-            # cancel any pending tasks when generator is interrupted
-            try:
-                for task in futures:
-                    task.cancel()
-            except NameError:
-                pass
-            # wait for all background tasks to finish
-            done, _ = concurrent.futures.wait(
-                bg, return_when=concurrent.futures.ALL_COMPLETED
-            )
-            for task in done:
-                task.result()
 
     async def astream(
         self,
@@ -1162,11 +1015,76 @@ class Pregel(
         *,
         stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
         output_keys: Optional[Union[str, Sequence[str]]] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
+        """Stream graph steps for a single input.
+
+        Args:
+            input: The input to the graph.
+            config: The configuration to use for the run.
+            stream_mode: The mode to stream output, defaults to self.stream_mode.
+                Options are 'values', 'updates', and 'debug'.
+                values: Emit the current values of the state for each step.
+                updates: Emit only the updates to the state for each step.
+                    Output is a dict with the node name as key and the updated values as value.
+                debug: Emit debug events for each step.
+            output_keys: The keys to stream, defaults to all non-context channels.
+            interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
+            interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
+            debug: Whether to print debug information during execution, defaults to False.
+
+        Yields:
+            The output of each step in the graph. The output shape depends on the stream_mode.
+
+        Examples:
+            Using different stream modes with a graph:
+            ```pycon
+            >>> import operator
+            >>> from typing_extensions import Annotated, TypedDict
+            >>> from langgraph.graph import StateGraph
+            >>> from langgraph.constants import START
+            ...
+            >>> class State(TypedDict):
+            ...     alist: Annotated[list, operator.add]
+            ...     another_list: Annotated[list, operator.add]
+            ...
+            >>> builder = StateGraph(State)
+            >>> builder.add_node("a", lambda _state: {"another_list": ["hi"]})
+            >>> builder.add_node("b", lambda _state: {"alist": ["there"]})
+            >>> builder.add_edge("a", "b")
+            >>> builder.add_edge(START, "a")
+            >>> graph = builder.compile()
+            ```
+            With stream_mode="values":
+
+            ```pycon
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="values"']}, stream_mode="values"):
+            ...     print(event)
+            {'alist': ['Ex for stream_mode="values"'], 'another_list': []}
+            {'alist': ['Ex for stream_mode="values"'], 'another_list': ['hi']}
+            {'alist': ['Ex for stream_mode="values"', 'there'], 'another_list': ['hi']}
+            ```
+            With stream_mode="updates":
+
+            ```pycon
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="updates"']}, stream_mode="updates"):
+            ...     print(event)
+            {'a': {'another_list': ['hi']}}
+            {'b': {'alist': ['there']}}
+            ```
+            With stream_mode="debug":
+
+            ```pycon
+            >>> async for event in graph.astream({"alist": ['Ex for stream_mode="debug"']}, stream_mode="debug"):
+            ...     print(event)
+            {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': []}, 'triggers': ['start:a']}}
+            {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 1, 'payload': {'id': '...', 'name': 'a', 'result': [('another_list', ['hi'])]}}
+            {'type': 'task', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'input': {'alist': ['Ex for stream_mode="debug"'], 'another_list': ['hi']}, 'triggers': ['a']}}
+            {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
+            ```
+        """
         config = ensure_config(config)
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
@@ -1185,8 +1103,6 @@ class Pregel(
             None,
         )
         try:
-            loop = asyncio.get_event_loop()
-            bg: list[asyncio.Task] = []
             if config["recursion_limit"] < 1:
                 raise ValueError("recursion_limit must be at least 1")
             if self.checkpointer and not config.get("configurable"):
@@ -1197,215 +1113,93 @@ class Pregel(
             (
                 debug,
                 stream_modes,
-                input_keys,
                 output_keys,
                 interrupt_before,
                 interrupt_after,
+                checkpointer,
             ) = self._defaults(
                 config,
                 stream_mode=stream_mode,
-                input_keys=input_keys,
                 output_keys=output_keys,
                 interrupt_before=interrupt_before,
                 interrupt_after=interrupt_after,
                 debug=debug,
             )
-            # copy nodes to ignore mutations during execution
-            processes = {**self.nodes}
-            # get checkpoint from saver, or create an empty one
-            saved = (
-                await self.checkpointer.aget_tuple(config)
-                if self.checkpointer
-                else None
-            )
-            checkpoint = saved.checkpoint if saved else empty_checkpoint()
-
-            # merge configurable fields with previous checkpoint config
-            checkpoint_config = config
-            if saved:
-                checkpoint_config = {
-                    **config,
-                    **saved.config,
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    },
-                }
-
-            start = saved.metadata.get("step", -2) + 1 if saved else -1
-            # create channels from checkpoint
-            async with AsyncChannelsManager(
-                self.channels, checkpoint, config
-            ) as channels, AsyncManagedValuesManager(
-                self.managed_values_dict, config, self
-            ) as managed:
-
-                def put_checkpoint(metadata: CheckpointMetadata) -> Iterator[Any]:
-                    nonlocal checkpoint, checkpoint_config, channels
-
-                    if self.checkpointer is None:
-                        return
-                    if debug:
-                        print_step_checkpoint(
-                            metadata["step"], channels, self.stream_channels_list
-                        )
-
-                    # create new checkpoint
-                    checkpoint = create_checkpoint(
-                        checkpoint, channels, metadata["step"]
-                    )
-                    # save it, without blocking
-                    bg.append(
-                        asyncio.create_task(
-                            self.checkpointer.aput(
-                                checkpoint_config, copy_checkpoint(checkpoint), metadata
-                            )
-                        )
-                    )
-                    # update checkpoint config
-                    checkpoint_config = {
-                        **checkpoint_config,
-                        "configurable": {
-                            **checkpoint_config["configurable"],
-                            "thread_ts": checkpoint["id"],
-                        },
-                    }
-                    # yield debug checkpoint event
-                    if "debug" in stream_modes:
-                        yield from _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_checkpoint(
-                                metadata["step"],
-                                checkpoint_config,
-                                channels,
-                                self.stream_channels_asis,
-                                metadata,
-                            ),
-                        )
-
-                # map inputs to channel updates
-                if input_writes := deque(map_input(input_keys, input)):
-                    # discard any unfinished tasks from previous checkpoint
-                    checkpoint, _ = _prepare_next_tasks(
-                        checkpoint,
-                        processes,
-                        channels,
-                        managed,
-                        config,
-                        -1,
-                        for_execution=True,
-                        get_next_version=(
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
-                    )
-                    # apply input writes
-                    _apply_writes(
-                        checkpoint,
-                        channels,
-                        input_writes,
-                        (
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
-                    )
-                    # save input checkpoint
-                    for chunk in put_checkpoint(
-                        {"source": "input", "step": start, "writes": input}
-                    ):
-                        yield chunk
-                    # increment start to 0
-                    start += 1
-                else:
-                    # if received no input, take that as signal to proceed
-                    # past previous interrupt, if any
-                    checkpoint = copy_checkpoint(checkpoint)
-                    for k in self.stream_channels_list:
-                        if k in checkpoint["channel_versions"]:
-                            version = checkpoint["channel_versions"][k]
-                            checkpoint["versions_seen"][INTERRUPT][k] = version
-
+            async with AsyncPregelLoop(
+                input, config=config, checkpointer=checkpointer, graph=self
+            ) as loop:
+                aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
-                # channel updates from step N are only visible in step N+1,
+                # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
-                # channel updates being applied only at the transition between steps
-                stop = start + config["recursion_limit"] + 1
-                for step in range(start, stop):
-                    next_checkpoint, next_tasks = _prepare_next_tasks(
-                        checkpoint,
-                        processes,
-                        channels,
-                        managed,
-                        config,
-                        step,
-                        for_execution=True,
-                        manager=run_manager,
-                        get_next_version=(
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
-                    )
-
-                    # if no more tasks, we're done
-                    if not next_tasks:
-                        if step == start:
-                            raise ValueError("No tasks to run in graph.")
-                        else:
-                            break
-
-                    # before execution, check if we should interrupt
-                    if _should_interrupt(
-                        checkpoint,
-                        interrupt_before,
-                        self.stream_channels_list,
-                        next_tasks,
-                    ):
-                        break
-                    else:
-                        checkpoint = next_checkpoint
-
+                # with channel updates applied only at the transition between steps
+                while loop.tick(
+                    output_keys=output_keys,
+                    interrupt_before=interrupt_before,
+                    interrupt_after=interrupt_after,
+                    manager=run_manager,
+                ):
+                    # debug flag
+                    if self.debug:
+                        print_step_checkpoint(
+                            loop.checkpoint_metadata,
+                            loop.channels,
+                            self.stream_channels_list,
+                        )
+                    # emit output
+                    while loop.stream:
+                        mode, payload = loop.stream.popleft()
+                        if mode in stream_modes:
+                            if isinstance(stream_mode, list):
+                                yield (mode, payload)
+                            else:
+                                yield payload
+                    # debug flag
                     if debug:
-                        print_step_tasks(step, next_tasks)
-                    if "debug" in stream_modes:
-                        for chunk in _with_mode(
-                            "debug",
-                            isinstance(stream_mode, list),
-                            map_debug_tasks(step, next_tasks),
-                        ):
-                            yield chunk
+                        print_step_tasks(loop.step, loop.tasks)
 
                     # execute tasks, and wait for one to fail or all to finish.
                     # each task is independent from all other concurrent tasks
                     # yield updates/debug output as each task finishes
                     futures = {
-                        asyncio.create_task(
-                            arun_with_retry(task, self.retry_policy, do_stream)
+                        loop.submit(
+                            arun_with_retry,
+                            task,
+                            self.retry_policy,
+                            stream=do_stream,
+                            __name__=task.name,
+                            __cancel_on_exit__=True,
                         ): task
-                        for task in next_tasks
+                        for task in loop.tasks
+                        if not task.writes
                     }
                     end_time = (
-                        self.step_timeout + loop.time() if self.step_timeout else None
+                        self.step_timeout + aioloop.time()
+                        if self.step_timeout
+                        else None
                     )
+                    if not futures:
+                        done, inflight = set(), set()
                     while futures:
                         done, inflight = await asyncio.wait(
                             futures,
                             return_when=asyncio.FIRST_COMPLETED,
                             timeout=(
-                                max(0, end_time - loop.time()) if end_time else None
+                                max(0, end_time - aioloop.time()) if end_time else None
                             ),
                         )
+                        if not done:
+                            break  # timed out
                         for fut in done:
                             task = futures.pop(fut)
                             if fut.exception() is not None:
                                 # we got an exception, break out of while loop
-                                # exception will be handle in panic_or_proceed
+                                # exception will be handled in panic_or_proceed
                                 futures.clear()
                             else:
+                                # save task writes to checkpointer
+                                loop.put_writes(task.id, task.writes)
                                 # yield updates output for the finished task
                                 if "updates" in stream_modes:
                                     for chunk in _with_mode(
@@ -1419,7 +1213,9 @@ class Pregel(
                                         "debug",
                                         isinstance(stream_mode, list),
                                         map_debug_task_results(
-                                            step, [task], self.stream_channels_list
+                                            loop.step,
+                                            [task],
+                                            self.stream_channels_list,
                                         ),
                                     ):
                                         yield chunk
@@ -1428,89 +1224,40 @@ class Pregel(
                             del fut, task
 
                     # panic on failure or timeout
-                    _panic_or_proceed(done, inflight, step)
+                    _panic_or_proceed(done, inflight, loop.step, asyncio.TimeoutError)
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
-
-                    # combine pending writes from all tasks
-                    pending_writes = deque[tuple[str, Any]]()
-                    for _, _, _, writes, _, _ in next_tasks:
-                        pending_writes.extend(writes)
-
+                    # debug flag
                     if debug:
                         print_step_writes(
-                            step, pending_writes, self.stream_channels_list
+                            loop.step,
+                            [w for t in loop.tasks for w in t.writes],
+                            self.stream_channels_list,
                         )
-
-                    # apply writes to channels
-                    _apply_writes(
-                        checkpoint,
-                        channels,
-                        pending_writes,
-                        (
-                            self.checkpointer.get_next_version
-                            if self.checkpointer
-                            else _increment
-                        ),
-                    )
-
-                    # yield current values
-                    if "values" in stream_modes:
-                        for chunk in _with_mode(
-                            "values",
-                            isinstance(stream_mode, list),
-                            map_output_values(output_keys, pending_writes, channels),
-                        ):
-                            yield chunk
-
-                    # save end of step checkpoint
-                    for chunk in put_checkpoint(
-                        {
-                            "source": "loop",
-                            "step": step,
-                            "writes": (
-                                single(map_output_updates(output_keys, next_tasks))
-                                if self.stream_mode == "updates"
-                                else single(
-                                    map_output_values(
-                                        output_keys, pending_writes, channels
-                                    )
-                                )
-                            ),
-                        }
-                    ):
-                        yield chunk
-
-                    # after execution, check if we should interrupt
-                    if _should_interrupt(
-                        checkpoint,
-                        interrupt_after,
-                        self.stream_channels_list,
-                        next_tasks,
-                    ):
-                        break
-                else:
+                # emit output
+                while loop.stream:
+                    mode, payload = loop.stream.popleft()
+                    if mode in stream_modes:
+                        if isinstance(stream_mode, list):
+                            yield (mode, payload)
+                        else:
+                            yield payload
+                # handle exit
+                if loop.status == "out_of_steps":
                     raise GraphRecursionError(
-                        f"Recursion limit of {config['recursion_limit']} reached"
-                        "without hitting a stop condition. You can increase the limit"
-                        "by setting the `recursion_limit` config key."
+                        f"Recursion limit of {config['recursion_limit']} reached "
+                        "without hitting a stop condition. You can increase the "
+                        "limit by setting the `recursion_limit` config key."
                     )
 
                 # set final channel values as run output
-                await run_manager.on_chain_end(read_channels(channels, output_keys))
+                await run_manager.on_chain_end(
+                    read_channels(loop.channels, output_keys)
+                )
         except BaseException as e:
-            await run_manager.on_chain_error(e)
+            # TODO use on_chain_end if exc is GraphInterrupt
+            await asyncio.shield(run_manager.on_chain_error(e))
             raise
-        finally:
-            # cancel any pending tasks when generator is interrupted
-            try:
-                for task in futures:
-                    task.cancel()
-                    bg.append(task)
-            except NameError:
-                pass
-            # wait for all background tasks to finish
-            await asyncio.shield(asyncio.gather(*bg))
 
     def invoke(
         self,
@@ -1519,7 +1266,6 @@ class Pregel(
         *,
         stream_mode: StreamMode = "values",
         output_keys: Optional[Union[str, Sequence[str]]] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
@@ -1532,7 +1278,6 @@ class Pregel(
             config: Optional. The configuration for the graph run.
             stream_mode: Optional[str]. The stream mode for the graph run. Default is "values".
             output_keys: Optional. The output keys to retrieve from the graph run.
-            input_keys: Optional. The input keys to provide for the graph run.
             interrupt_before: Optional. The nodes to interrupt the graph run before.
             interrupt_after: Optional. The nodes to interrupt the graph run after.
             debug: Optional. Enable debug mode for the graph run.
@@ -1552,7 +1297,6 @@ class Pregel(
             config,
             stream_mode=stream_mode,
             output_keys=output_keys,
-            input_keys=input_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             debug=debug,
@@ -1574,7 +1318,6 @@ class Pregel(
         *,
         stream_mode: StreamMode = "values",
         output_keys: Optional[Union[str, Sequence[str]]] = None,
-        input_keys: Optional[Union[str, Sequence[str]]] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
@@ -1587,7 +1330,6 @@ class Pregel(
             config: Optional. The configuration for the computation.
             stream_mode: Optional. The stream mode for the computation. Default is "values".
             output_keys: Optional. The output keys to include in the result. Default is None.
-            input_keys: Optional. The input keys to include in the result. Default is None.
             interrupt_before: Optional. The nodes to interrupt before. Default is None.
             interrupt_after: Optional. The nodes to interrupt after. Default is None.
             debug: Optional. Whether to enable debug mode. Default is None.
@@ -1608,7 +1350,6 @@ class Pregel(
             config,
             stream_mode=stream_mode,
             output_keys=output_keys,
-            input_keys=input_keys,
             interrupt_before=interrupt_before,
             interrupt_after=interrupt_after,
             debug=debug,
@@ -1628,6 +1369,7 @@ def _panic_or_proceed(
     done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     inflight: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     step: int,
+    timeout_exc_cls: Type[Exception] = TimeoutError,
 ) -> None:
     while done:
         # if any task failed
@@ -1644,375 +1386,7 @@ def _panic_or_proceed(
             # cancel all pending tasks
             inflight.pop().cancel()
         # raise timeout error
-        raise TimeoutError(f"Timed out at step {step}")
-
-
-def _should_interrupt(
-    checkpoint: Checkpoint,
-    interrupt_nodes: Union[All, Sequence[str]],
-    snapshot_channels: Sequence[str],
-    tasks: list[PregelExecutableTask],
-) -> bool:
-    version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
-    null_version = version_type()
-    # defaultdicts are mutated on access :( so we need to copy
-    seen = checkpoint["versions_seen"].copy()[INTERRUPT]
-    return (
-        # interrupt if any of snapshopt_channels has been updated since last interrupt
-        any(
-            checkpoint["channel_versions"].get(chan, null_version)
-            > seen.get(chan, null_version)
-            for chan in snapshot_channels
-        )
-        # and any triggered node is in interrupt_nodes list
-        and any(
-            node
-            for node, _, _, _, config, _ in tasks
-            if (
-                (not config or TAG_HIDDEN not in config.get("tags"))
-                if interrupt_nodes == "*"
-                else node in interrupt_nodes
-            )
-        )
-    )
-
-
-def _local_read(
-    checkpoint: Checkpoint,
-    channels: Mapping[str, BaseChannel],
-    writes: Sequence[tuple[str, Any]],
-    config: RunnableConfig,
-    select: Union[list[str], str],
-    fresh: bool = False,
-) -> Union[dict[str, Any], Any]:
-    if fresh:
-        checkpoint = create_checkpoint(checkpoint, channels, -1)
-        context_channels = {k: v for k, v in channels.items() if isinstance(v, Context)}
-        with ChannelsManager(
-            {k: v for k, v in channels.items() if k not in context_channels},
-            checkpoint,
-            config,
-        ) as channels:
-            all_channels = {**channels, **context_channels}
-            _apply_writes(copy_checkpoint(checkpoint), all_channels, writes, None)
-            return read_channels(all_channels, select)
-    else:
-        return read_channels(channels, select)
-
-
-def _local_write(
-    commit: Callable[[Sequence[tuple[str, Any]]], None],
-    processes: Mapping[str, PregelNode],
-    channels: Mapping[str, BaseChannel],
-    writes: Sequence[tuple[str, Any]],
-) -> None:
-    for chan, value in writes:
-        if chan == TASKS:
-            if not isinstance(value, Send):
-                raise InvalidUpdateError(
-                    f"Invalid packet type, expected Packet, got {value}"
-                )
-            if value.node not in processes:
-                raise InvalidUpdateError(f"Invalid node name {value.node} in packet")
-        elif chan not in channels:
-            logger.warning(f"Skipping write for channel '{chan}' which has no readers")
-    commit(writes)
-
-
-def _increment(current: Optional[int], channel: BaseChannel) -> int:
-    return current + 1 if current is not None else 1
-
-
-def _apply_writes(
-    checkpoint: Checkpoint,
-    channels: Mapping[str, BaseChannel],
-    pending_writes: Sequence[tuple[str, Any]],
-    get_next_version: Optional[Callable[[int, BaseChannel], int]],
-) -> None:
-    if checkpoint["pending_sends"]:
-        checkpoint["pending_sends"].clear()
-
-    pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
-    # Group writes by channel
-    for chan, val in pending_writes:
-        if chan == TASKS:
-            checkpoint["pending_sends"].append(val)
-        else:
-            pending_writes_by_channel[chan].append(val)
-
-    # Find the highest version of all channels
-    if checkpoint["channel_versions"]:
-        max_version = max(checkpoint["channel_versions"].values())
-    else:
-        max_version = None
-
-    updated_channels: set[str] = set()
-    # Apply writes to channels
-    for chan, vals in pending_writes_by_channel.items():
-        if chan in channels:
-            try:
-                updated = channels[chan].update(vals)
-            except InvalidUpdateError as e:
-                raise InvalidUpdateError(
-                    f"Invalid update for channel {chan} with values {vals}"
-                ) from e
-            if updated and get_next_version is not None:
-                checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version, channels[chan]
-                )
-            updated_channels.add(chan)
-    # Channels that weren't updated in this step are notified of a new step
-    for chan in channels:
-        if chan not in updated_channels:
-            if channels[chan].update([]) and get_next_version is not None:
-                checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version, channels[chan]
-                )
-
-
-@overload
-def _prepare_next_tasks(
-    checkpoint: Checkpoint,
-    processes: Mapping[str, PregelNode],
-    channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
-    config: RunnableConfig,
-    step: int,
-    for_execution: Literal[False],
-    get_next_version: Literal[None] = None,
-    manager: Literal[None] = None,
-) -> tuple[Checkpoint, list[PregelTaskDescription]]:
-    ...
-
-
-@overload
-def _prepare_next_tasks(
-    checkpoint: Checkpoint,
-    processes: Mapping[str, PregelNode],
-    channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
-    config: RunnableConfig,
-    step: int,
-    for_execution: Literal[True],
-    get_next_version: Callable[[int, BaseChannel], int],
-    manager: Union[None, ParentRunManager, AsyncParentRunManager],
-) -> tuple[Checkpoint, list[PregelExecutableTask]]:
-    ...
-
-
-def _prepare_next_tasks(
-    checkpoint: Checkpoint,
-    processes: Mapping[str, PregelNode],
-    channels: Mapping[str, BaseChannel],
-    managed: ManagedValueMapping,
-    config: RunnableConfig,
-    step: int,
-    *,
-    for_execution: bool,
-    get_next_version: Union[None, Callable[[int, BaseChannel], int]] = None,
-    manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-) -> tuple[Checkpoint, Union[list[PregelTaskDescription], list[PregelExecutableTask]]]:
-    checkpoint = copy_checkpoint(checkpoint)
-    tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
-    # Consume pending packets
-    for packet in checkpoint["pending_sends"]:
-        if not isinstance(packet, Send):
-            logger.warn(f"Ignoring invalid packet type {type(packet)} in pending sends")
-            continue
-        if for_execution:
-            if node := processes[packet.node].get_node():
-                writes = deque()
-                tasks.append(
-                    PregelExecutableTask(
-                        packet.node,
-                        packet.arg,
-                        node,
-                        writes,
-                        patch_config(
-                            merge_configs(
-                                config,
-                                processes[packet.node].config,
-                                {
-                                    "metadata": {
-                                        "langgraph_step": step,
-                                        "langgraph_node": packet.node,
-                                        "langgraph_triggers": [TASKS],
-                                        "langgraph_task_idx": len(tasks),
-                                    }
-                                },
-                            ),
-                            run_name=packet.node,
-                            callbacks=(
-                                manager.get_child(f"graph:step:{step}")
-                                if manager
-                                else None
-                            ),
-                            configurable={
-                                # deque.extend is thread-safe
-                                CONFIG_KEY_SEND: partial(
-                                    _local_write, writes.extend, processes, channels
-                                ),
-                                CONFIG_KEY_READ: partial(
-                                    _local_read, checkpoint, channels, tasks, config
-                                ),
-                            },
-                        ),
-                        [TASKS],
-                    )
-                )
-        else:
-            tasks.append(PregelTaskDescription(packet.node, packet.arg))
-    if for_execution:
-        checkpoint["pending_sends"].clear()
-    # Collect channels to consume
-    channels_to_consume = set()
-    # Check if any processes should be run in next step
-    # If so, prepare the values to be passed to them
-    version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
-    null_version = version_type()
-    if null_version is None:
-        return checkpoint, tasks
-    for name, proc in processes.items():
-        seen = checkpoint["versions_seen"][name]
-        # If any of the channels read by this process were updated
-        if triggers := [
-            chan
-            for chan in proc.triggers
-            if not isinstance(
-                read_channel(channels, chan, return_exception=True), EmptyChannelError
-            )
-            and checkpoint["channel_versions"].get(chan, null_version)
-            > seen.get(chan, null_version)
-        ]:
-            channels_to_consume.update(triggers)
-            try:
-                val = next(_proc_input(step, name, proc, managed, channels))
-            except StopIteration:
-                continue
-
-            # update seen versions
-            if for_execution:
-                seen.update(
-                    {
-                        chan: checkpoint["channel_versions"][chan]
-                        for chan in proc.triggers
-                        if chan in checkpoint["channel_versions"]
-                    }
-                )
-
-            if for_execution:
-                if node := proc.get_node():
-                    writes = deque()
-                    triggers = sorted(triggers)
-                    tasks.append(
-                        PregelExecutableTask(
-                            name,
-                            val,
-                            node,
-                            writes,
-                            patch_config(
-                                merge_configs(
-                                    config,
-                                    proc.config,
-                                    {
-                                        "metadata": {
-                                            "langgraph_step": step,
-                                            "langgraph_node": name,
-                                            "langgraph_triggers": triggers,
-                                            "langgraph_task_idx": len(tasks),
-                                        }
-                                    },
-                                ),
-                                run_name=name,
-                                callbacks=(
-                                    manager.get_child(f"graph:step:{step}")
-                                    if manager
-                                    else None
-                                ),
-                                configurable={
-                                    # deque.extend is thread-safe
-                                    CONFIG_KEY_SEND: partial(
-                                        _local_write, writes.extend, processes, channels
-                                    ),
-                                    CONFIG_KEY_READ: partial(
-                                        _local_read,
-                                        checkpoint,
-                                        channels,
-                                        writes,
-                                        config,
-                                    ),
-                                },
-                            ),
-                            triggers,
-                        )
-                    )
-            else:
-                tasks.append(PregelTaskDescription(name, val))
-    # Find the highest version of all channels
-    if checkpoint["channel_versions"]:
-        max_version = max(checkpoint["channel_versions"].values())
-    else:
-        max_version = None
-    # Consume all channels that were read
-    if for_execution:
-        for chan in channels_to_consume:
-            if channels[chan].consume():
-                checkpoint["channel_versions"][chan] = get_next_version(
-                    max_version, channels[chan]
-                )
-    return checkpoint, tasks
-
-
-def _proc_input(
-    step: int,
-    name: str,
-    proc: PregelNode,
-    managed: ManagedValueMapping,
-    channels: Mapping[str, BaseChannel],
-) -> Iterator[Any]:
-    # If all trigger channels subscribed by this process are not empty
-    # then invoke the process with the values of all non-empty channels
-    if isinstance(proc.channels, dict):
-        try:
-            val: dict = {
-                k: read_channel(
-                    channels,
-                    chan,
-                    catch=chan not in proc.triggers,
-                )
-                for k, chan in proc.channels.items()
-                if isinstance(chan, str)
-            }
-
-            managed_values = {}
-            for key, chan in proc.channels.items():
-                if is_managed_value(chan):
-                    managed_values[key] = managed[key](
-                        step, PregelTaskDescription(name, val)
-                    )
-
-            val.update(managed_values)
-        except EmptyChannelError:
-            return
-    elif isinstance(proc.channels, list):
-        for chan in proc.channels:
-            try:
-                val = read_channel(channels, chan, catch=False)
-                break
-            except EmptyChannelError:
-                pass
-        else:
-            return
-    else:
-        raise RuntimeError(
-            "Invalid channels type, expected list or dict, got {proc.channels}"
-        )
-
-    # If the process has a mapper, apply it to the value
-    if proc.mapper is not None:
-        val = proc.mapper(val)
-
-    yield val
+        raise timeout_exc_cls(f"Timed out at step {step}")
 
 
 def _with_mode(mode: StreamMode, on: bool, iter: Iterator[Any]) -> Iterator[Any]:

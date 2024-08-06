@@ -47,6 +47,13 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
         self.ctx = ctx
         self.actx = actx
 
+    def __eq__(self, value: object) -> bool:
+        return (
+            isinstance(value, Context)
+            and value.ctx == self.ctx
+            and value.actx == self.actx
+        )
+
     @property
     def ValueType(self) -> Any:
         """The type of the value stored in the channel."""

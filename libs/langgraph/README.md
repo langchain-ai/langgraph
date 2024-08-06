@@ -3,13 +3,15 @@
 ![Version](https://img.shields.io/pypi/v/langgraph)
 [![Downloads](https://static.pepy.tech/badge/langgraph/month)](https://pepy.tech/project/langgraph)
 [![Open Issues](https://img.shields.io/github/issues-raw/langchain-ai/langgraph)](https://github.com/langchain-ai/langgraph/issues)
-[![](https://dcbadge.vercel.app/api/server/6adMQxSpJS?compact=true&style=flat)](https://discord.com/channels/1038097195422978059/1170024642245832774)
 [![Docs](https://img.shields.io/badge/docs-latest-blue)](https://langchain-ai.github.io/langgraph/)
 
 ⚡ Building language agents as graphs ⚡
 
 > [!NOTE]
 > Looking for the JS version? Click [here](https://github.com/langchain-ai/langgraphjs) ([JS docs](https://langchain-ai.github.io/langgraphjs/)).
+
+> [!TIP]
+> Looking to deploy your LangGraph application? [Join the waitlist](https://www.langchain.com/langgraph-cloud-beta) for [LangGraph Cloud](https://langchain-ai.github.io/langgraph/cloud/), our managed service for deploying and hosting LangGraph applications.
 
 ## Overview
 
@@ -36,40 +38,49 @@ pip install -U langgraph
 
 One of the central concepts of LangGraph is state. Each graph execution creates a state that is passed between nodes in the graph as they execute, and each node updates this internal state with its return value after it executes. The way that the graph updates its internal state is defined by either the type of graph chosen or a custom function.
 
-Let's take a look at a simple example of an agent that can search the web using [Tavily Search API](https://tavily.com/).
+Let's take a look at a simple example of an agent that can use a search tool.
 
 ```shell
-pip install langchain_openai langchain_community
+pip install langchain-anthropic
 ```
 
 ```shell
-export OPENAI_API_KEY=sk-...
-export TAVILY_API_KEY=tvly-...
+export ANTHROPIC_API_KEY=sk-...
 ```
 
 Optionally, we can set up [LangSmith](https://docs.smith.langchain.com/) for best-in-class observability.
 
 ```shell
-export LANGCHAIN_TRACING_V2="true"
-export LANGCHAIN_API_KEY=ls__...
+export LANGSMITH_TRACING=true
+export LANGSMITH_API_KEY=lsv2_sk_...
 ```
 
 ```python
 from typing import Annotated, Literal, TypedDict
 
 from langchain_core.messages import HumanMessage
-from langchain_community.tools.tavily_search import TavilySearchResults
-from langchain_openai import ChatOpenAI
-from langgraph.checkpoint import MemorySaver
+from langchain_anthropic import ChatAnthropic
+from langchain_core.tools import tool
+from langgraph.checkpoint.memory import MemorySaver
 from langgraph.graph import END, StateGraph, MessagesState
 from langgraph.prebuilt import ToolNode
 
 
 # Define the tools for the agent to use
-tools = [TavilySearchResults(max_results=1)]
+@tool
+def search(query: str):
+    """Call to surf the web."""
+    # This is a placeholder, but don't tell the LLM that...
+    if "sf" in query.lower() or "san francisco" in query.lower():
+        return "It's 60 degrees and foggy."
+    return "It's 90 degrees and sunny."
+
+
+tools = [search]
+
 tool_node = ToolNode(tools)
 
-model = ChatOpenAI(temperature=0).bind_tools(tools)
+model = ChatAnthropic(model="claude-3-5-sonnet-20240620", temperature=0).bind_tools(tools)
 
 # Define the function that determines whether to continue or not
 def should_continue(state: MessagesState) -> Literal["tools", END]:
@@ -132,7 +143,7 @@ final_state["messages"][-1].content
 ```
 
 ```
-'The current weather in San Francisco is as follows:\n- Temperature: 60.1°F (15.6°C)\n- Condition: Partly cloudy\n- Wind: 5.6 mph (9.0 kph) from SSW\n- Humidity: 83%\n- Visibility: 9.0 miles (16.0 km)\n- UV Index: 4.0\n\nFor more details, you can visit [Weather API](https://www.weatherapi.com/).'
+"Based on the search results, I can tell you that the current weather in San Francisco is:\n\nTemperature: 60 degrees Fahrenheit\nConditions: Foggy\n\nSan Francisco is known for its microclimates and frequent fog, especially during the summer months. The temperature of 60°F (about 15.5°C) is quite typical for the city, which tends to have mild temperatures year-round. The fog, often referred to as "Karl the Fog" by locals, is a characteristic feature of San Francisco\'s weather, particularly in the mornings and evenings.\n\nIs there anything else you\'d like to know about the weather in San Francisco or any other location?"
 ```
 
 Now when we pass the same `"thread_id"`, the conversation context is retained via the saved state (i.e. stored list of messages)
@@ -146,7 +157,7 @@ final_state["messages"][-1].content
 ```
 
 ```
-'The current weather in New York is as follows:\n- Temperature: 20.3°C (68.5°F)\n- Condition: Overcast\n- Wind: 2.2 mph from the north\n- Humidity: 65%\n- Cloud Cover: 100%\n- UV Index: 5.0\n\nFor more details, you can visit [Weather API](https://www.weatherapi.com/).'
+"Based on the search results, I can tell you that the current weather in New York City is:\n\nTemperature: 90 degrees Fahrenheit (approximately 32.2 degrees Celsius)\nConditions: Sunny\n\nThis weather is quite different from what we just saw in San Francisco. New York is experiencing much warmer temperatures right now. Here are a few points to note:\n\n1. The temperature of 90°F is quite hot, typical of summer weather in New York City.\n2. The sunny conditions suggest clear skies, which is great for outdoor activities but also means it might feel even hotter due to direct sunlight.\n3. This kind of weather in New York often comes with high humidity, which can make it feel even warmer than the actual temperature suggests.\n\nIt's interesting to see the stark contrast between San Francisco's mild, foggy weather and New York's hot, sunny conditions. This difference illustrates how varied weather can be across different parts of the United States, even on the same day.\n\nIs there anything else you'd like to know about the weather in New York or any other location?"
 ```
 
 ### Step-by-step Breakdown
@@ -154,8 +165,8 @@ final_state["messages"][-1].content
 1. <details>
     <summary>Initialize the model and tools.</summary>
 
-    - we use `ChatOpenAI` as our LLM. **NOTE:** we need make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the `.bind_tools()` method.
-    - we define the tools we want to use - a web search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
+    - we use `ChatAnthropic` as our LLM. **NOTE:** we need make sure the model knows that it has these tools available to call. We can do this by converting the LangChain tools into the format for OpenAI tool calling using the `.bind_tools()` method.
+    - we define the tools we want to use - a search tool in our case. It is really easy to create your own tools - see documentation here on how to do that [here](https://python.langchain.com/docs/modules/agents/tools/custom_tools).
    </details>
 
 2. <details>
@@ -220,4 +231,4 @@ final_state["messages"][-1].content
 
 ## Contributing
 
-For more information on how to contribute, see [here](https://github.com/langchain-ai/langgraph/CONTRIBUTING.md).
+For more information on how to contribute, see [here](https://github.com/langchain-ai/langgraph/blob/main/CONTRIBUTING.md).

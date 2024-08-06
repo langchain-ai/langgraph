@@ -9,6 +9,8 @@ Starting from the <a href="https://smith.langchain.com/" target="_blank">LangSmi
 1. In the top-right corner, select `Open LangGraph Studio`.
 1. [Invoke an assistant](./invoke_studio.md) or [view an existing thread](./threads_studio.md).
 
-The following GIF shows these exact steps being carried out:
+The following video shows these exact steps being carried out:
 
-![Using LangGraph Studio](./img/studio_usage.gif)
+<video controls allowfullscreen="true" poster="../img/studio_usage_poster.png">
+    <source src="../img/studio_usage.mp4" type="video/mp4">
+</video>

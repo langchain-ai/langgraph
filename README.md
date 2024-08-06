@@ -225,15 +225,14 @@ pip install -U gigachain gigachain_openai tavily-python
 Также для доступа к OpenAI и Tavily API понадобится задать переменные среды:
 
 ```shell
-export OPENAI_API_KEY=sk-...
-export TAVILY_API_KEY=tvly-...
+export ANTHROPIC_API_KEY=sk-...
 ```
 
 При желании вы можете использовать [LangSmith](https://docs.smith.langchain.com/):
 
 ```shell
-export LANGCHAIN_TRACING_V2="true"
-export LANGCHAIN_API_KEY=ls__...
+export LANGSMITH_TRACING=true
+export LANGSMITH_API_KEY=lsv2_sk_...
 ```
 
 ### Подготовьте инструменты
@@ -338,7 +337,7 @@ class AgentState(TypedDict):
 
 Определите вершины и функцию, которая будет решать какое из условных ребер выполнять.
 
-model = ChatOpenAI(temperature=0).bind_tools(tools)
+model = ChatAnthropic(model="claude-3-5-sonnet-20240620", temperature=0).bind_tools(tools)
 
 # Задайте функцию, которая определяет нужно продолжать или нет
 def should_continue(state):
@@ -455,7 +454,7 @@ for output in app.stream(inputs):
 ```
 
 ```
-'The current weather in San Francisco is as follows:\n- Temperature: 60.1°F (15.6°C)\n- Condition: Partly cloudy\n- Wind: 5.6 mph (9.0 kph) from SSW\n- Humidity: 83%\n- Visibility: 9.0 miles (16.0 km)\n- UV Index: 4.0\n\nFor more details, you can visit [Weather API](https://www.weatherapi.com/).'
+"Based on the search results, I can tell you that the current weather in San Francisco is:\n\nTemperature: 60 degrees Fahrenheit\nConditions: Foggy\n\nSan Francisco is known for its microclimates and frequent fog, especially during the summer months. The temperature of 60°F (about 15.5°C) is quite typical for the city, which tends to have mild temperatures year-round. The fog, often referred to as "Karl the Fog" by locals, is a characteristic feature of San Francisco\'s weather, particularly in the mornings and evenings.\n\nIs there anything else you\'d like to know about the weather in San Francisco or any other location?"
 ```
 
 ### Потоковая передача токенов модели
@@ -473,7 +472,7 @@ final_state["messages"][-1].content
 ```
 
 ```
-'The current weather in New York is as follows:\n- Temperature: 20.3°C (68.5°F)\n- Condition: Overcast\n- Wind: 2.2 mph from the north\n- Humidity: 65%\n- Cloud Cover: 100%\n- UV Index: 5.0\n\nFor more details, you can visit [Weather API](https://www.weatherapi.com/).'
+"Based on the search results, I can tell you that the current weather in New York City is:\n\nTemperature: 90 degrees Fahrenheit (approximately 32.2 degrees Celsius)\nConditions: Sunny\n\nThis weather is quite different from what we just saw in San Francisco. New York is experiencing much warmer temperatures right now. Here are a few points to note:\n\n1. The temperature of 90°F is quite hot, typical of summer weather in New York City.\n2. The sunny conditions suggest clear skies, which is great for outdoor activities but also means it might feel even hotter due to direct sunlight.\n3. This kind of weather in New York often comes with high humidity, which can make it feel even warmer than the actual temperature suggests.\n\nIt's interesting to see the stark contrast between San Francisco's mild, foggy weather and New York's hot, sunny conditions. This difference illustrates how varied weather can be across different parts of the United States, even on the same day.\n\nIs there anything else you'd like to know about the weather in New York or any other location?"
 ```
 
 ## Область применения

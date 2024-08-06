@@ -16,6 +16,9 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
         self.names = names
         self.seen = set()
 
+    def __eq__(self, value: object) -> bool:
+        return isinstance(value, NamedBarrierValue) and value.names == self.names
+
     @property
     def ValueType(self) -> Type[Value]:
         """The type of the value stored in the channel."""

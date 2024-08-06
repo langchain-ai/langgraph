@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gigagraph"
-version = "0.1.4"
+version = "0.1.19"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
@@ -12,7 +12,7 @@ packages = [
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-gigachain-core = ">=0.2,<0.3"
+gigachain-core = ">=0.2.27,<0.3"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -25,7 +25,6 @@ syrupy = "^4.0.2"
 httpx = "^0.26.0"
 pytest-watcher = "^0.4.1"
 gigachain = ">=0.1.0"
-aiosqlite = "^0.19.0"
 grandalf = "^0.8"
 mypy = "^1.6.0"
 ruff = "^0.1.4"
@@ -33,7 +32,11 @@ jupyter = "^1.0.0"
 langchainhub = "^0.1.14"
 gigachain-openai = ">=0.1.2"
 gigachain-anthropic = ">=0.1.8"
-dataclasses-json = "^0.6.7"
+pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
+pytest-repeat = "^0.9.3"
+gigagraph-checkpoint = {path = "../checkpoint", develop = true}
+gigagraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
+aiosqlite = "^0.20.0"
 
 [tool.poetry.group.dev]
 optional = true
@@ -64,7 +67,7 @@ omit = ["tests/*"]
 [tool.pytest-watcher]
 now = true
 delay = 0.1
-runner_args = ["-x", "--ff", "-vv", "--snapshot-update"]
+runner_args = ["--ff", "-v", "-n", "auto", "--dist", "worksteal", "--snapshot-update", "--tb", "short"]
 patterns = ["*.py"]
 
 [build-system]

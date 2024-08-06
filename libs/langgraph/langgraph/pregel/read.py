@@ -16,6 +16,7 @@ from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
 from langgraph.managed.base import ManagedValueSpec
+from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils import RunnableCallable
 
@@ -112,6 +113,8 @@ class PregelNode(RunnableBindingBase):
 
     kwargs: Mapping[str, Any] = Field(default_factory=dict)
 
+    retry_policy: Optional[RetryPolicy] = None
+
     def get_writers(self) -> list[Runnable]:
         """Get writers with optimizations applied."""
         writers = self.writers.copy()
@@ -151,9 +154,11 @@ class PregelNode(RunnableBindingBase):
         mapper: Optional[Callable[[Any], Any]] = None,
         writers: Optional[list[Runnable]] = None,
         tags: Optional[list[str]] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
         bound: Optional[Runnable[Any, Any]] = None,
         kwargs: Optional[Mapping[str, Any]] = None,
         config: Optional[RunnableConfig] = None,
+        retry_policy: Optional[RetryPolicy] = None,
         **other_kwargs: Any,
     ) -> None:
         super().__init__(
@@ -163,7 +168,10 @@ class PregelNode(RunnableBindingBase):
             writers=writers or [],
             bound=bound or DEFAULT_BOUND,
             kwargs=kwargs or {},
-            config=merge_configs(config, {"tags": tags or []}),
+            retry_policy=retry_policy,
+            config=merge_configs(
+                config, {"tags": tags or [], "metadata": metadata or {}}
+            ),
             **other_kwargs,
         )
 
@@ -177,17 +185,13 @@ class PregelNode(RunnableBindingBase):
         assert isinstance(
             self.channels, dict
         ), "all channels must be named when using .join()"
-        return PregelNode(
-            channels={
-                **self.channels,
-                **{chan: chan for chan in channels},
-            },
-            triggers=self.triggers,
-            mapper=self.mapper,
-            writers=self.writers,
-            bound=self.bound,
-            kwargs=self.kwargs,
-            config=self.config,
+        return self.copy(
+            update=dict(
+                channels={
+                    **self.channels,
+                    **{chan: chan for chan in channels},
+                }
+            ),
         )
 
     def __or__(
@@ -199,36 +203,11 @@ class PregelNode(RunnableBindingBase):
         ],
     ) -> PregelNode:
         if ChannelWrite.is_writer(other):
-            return PregelNode(
-                channels=self.channels,
-                triggers=self.triggers,
-                mapper=self.mapper,
-                writers=[*self.writers, other],
-                bound=self.bound,
-                kwargs=self.kwargs,
-                config=self.config,
-            )
+            return self.copy(update=dict(writers=[*self.writers, other]))
         elif self.bound is DEFAULT_BOUND:
-            return PregelNode(
-                channels=self.channels,
-                triggers=self.triggers,
-                mapper=self.mapper,
-                writers=self.writers,
-                bound=coerce_to_runnable(other),
-                kwargs=self.kwargs,
-                config=self.config,
-            )
+            return self.copy(update=dict(bound=coerce_to_runnable(other)))
         else:
-            return PregelNode(
-                channels=self.channels,
-                triggers=self.triggers,
-                mapper=self.mapper,
-                writers=self.writers,
-                # delegate to __or__ in self.bound
-                bound=self.bound | other,
-                kwargs=self.kwargs,
-                config=self.config,
-            )
+            return self.copy(update=dict(bound=self.bound | other))
 
     def pipe(
         self,

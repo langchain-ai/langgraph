@@ -38,9 +38,19 @@ const updateConfig = () => {
     ...json,
     typedocOptions: {
       ...json.typedocOptions,
-      entryPoints: [...Object.keys(entrypoints)].map(
-        (key) => `src/${entrypoints[key]}.ts`,
-      ),
+      entryPoints: [...Object.keys(entrypoints)].map((key) => {
+        const basePath = `src/${entrypoints[key]}`;
+        if (fs.existsSync(`${basePath}.mts`)) {
+          return `${basePath}.mts`;
+        } else if (fs.existsSync(`${basePath}.ts`)) {
+          return `${basePath}.ts`;
+        } else {
+          console.warn(
+            `Warning: Neither ${basePath}.mts nor ${basePath}.ts found for entrypoint ${key}`,
+          );
+          return `${basePath}.ts`; // Default to .ts if neither exists
+        }
+      }),
     },
   }));
 
@@ -87,11 +97,15 @@ const updateConfig = () => {
   const endMarker = "## END GENERATED create-entrypoints.js";
   const startIdx = lines.findIndex((line) => line.includes(startMarker));
   const endIdx = lines.findIndex((line) => line.includes(endMarker));
-  const newLines = [
-    ...lines.slice(0, startIdx + 1),
-    ...filenames.map((fname) => `/${fname}`),
-    ...lines.slice(endIdx),
-  ];
+  const newLines = lines.slice(0, startIdx + 1);
+  if (startIdx === -1) {
+    newLines.push(startMarker);
+  }
+  newLines.push(...filenames.map((fname) => `/${fname}`));
+  if (endIdx === -1) {
+    newLines.push(endMarker);
+  }
+  newLines.push(...lines.slice(endIdx));
   fs.writeFileSync("./.gitignore", newLines.join("\n"));
 };
 
