@@ -55,7 +55,7 @@ class BaseClient {
     options?: RequestInit & {
       json?: unknown;
       params?: Record<string, unknown>;
-    }
+    },
   ): [url: URL, init: RequestInit] {
     const mutatedOptions = {
       ...options,
@@ -95,10 +95,10 @@ class BaseClient {
     options?: RequestInit & {
       json?: unknown;
       params?: Record<string, unknown>;
-    }
+    },
   ): Promise<T> {
     const response = await this.asyncCaller.fetch(
-      ...this.prepareFetchOptions(path, options)
+      ...this.prepareFetchOptions(path, options),
     );
     if (response.status === 202 || response.status === 204) {
       return undefined as T;
@@ -118,7 +118,7 @@ export class CronsClient extends BaseClient {
   async createForThread(
     threadId: string,
     assistantId: string,
-    payload?: CronsCreatePayload
+    payload?: CronsCreatePayload,
   ): Promise<Run> {
     const json: Record<string, any> = {
       schedule: payload?.schedule,
@@ -144,7 +144,7 @@ export class CronsClient extends BaseClient {
    */
   async create(
     assistantId: string,
-    payload?: CronsCreatePayload
+    payload?: CronsCreatePayload,
   ): Promise<Run> {
     const json: Record<string, any> = {
       schedule: payload?.schedule,
@@ -256,7 +256,7 @@ export class AssistantsClient extends BaseClient {
       graphId: string;
       config?: Config;
       metadata?: Metadata;
-    }
+    },
   ): Promise<Assistant> {
     return this.fetch<Assistant>(`/assistants/${assistantId}`, {
       method: "PATCH",
@@ -362,7 +362,7 @@ export class ThreadsClient extends BaseClient {
        * Metadata for the thread.
        */
       metadata?: Metadata;
-    }
+    },
   ): Promise<Thread> {
     return this.fetch<Thread>(`/threads/${threadId}`, {
       method: "PATCH",
@@ -420,12 +420,12 @@ export class ThreadsClient extends BaseClient {
    */
   async getState<ValuesType = DefaultValues>(
     threadId: string,
-    checkpointId?: string
+    checkpointId?: string,
   ): Promise<ThreadState<ValuesType>> {
     return this.fetch<ThreadState<ValuesType>>(
       checkpointId != null
         ? `/threads/${threadId}/state/${checkpointId}`
-        : `/threads/${threadId}/state`
+        : `/threads/${threadId}/state`,
     );
   }
 
@@ -437,7 +437,7 @@ export class ThreadsClient extends BaseClient {
    */
   async updateState<ValuesType = DefaultValues>(
     threadId: string,
-    options: { values: ValuesType; checkpointId?: string; asNode?: string }
+    options: { values: ValuesType; checkpointId?: string; asNode?: string },
   ): Promise<Pick<Config, "configurable">> {
     return this.fetch<Pick<Config, "configurable">>(
       `/threads/${threadId}/state`,
@@ -448,7 +448,7 @@ export class ThreadsClient extends BaseClient {
           checkpoint_id: options.checkpointId,
           as_node: options?.asNode,
         },
-      }
+      },
     );
   }
 
@@ -460,14 +460,14 @@ export class ThreadsClient extends BaseClient {
    */
   async patchState(
     threadIdOrConfig: string | Config,
-    metadata: Metadata
+    metadata: Metadata,
   ): Promise<void> {
     let threadId: string;
 
     if (typeof threadIdOrConfig !== "string") {
       if (typeof threadIdOrConfig.configurable.thread_id !== "string") {
         throw new Error(
-          "Thread ID is required when updating state with a config."
+          "Thread ID is required when updating state with a config.",
         );
       }
       threadId = threadIdOrConfig.configurable.thread_id;
@@ -494,7 +494,7 @@ export class ThreadsClient extends BaseClient {
       limit?: number;
       before?: Config;
       metadata?: Metadata;
-    }
+    },
   ): Promise<ThreadState<ValuesType>[]> {
     return this.fetch<ThreadState<ValuesType>[]>(
       `/threads/${threadId}/history`,
@@ -505,7 +505,7 @@ export class ThreadsClient extends BaseClient {
           before: options?.before,
           metadata: options?.metadata,
         },
-      }
+      },
     );
   }
 }
@@ -514,7 +514,7 @@ export class RunsClient extends BaseClient {
   stream(
     threadId: null,
     assistantId: string,
-    payload?: Omit<RunsStreamPayload, "multitaskStrategy">
+    payload?: Omit<RunsStreamPayload, "multitaskStrategy">,
   ): AsyncGenerator<{
     event: StreamEvent;
     data: any;
@@ -523,7 +523,7 @@ export class RunsClient extends BaseClient {
   stream(
     threadId: string,
     assistantId: string,
-    payload?: RunsStreamPayload
+    payload?: RunsStreamPayload,
   ): AsyncGenerator<{
     event: StreamEvent;
     data: any;
@@ -539,7 +539,7 @@ export class RunsClient extends BaseClient {
   async *stream(
     threadId: string | null,
     assistantId: string,
-    payload?: RunsStreamPayload
+    payload?: RunsStreamPayload,
   ): AsyncGenerator<{
     event: StreamEvent;
     // TODO: figure out a better way to
@@ -567,7 +567,7 @@ export class RunsClient extends BaseClient {
         method: "POST",
         json,
         signal: payload?.signal,
-      })
+      }),
     );
 
     let parser: EventSourceParser;
@@ -598,7 +598,7 @@ export class RunsClient extends BaseClient {
         async transform(chunk) {
           parser.feed(textDecoder.decode(chunk));
         },
-      })
+      }),
     );
 
     yield* IterableReadableStream.fromReadableStream(stream);
@@ -615,7 +615,7 @@ export class RunsClient extends BaseClient {
   async create(
     threadId: string,
     assistantId: string,
-    payload?: RunsCreatePayload
+    payload?: RunsCreatePayload,
   ): Promise<Run> {
     const json: Record<string, any> = {
       input: payload?.input,
@@ -639,13 +639,13 @@ export class RunsClient extends BaseClient {
   async wait(
     threadId: null,
     assistantId: string,
-    payload?: Omit<RunsWaitPayload, "multitaskStrategy">
+    payload?: Omit<RunsWaitPayload, "multitaskStrategy">,
   ): Promise<ThreadState["values"]>;
 
   async wait(
     threadId: string,
     assistantId: string,
-    payload?: RunsWaitPayload
+    payload?: RunsWaitPayload,
   ): Promise<ThreadState["values"]>;
 
   /**
@@ -659,7 +659,7 @@ export class RunsClient extends BaseClient {
   async wait(
     threadId: string | null,
     assistantId: string,
-    payload?: RunsWaitPayload
+    payload?: RunsWaitPayload,
   ): Promise<ThreadState["values"]> {
     const json: Record<string, any> = {
       input: payload?.input,
@@ -702,7 +702,7 @@ export class RunsClient extends BaseClient {
        * Defaults to 0.
        */
       offset?: number;
-    }
+    },
   ): Promise<Run[]> {
     return this.fetch<Run[]>(`/threads/${threadId}/runs`, {
       params: {
@@ -734,7 +734,7 @@ export class RunsClient extends BaseClient {
   async cancel(
     threadId: string,
     runId: string,
-    wait: boolean = false
+    wait: boolean = false,
   ): Promise<void> {
     return this.fetch<void>(`/threads/${threadId}/runs/${runId}/cancel`, {
       method: "POST",
