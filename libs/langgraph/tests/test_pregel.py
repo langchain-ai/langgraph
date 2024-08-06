@@ -765,10 +765,12 @@ def test_invoke_two_processes_in_out_interrupt(
     [
         MemorySaverAssertImmutable(),
         SqliteSaver.from_conn_string(":memory:"),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
     ],
     ids=[
         "memory",
         "sqlite",
+        "postgres"
     ],
 )
 def test_fork_always_re_runs_nodes(
@@ -7530,10 +7532,12 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     [
         lambda: MemorySaverAssertImmutable(put_sleep=0.2),
         lambda: SqliteSaver.from_conn_string(":memory:"),
+        lambda: PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
     ],
     ids=[
         "memory",
         "sqlite",
+        "postgres"
     ],
 )
 def test_nested_graph_interrupts(
@@ -8856,10 +8860,12 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
     [
         MemorySaverAssertImmutable(),
         SqliteSaver.from_conn_string(":memory:"),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI)
     ],
     ids=[
         "memory",
         "sqlite",
+        "postgres"
     ],
 )
 def test_doubly_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
