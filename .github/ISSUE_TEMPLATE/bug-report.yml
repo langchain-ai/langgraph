@@ -8,48 +8,45 @@ body:
 
         Перед тем как сообщить об ошибке, пожалуйста, убедитесь, что вашей проблемы нет среди открытых issue.
 
+        Разработчики стараются своевременно обрабатывать все открытые issue. Тем не менее, если вы считаете, что обнаруженную ошибку нужно рассмотреть с повышенным приоритетом, вы можете уведомить об этом руководителя проекта — @Rai220.
   - type: textarea
-    id: system-info
-    attributes:
-      label: Информация об окружении
-      description: Расскажите об окружении, в котором возникла ошибка.
-      placeholder: Версия GigaChain, версия python, операционная система, ...
+    id: reproduction
     validations:
       required: true
     attributes:
-      label: К кому обратиться?
+      label: Воспроизведение ошибки
       description: |
-        Разработчики стараются своевременно обрабатывать все открытые issue. Тем не менее, если вы считаете, что обнаруженную ошибку нужно рассмотреть с повышенным приоритетом, вы можете уведомить об этом руководителя проекта — @Rai220.
+        Предоставьте [образец кода](https://stackoverflow.com/help/minimal-reproducible-example), при выполнении которого возникает ошибка. Подойдет как ссылка на Colab, так и отдельный фрагмент кода.
+        По возможности, приложите другие примеры кода, сообщения об ошибках и стек трейсы, которые помогут воспроизвести проблему.
 
+        Обратите внимание на корректное [выделение блоков кода с помощью тегов](https://help.github.com/en/github/writing-on-github/creating-and-highlighting-code-blocks#syntax-highlighting).
+
+        Не нужно присылать скриншоты кода. Такие примеры неудобно читать и их нельзя скопировать.
       placeholder: |
-        from langchain_core.runnables import RunnableLambda
+        from langgraph.graph import StateGraph
 
         def bad_code(inputs) -> int:
           raise NotImplementedError('For demo purpose')
           
-          chain = RunnableLambda(bad_code)
-          chain.invoke('Hello!')
+        chain = StateGraph(list)
+        chain.invoke('Hello!')
       render: python
   - type: textarea
     id: error
     validations:
       required: false
     attributes:
-      label: Error Message and Stack Trace (if applicable)
+      label: Сообщение об ошибке и трассировка стека (если применимо)
       description: |
-        If you are reporting an error, please include the full error message and stack trace.
+        Если вы хотите сообщить об ощибке, пожалуйста, приложите полное сообщение и трассировку стека.
       placeholder: |
-        Exception + full stack trace
+        Exception + полная трассировка стека
       render: shell
   - type: textarea
     id: description
     attributes:
-      label: Дополнительная информация
-      description: "Ошибка обнаружена при использовании:"
-      options:
-        - label: "Официальных примеров (*notebooks*)/скриптов"
-        - label: "Собственных или доработанных скриптов"
-
+      label: Описание
+      description: |
         Напишите короткое описание того, что вы делаете, какое поведение наблюдаете и какого поведения ожидали.
       placeholder: |
         * Я пытаюсь использовать `gigachain` чтобы сделать X.
@@ -63,69 +60,24 @@ body:
       label: Системная информация
       description: |
         Пожалуйста, поделитесь данными о вашем окружении
-        
+
         "pip freeze | grep gigachain" 
         ОС (windows / linux / mac)
         python version
-        
+
         Если вы используете последние версии gigachain-core, приведите резултат вызова команды:
-        
+
         python -m gigachain_core.sys_info
       placeholder: |
         "pip freeze | grep langchain"
         OC
         python version
-        
-        Если вы используете последние версии gigachain-core, приведите резултат вызова команды:
-        
+
+        Если вы используете последние версии gigachain-core, приведите результат вызова команды:
+
         python -m langchain_core.sys_info
-        
+
         Команда возвращает пакеты, которые использует GigaChain. При необходимости укажите другие релевантные пакеты.
         Если вы не уверены в том, какие пакеты стоит указывать, можете приложить весь результат команды `pip freeze`.
     validations:
       required: true
-  - type: checkboxes
-    id: related-components
-    attributes:
-      label: Компоненты
-      description: "По возможности, укажите компоненты библиотеки, к которым относится ошибка:"
-      options:
-        - label: "LLMs/Chat Models"
-        - label: "Embedding Models"
-        - label: "Prompts / Prompt Templates / Prompt Selectors"
-        - label: "Output Parsers"
-        - label: "Document Loaders"
-        - label: "Vector Stores / Retrievers"
-        - label: "Memory"
-        - label: "Agents / Agent Executors"
-        - label: "Tools / Toolkits"
-        - label: "Chains"
-        - label: "Callbacks/Tracing"
-        - label: "Async"
-
-  - type: textarea
-    id: reproduction
-    validations:
-      required: true
-    attributes:
-      label: Воспроизведение ошибки
-      description: |
-        Предоставьте [образец кода](https://stackoverflow.com/help/minimal-reproducible-example), при выполнении которого возникает ошибка. Подойдет как ссылка на Colab, так и отдельный фрагмент кода.
-        По возможности, приложите другие примеры кода, сообщения об ошибках и стек трейсы, которые помогут воспроизвести проблему.
-        Обратите внимание на корректное [выделение блоков кода с помощью тегов](https://help.github.com/en/github/writing-on-github/creating-and-highlighting-code-blocks#syntax-highlighting).
-        Не нужно присылать скриншоты кода. Такие примеры неудобно читать и их нельзя скопировать.
-
-      placeholder: |
-        Опишите шаги для воспроизведения ошибки:
-
-          1.
-          2.
-          3.
-
-  - type: textarea
-    id: expected-behavior
-    validations:
-      required: true
-    attributes:
-      label: Ожидаемое поведение
-      description: "Краткое и понятное описание поведения GigaChain, которого вы ожидали при выполнении кода."

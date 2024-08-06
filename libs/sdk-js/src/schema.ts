@@ -39,14 +39,22 @@ export interface GraphSchema {
   graph_id: string;
 
   /**
-   * The schema for the graph state
+   * The schema for the graph state.
+   * Missing if unable to generate JSON schema from graph.
    */
-  state_schema: JSONSchema7;
+  input_schema?: JSONSchema7;
 
   /**
-   * The schema for the graph config
+   * The schema for the graph state.
+   * Missing if unable to generate JSON schema from graph.
    */
-  config_schema: JSONSchema7;
+  state_schema?: JSONSchema7;
+
+  /**
+   * The schema for the graph config.
+   * Missing if unable to generate JSON schema from graph.
+   */
+  config_schema?: JSONSchema7;
 }
 
 export type Metadata = Optional<Record<string, unknown>>;

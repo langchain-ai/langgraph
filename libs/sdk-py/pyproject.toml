@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gigagraph-sdk"
-version = "0.1.25"
+version = "0.1.27"
 description = "SDK for interacting with GigaGraph API"
 authors = []
 license = "MIT"

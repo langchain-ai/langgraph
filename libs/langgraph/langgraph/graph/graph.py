@@ -20,21 +20,31 @@ from typing import (
 from langchain_core.runnables import Runnable
 from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.config import RunnableConfig
-from langchain_core.runnables.graph import (
-    Node as RunnableGraphNode,
-)
+from langchain_core.runnables.graph import Graph as DrawableGraph
+from langchain_core.runnables.graph import Node as DrawableNode
 
 from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.constants import END, START, TAG_HIDDEN, Send
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.constants import (
+    CHECKPOINT_NAMESPACE_SEPARATOR,
+    END,
+    START,
+    TAG_HIDDEN,
+    Send,
+)
 from langgraph.errors import InvalidUpdateError
 from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
-from langgraph.utils import DrawableGraph, RunnableCallable, coerce_to_runnable
+from langgraph.utils import RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
+
+
+class NodeSpec(NamedTuple):
+    runnable: Runnable
+    metadata: Optional[dict[str, Any]] = None
 
 
 class Branch(NamedTuple):
@@ -114,7 +124,7 @@ class Branch(NamedTuple):
 
 class Graph:
     def __init__(self) -> None:
-        self.nodes: dict[str, Runnable] = {}
+        self.nodes: dict[str, NodeSpec] = {}
         self.edges = set[tuple[str, str]]()
         self.branches: defaultdict[str, dict[str, Branch]] = defaultdict(dict)
         self.support_multiple_edges = False
@@ -125,16 +135,36 @@ class Graph:
         return self.edges
 
     @overload
-    def add_node(self, node: RunnableLike) -> None:
+    def add_node(
+        self,
+        node: RunnableLike,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
         ...
 
     @overload
-    def add_node(self, node: str, action: RunnableLike) -> None:
+    def add_node(
+        self,
+        node: str,
+        action: RunnableLike,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
+    ) -> None:
         ...
 
     def add_node(
-        self, node: Union[str, RunnableLike], action: Optional[RunnableLike] = None
+        self,
+        node: Union[str, RunnableLike],
+        action: Optional[RunnableLike] = None,
+        *,
+        metadata: Optional[dict[str, Any]] = None,
     ) -> None:
+        if isinstance(node, str) and CHECKPOINT_NAMESPACE_SEPARATOR in node:
+            raise ValueError(
+                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
+            )
+
         if self.compiled:
             logger.warning(
                 "Adding a node to a graph that has already been compiled. This will "
@@ -148,7 +178,9 @@ class Graph:
         if node == END or node == START:
             raise ValueError(f"Node `{node}` is reserved.")
 
-        self.nodes[node] = coerce_to_runnable(action, name=node, trace=False)
+        self.nodes[node] = NodeSpec(
+            coerce_to_runnable(action, name=node, trace=False), metadata
+        )
 
     def add_edge(self, start_key: str, end_key: str) -> None:
         if self.compiled:
@@ -196,6 +228,10 @@ class Graph:
 
         Returns:
             None
+
+        Note: Without typehints on the `path` function's return value (e.g., `-> Literal["foo", "__end__"]:`)
+            or a path_map, the graph visualization assumes the edge could transition to any node in the graph.
+
         """  # noqa: E501
         if self.compiled:
             logger.warning(
@@ -385,11 +421,11 @@ class Graph:
 class CompiledGraph(Pregel):
     builder: Graph
 
-    def attach_node(self, key: str, node: Runnable) -> None:
+    def attach_node(self, key: str, node: NodeSpec) -> None:
         self.channels[key] = EphemeralValue(Any)
         self.nodes[key] = (
-            PregelNode(channels=[], triggers=[])
-            | node
+            PregelNode(channels=[], triggers=[], metadata=node.metadata)
+            | node.runnable
             | ChannelWrite([ChannelWriteEntry(key)], tags=[TAG_HIDDEN])
         )
         cast(list[str], self.stream_channels).append(key)
@@ -441,14 +477,27 @@ class CompiledGraph(Pregel):
     ) -> DrawableGraph:
         """Returns a drawable representation of the computation graph."""
         graph = DrawableGraph()
-        start_nodes: dict[str, RunnableGraphNode] = {
+        start_nodes: dict[str, DrawableNode] = {
             START: graph.add_node(self.get_input_schema(config), START)
         }
-        end_nodes: dict[str, RunnableGraphNode] = {
-            END: graph.add_node(self.get_output_schema(config), END)
-        }
+        end_nodes: dict[str, DrawableNode] = {}
 
-        for key, node in self.builder.nodes.items():
+        def add_edge(
+            start: str, end: str, label: Optional[str] = None, conditional: bool = False
+        ) -> None:
+            if end == END and END not in end_nodes:
+                end_nodes[END] = graph.add_node(self.get_output_schema(config), END)
+            return graph.add_edge(
+                start_nodes[start], end_nodes[end], label, conditional
+            )
+
+        for key, n in self.builder.nodes.items():
+            node = n.runnable
+            metadata = n.metadata or {}
+            if key in self.interrupt_before_nodes:
+                metadata["__interrupt"] = "before"
+            elif key in self.interrupt_after_nodes:
+                metadata["__interrupt"] = "after"
             if xray:
                 subgraph = (
                     node.get_graph(
@@ -465,15 +514,15 @@ class CompiledGraph(Pregel):
                         subgraph, prefix=key
                     )
                 else:
-                    n = graph.add_node(node, key)
+                    n = graph.add_node(node, key, metadata=metadata or None)
                     start_nodes[key] = n
                     end_nodes[key] = n
             else:
-                n = graph.add_node(node, key)
+                n = graph.add_node(node, key, metadata=metadata or None)
                 start_nodes[key] = n
                 end_nodes[key] = n
         for start, end in sorted(self.builder._all_edges):
-            graph.add_edge(start_nodes[start], end_nodes[end])
+            add_edge(start, end)
         for start, branches in self.builder.branches.items():
             default_ends = {
                 **{k: k for k in self.builder.nodes if k != start},
@@ -487,13 +536,13 @@ class CompiledGraph(Pregel):
                 else:
                     ends = default_ends
                 for label, end in ends.items():
-                    graph.add_edge(
-                        start_nodes[start],
-                        end_nodes[end],
+                    add_edge(
+                        start,
+                        end,
                         label if label != end else None,
                         conditional=True,
                     )
                     if branch.then is not None:
-                        graph.add_edge(start_nodes[end], end_nodes[branch.then])
+                        add_edge(end, branch.then)
 
         return graph

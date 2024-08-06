@@ -1,3 +1,6 @@
+from langgraph.checkpoint.base import EmptyChannelError
+
+
 class GraphRecursionError(RecursionError):
     """Raised when the graph has exhausted the maximum number of steps.
 
@@ -17,14 +20,28 @@ class GraphRecursionError(RecursionError):
     pass
 
 
-class EmptyChannelError(Exception):
-    """Raised when attempting to get the value of a channel that hasn't been updated
-    for the first time yet."""
-
-    pass
-
-
 class InvalidUpdateError(Exception):
     """Raised when attempting to update a channel with an invalid sequence of updates."""
 
     pass
+
+
+class GraphInterrupt(Exception):
+    """Raised when a subgraph is interrupted."""
+
+    pass
+
+
+class EmptyInputError(Exception):
+    """Raised when graph receives an empty input."""
+
+    pass
+
+
+__all__ = [
+    "GraphRecursionError",
+    "InvalidUpdateError",
+    "GraphInterrupt",
+    "EmptyInputError",
+    "EmptyChannelError",
+]

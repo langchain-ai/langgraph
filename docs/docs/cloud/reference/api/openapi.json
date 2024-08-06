@@ -59,7 +59,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SearchRequest"
+                "$ref": "#/components/schemas/AssistantSearchRequest"
               }
             }
           },
@@ -388,7 +388,7 @@
           "content": {
             "application/json": {
               "schema": {
-                "$ref": "#/components/schemas/SearchRequest"
+                "$ref": "#/components/schemas/ThreadSearchRequest"
               }
             }
           },
@@ -1463,6 +1463,52 @@
         }
       }
     },
+    "/runs/crons/search": {
+      "post": {
+        "tags": [
+          "crons/search"
+        ],
+        "summary": "Search Crons",
+        "description": "Search all active crons",
+        "operationId": "search_crons_runs_crons_post",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CronSearch"
+              }
+            }
+          },
+          "required": true
+        },
+        "responses": {
+          "200": {
+            "description": "Successful Response",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "items": {
+                    "$ref": "#/components/schemas/Cron"
+                  },
+                  "type": "array",
+                  "title": "Response Search Crons Search Post"
+                }
+              }
+            }
+          },
+          "422": {
+            "description": "Validation Error",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/HTTPValidationError"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
     "/runs/stream": {
       "post": {
         "tags": [
@@ -1920,6 +1966,39 @@
         "title": "CronCreate",
         "description": "Payload for creating a cron."
       },
+      "CronSearch" : {
+        "properties": {
+          "assistant_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Assistant Id"
+          },
+          "thread_id": {
+            "type": "string",
+            "format": "uuid",
+            "title": "Thread Id"
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Maximum number to return.",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "Offset to start from.",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "type": "object",
+        "required" : [],
+        "title": "CronSearch",
+        "description": "Payload for listing crons"
+      },
       "GraphSchema": {
         "properties": {
           "graph_id": {
@@ -2335,7 +2414,76 @@
         },
         "type": "object",
         "title": "SearchRequest",
-        "description": "Payload for listing assistants/threads/runs."
+        "description": "Payload for listing runs."
+      },
+      "AssistantSearchRequest": {
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Metadata to search for."
+          },
+          "graph_id": {
+            "type": "string",
+            "title": "Graph Id",
+            "description": "Filter by graph ID."
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Maximum number to return.",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "Offset to start from.",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "type": "object",
+        "title": "SearchRequest",
+        "description": "Payload for listing assistants."
+      },
+      "ThreadSearchRequest": {
+        "properties": {
+          "metadata": {
+            "type": "object",
+            "title": "Metadata",
+            "description": "Metadata to search for."
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "busy",
+              "interrupted"
+            ],
+            "title": "Status",
+            "description": "Filter by thread status."
+          },
+          "limit": {
+            "type": "integer",
+            "title": "Limit",
+            "description": "Maximum number to return.",
+            "default": 10,
+            "minimum": 1,
+            "maximum": 1000
+          },
+          "offset": {
+            "type": "integer",
+            "title": "Offset",
+            "description": "Offset to start from.",
+            "default": 0,
+            "minimum": 0
+          }
+        },
+        "type": "object",
+        "title": "SearchRequest",
+        "description": "Payload for listing threads."
       },
       "Thread": {
         "properties": {
@@ -2357,6 +2505,15 @@
           "metadata": {
             "type": "object",
             "title": "Metadata"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "idle",
+              "busy",
+              "interrupted"
+            ],
+            "title": "Status"
           }
         },
         "type": "object",

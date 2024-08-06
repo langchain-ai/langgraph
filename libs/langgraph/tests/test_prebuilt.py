@@ -1,15 +1,11 @@
-from typing import Any, Callable, Dict, List, Optional, Sequence, Type, Union
+from typing import Annotated, Any, Callable, Dict, List, Optional, Sequence, Type, Union
 
 import pytest
-from langchain_core.callbacks import (
-    CallbackManagerForLLMRun,
-)
-from langchain_core.language_models import (
-    BaseChatModel,
-    LanguageModelInput,
-)
+from langchain_core.callbacks import CallbackManagerForLLMRun
+from langchain_core.language_models import BaseChatModel, LanguageModelInput
 from langchain_core.messages import (
     AIMessage,
+    AnyMessage,
     BaseMessage,
     HumanMessage,
     SystemMessage,
@@ -22,7 +18,12 @@ from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
+from langgraph.prebuilt.tool_node import InjectedState
+from tests.any_str import AnyStr
+from tests.memory_assert import MemorySaverAssertImmutable
+from tests.messages import _AnyIdHumanMessage
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -52,68 +53,227 @@ class FakeToolCallingModel(BaseChatModel):
         return self
 
 
-def test_no_modifier():
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        None,
+    ],
+    ids=[
+        "memory",
+        "none",
+    ],
+)
+def test_no_modifier(checkpointer: Optional[BaseCheckpointSaver]):
     model = FakeToolCallingModel()
-    agent = create_react_agent(model, [])
+    agent = create_react_agent(model, [], checkpointer=checkpointer)
     inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
+    thread = {"configurable": {"thread_id": "123"}}
+    response = agent.invoke({"messages": inputs}, thread, debug=True)
     expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
     assert response == expected_response
+
+    if checkpointer:
+        saved = checkpointer.get_tuple(thread)
+        assert saved is not None
+        assert saved.checkpoint == {
+            "v": 1,
+            "ts": AnyStr(),
+            "id": AnyStr(),
+            "channel_values": {
+                "messages": [
+                    _AnyIdHumanMessage(content="hi?"),
+                    AIMessage(content="hi?", id="0"),
+                ],
+                "agent": "agent",
+            },
+            "channel_versions": {
+                "__start__": 2,
+                "messages": 3,
+                "start:agent": 3,
+                "agent": 3,
+            },
+            "versions_seen": {
+                "__input__": {},
+                "__start__": {"__start__": 1},
+                "agent": {"start:agent": 2},
+            },
+            "pending_sends": [],
+            "current_tasks": {},
+        }
+        assert saved.metadata == {
+            "source": "loop",
+            "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
+            "step": 1,
+        }
+        assert saved.pending_writes == []
+
+
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        None,
+    ],
+    ids=[
+        "memory",
+        "none",
+    ],
+)
+async def test_no_modifier_async(checkpointer: Optional[BaseCheckpointSaver]):
+    model = FakeToolCallingModel()
+    agent = create_react_agent(model, [], checkpointer=checkpointer)
+    inputs = [HumanMessage("hi?")]
+    thread = {"configurable": {"thread_id": "123"}}
+    response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
+    expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
+    assert response == expected_response
+
+    if checkpointer:
+        saved = await checkpointer.aget_tuple(thread)
+        assert saved is not None
+        assert saved.checkpoint == {
+            "v": 1,
+            "ts": AnyStr(),
+            "id": AnyStr(),
+            "channel_values": {
+                "messages": [
+                    _AnyIdHumanMessage(content="hi?"),
+                    AIMessage(content="hi?", id="0"),
+                ],
+                "agent": "agent",
+            },
+            "channel_versions": {
+                "__start__": 2,
+                "messages": 3,
+                "start:agent": 3,
+                "agent": 3,
+            },
+            "versions_seen": {
+                "__input__": {},
+                "__start__": {"__start__": 1},
+                "agent": {"start:agent": 2},
+            },
+            "pending_sends": [],
+            "current_tasks": {},
+        }
+        assert saved.metadata == {
+            "source": "loop",
+            "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
+            "step": 1,
+        }
+        assert saved.pending_writes == []
+
+
+def test_passing_two_modifiers():
+    model = FakeToolCallingModel()
+    with pytest.raises(ValueError):
+        create_react_agent(model, [], messages_modifier="Foo", state_modifier="Bar")
 
 
 def test_system_message_modifier():
     model = FakeToolCallingModel()
     messages_modifier = SystemMessage(content="Foo")
-    agent = create_react_agent(model, [], messages_modifier=messages_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Foo-hi?", id="0")]}
-    assert response == expected_response
+    agent_1 = create_react_agent(model, [], messages_modifier=messages_modifier)
+    agent_2 = create_react_agent(model, [], state_modifier=messages_modifier)
+    for agent in [agent_1, agent_2]:
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Foo-hi?", id="0")]
+        }
+        assert response == expected_response
 
 
 def test_system_message_string_modifier():
     model = FakeToolCallingModel()
     messages_modifier = "Foo"
-    agent = create_react_agent(model, [], messages_modifier=messages_modifier)
-    inputs = [HumanMessage("hi?")]
-    response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Foo-hi?", id="0")]}
-    assert response == expected_response
+    agent_1 = create_react_agent(model, [], messages_modifier=messages_modifier)
+    agent_2 = create_react_agent(model, [], state_modifier=messages_modifier)
+    for agent in [agent_1, agent_2]:
+        inputs = [HumanMessage("hi?")]
+        response = agent.invoke({"messages": inputs})
+        expected_response = {
+            "messages": inputs + [AIMessage(content="Foo-hi?", id="0")]
+        }
+        assert response == expected_response
 
 
-def test_callable_modifier():
+def test_callable_messages_modifier():
     model = FakeToolCallingModel()
 
     def messages_modifier(messages):
-        return [HumanMessage(content="Bar")]
+        modified_message = f"Bar {messages[-1].content}"
+        return [HumanMessage(content=modified_message)]
 
     agent = create_react_agent(model, [], messages_modifier=messages_modifier)
     inputs = [HumanMessage("hi?")]
     response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Bar", id="0")]}
+    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
     assert response == expected_response
 
 
-def test_runnable_modifier():
+def test_callable_state_modifier():
     model = FakeToolCallingModel()
 
-    messages_modifier = RunnableLambda(lambda x: [HumanMessage(content="Baz")])
+    def state_modifier(state):
+        modified_message = f"Bar {state['messages'][-1].content}"
+        return [HumanMessage(content=modified_message)]
+
+    agent = create_react_agent(model, [], state_modifier=state_modifier)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Bar hi?", id="0")]}
+    assert response == expected_response
+
+
+def test_runnable_messages_modifier():
+    model = FakeToolCallingModel()
+
+    messages_modifier = RunnableLambda(
+        lambda messages: [HumanMessage(content=f"Baz {messages[-1].content}")]
+    )
 
     agent = create_react_agent(model, [], messages_modifier=messages_modifier)
     inputs = [HumanMessage("hi?")]
     response = agent.invoke({"messages": inputs})
-    expected_response = {"messages": inputs + [AIMessage(content="Baz", id="0")]}
+    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
+    assert response == expected_response
+
+
+def test_runnable_state_modifier():
+    model = FakeToolCallingModel()
+
+    state_modifier = RunnableLambda(
+        lambda state: [HumanMessage(content=f"Baz {state['messages'][-1].content}")]
+    )
+
+    agent = create_react_agent(model, [], state_modifier=state_modifier)
+    inputs = [HumanMessage("hi?")]
+    response = agent.invoke({"messages": inputs})
+    expected_response = {"messages": inputs + [AIMessage(content="Baz hi?", id="0")]}
     assert response == expected_response
 
 
 async def test_tool_node():
     def tool1(some_val: int, some_other_val: str) -> str:
         """Tool 1 docstring."""
+        if some_val == 0:
+            raise ValueError("Test error")
         return f"{some_val} - {some_other_val}"
 
     async def tool2(some_val: int, some_other_val: str) -> str:
         """Tool 2 docstring."""
+        if some_val == 0:
+            raise ValueError("Test error")
         return f"tool2: {some_val} - {some_other_val}"
+
+    async def tool3(some_val: int, some_other_val: str) -> str:
+        """Tool 3 docstring."""
+        return [
+            {"key_1": some_val, "key_2": "foo"},
+            {"key_1": some_other_val, "key_2": "baz"},
+        ]
 
     result = ToolNode([tool1]).invoke(
         {
@@ -131,9 +291,35 @@ async def test_tool_node():
             ]
         }
     )
+
     tool_message: ToolMessage = result["messages"][-1]
     assert tool_message.type == "tool"
     assert tool_message.content == "1 - foo"
+    assert tool_message.tool_call_id == "some 0"
+
+    result_error = ToolNode([tool1]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool1",
+                            "args": {"some_val": 0, "some_other_val": "foo"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+
+    tool_message: ToolMessage = result_error["messages"][-1]
+    assert tool_message.type == "tool"
+    assert (
+        tool_message.content
+        == f"Error: {repr(ValueError('Test error'))}\n Please fix your mistakes."
+    )
     assert tool_message.tool_call_id == "some 0"
 
     result2 = await ToolNode([tool2]).ainvoke(
@@ -155,6 +341,74 @@ async def test_tool_node():
     tool_message: ToolMessage = result2["messages"][-1]
     assert tool_message.type == "tool"
     assert tool_message.content == "tool2: 2 - bar"
+
+    with pytest.raises(ValueError):
+        await ToolNode([tool2], handle_tool_errors=False).ainvoke(
+            {
+                "messages": [
+                    AIMessage(
+                        "hi?",
+                        tool_calls=[
+                            {
+                                "name": "tool2",
+                                "args": {"some_val": 0, "some_other_val": "bar"},
+                                "id": "some 1",
+                            }
+                        ],
+                    )
+                ]
+            }
+        )
+
+    # incorrect tool name
+    result_incorrect_name = ToolNode([tool1, tool2]).invoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool3",
+                            "args": {"some_val": 1, "some_other_val": "foo"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+    tool_message: ToolMessage = result_incorrect_name["messages"][-1]
+    assert tool_message.type == "tool"
+    assert (
+        tool_message.content
+        == "Error: tool3 is not a valid tool, try one of [tool1, tool2]."
+    )
+    assert tool_message.tool_call_id == "some 0"
+
+    # list of dicts tool content
+    result3 = await ToolNode([tool3]).ainvoke(
+        {
+            "messages": [
+                AIMessage(
+                    "hi?",
+                    tool_calls=[
+                        {
+                            "name": "tool3",
+                            "args": {"some_val": 2, "some_other_val": "bar"},
+                            "id": "some 0",
+                        }
+                    ],
+                )
+            ]
+        }
+    )
+    tool_message: ToolMessage = result3["messages"][-1]
+    assert tool_message.type == "tool"
+    assert (
+        tool_message.content
+        == '[{"key_1": 2, "key_2": "foo"}, {"key_1": "bar", "key_2": "baz"}]'
+    )
+    assert tool_message.tool_call_id == "some 0"
 
 
 def my_function(some_val: int, some_other_val: str) -> str:
@@ -225,3 +479,69 @@ async def test_validation_node(tool_schema: Any, use_message_key: bool):
     if use_message_key:
         result_sync = result_sync["messages"]
     check_results(result_sync)
+
+
+def test_tool_node_inject_state() -> None:
+    def tool1(some_val: int, state: Annotated[dict, InjectedState]) -> str:
+        """Tool 1 docstring."""
+        return state["foo"]
+
+    def tool2(some_val: int, state: Annotated[dict, InjectedState()]) -> str:
+        """Tool 1 docstring."""
+        return state["foo"]
+
+    def tool3(
+        some_val: int,
+        foo: Annotated[str, InjectedState("foo")],
+        msgs: Annotated[List[AnyMessage], InjectedState("messages")],
+    ) -> str:
+        """Tool 1 docstring."""
+        return foo
+
+    def tool4(
+        some_val: int, msgs: Annotated[List[AnyMessage], InjectedState("messages")]
+    ) -> str:
+        """Tool 1 docstring."""
+        return msgs[0].content
+
+    node = ToolNode([tool1, tool2, tool3, tool4])
+    for tool_name in ("tool1", "tool2", "tool3"):
+        tool_call = {
+            "name": tool_name,
+            "args": {"some_val": 1},
+            "id": "some 0",
+            "type": "tool_call",
+        }
+        msg = AIMessage("hi?", tool_calls=[tool_call])
+        result = node.invoke({"messages": [msg], "foo": "bar"})
+        tool_message = result["messages"][-1]
+        assert tool_message.content == "bar"
+
+        if tool_name == "tool3":
+            with pytest.raises(KeyError):
+                node.invoke({"messages": [msg], "notfoo": "bar"})
+
+            with pytest.raises(ValueError):
+                node.invoke([msg])
+        else:
+            tool_message = node.invoke({"messages": [msg], "notfoo": "bar"})[
+                "messages"
+            ][-1]
+            assert "KeyError" in tool_message.content
+            tool_message = node.invoke([msg])[-1]
+            assert "KeyError" in tool_message.content
+
+    tool_call = {
+        "name": "tool4",
+        "args": {"some_val": 1},
+        "id": "some 0",
+        "type": "tool_call",
+    }
+    msg = AIMessage("hi?", tool_calls=[tool_call])
+    result = node.invoke({"messages": [msg]})
+    tool_message = result["messages"][-1]
+    assert tool_message.content == "hi?"
+
+    result = node.invoke([msg])
+    tool_message = result[-1]
+    assert tool_message.content == "hi?"

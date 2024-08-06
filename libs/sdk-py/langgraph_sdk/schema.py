@@ -11,6 +11,8 @@ StreamMode = Literal["values", "messages", "updates", "events", "debug"]
 
 MultitaskStrategy = Literal["reject", "interrupt", "rollback", "enqueue"]
 
+OnConflictBehavior = Literal["raise", "do_nothing"]
+
 All = Literal["*"]
 
 
@@ -40,10 +42,15 @@ class GraphSchema(TypedDict):
 
     graph_id: str
     """The ID of the graph."""
-    state_schema: dict
-    """The schema for the graph state."""
-    config_schema: dict
-    """The schema for the graph config."""
+    input_schema: Optional[dict]
+    """The schema for the graph state.
+    Missing if unable to generate JSON schema from graph."""
+    state_schema: Optional[dict]
+    """The schema for the graph state.
+    Missing if unable to generate JSON schema from graph."""
+    config_schema: Optional[dict]
+    """The schema for the graph config.
+    Missing if unable to generate JSON schema from graph."""
 
 
 class Assistant(TypedDict):
@@ -126,3 +133,18 @@ class Cron(TypedDict):
     """The last time the cron was updated."""
     payload: dict
     """The run payload to use for creating new run."""
+
+
+class RunCreate(TypedDict):
+    """Payload for creating a background run."""
+
+    thread_id: Optional[str]
+    assistant_id: str
+    input: Optional[dict]
+    metadata: Optional[dict]
+    config: Optional[Config]
+    checkpoint_id: Optional[str]
+    interrupt_before: Optional[list[str]]
+    interrupt_after: Optional[list[str]]
+    webhook: Optional[str]
+    multitask_strategy: Optional[MultitaskStrategy]
