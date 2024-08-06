@@ -233,7 +233,6 @@ class PregelLoop:
         # if no more tasks, we're done
         if not self.tasks:
             self.status = "done"
-            self.checkpoint_previous_versions.clear()
             return False
 
         # if there are pending writes from a previous loop, apply them

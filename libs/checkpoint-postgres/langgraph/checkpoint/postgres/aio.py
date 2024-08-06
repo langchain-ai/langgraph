@@ -202,7 +202,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint_ns,
                     copy.pop("channel_values"),
                     copy["channel_versions"],
-                    new_versions
+                    new_versions,
                 ),
             )
             await cur.execute(
