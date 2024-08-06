@@ -18,6 +18,7 @@ from typing import (
     Tuple,
     TypedDict,
     Union,
+    get_type_hints,
 )
 
 import httpx
@@ -309,6 +310,20 @@ def test_node_schemas_custom_output() -> None:
         "messages": [_AnyIdHumanMessage(content="hello")],
     }
 
+    assert [
+        c
+        for c in graph.stream(
+            {
+                "hello": "there",
+                "bye": "world",
+                "messages": "hello",
+                "now": 345,  # ignored because not in input schema
+            }
+        )
+    ] == [
+        {"b": {"hello": "again", "now": 123}},
+    ]
+
 
 def test_reducer_before_first_node() -> None:
     class State(TypedDict):
@@ -558,7 +573,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 def test_invoke_two_processes_in_out_interrupt(
     checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
-    try:
+    with checkpointer as checkpointer:
         add_one = mocker.Mock(side_effect=lambda x: x + 1)
         one = Channel.subscribe_to("input") | add_one | Channel.write_to("inbox")
         two = Channel.subscribe_to("inbox") | add_one | Channel.write_to("output")
@@ -758,9 +773,6 @@ def test_invoke_two_processes_in_out_interrupt(
         assert [c for c in app.stream(None, fork_config, stream_mode="updates")] == [
             {"one": {"inbox": 4}}
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -777,7 +789,7 @@ def test_invoke_two_processes_in_out_interrupt(
 def test_fork_always_re_runs_nodes(
     checkpointer: BaseCheckpointSaver, mocker: MockerFixture
 ) -> None:
-    try:
+    with checkpointer as checkpointer:
         add_one = mocker.Mock(side_effect=lambda _: 1)
 
         builder = StateGraph(Annotated[int, operator.add])
@@ -930,9 +942,6 @@ def test_fork_always_re_runs_nodes(
             {"add_one": 1},
             {"add_one": 1},
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
@@ -1268,7 +1277,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     ],
 )
 def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
-    try:
+    with checkpointer as checkpointer:
 
         class State(TypedDict):
             value: Annotated[int, operator.add]
@@ -1340,9 +1349,6 @@ def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         two.rtn = {"value": 3}
         # both the pending write and the new write were applied, 1 + 2 + 3 = 6
         assert graph.invoke(None, thread1) == {"value": 6}
-    finally:
-        if getattr(checkpointer, "__exit__", None):
-            checkpointer.__exit__(None, None, None)
 
 
 def test_cond_edge_after_send() -> None:
@@ -3309,16 +3315,24 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     ]
 
 
-def test_state_graph_w_config(snapshot: SnapshotAssertion) -> None:
+def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
 
-    class AgentState(TypedDict, total=False):
+    class BaseState(TypedDict):
         input: str
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
+
+    class AgentState(BaseState, total=False):
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
+
+    assert get_type_hints(AgentState).keys() == {
+        "input",
+        "agent_outcome",
+        "intermediate_steps",
+    }
 
     class Config(TypedDict, total=False):
         tools: list[str]
@@ -3377,22 +3391,49 @@ def test_state_graph_w_config(snapshot: SnapshotAssertion) -> None:
             return "continue"
 
     # Define a new graph
-    workflow = StateGraph(AgentState, Config)
+    builder = StateGraph(AgentState, Config)
 
-    workflow.add_node("agent", agent)
-    workflow.add_node("tools", execute_tools)
+    builder.add_node("agent", agent)
+    builder.add_node("tools", execute_tools)
 
-    workflow.set_entry_point("agent")
+    builder.set_entry_point("agent")
 
-    workflow.add_conditional_edges(
+    builder.add_conditional_edges(
         "agent", should_continue, {"continue": "tools", "exit": END}
     )
 
-    workflow.add_edge("tools", "agent")
+    builder.add_edge("tools", "agent")
 
-    app = workflow.compile()
+    app = builder.compile()
 
     assert app.config_schema().schema_json() == snapshot
+    assert app.get_input_schema().schema_json() == snapshot
+    assert app.get_output_schema().schema_json() == snapshot
+
+    assert builder.channels.keys() == {"input", "agent_outcome", "intermediate_steps"}
+
+    assert app.invoke({"input": "what is weather in sf"}) == {
+        "agent_outcome": AgentFinish(
+            return_values={"answer": "answer"}, log="finish:answer"
+        ),
+        "input": "what is weather in sf",
+        "intermediate_steps": [
+            (
+                AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+                "result for query",
+            ),
+            (
+                AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+                "result for another",
+            ),
+        ],
+    }
 
 
 def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None:
@@ -6894,6 +6935,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         return {"answer": ",".join(data.docs)}
 
     def decider(data: State) -> str:
+        print("decider", data)
         assert isinstance(data, State)
         return "retriever_two"
 
@@ -6959,6 +7001,16 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
+
+    assert app_w_interrupt.update_state(
+        config, {"docs": ["doc5"]}, as_node="rewrite_query"
+    ) == {
+        "configurable": {
+            "thread_id": "1",
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
+        }
+    }
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
@@ -7071,6 +7123,16 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
+
+    assert app_w_interrupt.update_state(
+        config, {"docs": ["doc5"]}, as_node="rewrite_query"
+    ) == {
+        "configurable": {
+            "thread_id": "1",
+            "checkpoint_id": AnyStr(),
+            "checkpoint_ns": "",
+        }
+    }
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:
@@ -7529,8 +7591,7 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 def test_nested_graph_interrupts(
     checkpointer_fct: Callable[[], BaseCheckpointSaver],
 ) -> None:
-    try:
-        checkpointer = checkpointer_fct()
+    with checkpointer_fct() as checkpointer:
 
         class InnerState(TypedDict):
             my_key: str
@@ -8708,9 +8769,6 @@ def test_nested_graph_interrupts(
                 parent_config=None,
             ),
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 @pytest.mark.parametrize(
@@ -8725,7 +8783,7 @@ def test_nested_graph_interrupts(
     ],
 )
 def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> None:
-    try:
+    with checkpointer as checkpointer:
 
         class InnerState(TypedDict):
             my_key: Annotated[str, operator.add]
@@ -8840,9 +8898,6 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
                 "my_key": "got here and there and parallel and back again",
             },
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 @pytest.mark.skip
@@ -8858,7 +8913,7 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
     ],
 )
 def test_doubly_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
-    try:
+    with checkpointer as checkpointer:
 
         class State(TypedDict):
             my_key: str
@@ -8944,9 +8999,6 @@ def test_doubly_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> No
                 "my_key": "hi my value here and there and back again",
             },
         ]
-    finally:
-        if hasattr(checkpointer, "__exit__"):
-            checkpointer.__exit__(None, None, None)
 
 
 def test_repeat_condition(snapshot: SnapshotAssertion) -> None:
