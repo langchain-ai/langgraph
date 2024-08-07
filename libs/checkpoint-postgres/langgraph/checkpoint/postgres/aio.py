@@ -16,6 +16,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 
 class AsyncPostgresSaver(BasePostgresSaver):
@@ -32,6 +33,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         super().__init__(serde=serde)
         self.conn = conn
         self.pipe = pipe
+        self.jsonplus_serde = JsonPlusSerializer()
         self.lock = asyncio.Lock()
         self.is_setup = False
 
@@ -111,7 +113,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                         self._load_blobs, value["channel_values"]
                     ),
                 },
-                value["metadata"],
+                self._load_metadata(value["metadata"]),
                 {
                     "configurable": {
                         "thread_id": value["thread_id"],
@@ -157,7 +159,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             self._load_blobs, value["channel_values"]
                         ),
                     },
-                    value["metadata"],
+                    self._load_metadata(value["metadata"]),
                     {
                         "configurable": {
                             "thread_id": thread_id,
@@ -194,6 +196,14 @@ class AsyncPostgresSaver(BasePostgresSaver):
             }
         }
 
+        serialized_metadata_type, serialized_metadata = self.jsonplus_serde.dumps_typed(
+            metadata
+        )
+        if serialized_metadata_type != "json":
+            raise TypeError(
+                f"Failed to properly serialize metadata -- expected 'json', got '{serialized_metadata_type}'"
+            )
+
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(
                 self.UPSERT_CHECKPOINT_BLOBS_SQL,
@@ -214,7 +224,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(self._dump_checkpoint(copy)),
-                    Jsonb(metadata),
+                    self._dump_metadata(metadata),
                 ),
             )
         return next_config
