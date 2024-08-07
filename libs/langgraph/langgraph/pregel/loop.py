@@ -132,7 +132,6 @@ class PregelLoop:
         # TODO if managed values no longer needs graph we can replace with
         # managed_specs, channel_specs
         self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
-        self.checkpoint_previous_versions = {}
 
     def mark_tasks_scheduled(self, tasks: Sequence[PregelExecutableTask]) -> None:
         """Mark tasks as scheduled, to be used by queue-based executors."""
@@ -353,7 +352,7 @@ class PregelLoop:
 
             self.checkpoint_previous_versions[
                 (thread_id, checkpoint_ns)
-            ] = self.checkpoint["channel_versions"].copy()
+            ] = self.checkpoint["channel_versions"]
 
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
@@ -459,7 +458,14 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
-        self.checkpoint_previous_versions = {}
+        if self.checkpointer:
+            thread_id = self.config["configurable"]["thread_id"]
+            checkpoint_ns = self.config["configurable"].get("checkpoint_ns", "")
+            self.checkpoint_previous_versions = {
+                (thread_id, checkpoint_ns): self.checkpoint["channel_versions"]
+            }
+        else:
+            self.checkpoint_previous_versions = {}
 
         return self
 
@@ -539,6 +545,14 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
         self.checkpoint_previous_versions = {}
+        if self.checkpointer:
+            thread_id = self.config["configurable"]["thread_id"]
+            checkpoint_ns = self.config["configurable"].get("checkpoint_ns", "")
+            self.checkpoint_previous_versions = {
+                (thread_id, checkpoint_ns): self.checkpoint["channel_versions"]
+            }
+        else:
+            self.checkpoint_previous_versions = {}
 
         return self
 
