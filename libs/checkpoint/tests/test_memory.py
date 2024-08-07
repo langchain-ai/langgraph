@@ -60,9 +60,9 @@ class TestMemorySaver:
     async def test_search(self):
         # set up test
         # save checkpoints
-        self.memory_saver.put(self.config_1, self.chkpnt_1, self.metadata_1)
-        self.memory_saver.put(self.config_2, self.chkpnt_2, self.metadata_2)
-        self.memory_saver.put(self.config_3, self.chkpnt_3, self.metadata_3)
+        self.memory_saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
+        self.memory_saver.put(self.config_2, self.chkpnt_2, self.metadata_2, {})
+        self.memory_saver.put(self.config_3, self.chkpnt_3, self.metadata_3, {})
 
         # call method / assertions
         query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key
@@ -108,8 +108,8 @@ class TestMemorySaver:
     async def test_asearch(self):
         # set up test
         # save checkpoints
-        self.memory_saver.put(self.config_1, self.chkpnt_1, self.metadata_1)
-        self.memory_saver.put(self.config_2, self.chkpnt_2, self.metadata_2)
+        self.memory_saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
+        self.memory_saver.put(self.config_2, self.chkpnt_2, self.metadata_2, {})
 
         # call method / assertions
         query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key

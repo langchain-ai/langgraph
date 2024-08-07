@@ -338,6 +338,17 @@ export class ThreadsClient extends BaseClient {
   }
 
   /**
+   * Copy an existing thread
+   * @param threadId ID of the thread to be copied
+   * @returns Newly copied thread
+   */
+  async copy(threadId: string): Promise<Thread> {
+    return this.fetch<Thread>(`/threads/${threadId}/copy`, {
+      method: "POST",
+    });
+  }
+
+  /**
    * Update a thread.
    *
    * @param threadId ID of the thread.
