@@ -69,6 +69,7 @@ from tests.memory_assert import (
     MemorySaverAssertImmutable,
 )
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
+from tests.pydantic_utils import _schema
 
 
 class NoneContextManager(AbstractAsyncContextManager):
@@ -542,8 +543,8 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
+    assert _schema(app.input_schema) == {"title": "LangGraphInput", "type": "integer"}
+    assert _schema(app.output_schema) == {"title": "LangGraphOutput", "type": "integer"}
     assert await app.ainvoke(2) == 3
     assert await app.ainvoke(2, output_keys=["output"]) == {"output": 3}
 
@@ -583,8 +584,8 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
         input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
+    assert _schema(app.input_schema) == {"title": "LangGraphInput", "type": "integer"}
+    assert _schema(app.output_schema) == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
@@ -607,8 +608,8 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
+    assert _schema(app.input_schema) == {"title": "LangGraphInput", "type": "integer"}
+    assert _schema(app.output_schema) == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {"output": {"title": "Output", "type": "integer"}},
@@ -627,12 +628,12 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {
+    assert _schema(app.input_schema) == {
         "title": "LangGraphInput",
         "type": "object",
         "properties": {"input": {"title": "Input", "type": "integer"}},
     }
-    assert app.output_schema.schema() == {
+    assert _schema(app.output_schema) == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {"output": {"title": "Output", "type": "integer"}},
