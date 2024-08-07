@@ -4,6 +4,7 @@ from typing import Any, Iterator, List, Optional
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Connection, Cursor, Pipeline
+from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -23,8 +24,6 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 class PostgresSaver(BasePostgresSaver):
     lock: threading.Lock
 
-    is_setup: bool
-
     def __init__(
         self,
         conn: Connection,
@@ -35,7 +34,6 @@ class PostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
-        self.is_setup = False
 
     @classmethod
     @contextmanager
@@ -67,22 +65,22 @@ class PostgresSaver(BasePostgresSaver):
         already exist. It is called automatically when needed and should not be called
         directly by the user.
         """
-        if self.is_setup:
-            return
         with self.lock:
-            create_table_queries = [
-                self.CREATE_CHECKPOINTS_SQL,
-                self.CREATE_CHECKPOINT_BLOBS_SQL,
-                self.CREATE_CHECKPOINT_WRITES_SQL,
-            ]
             with self.conn.cursor(binary=True) as cur:
-                for query in create_table_queries:
-                    cur.execute(query)
-
+                try:
+                    version = cur.execute(
+                        "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                    ).fetchone()["v"]
+                except UndefinedTable:
+                    version = -1
+                for v, migration in zip(
+                    range(version + 1, len(self.MIGRATIONS)),
+                    self.MIGRATIONS[version + 1 :],
+                ):
+                    cur.execute(migration)
+                    cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
             if self.pipe:
                 self.pipe.sync()
-
-            self.is_setup = True
 
     def list(
         self,
@@ -92,7 +90,6 @@ class PostgresSaver(BasePostgresSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
-        self.setup()
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
         if limit:
@@ -124,7 +121,6 @@ class PostgresSaver(BasePostgresSaver):
             )
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        self.setup()
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -235,7 +231,6 @@ class PostgresSaver(BasePostgresSaver):
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor]:
-        self.setup()
         if self.pipe:
             # a connection in pipeline mode can be used concurrently
             # in multiple threads/coroutines, but only one cursor can be
