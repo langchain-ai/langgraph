@@ -1,4 +1,5 @@
 import asyncio
+import sys
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import asynccontextmanager, contextmanager
 from typing import AsyncIterator, Iterator, TypeVar
@@ -123,6 +124,8 @@ def checkpointer_postgres_pipe():
 
 @pytest.fixture(scope="function")
 def checkpointer_postgres_aio():
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
     with agen_to_gen(_checkpointer_postgres_aio()) as checkpointer:
         yield checkpointer
 
@@ -152,6 +155,8 @@ async def _checkpointer_postgres_aio():
 
 @pytest.fixture(scope="function")
 def checkpointer_postgres_aio_pipe():
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
     with agen_to_gen(_checkpointer_postgres_aio_pipe()) as checkpointer:
         yield checkpointer
 
