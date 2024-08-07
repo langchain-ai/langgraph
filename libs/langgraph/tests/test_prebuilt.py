@@ -25,7 +25,6 @@ from langgraph.checkpoint.sqlite import SqliteSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState
-from tests.any_str import AnyStr
 from tests.conftest import DEFAULT_POSTGRES_URI
 from tests.memory_assert import MemorySaverAssertImmutable
 from tests.messages import _AnyIdHumanMessage
