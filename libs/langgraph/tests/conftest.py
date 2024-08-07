@@ -7,7 +7,7 @@ from psycopg.rows import dict_row
 from pytest_mock import MockerFixture
 
 DEFAULT_POSTGRES_URI = (
-    "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+    "postgres://postgres:postgres@localhost:5442/postgres?sslmode=disable"
 )
 
 

@@ -4,6 +4,7 @@ from typing import Any, AsyncIterator, Optional
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
+from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -68,15 +69,23 @@ class AsyncPostgresSaver(BasePostgresSaver):
         if self.is_setup:
             return
         async with self.lock:
-            create_table_queries = [
-                self.CREATE_CHECKPOINTS_SQL,
-                self.CREATE_CHECKPOINT_BLOBS_SQL,
-                self.CREATE_CHECKPOINT_WRITES_SQL,
-            ]
-            async with self.conn.cursor() as cur:
-                for query in create_table_queries:
-                    await cur.execute(query)
-
+            async with self.conn.cursor(binary=True) as cur:
+                try:
+                    version = (
+                        await cur.execute(
+                            "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                        )
+                    ).fetchone()["v"]
+                except UndefinedTable:
+                    version = -1
+                for v, migration in zip(
+                    range(version + 1, len(self.MIGRATIONS)),
+                    self.MIGRATIONS[version + 1 :],
+                ):
+                    await cur.execute(migration)
+                    await cur.execute(
+                        f"INSERT INTO checkpoint_migrations (v) VALUES ({v})"
+                    )
             if self.pipe:
                 await self.pipe.sync()
 
