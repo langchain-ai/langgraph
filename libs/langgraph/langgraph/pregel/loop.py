@@ -101,9 +101,7 @@ class PregelLoop:
     checkpoint_metadata: CheckpointMetadata
     checkpoint_pending_writes: List[PendingWrite]
     # (thread_id, checkpoint_ns -> channel_versions)
-    checkpoint_previous_versions: dict[
-        tuple[str, str], dict[str, Union[str, float, int]]
-    ]
+    checkpoint_previous_versions: dict[str, Union[str, float, int]]
 
     step: int
     stop: int
@@ -327,32 +325,30 @@ class PregelLoop:
                 else None,
             )
 
-            thread_id = self.config["configurable"]["thread_id"]
-            checkpoint_ns = self.config["configurable"].get("checkpoint_ns", "")
             self.checkpoint_config = {
                 **self.checkpoint_config,
                 "configurable": {
                     **self.checkpoint_config["configurable"],
-                    "checkpoint_ns": checkpoint_ns,
+                    "checkpoint_ns": self.config["configurable"].get(
+                        "checkpoint_ns", ""
+                    ),
                 },
             }
 
-            if previous_versions := self.checkpoint_previous_versions.get(
-                (thread_id, checkpoint_ns)
-            ):
+            if self.checkpoint_previous_versions:
                 new_versions = {
                     k: v
                     for k, v in self.checkpoint["channel_versions"].items()
-                    if k not in previous_versions
-                    or k in previous_versions
-                    and v > previous_versions[k]
+                    if k not in self.checkpoint_previous_versions
+                    or k in self.checkpoint_previous_versions
+                    and v > self.checkpoint_previous_versions[k]
                 }
             else:
                 new_versions = None
 
-            self.checkpoint_previous_versions[
-                (thread_id, checkpoint_ns)
-            ] = self.checkpoint["channel_versions"]
+            self.checkpoint_previous_versions = self.checkpoint[
+                "channel_versions"
+            ].copy()
 
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
@@ -458,14 +454,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
-        if self.checkpointer:
-            thread_id = self.config["configurable"]["thread_id"]
-            checkpoint_ns = self.config["configurable"].get("checkpoint_ns", "")
-            self.checkpoint_previous_versions = {
-                (thread_id, checkpoint_ns): self.checkpoint["channel_versions"]
-            }
-        else:
-            self.checkpoint_previous_versions = {}
+        self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
 
         return self
 
@@ -544,15 +533,8 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
-        self.checkpoint_previous_versions = {}
-        if self.checkpointer:
-            thread_id = self.config["configurable"]["thread_id"]
-            checkpoint_ns = self.config["configurable"].get("checkpoint_ns", "")
-            self.checkpoint_previous_versions = {
-                (thread_id, checkpoint_ns): self.checkpoint["channel_versions"]
-            }
-        else:
-            self.checkpoint_previous_versions = {}
+
+        self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
 
         return self
 
