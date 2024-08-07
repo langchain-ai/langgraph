@@ -335,20 +335,19 @@ class PregelLoop:
                 },
             }
 
+            channel_versions = self.checkpoint["channel_versions"].copy()
             if self.checkpoint_previous_versions:
                 new_versions = {
                     k: v
-                    for k, v in self.checkpoint["channel_versions"].items()
+                    for k, v in channel_versions.items()
                     if k not in self.checkpoint_previous_versions
                     or k in self.checkpoint_previous_versions
                     and v > self.checkpoint_previous_versions[k]
                 }
             else:
-                new_versions = self.checkpoint["channel_versions"]
+                new_versions = channel_versions
 
-            self.checkpoint_previous_versions = self.checkpoint[
-                "channel_versions"
-            ].copy()
+            self.checkpoint_previous_versions = channel_versions
 
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
