@@ -1820,7 +1820,7 @@ types-requests = ">=2.31.0.2,<3.0.0.0"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "1.0.1"
+version = "1.0.2"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -4282,4 +4282,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "4da3823fc4a530f306ab8bf29f11cd01e868310b23417665d776024617b2a22e"
+content-hash = "4ef9e25016072ce08554c8ff8d091104fb59da7cdab9a128312bd787e6f35146"
