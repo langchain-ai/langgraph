@@ -1820,7 +1820,7 @@ types-requests = ">=2.31.0.2,<3.0.0.0"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "1.0.0"
+version = "1.0.1"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1844,7 +1844,7 @@ files = []
 develop = true
 
 [package.dependencies]
-langgraph-checkpoint = "^1.0.0"
+langgraph-checkpoint = "^1.0.1"
 orjson = ">=3.10.1"
 psycopg = {version = ">=3.1.19", extras = ["binary"]}
 
@@ -1863,7 +1863,7 @@ develop = true
 
 [package.dependencies]
 aiosqlite = "^0.20.0"
-langgraph-checkpoint = "^1.0.0"
+langgraph-checkpoint = "^1.0.1"
 
 [package.source]
 type = "directory"
@@ -4282,4 +4282,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "61fe872e3b9dc213966f73958819fc42219c2aebe3bf9ef56605005c12d336c6"
+content-hash = "4da3823fc4a530f306ab8bf29f11cd01e868310b23417665d776024617b2a22e"
