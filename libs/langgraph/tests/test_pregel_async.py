@@ -9,7 +9,6 @@ from typing import (
     Any,
     AsyncGenerator,
     AsyncIterator,
-    Callable,
     Dict,
     Generator,
     List,
@@ -41,14 +40,12 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
@@ -63,7 +60,6 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from tests.any_str import AnyStr
-from tests.conftest import DEFAULT_POSTGRES_URI
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
