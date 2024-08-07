@@ -9192,16 +9192,12 @@ def test_checkpoint_metadata() -> None:
 
 
 @pytest.mark.parametrize(
-    "checkpointer",
-    [
-        MemorySaverAssertImmutable(),
-        SqliteSaver.from_conn_string(":memory:"),
-        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
-        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
-    ],
-    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
+    "checkpointer_name",
+    ["memory", "sqlite", "postgres", "postgres_pipe"],
 )
-def test_remove_message_via_state_update(checkpointer: BaseCheckpointSaver):
+def test_remove_message_via_state_update(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
     workflow = MessageGraph()
@@ -9217,16 +9213,16 @@ def test_remove_message_via_state_update(checkpointer: BaseCheckpointSaver):
     workflow.set_entry_point("chatbot")
     workflow.add_edge("chatbot", END)
 
-    with checkpointer as checkpointer:
-        app = workflow.compile(checkpointer=checkpointer)
-        config = {"configurable": {"thread_id": "1"}}
-        output = app.invoke([HumanMessage(content="Hi")], config=config)
-        app.update_state(config, values=[RemoveMessage(id=output[-1].id)])
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+    app = workflow.compile(checkpointer=checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+    output = app.invoke([HumanMessage(content="Hi")], config=config)
+    app.update_state(config, values=[RemoveMessage(id=output[-1].id)])
 
-        updated_state = app.get_state(config)
+    updated_state = app.get_state(config)
 
-        assert len(updated_state.values) == 1
-        assert updated_state.values[-1].content == "Hi"
+    assert len(updated_state.values) == 1
+    assert updated_state.values[-1].content == "Hi"
 
 
 def test_remove_message_from_node():
