@@ -61,7 +61,7 @@ class SqliteSaver(BaseCheckpointSaver):
         >>> graph.get_state(config)
         >>> result = graph.invoke(3, config)
         >>> graph.get_state(config)
-        StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'checkpoint_id': '0c62ca34-ac19-445d-bbb0-5b4984975b2a'}}, parent_config=None)
+        StateSnapshot(values=4, next=(), config={'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '0c62ca34-ac19-445d-bbb0-5b4984975b2a'}}, parent_config=None)
     """  # noqa
 
     conn: sqlite3.Connection
@@ -197,7 +197,8 @@ class SqliteSaver(BaseCheckpointSaver):
             >>> config = {
             ...    "configurable": {
             ...        "thread_id": "1",
-            ...        "checkpoint_id": "2024-05-04T06:32:42.235444+00:00",
+           ...         "checkpoint_ns": "",
+            ...        "checkpoint_id": "1ef4f797-8335-6428-8001-8a1503f9b875",
             ...    }
             ... }
             >>> checkpoint_tuple = memory.get_tuple(config)
@@ -302,8 +303,9 @@ class SqliteSaver(BaseCheckpointSaver):
             [CheckpointTuple(...), CheckpointTuple(...)]
 
             >>> config = {"configurable": {"thread_id": "1"}}
-            >>> before = {"configurable": {"checkpoint_id": "2024-05-04T06:32:42.235444+00:00"}}
+            >>> before = {"configurable": {"checkpoint_id": "1ef4f797-8335-6428-8001-8a1503f9b875"}}
             >>> with SqliteSaver.from_conn_string(":memory:") as memory:
+            ... # Run a graph, then list the checkpoints
             >>>     checkpoints = list(memory.list(config, before=before))
             >>> print(checkpoints)
             [CheckpointTuple(...), ...]
@@ -373,11 +375,11 @@ class SqliteSaver(BaseCheckpointSaver):
 
             >>> from langgraph.checkpoint.sqlite import SqliteSaver
             >>> with SqliteSaver.from_conn_string(":memory:") as memory:
-            >>>     config = {"configurable": {"thread_id": "1"}}
-            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
+            >>>     config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
+            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "id": "1ef4f797-8335-6428-8001-8a1503f9b875", "data": {"key": "value"}}
             >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}})
             >>> print(saved_config)
-            {"configurable": {"thread_id": "1", "checkpoint_id": 2024-05-04T06:32:42.235444+00:00"}}
+            {'configurable': {'thread_id': '1', 'checkpoint_ns': '', 'checkpoint_id': '1ef4f797-8335-6428-8001-8a1503f9b875'}}
         """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]

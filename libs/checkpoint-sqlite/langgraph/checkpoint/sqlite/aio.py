@@ -93,10 +93,10 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         >>> builder.add_node("add_one", lambda x: x + 1)
         >>> builder.set_entry_point("add_one")
         >>> builder.set_finish_point("add_one")
-        >>> memory = AsyncSqliteSaver.from_conn_string("checkpoints.sqlite")
-        >>> graph = builder.compile(checkpointer=memory)
-        >>> coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
-        >>> asyncio.run(coro)
+        >>> async with AsyncSqliteSaver.from_conn_string("checkpoints.db") as memory:
+        >>>     graph = builder.compile(checkpointer=memory)
+        >>>     coro = graph.ainvoke(1, {"configurable": {"thread_id": "thread-1"}})
+        >>>     print(asyncio.run(coro))
         Output: 2
         ```
         Raw usage:

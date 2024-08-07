@@ -16,23 +16,23 @@ with SqliteSaver.from_conn_string(":memory:") as checkpointer:
         "ts": "2024-07-31T20:14:19.804150+00:00",
         "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
         "channel_values": {
-        "my_key": "meow",
-        "node": "node"
+            "my_key": "meow",
+            "node": "node"
         },
         "channel_versions": {
-        "__start__": 2,
-        "my_key": 3,
-        "start:node": 3,
-        "node": 3
+            "__start__": 2,
+            "my_key": 3,
+            "start:node": 3,
+            "node": 3
         },
         "versions_seen": {
-        "__input__": {},
-        "__start__": {
-            "__start__": 1
-        },
-        "node": {
-            "start:node": 2
-        }
+            "__input__": {},
+            "__start__": {
+                "__start__": 1
+            },
+            "node": {
+                "start:node": 2
+            }
         },
         "pending_sends": [],
         "current_tasks": {}
@@ -59,23 +59,23 @@ async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
         "ts": "2024-07-31T20:14:19.804150+00:00",
         "id": "1ef4f797-8335-6428-8001-8a1503f9b875",
         "channel_values": {
-        "my_key": "meow",
-        "node": "node"
+            "my_key": "meow",
+            "node": "node"
         },
         "channel_versions": {
-        "__start__": 2,
-        "my_key": 3,
-        "start:node": 3,
-        "node": 3
+            "__start__": 2,
+            "my_key": 3,
+            "start:node": 3,
+            "node": 3
         },
         "versions_seen": {
-        "__input__": {},
-        "__start__": {
-            "__start__": 1
-        },
-        "node": {
-            "start:node": 2
-        }
+            "__input__": {},
+            "__start__": {
+                "__start__": 1
+            },
+            "node": {
+                "start:node": 2
+            }
         },
         "pending_sends": [],
         "current_tasks": {}
