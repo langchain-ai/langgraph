@@ -38,7 +38,8 @@
                 "libs/sdk-py",
                 "libs/cli",
                 "libs/checkpoint",
-                "libs/checkpoint-sqlite"
+                "libs/checkpoint-sqlite",
+                "libs/checkpoint-postgres"
             ]
         uses: ./.github/workflows/_lint.yml
         with:
@@ -54,7 +55,8 @@
                 "libs/langgraph",
                 "libs/cli",
                 "libs/checkpoint",
-                "libs/checkpoint-sqlite"
+                "libs/checkpoint-sqlite",
+                "libs/checkpoint-postgres"
             ]
         uses: ./.github/workflows/_test.yml
         with:

@@ -5,6 +5,7 @@ from typing import Any, Optional
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -41,7 +42,8 @@ class MemorySaverAssertImmutable(MemorySaver):
         self,
         config: dict,
         checkpoint: Checkpoint,
-        metadata: Optional[CheckpointMetadata] = None,
+        metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
     ) -> None:
         if self.put_sleep:
             import time
@@ -61,7 +63,7 @@ class MemorySaverAssertImmutable(MemorySaver):
             checkpoint["id"]
         ] = self.serde.dumps_typed(copy_checkpoint(checkpoint))
         # call super to write checkpoint
-        return super().put(config, checkpoint, metadata)
+        return super().put(config, checkpoint, metadata, new_versions)
 
 
 class MemorySaverAssertCheckpointMetadata(MemorySaver):
@@ -85,7 +87,8 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
-        metadata: Optional[CheckpointMetadata] = None,
+        metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
     ) -> None:
         """The implementation of put() merges config["configurable"] (a run's
         configurable fields) with the metadata field. The state of the
@@ -120,9 +123,10 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint, metadata
+            None, self.put, config, checkpoint, metadata, new_versions
         )
 
 

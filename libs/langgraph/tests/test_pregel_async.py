@@ -42,11 +42,13 @@ from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
 )
 from langgraph.checkpoint.memory import MemorySaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.constants import Send
 from langgraph.errors import InvalidUpdateError
@@ -61,6 +63,7 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from tests.any_str import AnyStr
+from tests.conftest import DEFAULT_POSTGRES_URI
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
@@ -92,6 +95,7 @@ async def test_checkpoint_errors() -> None:
             config: RunnableConfig,
             checkpoint: Checkpoint,
             metadata: CheckpointMetadata,
+            new_versions: ChannelVersions,
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 
@@ -251,11 +255,15 @@ async def test_step_timeout_on_stream_hang() -> None:
     [
         MemorySaverAssertImmutable(),
         AsyncSqliteSaver.from_conn_string(":memory:"),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
         NoneContextManager(),
     ],
     ids=[
         "memory",
         "aiosqlite",
+        "postgres",
+        "postgres_pipeline",
         "none",
     ],
 )
@@ -300,7 +308,7 @@ async def test_cancel_graph_astream(
 
         # test interrupting astream
         got_event = False
-        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
         async with aclosing(graph.astream({"value": 1}, thread1)) as stream:
             async for chunk in stream:
                 assert chunk == {"alittlewhile": {"value": 2}}
@@ -333,11 +341,15 @@ async def test_cancel_graph_astream(
     [
         MemorySaverAssertImmutable(),
         AsyncSqliteSaver.from_conn_string(":memory:"),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
         NoneContextManager(),
     ],
     ids=[
         "memory",
         "aiosqlite",
+        "postgres",
+        "postgres_pipeline",
         "none",
     ],
 )
@@ -382,7 +394,7 @@ async def test_cancel_graph_astream_events_v2(
 
         # test interrupting astream_events v2
         got_event = False
-        thread2: RunnableConfig = {"configurable": {"thread_id": 2}}
+        thread2: RunnableConfig = {"configurable": {"thread_id": "2"}}
         async with aclosing(
             graph.astream_events({"value": 1}, thread2, version="v2")
         ) as stream:
@@ -693,11 +705,10 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     [
         MemorySaverAssertImmutable(),
         AsyncSqliteSaver.from_conn_string(":memory:"),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
     ],
-    ids=[
-        "memory",
-        "sqlite",
-    ],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
 )
 async def test_invoke_two_processes_in_out_interrupt(
     checkpointer: BaseCheckpointSaver, mocker: MockerFixture
@@ -910,11 +921,10 @@ async def test_invoke_two_processes_in_out_interrupt(
     [
         MemorySaverAssertImmutable(),
         AsyncSqliteSaver.from_conn_string(":memory:"),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
     ],
-    ids=[
-        "memory",
-        "sqlite",
-    ],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
 )
 async def test_fork_always_re_runs_nodes(
     checkpointer: BaseCheckpointSaver, mocker: MockerFixture
@@ -1416,11 +1426,10 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     [
         MemorySaverAssertImmutable(),
         AsyncSqliteSaver.from_conn_string(":memory:"),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
     ],
-    ids=[
-        "memory",
-        "sqlite",
-    ],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
 )
 async def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
     async with checkpointer as checkpointer:
@@ -1454,7 +1463,7 @@ async def test_pending_writes_resume(checkpointer: BaseCheckpointSaver) -> None:
         builder.add_edge(START, "two")
         graph = builder.compile(checkpointer=checkpointer)
 
-        thread1: RunnableConfig = {"configurable": {"thread_id": 1}}
+        thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
         with pytest.raises(ValueError, match="I'm not good"):
             await graph.ainvoke({"value": 1}, thread1)
 
@@ -6142,11 +6151,12 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
     [
         lambda: MemorySaverAssertImmutable(put_sleep=0.2),
         lambda: AsyncSqliteSaver.from_conn_string(":memory:"),
+        lambda: AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        lambda: AsyncPostgresSaver.from_conn_string(
+            DEFAULT_POSTGRES_URI, pipeline=True
+        ),
     ],
-    ids=[
-        "memory",
-        "sqlite",
-    ],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
 )
 async def test_nested_graph_interrupts(
     checkpointer_fct: Callable[[], BaseCheckpointSaver],
@@ -7349,11 +7359,10 @@ async def test_nested_graph_interrupts(
     [
         MemorySaverAssertImmutable(),
         AsyncSqliteSaver.from_conn_string(":memory:"),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
     ],
-    ids=[
-        "memory",
-        "sqlite",
-    ],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
 )
 async def test_nested_graph_interrupts_parallel(
     checkpointer: BaseCheckpointSaver,
@@ -7483,11 +7492,10 @@ async def test_nested_graph_interrupts_parallel(
     [
         MemorySaverAssertImmutable(),
         AsyncSqliteSaver.from_conn_string(":memory:"),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
     ],
-    ids=[
-        "memory",
-        "sqlite",
-    ],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
 )
 async def test_doubly_nested_graph_interrupts(
     checkpointer: BaseCheckpointSaver,
