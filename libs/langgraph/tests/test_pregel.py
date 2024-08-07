@@ -36,6 +36,7 @@ from syrupy import SnapshotAssertion
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
+from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
@@ -9370,3 +9371,30 @@ def test_xray_lance(snapshot: SnapshotAssertion):
     # View
     assert graph.get_graph().to_json() == snapshot
     assert graph.get_graph(xray=1).to_json() == snapshot
+
+
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite", "postgres", "postgres_pipe"],
+)
+def test_channel_values(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    config = {"configurable": {"thread_id": "1"}}
+    chain = Channel.subscribe_to("input") | Channel.write_to("output")
+    app = Pregel(
+        nodes={
+            "one": chain,
+        },
+        channels={
+            "ephemeral": EphemeralValue(Any),
+            "input": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels=["input", "ephemeral"],
+        output_channels="output",
+        checkpointer=checkpointer,
+    )
+    app.invoke({"input": 1, "ephemeral": "meow"}, config)
+    # assert checkpointer.get(config)["channel_values"] == {"input": 1, "output": 1}
+    print([c.checkpoint["channel_values"] for c in checkpointer.list(config)])
