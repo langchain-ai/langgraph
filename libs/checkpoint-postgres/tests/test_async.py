@@ -13,7 +13,7 @@ from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
 class TestAsyncPostgresSaver:
     @pytest.fixture(autouse=True)
-    def setup(self):
+    async def setup(self):
         # objects for test setup
         self.config_1: RunnableConfig = {
             "configurable": {
@@ -55,6 +55,8 @@ class TestAsyncPostgresSaver:
             "score": None,
         }
         self.metadata_3: CheckpointMetadata = {}
+        async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
+            await saver.setup()
 
     async def test_asearch(self):
         async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:

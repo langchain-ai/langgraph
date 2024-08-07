@@ -99,7 +99,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
-        await self.setup()
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
         if limit:
@@ -133,7 +132,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
             )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        await self.setup()
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -186,7 +184,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        await self.setup()
         configurable = config["configurable"].copy()
         thread_id = configurable.pop("thread_id")
         checkpoint_ns = configurable.pop("checkpoint_ns")
@@ -249,7 +246,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
     @asynccontextmanager
     async def _cursor(self, *, pipeline: bool = False) -> AsyncIterator[AsyncCursor]:
-        await self.setup()
         if self.pipe:
             # a connection in pipeline mode can be used concurrently
             # in multiple threads/coroutines, but only one cursor can be

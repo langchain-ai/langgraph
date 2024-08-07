@@ -97,7 +97,6 @@ class PostgresSaver(BasePostgresSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
-        self.setup()
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
         if limit:
@@ -129,7 +128,6 @@ class PostgresSaver(BasePostgresSaver):
             )
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        self.setup()
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -240,7 +238,6 @@ class PostgresSaver(BasePostgresSaver):
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor]:
-        self.setup()
         if self.pipe:
             # a connection in pipeline mode can be used concurrently
             # in multiple threads/coroutines, but only one cursor can be
