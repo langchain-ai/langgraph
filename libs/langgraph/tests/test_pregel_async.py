@@ -39,6 +39,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -2737,7 +2738,7 @@ async def test_conditional_graph_state() -> None:
             await session.aclose()
 
     class AgentState(TypedDict):
-        input: str
+        input: Annotated[str, UntrackedValue]
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
         context: Annotated[MyPydanticContextModel, Context(make_context)]
@@ -2952,7 +2953,6 @@ async def test_conditional_graph_state() -> None:
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api",
                 tool_input="query",
@@ -2996,7 +2996,6 @@ async def test_conditional_graph_state() -> None:
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api",
                 tool_input="query",
@@ -3065,7 +3064,6 @@ async def test_conditional_graph_state() -> None:
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentFinish(
                 return_values={"answer": "a really nice answer"},
                 log="finish:a really nice answer",
@@ -3129,7 +3127,6 @@ async def test_conditional_graph_state() -> None:
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api", tool_input="query", log="tool:search_api:query"
             ),
@@ -3171,7 +3168,6 @@ async def test_conditional_graph_state() -> None:
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api",
                 tool_input="query",
@@ -3240,7 +3236,6 @@ async def test_conditional_graph_state() -> None:
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentFinish(
                 return_values={"answer": "a really nice answer"},
                 log="finish:a really nice answer",
