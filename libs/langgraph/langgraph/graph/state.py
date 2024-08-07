@@ -714,6 +714,8 @@ def _is_field_channel(typ: Type[Any]) -> Optional[BaseChannel]:
         meta = typ.__metadata__
         if len(meta) >= 1 and isinstance(meta[-1], BaseChannel):
             return meta[-1]
+        elif len(meta) >= 1 and isclass(meta[-1]) and issubclass(meta[-1], BaseChannel):
+            return meta[-1](typ.__origin__ if hasattr(typ, "__origin__") else typ)
     return None
 
 

@@ -39,6 +39,7 @@ from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -2576,7 +2577,7 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     from langchain_core.tools import tool
 
     class AgentState(TypedDict, total=False):
-        input: str
+        input: Annotated[str, UntrackedValue]
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
         session: Annotated[httpx.Client, Context(httpx.Client)]
@@ -2767,7 +2768,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api", tool_input="query", log="tool:search_api:query"
             ),
@@ -2805,7 +2805,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api",
                 tool_input="query",
@@ -2870,7 +2869,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentFinish(
                 return_values={"answer": "a really nice answer"},
                 log="finish:a really nice answer",
@@ -2928,7 +2926,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api", tool_input="query", log="tool:search_api:query"
             ),
@@ -2966,7 +2963,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api",
                 tool_input="query",
@@ -3031,7 +3027,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentFinish(
                 return_values={"answer": "a really nice answer"},
                 log="finish:a really nice answer",
@@ -3080,7 +3075,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "intermediate_steps": [],
         },
         next=("agent",),
@@ -3102,7 +3096,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api", tool_input="query", log="tool:search_api:query"
             ),
@@ -3146,7 +3139,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api", tool_input="query", log="tool:search_api:query"
             ),
@@ -3219,7 +3211,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api", tool_input="query", log="tool:search_api:query"
             ),
@@ -3263,7 +3254,6 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
-            "input": "what is weather in sf",
             "agent_outcome": AgentAction(
                 tool="search_api", tool_input="query", log="tool:search_api:query"
             ),
