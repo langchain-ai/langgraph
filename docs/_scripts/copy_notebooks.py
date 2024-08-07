@@ -44,6 +44,7 @@ _MANUAL = {
         "tool-calling.ipynb",
         "tool-calling-errors.ipynb",
         "pass-config-to-tools.ipynb",
+        "many-tools.ipynb",
         "dynamic-returning-direct.ipynb",
         "managing-agent-steps.ipynb",
         "respond-in-format.ipynb",

@@ -11,6 +11,8 @@ python = "^3.10"
 
 [tool.poetry.group.docs.dependencies]
 langgraph = { path = "libs/langgraph/", develop = true }
+langgraph-checkpoint = { path = "libs/checkpoint/", develop = true }
+langgraph-checkpoint-sqlite = { path = "libs/checkpoint-sqlite", develop = true }
 langgraph-sdk = {path = "libs/sdk-py", develop = true}
 mkdocs = "^1.6.0"
 mkdocstrings = "^0.25.1"

@@ -5,6 +5,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as create_tool
 
+from langgraph._api.deprecation import deprecated
 from langgraph.utils import RunnableCallable
 
 INVALID_TOOL_MSG_TEMPLATE = (
@@ -13,6 +14,7 @@ INVALID_TOOL_MSG_TEMPLATE = (
 )
 
 
+@deprecated("0.2.0", "langgraph.prebuilt.ToolNode", removal="0.3.0")
 class ToolInvocationInterface:
     """Interface for invoking a tool.
 
@@ -26,6 +28,7 @@ class ToolInvocationInterface:
     tool_input: Union[str, dict]
 
 
+@deprecated("0.2.0", "langgraph.prebuilt.ToolNode", removal="0.3.0")
 class ToolInvocation(Serializable):
     """Information about how to invoke a tool.
 
@@ -47,6 +50,7 @@ class ToolInvocation(Serializable):
     tool_input: Union[str, dict]
 
 
+@deprecated("0.2.0", "langgraph.prebuilt.ToolNode", removal="0.3.0")
 class ToolExecutor(RunnableCallable):
     """Executes a tool invocation.
 

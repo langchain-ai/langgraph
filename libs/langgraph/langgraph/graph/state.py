@@ -29,8 +29,8 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.checkpoint import BaseCheckpointSaver
-from langgraph.constants import TAG_HIDDEN
+from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.constants import CHECKPOINT_NAMESPACE_SEPARATOR, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph.graph import (
     END,
@@ -85,7 +85,7 @@ class StateGraph(Graph):
     Examples:
         >>> from langchain_core.runnables import RunnableConfig
         >>> from typing_extensions import Annotated, TypedDict
-        >>> from langgraph.checkpoint import MemorySaver
+        >>> from langgraph.checkpoint.memory import MemorySaver
         >>> from langgraph.graph import StateGraph
         >>>
         >>> def reducer(a: list, b: int | None) -> int:
@@ -311,6 +311,12 @@ class StateGraph(Graph):
             raise ValueError(f"Node `{node}` already present.")
         if node == END or node == START:
             raise ValueError(f"Node `{node}` is reserved.")
+
+        if CHECKPOINT_NAMESPACE_SEPARATOR in node:
+            raise ValueError(
+                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
+            )
+
         try:
             if isfunction(action) and (
                 hints := get_type_hints(action.__call__) or get_type_hints(action)
@@ -412,6 +418,15 @@ class StateGraph(Graph):
                 if not isinstance(val, Context) and not is_managed_value(val)
             ]
         )
+        stream_channels = (
+            "__root__"
+            if len(self.channels) == 1 and "__root__" in self.channels
+            else [
+                key
+                for key, val in self.channels.items()
+                if not isinstance(val, Context) and not is_managed_value(val)
+            ]
+        )
 
         compiled = CompiledStateGraph(
             builder=self,
@@ -421,7 +436,7 @@ class StateGraph(Graph):
             input_channels=START,
             stream_mode="updates",
             output_channels=output_channels,
-            stream_channels=output_channels,
+            stream_channels=stream_channels,
             checkpointer=checkpointer,
             interrupt_before_nodes=interrupt_before,
             interrupt_after_nodes=interrupt_after,
@@ -610,7 +625,7 @@ class CompiledStateGraph(CompiledGraph):
                 if branch.then and branch.then != END:
                     writes.append(
                         ChannelWriteEntry(
-                            f"branch:{start}:{name}:then",
+                            f"branch:{start}:{name}::then",
                             WaitForNames(
                                 {p.node if isinstance(p, Send) else p for p in filtered}
                             ),
@@ -630,12 +645,12 @@ class CompiledStateGraph(CompiledGraph):
         for end in ends:
             if end != END:
                 channel_name = f"branch:{start}:{name}:{end}"
-                self.channels[channel_name] = EphemeralValue(Any)
+                self.channels[channel_name] = EphemeralValue(Any, guard=False)
                 self.nodes[end].triggers.append(channel_name)
 
         # attach then subscriber
         if branch.then and branch.then != END:
-            channel_name = f"branch:{start}:{name}:then"
+            channel_name = f"branch:{start}:{name}::then"
             self.channels[channel_name] = DynamicBarrierValue(str)
             self.nodes[branch.then].triggers.append(channel_name)
             for end in ends:
@@ -699,6 +714,8 @@ def _is_field_channel(typ: Type[Any]) -> Optional[BaseChannel]:
         meta = typ.__metadata__
         if len(meta) >= 1 and isinstance(meta[-1], BaseChannel):
             return meta[-1]
+        elif len(meta) >= 1 and isclass(meta[-1]) and issubclass(meta[-1], BaseChannel):
+            return meta[-1](typ.__origin__ if hasattr(typ, "__origin__") else typ)
     return None
 
 
@@ -708,14 +725,14 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
         if len(meta) >= 1 and callable(meta[-1]):
             sig = signature(meta[0])
             params = list(sig.parameters.values())
-            if len(params) == 2 and len(
-                [
-                    p
-                    for p in params
-                    if p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD)
-                ]
+            if len(params) == 2 and all(
+                p.kind in (p.POSITIONAL_ONLY, p.POSITIONAL_OR_KEYWORD) for p in params
             ):
                 return BinaryOperatorAggregate(typ, meta[0])
+            else:
+                raise ValueError(
+                    f"Invalid reducer signature. Expected (a, b) -> c. Got {sig}"
+                )
     return None
 
 
