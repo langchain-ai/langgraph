@@ -16,7 +16,6 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
 
 class AsyncPostgresSaver(BasePostgresSaver):
@@ -33,7 +32,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         super().__init__(serde=serde)
         self.conn = conn
         self.pipe = pipe
-        self.jsonplus_serde = JsonPlusSerializer()
         self.lock = asyncio.Lock()
         self.is_setup = False
 
@@ -195,14 +193,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 "checkpoint_id": checkpoint["id"],
             }
         }
-
-        serialized_metadata_type, serialized_metadata = self.jsonplus_serde.dumps_typed(
-            metadata
-        )
-        if serialized_metadata_type != "json":
-            raise TypeError(
-                f"Failed to properly serialize metadata -- expected 'json', got '{serialized_metadata_type}'"
-            )
 
         async with self._cursor(pipeline=True) as cur:
             await cur.executemany(
