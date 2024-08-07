@@ -330,7 +330,9 @@ def test_node_schemas_custom_output() -> None:
             }
         )
     ] == [
+        {"a": None},
         {"b": {"hello": "again", "now": 123}},
+        {"c": None},
     ]
 
 
@@ -959,6 +961,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             {"input": 2, "inbox": 12}, output_keys="output", stream_mode="updates"
         )
     ] == [
+        {"one": None},
         {"two": 13},
         {"two": 4},
     ]
@@ -7265,6 +7268,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"decider": None},
         {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
         {
             "analyzer_one": {
@@ -7273,6 +7277,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple() -> None:
         },
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"decider": None},
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
 
@@ -7400,6 +7405,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"decider": None},
         {"rewrite_query": {"query": "query: analyzed: query: what is weather in sf"}},
         {
             "analyzer_one": {
@@ -7408,6 +7414,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge() -> None:
         },
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        {"decider": None},
         {"qa": {"answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4"}},
     ]
 
@@ -7422,6 +7429,9 @@ def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
     def side(state: State):
         pass
 
+    def other(state: State):
+        return {"my_key": "_more"}
+
     def down(state: State):
         pass
 
@@ -7429,17 +7439,25 @@ def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
 
     graph.add_node("up", up)
     graph.add_node("side", side)
+    graph.add_node("other", other)
     graph.add_node("down", down)
 
     graph.set_entry_point("up")
     graph.add_edge("up", "side")
+    graph.add_edge("up", "other")
     graph.add_edge(["up", "side"], "down")
     graph.set_finish_point("down")
 
     app = graph.compile()
 
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value"}
+    assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value_more"}
+    assert [*app.stream({"my_key": "my_value"})] == [
+        {"up": None},
+        {"side": None},
+        {"other": {"my_key": "_more"}},
+        {"down": None},
+    ]
 
 
 def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
