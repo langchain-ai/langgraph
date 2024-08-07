@@ -69,19 +69,7 @@ from tests.memory_assert import (
     MemorySaverAssertImmutable,
 )
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
-
-
-class NoneContextManager(AbstractAsyncContextManager):
-    async def __aenter__(self) -> None:
-        return None
-
-    async def __aexit__(
-        self,
-        __exc_type: Optional[type[BaseException]],
-        __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
-        return
+from tests.none_context_manager import NoneContextManager
 
 
 async def test_checkpoint_errors() -> None:

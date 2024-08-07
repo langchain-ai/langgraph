@@ -19,11 +19,17 @@ from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
+from langgraph.checkpoint.postgres import PostgresSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
+from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState
 from tests.any_str import AnyStr
+from tests.conftest import DEFAULT_POSTGRES_URI
 from tests.memory_assert import MemorySaverAssertImmutable
 from tests.messages import _AnyIdHumanMessage
+from tests.none_context_manager import NoneContextManager
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -57,49 +63,31 @@ class FakeToolCallingModel(BaseChatModel):
     "checkpointer",
     [
         MemorySaverAssertImmutable(),
-        None,
+        SqliteSaver.from_conn_string(":memory:"),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
+        NoneContextManager()
     ],
-    ids=[
-        "memory",
-        "none",
-    ],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline", "none"],
 )
-def test_no_modifier(checkpointer: Optional[BaseCheckpointSaver]):
+def test_no_modifier(checkpointer: BaseCheckpointSaver):
     model = FakeToolCallingModel()
-    agent = create_react_agent(model, [], checkpointer=checkpointer)
-    inputs = [HumanMessage("hi?")]
-    thread = {"configurable": {"thread_id": "123"}}
-    response = agent.invoke({"messages": inputs}, thread, debug=True)
-    expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
-    assert response == expected_response
 
-    if checkpointer:
+    with checkpointer as checkpointer:
+        agent = create_react_agent(model, [], checkpointer=checkpointer)
+        inputs = [HumanMessage("hi?")]
+        thread = {"configurable": {"thread_id": "123"}}
+        response = agent.invoke({"messages": inputs}, thread, debug=True)
+        expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
+        assert response == expected_response
         saved = checkpointer.get_tuple(thread)
         assert saved is not None
-        assert saved.checkpoint == {
-            "v": 1,
-            "ts": AnyStr(),
-            "id": AnyStr(),
-            "channel_values": {
-                "messages": [
-                    _AnyIdHumanMessage(content="hi?"),
-                    AIMessage(content="hi?", id="0"),
-                ],
-                "agent": "agent",
-            },
-            "channel_versions": {
-                "__start__": 2,
-                "messages": 3,
-                "start:agent": 3,
-                "agent": 3,
-            },
-            "versions_seen": {
-                "__input__": {},
-                "__start__": {"__start__": 1},
-                "agent": {"start:agent": 2},
-            },
-            "pending_sends": [],
-            "current_tasks": {},
+        assert saved.checkpoint["channel_values"] == {
+            "messages": [
+                _AnyIdHumanMessage(content="hi?"),
+                AIMessage(content="hi?", id="0"),
+            ],
+            "agent": "agent",
         }
         assert saved.metadata == {
             "source": "loop",
@@ -113,23 +101,23 @@ def test_no_modifier(checkpointer: Optional[BaseCheckpointSaver]):
     "checkpointer",
     [
         MemorySaverAssertImmutable(),
-        None,
+        AsyncSqliteSaver.from_conn_string(":memory:"),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
+        NoneContextManager()
     ],
-    ids=[
-        "memory",
-        "none",
-    ],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline", "none"],
 )
 async def test_no_modifier_async(checkpointer: Optional[BaseCheckpointSaver]):
     model = FakeToolCallingModel()
-    agent = create_react_agent(model, [], checkpointer=checkpointer)
-    inputs = [HumanMessage("hi?")]
-    thread = {"configurable": {"thread_id": "123"}}
-    response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
-    expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
-    assert response == expected_response
 
-    if checkpointer:
+    with checkpointer as checkpointer:
+        agent = create_react_agent(model, [], checkpointer=checkpointer)
+        inputs = [HumanMessage("hi?")]
+        thread = {"configurable": {"thread_id": "123"}}
+        response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
+        expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
+        assert response == expected_response
         saved = await checkpointer.aget_tuple(thread)
         assert saved is not None
         assert saved.checkpoint == {
