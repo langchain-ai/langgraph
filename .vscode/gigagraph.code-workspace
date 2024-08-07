@@ -25,6 +25,9 @@
 		},
 		{
 			"path": "../libs/checkpoint-sqlite"
+		},
+		{
+			"path": "../libs/checkpoint-postgres"
 		}
 	],
 	"settings": {}

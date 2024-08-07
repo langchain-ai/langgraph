@@ -9,6 +9,7 @@ from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -229,6 +230,7 @@ class MemorySaver(
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Save a checkpoint to the in-memory storage.
 
@@ -239,6 +241,7 @@ class MemorySaver(
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
             metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (dict): New versions as of this write
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
@@ -341,6 +344,7 @@ class MemorySaver(
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Asynchronous version of put.
 
@@ -348,12 +352,13 @@ class MemorySaver(
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
             metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (dict): New versions as of this write
 
         Returns:
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
         return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint, metadata
+            None, self.put, config, checkpoint, metadata, new_versions
         )
 
     async def aput_writes(

@@ -68,6 +68,10 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(
                 obj.__class__, kwargs={"node": obj.node, "arg": obj.arg}
             )
+        elif isinstance(obj, (bytes, bytearray)):
+            return self._encode_constructor_args(
+                obj.__class__, method="fromhex", args=[obj.hex()]
+            )
         else:
             raise TypeError(
                 f"Object of type {obj.__class__.__name__} is not JSON serializable"
@@ -100,13 +104,23 @@ class JsonPlusSerializer(SerializerProtocol):
         )
 
     def dumps_typed(self, obj: Any) -> tuple[str, bytes]:
-        return "json", self.dumps(obj)
+        if isinstance(obj, bytes):
+            return "bytes", obj
+        elif isinstance(obj, bytearray):
+            return "bytearray", obj
+        else:
+            return "json", self.dumps(obj)
 
     def loads(self, data: bytes) -> Any:
         return json.loads(data, object_hook=self._reviver)
 
     def loads_typed(self, data: tuple[str, bytes]) -> Any:
         type_, data_ = data
-        if type_ != "json":
-            raise ValueError("JsonPlusSerializer can only deserialize `json` data")
-        return self.loads(data_)
+        if type_ == "bytes":
+            return data_
+        elif type_ == "bytearray":
+            return bytearray(data_)
+        elif type_ == "json":
+            return self.loads(data_)
+        else:
+            raise NotImplementedError(f"Unknown serialization type: {type_}")

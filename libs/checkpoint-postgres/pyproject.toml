@@ -1,7 +1,7 @@
 [tool.poetry]
-name = "gigagraph-checkpoint-sqlite"
+name = "gigagraph-checkpoint-postgres"
 version = "1.0.0"
-description = "Library with a SQLite implementation of GigaGraph checkpoint saver."
+description = "Library with a Postgres implementation of GigaGraph checkpoint saver."
 authors = []
 license = "MIT"
 readme = "README.md"
@@ -9,18 +9,21 @@ repository = "https://github.com/ai-forever/gigagraph"
 packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
-python = "^3.9.0"
+python = "^3.9.0,<4.0"
 gigagraph-checkpoint = "^1.0.1"
-aiosqlite = "^0.20.0"
+orjson = ">=3.10.1"
+psycopg = {extras = ["binary"], version = ">=3.1.19"}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.1.4"
 codespell = "^2.2.0"
 pytest = "^7.2.1"
+anyio = "^4.4.0"
 pytest-asyncio = "^0.21.1"
 pytest-mock = "^3.11.1"
-pytest-watcher = "^0.4.1"
+pytest-watch = "^4.2.0"
 mypy = "^1.10.0"
+psycopg-pool = "^3.2.2"
 gigagraph-checkpoint = {path = "../checkpoint", develop = true}
 
 [tool.pytest.ini_options]
@@ -47,9 +50,3 @@ lint.select = [
   "I",  # isort
 ]
 lint.ignore = ["E501", "B008", "UP007", "UP006"]
-
-[tool.pytest-watcher]
-now = true
-delay = 0.1
-runner_args = ["--ff", "-v", "--tb", "short"]
-patterns = ["*.py"]

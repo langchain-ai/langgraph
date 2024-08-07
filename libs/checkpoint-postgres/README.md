@@ -1,16 +1,17 @@
-# LangGraph SQLite Checkpoint
+# LangGraph Checkpoint Postgres
 
-Implementation of LangGraph CheckpointSaver that uses SQLite DB (both sync and async, via `aiosqlite`)
+Implementation of LangGraph CheckpointSaver that uses Postgres.
 
 ## Usage
 
 ```python
-from langgraph.checkpoint.sqlite import SqliteSaver
+from langgraph.checkpoint.postgres import PostgresSaver
 
 write_config = {"configurable": {"thread_id": "1", "checkpoint_ns": ""}}
 read_config = {"configurable": {"thread_id": "1"}}
 
-with SqliteSaver.from_conn_string(":memory:") as checkpointer:
+DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
     checkpoint = {
         "v": 1,
         "ts": "2024-07-31T20:14:19.804150+00:00",
@@ -28,10 +29,10 @@ with SqliteSaver.from_conn_string(":memory:") as checkpointer:
         "versions_seen": {
             "__input__": {},
             "__start__": {
-                "__start__": 1
+            "__start__": 1
             },
             "node": {
-                "start:node": 2
+            "start:node": 2
             }
         },
         "pending_sends": [],
@@ -51,9 +52,9 @@ with SqliteSaver.from_conn_string(":memory:") as checkpointer:
 ### Async
 
 ```python
-from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
+from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 
-async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
+async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
     checkpoint = {
         "v": 1,
         "ts": "2024-07-31T20:14:19.804150+00:00",
@@ -71,10 +72,10 @@ async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
         "versions_seen": {
             "__input__": {},
             "__start__": {
-                "__start__": 1
+            "__start__": 1
             },
             "node": {
-                "start:node": 2
+            "start:node": 2
             }
         },
         "pending_sends": [],
