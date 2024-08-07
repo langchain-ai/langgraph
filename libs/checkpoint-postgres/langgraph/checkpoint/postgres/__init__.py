@@ -24,8 +24,6 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 class PostgresSaver(BasePostgresSaver):
     lock: threading.Lock
 
-    is_setup: bool
-
     def __init__(
         self,
         conn: Connection,
@@ -36,7 +34,6 @@ class PostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
-        self.is_setup = False
 
     @classmethod
     @contextmanager
@@ -68,8 +65,6 @@ class PostgresSaver(BasePostgresSaver):
         already exist. It is called automatically when needed and should not be called
         directly by the user.
         """
-        if self.is_setup:
-            return
         with self.lock:
             with self.conn.cursor(binary=True) as cur:
                 try:
@@ -86,8 +81,6 @@ class PostgresSaver(BasePostgresSaver):
                     cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
             if self.pipe:
                 self.pipe.sync()
-
-            self.is_setup = True
 
     def list(
         self,

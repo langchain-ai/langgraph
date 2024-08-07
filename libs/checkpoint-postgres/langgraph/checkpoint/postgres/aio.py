@@ -22,8 +22,6 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 class AsyncPostgresSaver(BasePostgresSaver):
     lock: asyncio.Lock
 
-    is_setup: bool
-
     def __init__(
         self,
         conn: AsyncConnection,
@@ -34,7 +32,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = asyncio.Lock()
-        self.is_setup = False
 
     @classmethod
     @asynccontextmanager
@@ -66,8 +63,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         already exist. It is called automatically when needed and should not be called
         directly by the user.
         """
-        if self.is_setup:
-            return
         async with self.lock:
             async with self.conn.cursor(binary=True) as cur:
                 try:
@@ -88,8 +83,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     )
             if self.pipe:
                 await self.pipe.sync()
-
-            self.is_setup = True
 
     async def alist(
         self,
