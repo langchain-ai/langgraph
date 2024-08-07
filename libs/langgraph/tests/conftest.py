@@ -6,8 +6,10 @@ from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 from pytest_mock import MockerFixture
 
+from langgraph.checkpoint.postgres import PostgresSaver
+
 DEFAULT_POSTGRES_URI = (
-    "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+    "postgres://postgres:postgres@localhost:5442/postgres?sslmode=disable"
 )
 
 
@@ -25,6 +27,12 @@ async def conn():
         DEFAULT_POSTGRES_URI, autocommit=True, prepare_threshold=0, row_factory=dict_row
     ) as conn:
         yield conn
+
+
+@pytest.fixture(scope="session", autouse=True)
+def setup_before_all_tests():
+    with PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI) as checkpointer:
+        checkpointer.setup()
 
 
 @pytest.fixture(scope="function", autouse=True)

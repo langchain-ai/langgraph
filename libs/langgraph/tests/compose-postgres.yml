@@ -2,7 +2,7 @@ services:
   postgres-test:
     image: postgres:16
     ports:
-      - "5432:5432"
+      - "5442:5432"
     environment:
       POSTGRES_DB: postgres
       POSTGRES_USER: postgres

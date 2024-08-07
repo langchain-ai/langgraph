@@ -185,6 +185,15 @@ def test_graph_validation() -> None:
     with pytest.raises(ValueError, match="Found edge starting at unknown node "):
         graph.compile()
 
+    def bad_reducer(a):
+        ...
+
+    class BadReducerState(TypedDict):
+        hello: Annotated[str, bad_reducer]
+
+    with pytest.raises(ValueError, match="Invalid reducer"):
+        StateGraph(BadReducerState)
+
 
 def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(MemorySaver):
