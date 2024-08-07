@@ -11,6 +11,7 @@ from langgraph.checkpoint.base import (
     EmptyChannelError,
     get_checkpoint_id,
 )
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import ChannelProtocol
 
 MetadataInput = Optional[dict[str, Any]]
@@ -109,6 +110,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
+    jsonplus_serde = JsonPlusSerializer()
 
     def _load_checkpoint(self, checkpoint: dict[str, Any]) -> Checkpoint:
         if len(checkpoint["pending_sends"]) == 2 and all(
@@ -201,6 +203,19 @@ class BasePostgresSaver(BaseCheckpointSaver):
             )
             for idx, (channel, value) in enumerate(writes)
         ]
+
+    def _load_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
+        return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
+
+    def _dump_metadata(self, metadata) -> str:
+        serialized_metadata_type, serialized_metadata = self.jsonplus_serde.dumps_typed(
+            metadata
+        )
+        if serialized_metadata_type != "json":
+            raise TypeError(
+                f"Failed to properly serialize metadata -- expected 'json', got '{serialized_metadata_type}'"
+            )
+        return serialized_metadata.decode()
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:

@@ -111,7 +111,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                         self._load_blobs, value["channel_values"]
                     ),
                 },
-                value["metadata"],
+                self._load_metadata(value["metadata"]),
                 {
                     "configurable": {
                         "thread_id": value["thread_id"],
@@ -157,7 +157,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             self._load_blobs, value["channel_values"]
                         ),
                     },
-                    value["metadata"],
+                    self._load_metadata(value["metadata"]),
                     {
                         "configurable": {
                             "thread_id": thread_id,
@@ -214,7 +214,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(self._dump_checkpoint(copy)),
-                    Jsonb(metadata),
+                    self._dump_metadata(metadata),
                 ),
             )
         return next_config
