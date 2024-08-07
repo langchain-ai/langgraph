@@ -78,7 +78,7 @@ checkpoint = {
 }
 
 # store checkpoint
-checkpointer.put(write_config, checkpoint, {})
+checkpointer.put(write_config, checkpoint, {}, {})
 
 # load checkpoint
 checkpointer.get(read_config)

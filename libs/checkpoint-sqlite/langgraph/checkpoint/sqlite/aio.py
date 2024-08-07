@@ -111,7 +111,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         ...         saver = AsyncSqliteSaver(conn)
         ...         config = {"configurable": {"thread_id": "1"}}
         ...         checkpoint = {"ts": "2023-05-03T10:00:00Z", "data": {"key": "value"}}
-        ...         saved_config = await saver.aput(config, checkpoint)
+        ...         saved_config = await saver.aput(config, checkpoint, {}, {})
         ...         print(saved_config)
         >>> asyncio.run(main())
         {"configurable": {"thread_id": "1", "checkpoint_id": "0c62ca34-ac19-445d-bbb0-5b4984975b2a"}}
