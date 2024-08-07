@@ -8775,8 +8775,9 @@ def test_nested_graph_interrupts(
         MemorySaverAssertImmutable(),
         SqliteSaver.from_conn_string(":memory:"),
         PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
     ],
-    ids=["memory", "sqlite", "postgres"],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
 )
 def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> None:
     with checkpointer as checkpointer:
@@ -8903,8 +8904,9 @@ def test_nested_graph_interrupts_parallel(checkpointer: BaseCheckpointSaver) -> 
         MemorySaverAssertImmutable(),
         SqliteSaver.from_conn_string(":memory:"),
         PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
     ],
-    ids=["memory", "sqlite", "postgres"],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
 )
 def test_doubly_nested_graph_interrupts(checkpointer: BaseCheckpointSaver) -> None:
     with checkpointer as checkpointer:
@@ -9221,7 +9223,17 @@ def test_checkpoint_metadata() -> None:
         assert chkpnt_tuple.metadata["test_config_4"] == "bar"
 
 
-def test_remove_message_via_state_update():
+@pytest.mark.parametrize(
+    "checkpointer",
+    [
+        MemorySaverAssertImmutable(),
+        SqliteSaver.from_conn_string(":memory:"),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
+        PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
+    ],
+    ids=["memory", "sqlite", "postgres", "postgres_pipeline"],
+)
+def test_remove_message_via_state_update(checkpointer: BaseCheckpointSaver):
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
     workflow = MessageGraph()
@@ -9237,16 +9249,16 @@ def test_remove_message_via_state_update():
     workflow.set_entry_point("chatbot")
     workflow.add_edge("chatbot", END)
 
-    checkpointer = MemorySaver()
-    app = workflow.compile(checkpointer=checkpointer)
-    config = {"configurable": {"thread_id": "1"}}
-    output = app.invoke([HumanMessage(content="Hi")], config=config)
-    app.update_state(config, values=[RemoveMessage(id=output[-1].id)])
+    with checkpointer as checkpointer:
+        app = workflow.compile(checkpointer=checkpointer)
+        config = {"configurable": {"thread_id": "1"}}
+        output = app.invoke([HumanMessage(content="Hi")], config=config)
+        app.update_state(config, values=[RemoveMessage(id=output[-1].id)])
 
-    updated_state = app.get_state(config)
+        updated_state = app.get_state(config)
 
-    assert len(updated_state.values) == 1
-    assert updated_state.values[-1].content == "Hi"
+        assert len(updated_state.values) == 1
+        assert updated_state.values[-1].content == "Hi"
 
 
 def test_remove_message_from_node():

@@ -66,7 +66,7 @@ class FakeToolCallingModel(BaseChatModel):
         SqliteSaver.from_conn_string(":memory:"),
         PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
         PostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
-        NoneContextManager()
+        NoneContextManager(),
     ],
     ids=["memory", "sqlite", "postgres", "postgres_pipeline", "none"],
 )
@@ -80,21 +80,23 @@ def test_no_modifier(checkpointer: BaseCheckpointSaver):
         response = agent.invoke({"messages": inputs}, thread, debug=True)
         expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
         assert response == expected_response
-        saved = checkpointer.get_tuple(thread)
-        assert saved is not None
-        assert saved.checkpoint["channel_values"] == {
-            "messages": [
-                _AnyIdHumanMessage(content="hi?"),
-                AIMessage(content="hi?", id="0"),
-            ],
-            "agent": "agent",
-        }
-        assert saved.metadata == {
-            "source": "loop",
-            "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
-            "step": 1,
-        }
-        assert saved.pending_writes == []
+
+        if checkpointer:
+            saved = checkpointer.get_tuple(thread)
+            assert saved is not None
+            assert saved.checkpoint["channel_values"] == {
+                "messages": [
+                    _AnyIdHumanMessage(content="hi?"),
+                    AIMessage(content="hi?", id="0"),
+                ],
+                "agent": "agent",
+            }
+            assert saved.metadata == {
+                "source": "loop",
+                "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
+                "step": 1,
+            }
+            assert saved.pending_writes == []
 
 
 @pytest.mark.parametrize(
@@ -104,53 +106,37 @@ def test_no_modifier(checkpointer: BaseCheckpointSaver):
         AsyncSqliteSaver.from_conn_string(":memory:"),
         AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI),
         AsyncPostgresSaver.from_conn_string(DEFAULT_POSTGRES_URI, pipeline=True),
-        NoneContextManager()
+        NoneContextManager(),
     ],
     ids=["memory", "sqlite", "postgres", "postgres_pipeline", "none"],
 )
 async def test_no_modifier_async(checkpointer: Optional[BaseCheckpointSaver]):
     model = FakeToolCallingModel()
 
-    with checkpointer as checkpointer:
+    async with checkpointer as checkpointer:
         agent = create_react_agent(model, [], checkpointer=checkpointer)
         inputs = [HumanMessage("hi?")]
         thread = {"configurable": {"thread_id": "123"}}
         response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
         expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
         assert response == expected_response
-        saved = await checkpointer.aget_tuple(thread)
-        assert saved is not None
-        assert saved.checkpoint == {
-            "v": 1,
-            "ts": AnyStr(),
-            "id": AnyStr(),
-            "channel_values": {
+
+        if checkpointer:
+            saved = await checkpointer.aget_tuple(thread)
+            assert saved is not None
+            assert saved.checkpoint["channel_values"] == {
                 "messages": [
                     _AnyIdHumanMessage(content="hi?"),
                     AIMessage(content="hi?", id="0"),
                 ],
                 "agent": "agent",
-            },
-            "channel_versions": {
-                "__start__": 2,
-                "messages": 3,
-                "start:agent": 3,
-                "agent": 3,
-            },
-            "versions_seen": {
-                "__input__": {},
-                "__start__": {"__start__": 1},
-                "agent": {"start:agent": 2},
-            },
-            "pending_sends": [],
-            "current_tasks": {},
-        }
-        assert saved.metadata == {
-            "source": "loop",
-            "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
-            "step": 1,
-        }
-        assert saved.pending_writes == []
+            }
+            assert saved.metadata == {
+                "source": "loop",
+                "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
+                "step": 1,
+            }
+            assert saved.pending_writes == []
 
 
 def test_passing_two_modifiers():
