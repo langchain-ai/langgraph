@@ -294,16 +294,17 @@ class SqliteSaver(BaseCheckpointSaver):
 
         Examples:
             >>> from langgraph.checkpoint.sqlite import SqliteSaver
-            >>> memory = SqliteSaver.from_conn_string(":memory:")
+            >>> with SqliteSaver.from_conn_string(":memory:") as memory:
             ... # Run a graph, then list the checkpoints
-            >>> config = {"configurable": {"thread_id": "1"}}
-            >>> checkpoints = list(memory.list(config, limit=2))
+            >>>     config = {"configurable": {"thread_id": "1"}}
+            >>>     checkpoints = list(memory.list(config, limit=2))
             >>> print(checkpoints)
             [CheckpointTuple(...), CheckpointTuple(...)]
 
             >>> config = {"configurable": {"thread_id": "1"}}
             >>> before = {"configurable": {"checkpoint_id": "2024-05-04T06:32:42.235444+00:00"}}
-            >>> checkpoints = list(memory.list(config, before=before))
+            >>> with SqliteSaver.from_conn_string(":memory:") as memory:
+            >>>     checkpoints = list(memory.list(config, before=before))
             >>> print(checkpoints)
             [CheckpointTuple(...), ...]
         """
@@ -371,11 +372,10 @@ class SqliteSaver(BaseCheckpointSaver):
         Examples:
 
             >>> from langgraph.checkpoint.sqlite import SqliteSaver
-            >>> memory = SqliteSaver.from_conn_string(":memory:")
-            ... # Run a graph, then list the checkpoints
-            >>> config = {"configurable": {"thread_id": "1"}}
-            >>> checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
-            >>> saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}})
+            >>> with SqliteSaver.from_conn_string(":memory:") as memory:
+            >>>     config = {"configurable": {"thread_id": "1"}}
+            >>>     checkpoint = {"ts": "2024-05-04T06:32:42.235444+00:00", "data": {"key": "value"}}
+            >>>     saved_config = memory.put(config, checkpoint, {"source": "input", "step": 1, "writes": {"key": "value"}})
             >>> print(saved_config)
             {"configurable": {"thread_id": "1", "checkpoint_id": 2024-05-04T06:32:42.235444+00:00"}}
         """
