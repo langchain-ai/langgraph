@@ -9396,5 +9396,4 @@ def test_channel_values(request: pytest.FixtureRequest, checkpointer_name: str) 
         checkpointer=checkpointer,
     )
     app.invoke({"input": 1, "ephemeral": "meow"}, config)
-    # assert checkpointer.get(config)["channel_values"] == {"input": 1, "output": 1}
-    print([c.checkpoint["channel_values"] for c in checkpointer.list(config)])
+    assert checkpointer.get(config)["channel_values"] == {"input": 1, "output": 1}
