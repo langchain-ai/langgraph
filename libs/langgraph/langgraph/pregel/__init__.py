@@ -544,6 +544,7 @@ class Pregel(
                     "step": step,
                     "writes": {},
                 },
+                {},
             )
         elif as_node is None and not any(
             v for vv in checkpoint["versions_seen"].values() for v in vv.values()
@@ -613,6 +614,7 @@ class Pregel(
                     "step": step + 1,
                     "writes": {as_node: values},
                 },
+                {},
             )
 
     async def aupdate_state(
@@ -654,6 +656,7 @@ class Pregel(
                     "step": step,
                     "writes": {},
                 },
+                {},
             )
         elif as_node is None and not saved:
             if (
@@ -721,6 +724,7 @@ class Pregel(
                     "step": step + 1,
                     "writes": {as_node: values},
                 },
+                {},
             )
 
     def _defaults(

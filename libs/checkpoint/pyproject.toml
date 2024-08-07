@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gigagraph-checkpoint"
-version = "1.0.0"
+version = "1.0.1"
 description = "Library with base interfaces for GigaGraph checkpoint savers."
 authors = []
 license = "MIT"

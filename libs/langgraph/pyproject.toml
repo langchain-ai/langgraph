@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gigagraph"
-version = "0.1.19"
+version = "0.2.0"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
@@ -13,6 +13,7 @@ packages = [
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
 gigachain-core = ">=0.2.27,<0.3"
+gigagraph-checkpoint = "^1.0.1"
 
 
 [tool.poetry.group.dev.dependencies]
@@ -36,7 +37,7 @@ pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
 pytest-repeat = "^0.9.3"
 gigagraph-checkpoint = {path = "../checkpoint", develop = true}
 gigagraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
-aiosqlite = "^0.20.0"
+gigagraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
 
 [tool.poetry.group.dev]
 optional = true
