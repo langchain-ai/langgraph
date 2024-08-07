@@ -60,9 +60,9 @@ class TestSqliteSaver:
         with SqliteSaver.from_conn_string(":memory:") as saver:
             # set up test
             # save checkpoints
-            saver.put(self.config_1, self.chkpnt_1, self.metadata_1)
-            saver.put(self.config_2, self.chkpnt_2, self.metadata_2)
-            saver.put(self.config_3, self.chkpnt_3, self.metadata_3)
+            saver.put(self.config_1, self.chkpnt_1, self.metadata_1, {})
+            saver.put(self.config_2, self.chkpnt_2, self.metadata_2, {})
+            saver.put(self.config_3, self.chkpnt_3, self.metadata_3, {})
 
             # call method / assertions
             query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key

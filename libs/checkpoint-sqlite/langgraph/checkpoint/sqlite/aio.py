@@ -10,7 +10,6 @@ from typing import (
     Sequence,
     Tuple,
     TypeVar,
-    Union,
 )
 
 import aiosqlite
@@ -18,6 +17,7 @@ from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -374,7 +374,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Save a checkpoint to the database asynchronously.
 

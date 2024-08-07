@@ -1,6 +1,6 @@
 import threading
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional, Union
+from typing import Any, Iterator, List, Optional
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Connection, Cursor, Pipeline
@@ -8,6 +8,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from langgraph.checkpoint.base import (
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -172,7 +173,7 @@ class PostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         configurable = config["configurable"].copy()
         thread_id = configurable.pop("thread_id")

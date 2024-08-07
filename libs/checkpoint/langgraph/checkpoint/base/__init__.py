@@ -62,6 +62,9 @@ class TaskInfo(TypedDict):
     status: Literal["scheduled", "success", "error"]
 
 
+ChannelVersions = dict[str, Union[str, int, float]]
+
+
 class Checkpoint(TypedDict):
     """State snapshot at a given point in time."""
 
@@ -77,13 +80,13 @@ class Checkpoint(TypedDict):
 
     Mapping from channel name to channel snapshot value.
     """
-    channel_versions: dict[str, Union[str, int, float]]
+    channel_versions: ChannelVersions
     """The versions of the channels at the time of the checkpoint.
 
     The keys are channel names and the values are the logical time step
     at which the channel was last updated.
     """
-    versions_seen: dict[str, dict[str, Union[str, int, float]]]
+    versions_seen: dict[str, ChannelVersions]
     """Map from node ID to map from channel name to version seen.
 
     This keeps track of the versions of the channels that each node has seen.
@@ -278,7 +281,7 @@ class BaseCheckpointSaver(ABC):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Store a checkpoint with its configuration and metadata.
 
@@ -370,7 +373,7 @@ class BaseCheckpointSaver(ABC):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Asynchronously store a checkpoint with its configuration and metadata.
 

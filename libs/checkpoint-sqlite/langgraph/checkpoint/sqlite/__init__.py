@@ -2,12 +2,13 @@ import sqlite3
 import threading
 from contextlib import contextmanager
 from hashlib import md5
-from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple, Union
+from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -356,7 +357,7 @@ class SqliteSaver(BaseCheckpointSaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Save a checkpoint to the database.
 

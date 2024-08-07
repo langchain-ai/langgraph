@@ -41,6 +41,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -93,7 +94,7 @@ async def test_checkpoint_errors() -> None:
             config: RunnableConfig,
             checkpoint: Checkpoint,
             metadata: CheckpointMetadata,
-            new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+            new_versions: ChannelVersions,
         ) -> RunnableConfig:
             raise ValueError("Faulty put")
 

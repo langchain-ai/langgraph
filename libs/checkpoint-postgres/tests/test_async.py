@@ -58,9 +58,9 @@ class TestAsyncPostgresSaver:
 
     async def test_asearch(self):
         async with AsyncPostgresSaver.from_conn_string(DEFAULT_URI) as saver:
-            await saver.aput(self.config_1, self.chkpnt_1, self.metadata_1)
-            await saver.aput(self.config_2, self.chkpnt_2, self.metadata_2)
-            await saver.aput(self.config_3, self.chkpnt_3, self.metadata_3)
+            await saver.aput(self.config_1, self.chkpnt_1, self.metadata_1, {})
+            await saver.aput(self.config_2, self.chkpnt_2, self.metadata_2, {})
+            await saver.aput(self.config_3, self.chkpnt_3, self.metadata_3, {})
 
             # call method / assertions
             query_1: CheckpointMetadata = {"source": "input"}  # search by 1 key

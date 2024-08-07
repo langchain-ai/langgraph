@@ -3,12 +3,13 @@ from collections import defaultdict
 from contextlib import AbstractAsyncContextManager, AbstractContextManager
 from functools import partial
 from types import TracebackType
-from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple, Union
+from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -229,7 +230,7 @@ class MemorySaver(
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Save a checkpoint to the in-memory storage.
 
@@ -343,7 +344,7 @@ class MemorySaver(
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         """Asynchronous version of put.
 
@@ -357,7 +358,7 @@ class MemorySaver(
             RunnableConfig: The updated config containing the saved checkpoint's timestamp.
         """
         return await asyncio.get_running_loop().run_in_executor(
-            None, self.put, config, checkpoint, metadata
+            None, self.put, config, checkpoint, metadata, new_versions
         )
 
     async def aput_writes(

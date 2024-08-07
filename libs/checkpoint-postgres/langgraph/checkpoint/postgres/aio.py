@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional, Union
+from typing import Any, AsyncIterator, Optional
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
@@ -8,6 +8,7 @@ from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
 from langgraph.checkpoint.base import (
+    ChannelVersions,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -174,7 +175,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
-        new_versions: Optional[dict[str, Union[str, int, float]]] = None,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
         await self.setup()
         configurable = config["configurable"].copy()

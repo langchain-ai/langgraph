@@ -344,7 +344,7 @@ class PregelLoop:
                     and v > self.checkpoint_previous_versions[k]
                 }
             else:
-                new_versions = None
+                new_versions = self.checkpoint["channel_versions"]
 
             self.checkpoint_previous_versions = self.checkpoint[
                 "channel_versions"
