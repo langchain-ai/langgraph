@@ -58,7 +58,6 @@ from langgraph.channels.manager import (
 )
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
-    ChannelVersions,
     copy_checkpoint,
     create_checkpoint,
     empty_checkpoint,

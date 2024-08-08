@@ -337,7 +337,9 @@ class PregelLoop:
             }
 
             channel_versions = self.checkpoint["channel_versions"].copy()
-            new_versions = get_new_channel_versions(self.checkpoint_previous_versions, channel_versions)
+            new_versions = get_new_channel_versions(
+                self.checkpoint_previous_versions, channel_versions
+            )
 
             self.checkpoint_previous_versions = channel_versions
 
