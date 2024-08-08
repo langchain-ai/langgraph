@@ -7,6 +7,8 @@ The final repo structure will look something like this:
 ```bash
 my-app/
 ├── my_agent # all project code lies within here
+│   ├── utils
+│   │   ├── 
 │   ├── __init__.py
 │   └── agent.py # code for your graph
 │-- .env # environment variables
