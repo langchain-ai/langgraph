@@ -249,7 +249,7 @@ class PostgresSaver(BasePostgresSaver):
             new_versions (ChannelVersions): New channel versions as of this write.
 
         Returns:
-            RunnableConfig: The updated config containing the saved checkpoint's ID.
+            RunnableConfig: Updated configuration after storing the checkpoint.
 
         Examples:
 
