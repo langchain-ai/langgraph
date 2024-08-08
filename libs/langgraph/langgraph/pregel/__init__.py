@@ -518,7 +518,9 @@ class Pregel(
         # get last checkpoint
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-        checkpoint_previous_versions = checkpoint["channel_versions"].copy()
+        checkpoint_previous_versions = (
+            saved.checkpoint["channel_versions"] if saved else {}
+        )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
         checkpoint_config = {
@@ -634,7 +636,9 @@ class Pregel(
         # get last checkpoint
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-        checkpoint_previous_versions = checkpoint["channel_versions"].copy()
+        checkpoint_previous_versions = (
+            saved.checkpoint["channel_versions"] if saved else {}
+        )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
         checkpoint_config = {
