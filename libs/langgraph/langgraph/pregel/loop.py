@@ -61,6 +61,7 @@ from langgraph.pregel.executor import (
 )
 from langgraph.pregel.io import map_input, map_output_updates, map_output_values, single
 from langgraph.pregel.types import PregelExecutableTask
+from langgraph.pregel.utils import get_new_channel_versions
 
 if TYPE_CHECKING:
     from langgraph.pregel import Pregel
@@ -336,18 +337,9 @@ class PregelLoop:
             }
 
             channel_versions = self.checkpoint["channel_versions"].copy()
-            if self.checkpoint_previous_versions:
-                new_versions = {
-                    k: v
-                    for k, v in channel_versions.items()
-                    if k not in self.checkpoint_previous_versions
-                    or (
-                        k in self.checkpoint_previous_versions
-                        and v > self.checkpoint_previous_versions[k]
-                    )
-                }
-            else:
-                new_versions = channel_versions
+            new_versions = get_new_channel_versions(
+                self.checkpoint_previous_versions, channel_versions
+            )
 
             self.checkpoint_previous_versions = channel_versions
 

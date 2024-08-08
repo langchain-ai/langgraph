@@ -242,7 +242,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     copy.pop("channel_values"),
-                    copy["channel_versions"],
                     new_versions,
                 ),
             )
