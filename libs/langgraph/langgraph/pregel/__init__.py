@@ -4,6 +4,7 @@ import asyncio
 import concurrent.futures
 import time
 from collections import deque
+from datetime import datetime, timezone
 from functools import partial
 from inspect import signature
 from typing import (
@@ -913,6 +914,8 @@ class Pregel(
                     interrupt_after=interrupt_after,
                     manager=run_manager,
                 ):
+                    # start time of superstep
+                    step_start_time = datetime.now(timezone.utc)
                     # debug flag
                     if self.debug:
                         print_step_checkpoint(
@@ -987,6 +990,7 @@ class Pregel(
                                             loop.step,
                                             [task],
                                             self.stream_channels_list,
+                                            step_start_time,
                                         ),
                                     )
                         else:
@@ -1157,6 +1161,8 @@ class Pregel(
                     interrupt_after=interrupt_after,
                     manager=run_manager,
                 ):
+                    # start time of superstep
+                    step_start_time = datetime.now(timezone.utc)
                     # debug flag
                     if self.debug:
                         print_step_checkpoint(
@@ -1233,6 +1239,7 @@ class Pregel(
                                             loop.step,
                                             [task],
                                             self.stream_channels_list,
+                                            step_start_time,
                                         ),
                                     ):
                                         yield chunk

@@ -58,6 +58,7 @@ from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
+from tests.any_int import AnyInt
 from tests.any_str import AnyStr
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
@@ -1117,6 +1118,8 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "payload": {
                 "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
                 "name": "one",
+                "task_id": AnyStr(),
+                "node_exec_ms": AnyInt(),
                 "result": [("inbox", 3)],
             },
         },
@@ -1127,6 +1130,8 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "payload": {
                 "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
                 "name": "two",
+                "task_id": AnyStr(),
+                "node_exec_ms": AnyInt(),
                 "result": [("output", 13)],
             },
         },
@@ -1148,6 +1153,8 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "payload": {
                 "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
                 "name": "two",
+                "task_id": AnyStr(),
+                "node_exec_ms": AnyInt(),
                 "result": [("output", 4)],
             },
         },
@@ -4490,6 +4497,8 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
                     "name": "rewrite_query",
+                    "task_id": AnyStr(),
+                    "node_exec_ms": AnyInt(),
                     "result": [("query", "query: what is weather in sf")],
                 },
             },
@@ -4544,6 +4553,8 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
                     "name": "retriever_two",
+                    "task_id": AnyStr(),
+                    "node_exec_ms": AnyInt(),
                     "result": [("docs", ["doc3", "doc4"])],
                 },
             },
@@ -4561,6 +4572,8 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
                     "name": "retriever_one",
+                    "task_id": AnyStr(),
+                    "node_exec_ms": AnyInt(),
                     "result": [("docs", ["doc1", "doc2"])],
                 },
             },
@@ -4600,6 +4613,8 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
                     "name": "qa",
+                    "task_id": AnyStr(),
+                    "node_exec_ms": AnyInt(),
                     "result": [("answer", "doc1,doc2,doc3,doc4")],
                 },
             },
@@ -4904,6 +4919,8 @@ async def test_branch_then() -> None:
                 "payload": {
                     "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
                     "name": "prepare",
+                    "task_id": AnyStr(),
+                    "node_exec_ms": AnyInt(),
                     "result": [("my_key", " prepared")],
                 },
             },
@@ -4952,6 +4969,8 @@ async def test_branch_then() -> None:
                 "payload": {
                     "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
                     "name": "tool_two_slow",
+                    "task_id": AnyStr(),
+                    "node_exec_ms": AnyInt(),
                     "result": [("my_key", " slow")],
                 },
             },
@@ -5000,6 +5019,8 @@ async def test_branch_then() -> None:
                 "payload": {
                     "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
                     "name": "finish",
+                    "task_id": AnyStr(),
+                    "node_exec_ms": AnyInt(),
                     "result": [("my_key", " finished")],
                 },
             },
