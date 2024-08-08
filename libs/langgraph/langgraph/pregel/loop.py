@@ -341,8 +341,10 @@ class PregelLoop:
                     k: v
                     for k, v in channel_versions.items()
                     if k not in self.checkpoint_previous_versions
-                    or k in self.checkpoint_previous_versions
-                    and v > self.checkpoint_previous_versions[k]
+                    or (
+                        k in self.checkpoint_previous_versions
+                        and v > self.checkpoint_previous_versions[k]
+                    )
                 }
             else:
                 new_versions = channel_versions
