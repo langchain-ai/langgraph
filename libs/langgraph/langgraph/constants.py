@@ -27,11 +27,15 @@ CHECKPOINT_NAMESPACE_SEPARATOR = "|"
 class Send:
     """A message or packet to send to a specific node in the graph.
 
-    The `Send` class is used within a `StateGraph`'s conditional edges to dynamically
-    route states to different nodes based on certain conditions. This enables
-    creating "map-reduce" like workflows, where a node can be invoked multiple times
-    in parallel on different states, and the results can be aggregated back into the
-    main graph's state.
+    The `Send` class is used within a `StateGraph`'s conditional edges to
+    dynamically invoke a node with a custom state at the next step.
+
+    Importantly, the sent state can differ from the core graph's state,
+    allowing for flexible and dynamic workflow management.
+
+    One such example is a "map-reduce" workflow where your graph invokes
+    the same node multiple times in parallel with different states,
+    before aggregating the results back into the main graph's state.
 
     Attributes:
         node (str): The name of the target node to send the message to.
@@ -55,6 +59,8 @@ class Send:
         >>> builder.add_conditional_edges(START, continue_to_jokes)
         >>> builder.add_edge("generate_joke", END)
         >>> graph = builder.compile()
+        >>>
+        >>> # Invoking with two subjects results in a generated joke for each
         >>> graph.invoke({"subjects": ["cats", "dogs"]})
         {'subjects': ['cats', 'dogs'], 'jokes': ['Joke about cats', 'Joke about dogs']}
     """
