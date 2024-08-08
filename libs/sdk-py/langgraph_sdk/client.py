@@ -783,7 +783,8 @@ class ThreadsClient:
                         'configurable':
                             {
                                 'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
-                                'thread_ts': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1'
+                                'checkpoint_ns': '',
+                                'checkpoint_id': '1ef4a9b8-e6fb-67b1-8001-abd5184439d1'
                             }
                     },
                 'metadata':
@@ -822,7 +823,8 @@ class ThreadsClient:
                         'configurable':
                             {
                                 'thread_id': 'e2496803-ecd5-4e0c-a779-3226296181c2',
-                                'thread_ts': '1ef4a9b8-d80d-6fa7-8000-9300467fad0f'
+                                'checkpoint_ns': '',
+                                'checkpoint_id': '1ef4a9b8-d80d-6fa7-8000-9300467fad0f'
                             }
                     }
             }
@@ -1184,7 +1186,7 @@ class RunsClient:
                                         'user_id': None,
                                         'graph_id': 'agent',
                                         'thread_id': 'my_thread_id',
-                                        'thread_ts': None,
+                                        'checkpoint_id': None,
                                         'model_name': "openai",
                                         'assistant_id': 'my_assistant_id'
                                     }

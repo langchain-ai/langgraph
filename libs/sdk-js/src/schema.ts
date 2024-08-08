@@ -27,7 +27,7 @@ export interface Config {
     /**
      * Timestamp of the state checkpoint
      */
-    thread_ts?: string;
+    checkpoint_id?: string;
     [key: string]: unknown;
   };
 }
