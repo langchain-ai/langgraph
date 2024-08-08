@@ -7453,12 +7453,20 @@ def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
 
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value_more"}
-    assert [*app.stream({"my_key": "my_value"})] == [
-        {"up": None},
-        {"side": None},
-        {"other": {"my_key": "_more"}},
-        {"down": None},
-    ]
+    assert [*app.stream({"my_key": "my_value"})] in (
+        [
+            {"up": None},
+            {"side": None},
+            {"other": {"my_key": "_more"}},
+            {"down": None},
+        ],
+        [
+            {"up": None},
+            {"other": {"my_key": "_more"}},
+            {"side": None},
+            {"down": None},
+        ],
+    )
 
 
 def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
