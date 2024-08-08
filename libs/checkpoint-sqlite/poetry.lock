@@ -206,7 +206,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "gigagraph-checkpoint"
-version = "1.0.1"
+version = "1.0.2"
 description = "Library with base interfaces for GigaGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
