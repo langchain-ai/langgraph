@@ -9200,7 +9200,13 @@ def test_checkpoint_metadata() -> None:
         assert chkpnt_tuple.metadata["test_config_4"] == "bar"
 
 
-def test_remove_message_via_state_update():
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite", "postgres", "postgres_pipe"],
+)
+def test_remove_message_via_state_update(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
     workflow = MessageGraph()
@@ -9216,7 +9222,7 @@ def test_remove_message_via_state_update():
     workflow.set_entry_point("chatbot")
     workflow.add_edge("chatbot", END)
 
-    checkpointer = MemorySaver()
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
     app = workflow.compile(checkpointer=checkpointer)
     config = {"configurable": {"thread_id": "1"}}
     output = app.invoke([HumanMessage(content="Hi")], config=config)
