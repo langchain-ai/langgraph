@@ -8,7 +8,7 @@ Implementation of LangGraph CheckpointSaver that uses Postgres.
 > When using Postgres checkpointers for the first time, make sure to call `.setup()` method on them to create required tables. See example below.
 
 > [!IMPORTANT]
-> When manually creating Postgres connections and passing them to `PostgresSaver` or `AsyncPostgresSaver`, make sure to include `autocommit=True` and `row_factory=dict_row` (`from pyscopg.rows import dict_row`). See a full example in this [how-to guide](https://langchain-ai.github.io/langgraph/how-tos/persistence_postgres/).
+> When manually creating Postgres connections and passing them to `PostgresSaver` or `AsyncPostgresSaver`, make sure to include `autocommit=True` and `row_factory=dict_row` (`from psycopg.rows import dict_row`). See a full example in this [how-to guide](https://langchain-ai.github.io/langgraph/how-tos/persistence_postgres/).
 
 ```python
 from langgraph.checkpoint.postgres import PostgresSaver
