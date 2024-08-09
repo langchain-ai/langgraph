@@ -50,7 +50,8 @@ Learn from example implementations of graphs designed for specific scenarios and
 
 - [Basic Reflection](reflection/reflection.ipynb): Prompt the agent to reflect on and revise its outputs
 - [Reflexion](reflexion/reflexion.ipynb): Critique missing and superfluous details to guide next steps
-- [Language Agent Tree Search](lats/lats.ipynb): Use reflection and rewards to drive a tree search over agents
+- [Tree of Thoughts](tot/tot.ipynb): Search over candidate solutions to a problem using a scored tree
+- [Language Agent Tree Search](lats/lats.ipynb): Use reflection and rewards to drive a monte-carlo tree search over agents
 - [Self-Discover Agent](self-discover/self-discover.ipynb): Analyze an agent that learns about its own capabilities
 
 #### Evaluation

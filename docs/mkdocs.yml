@@ -110,6 +110,7 @@ nav:
           - Reflection & Critique:
               - Basic Reflection: tutorials/reflection/reflection.ipynb
               - Reflexion: tutorials/reflexion/reflexion.ipynb
+              - Tree of Thoughts: tutorials/tot/tot.ipynb
               - Language Agent Tree Search: tutorials/lats/lats.ipynb
               - Self-Discover Agent: tutorials/self-discover/self-discover.ipynb
       - Evaluation & Analysis:
