@@ -2,6 +2,8 @@
 
 A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `requirements.txt` to specify project dependencies. 
 
+This walkthrough is based on [this repository](https://github.com/langchain-ai/langgraph-example), which you can play around with to learn more about how to setup your LangGraph application for deployment.
+
 !!! tip "Setup with pyproject.toml"
     If you prefer using poetry for dependency management, check out [this how-to guide](./setup_pyproject.md) on using `pyproject.toml` for LangGraph Cloud.
 
@@ -9,11 +11,17 @@ The final repo structure will look something like this:
 
 ```bash
 my-app/
-|-- requirements.txt    # package dependencies
-|-- .env                # environment variables
-|-- openai_agent.py     # code for an agent
-|-- anthropic_agent.py  # code for another agent
-|-- langgraph.json      # configuration file for LangGraph
+├── my_agent # all project code lies within here
+│   ├── utils # utilities for your graph
+│   │   ├── __init__.py
+│   │   ├── tools.py # tools for your graph
+│   │   ├── nodes.py # node functions for you graph
+│   │   └── state.py # state definition of your graph
+│   ├── requirements.txt # package dependencies
+│   ├── __init__.py
+│   └── agent.py # code for constructing your graph
+├── .env # environment variables
+└── langgraph.json # configuration file for LangGraph
 ```
 
 After each step, an example file directory is provided to demonstrate how code can be organized.
@@ -24,8 +32,8 @@ Dependencies can optionally be specified in one of the following files: `pyproje
 
 The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
 ```
-langgraph>=0.1.19,<0.2.0
-langchain-core>=0.2.8,<0.3.0
+langgraph>=0.2.0,<0.3.0
+langchain-core>=0.2.27,<0.3.0
 langsmith>=0.1.63
 orjson>=3.10.1
 httpx>=0.27.0
@@ -36,18 +44,24 @@ uvloop>=0.19.0
 httptools>=0.6.1
 jsonschema-rs>=0.18.0
 croniter>=1.0.1
+structlog>=24.4.0
 ```
 
 Example `requirements.txt` file:
 ```
 langgraph
+langchain_anthropic
+tavily-python
+langchain_community
 langchain_openai
+
 ```
 
 Example file directory:
-```
+```bash
 my-app/
-|-- requirements.txt    # Python packages required for your graph
+├── my_agent # all project code lies within here
+│   └── requirements.txt # package dependencies
 ```
 
 ## Specify Environment Variables
@@ -62,42 +76,66 @@ OPENAI_API_KEY=key
 ```
 
 Example file directory:
-```
+
+```bash
 my-app/
-|-- requirements.txt
-|-- .env                # file with environment variables
+├── my_agent # all project code lies within here
+│   └── requirements.txt # package dependencies
+└── .env # environment variables
 ```
 
 ## Define Graphs
 
 Implement your graphs! Graphs can be defined in a single file or multiple files. Make note of the variable names of each [CompiledGraph][compiledgraph] to be included in the LangGraph application. The variable names will be used later when creating the [LangGraph API configuration file](../reference/cli.md#configuration-file).
 
-Example `openai_agent.py` file:
+Example `agent.py` file, which shows how to import from other modules you define (code for the modules is not shown here, please see [this repo](https://github.com/langchain-ai/langgraph-example) to see their implementation):
+
+
 ```python
-from langchain_openai import ChatOpenAI
-from langgraph.graph import END, MessageGraph
+# my_agent/agent.py
+from typing import TypedDict, Literal
 
-model = ChatOpenAI(temperature=0)
+from langgraph.graph import StateGraph, END
+from my_agent.utils.nodes import call_model, should_continue, tool_node # import nodes
+from my_agent.utils.state import AgentState # import state
 
-graph_workflow = MessageGraph()
+# Define the config
+class GraphConfig(TypedDict):
+    model_name: Literal["anthropic", "openai"]
 
-graph_workflow.add_node("agent", model)
-graph_workflow.add_edge("agent", END)
-graph_workflow.set_entry_point("agent")
+workflow = StateGraph(AgentState, config_schema=GraphConfig)
+workflow.add_node("agent", call_model)
+workflow.add_node("action", tool_node)
+workflow.set_entry_point("agent")
+workflow.add_conditional_edges(
+    "agent",
+    should_continue,
+    {
+        "continue": "action",
+        "end": END,
+    },
+)
+workflow.add_edge("action", "agent")
 
-agent = graph_workflow.compile()
+graph = workflow.compile()
 ```
 
 !!! warning "Assign `CompiledGraph` to Variable"
     The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module (alternatively, you can provide [a function that creates a graph](./graph_rebuild.md)).
 
 Example file directory:
-```
+```bash
 my-app/
-|-- requirements.txt
-|-- .env
-|-- openai_agent.py     # code for your graph
-|-- anthropic_agent.py  # code for your graph
+├── my_agent # all project code lies within here
+│   ├── utils # utilities for your graph
+│   │   ├── __init__.py
+│   │   ├── tools.py # tools for your graph
+│   │   ├── nodes.py # node functions for you graph
+│   │   └── state.py # state definition of your graph
+│   ├── requirements.txt # package dependencies
+│   ├── __init__.py
+│   └── agent.py # code for constructing your graph
+└── .env # environment variables
 ```
 
 ## Create LangGraph API Config
@@ -107,14 +145,11 @@ Create a [LangGraph API configuration file](../reference/cli.md#configuration-fi
 Example `langgraph.json` file:
 ```json
 {
-    "dependencies": [
-        "."
-    ],
-    "graphs": {
-        "openai_agent": "./openai_agent.py:agent",
-        "anthropic_agent": "./anthropic_agent.py:agent"
-    },
-    "env": "./.env"
+  "dependencies": ["./my_agent"],
+  "graphs": {
+    "agent": "./my_agent/agent.py:graph"
+  },
+  "env": ".env"
 }
 ```
 
@@ -127,11 +162,17 @@ Example file directory:
 
 ```bash
 my-app/
-|-- requirements.txt
-|-- .env
-|-- openai_agent.py
-|-- anthropic_agent.py
-|-- langgraph.json      # configuration file for LangGraph
+├── my_agent # all project code lies within here
+│   ├── utils # utilities for your graph
+│   │   ├── __init__.py
+│   │   ├── tools.py # tools for your graph
+│   │   ├── nodes.py # node functions for you graph
+│   │   └── state.py # state definition of your graph
+│   ├── requirements.txt # package dependencies
+│   ├── __init__.py
+│   └── agent.py # code for constructing your graph
+├── .env # environment variables
+└── langgraph.json # configuration file for LangGraph
 ```
 
 ## Next
