@@ -56,6 +56,25 @@ This is a pretty advanced interaction pattern. In this interaction pattern, the 
 
 See [this guide](../how-tos/human_in_the_loop/time-travel.ipynb) for how to do this in LangGraph.
 
+## Review Tool Calls
+
+This is a specific type of human-in-the-loop interactions but is worth calling out because it is so common. A lot of agent decisions are made via tool calling, so having a clear UX for reviewing tool calls is handy.
+
+A tool call consists of:
+- The name of the tool to call
+- Arguments to pass to the tool
+
+Note that these tool calls can obviously be used for actually calling functions, but they can also be used for other purposes, like to route the agent in a specific direction.
+You want want to review the tool call for both of these use cases.
+
+When reviewing tool calls, there are few actions you may want to take.
+
+1. Approve the tool call (and let the agent continue on its way)
+2. Manually change the tool call, either the tool name or the tool arguments (and let the agent continue on its way after that)
+3. Leave feedback on the tool call. This differs from (2) in that you are not changing the tool call directly, but rather leaving natural language feedback suggesting the LLM call it different (or call a different tool). You could do this by either adding a ToolMessage and having the feedback be the result of the tool call, or by adding a ToolMessage (that simulates an error) and then a HumanMessage (with the feedback).
+
+See [this guide](../how-tos/human_in_the_loop/review-tool-calls.ipynb) for how to do this in LangGraph.
+
 ## Map-Reduce
 
 A common pattern in agents is to generate a list of objects, do some work on each of those objects, and then combine the results. This is very similar to the common [map-reduce](https://en.wikipedia.org/wiki/MapReduce) operation. This can be tricky for a few reasons. First, it can be tough to define a structured graph ahead of time because the length of the list of objects may be unknown. Second, in order to do this map-reduce you need multiple versions of the state to exist... but the graph shares a common shared state, so how can this be?
