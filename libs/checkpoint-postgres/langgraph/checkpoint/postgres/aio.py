@@ -66,11 +66,10 @@ class AsyncPostgresSaver(BasePostgresSaver):
         async with self.lock:
             async with self.conn.cursor(binary=True) as cur:
                 try:
-                    version = (
-                        await cur.execute(
-                            "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                        )
-                    ).fetchone()["v"]
+                    results = await cur.execute(
+                        "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                    )
+                    version = (await results.fetchone())["v"]
                 except UndefinedTable:
                     version = -1
                 for v, migration in zip(
