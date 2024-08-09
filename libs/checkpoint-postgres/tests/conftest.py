@@ -3,7 +3,7 @@ from psycopg import AsyncConnection
 from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 
-DEFAULT_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
+DEFAULT_URI = "postgres://postgres:postgres@localhost:5441/postgres?sslmode=disable"
 
 
 @pytest.fixture(scope="function")

@@ -230,7 +230,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
 
         This method retrieves a checkpoint tuple from the SQLite database based on the
         provided config. If the config contains a "checkpoint_id" key, the checkpoint with
-        the matching thread ID and timestamp is retrieved. Otherwise, the latest checkpoint
+        the matching thread ID and checkpoint ID is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
         Args:
@@ -317,12 +317,12 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         """List checkpoints from the database asynchronously.
 
         This method retrieves a list of checkpoint tuples from the SQLite database based
-        on the provided config. The checkpoints are ordered by timestamp in descending order.
+        on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
         Args:
             config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
             filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
             limit (Optional[int]): Maximum number of checkpoints to return.
 
         Yields:
@@ -385,10 +385,10 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
             metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (dict): New versions as of this write
+            new_versions (ChannelVersions): New channel versions as of this write.
 
         Returns:
-            RunnableConfig: The updated config containing the saved checkpoint's timestamp.
+            RunnableConfig: Updated configuration after storing the checkpoint.
         """
         await self.setup()
         thread_id = config["configurable"]["thread_id"]

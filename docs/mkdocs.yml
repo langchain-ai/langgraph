@@ -134,7 +134,7 @@ nav:
           - Manage conversation history: how-tos/memory/manage-conversation-history.ipynb
           - Delete messages: how-tos/memory/delete-messages.ipynb
           - Add summary of the conversation history: how-tos/memory/add-summary-conversation-history.ipynb
-          - Create custom checkpointer using Postgres: how-tos/persistence_postgres.ipynb
+          - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
       - Human-in-the-loop:
@@ -142,6 +142,7 @@ nav:
           - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
           - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
           - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
+          - Review tool calls: how-tos/human_in_the_loop/review-tool-calls.ipynb
       - Streaming:
           - Stream full state: how-tos/stream-values.ipynb
           - Stream state updates: how-tos/stream-updates.ipynb

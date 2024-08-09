@@ -4,6 +4,9 @@ Implementation of LangGraph CheckpointSaver that uses Postgres.
 
 ## Usage
 
+> [!IMPORTANT]
+> When using Postgres checkpointers for the first time, make sure to call `.setup()` method on them to create required tables. See example below.
+
 ```python
 from langgraph.checkpoint.postgres import PostgresSaver
 
@@ -12,6 +15,8 @@ read_config = {"configurable": {"thread_id": "1"}}
 
 DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    # call .setup() the first time you're using the checkpointer
+    checkpointer.setup()
     checkpoint = {
         "v": 1,
         "ts": "2024-07-31T20:14:19.804150+00:00",

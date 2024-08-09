@@ -289,7 +289,7 @@ class BaseCheckpointSaver(ABC):
             config (RunnableConfig): Configuration for the checkpoint.
             checkpoint (Checkpoint): The checkpoint to store.
             metadata (CheckpointMetadata): Additional metadata for the checkpoint.
-            new_versions (dict): New versions as of this write
+            new_versions (ChannelVersions): New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
@@ -381,7 +381,7 @@ class BaseCheckpointSaver(ABC):
             config (RunnableConfig): Configuration for the checkpoint.
             checkpoint (Checkpoint): The checkpoint to store.
             metadata (CheckpointMetadata): Additional metadata for the checkpoint.
-            new_versions (dict): New versions as of this write
+            new_versions (ChannelVersions): New channel versions as of this write.
 
         Returns:
             RunnableConfig: Updated configuration after storing the checkpoint.
