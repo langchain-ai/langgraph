@@ -1392,6 +1392,7 @@
   	down --> __end__;
   	side --> down;
   	up --> down;
+  	up --> other;
   	up --> side;
   
   '''

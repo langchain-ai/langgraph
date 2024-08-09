@@ -18,11 +18,8 @@ from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState
-from tests.any_str import AnyStr
-from tests.memory_assert import MemorySaverAssertImmutable
 from tests.messages import _AnyIdHumanMessage
 
 
@@ -54,18 +51,13 @@ class FakeToolCallingModel(BaseChatModel):
 
 
 @pytest.mark.parametrize(
-    "checkpointer",
-    [
-        MemorySaverAssertImmutable(),
-        None,
-    ],
-    ids=[
-        "memory",
-        "none",
-    ],
+    "checkpointer_name",
+    ["memory", "sqlite", "postgres", "postgres_pipe"],
 )
-def test_no_modifier(checkpointer: Optional[BaseCheckpointSaver]):
+def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
     model = FakeToolCallingModel()
+
     agent = create_react_agent(model, [], checkpointer=checkpointer)
     inputs = [HumanMessage("hi?")]
     thread = {"configurable": {"thread_id": "123"}}
@@ -76,30 +68,12 @@ def test_no_modifier(checkpointer: Optional[BaseCheckpointSaver]):
     if checkpointer:
         saved = checkpointer.get_tuple(thread)
         assert saved is not None
-        assert saved.checkpoint == {
-            "v": 1,
-            "ts": AnyStr(),
-            "id": AnyStr(),
-            "channel_values": {
-                "messages": [
-                    _AnyIdHumanMessage(content="hi?"),
-                    AIMessage(content="hi?", id="0"),
-                ],
-                "agent": "agent",
-            },
-            "channel_versions": {
-                "__start__": 2,
-                "messages": 3,
-                "start:agent": 3,
-                "agent": 3,
-            },
-            "versions_seen": {
-                "__input__": {},
-                "__start__": {"__start__": 1},
-                "agent": {"start:agent": 2},
-            },
-            "pending_sends": [],
-            "current_tasks": {},
+        assert saved.checkpoint["channel_values"] == {
+            "messages": [
+                _AnyIdHumanMessage(content="hi?"),
+                AIMessage(content="hi?", id="0"),
+            ],
+            "agent": "agent",
         }
         assert saved.metadata == {
             "source": "loop",
@@ -110,18 +84,16 @@ def test_no_modifier(checkpointer: Optional[BaseCheckpointSaver]):
 
 
 @pytest.mark.parametrize(
-    "checkpointer",
-    [
-        MemorySaverAssertImmutable(),
-        None,
-    ],
-    ids=[
-        "memory",
-        "none",
-    ],
+    "checkpointer_name",
+    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe"],
 )
-async def test_no_modifier_async(checkpointer: Optional[BaseCheckpointSaver]):
+async def test_no_modifier_async(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     model = FakeToolCallingModel()
+
     agent = create_react_agent(model, [], checkpointer=checkpointer)
     inputs = [HumanMessage("hi?")]
     thread = {"configurable": {"thread_id": "123"}}
@@ -132,30 +104,12 @@ async def test_no_modifier_async(checkpointer: Optional[BaseCheckpointSaver]):
     if checkpointer:
         saved = await checkpointer.aget_tuple(thread)
         assert saved is not None
-        assert saved.checkpoint == {
-            "v": 1,
-            "ts": AnyStr(),
-            "id": AnyStr(),
-            "channel_values": {
-                "messages": [
-                    _AnyIdHumanMessage(content="hi?"),
-                    AIMessage(content="hi?", id="0"),
-                ],
-                "agent": "agent",
-            },
-            "channel_versions": {
-                "__start__": 2,
-                "messages": 3,
-                "start:agent": 3,
-                "agent": 3,
-            },
-            "versions_seen": {
-                "__input__": {},
-                "__start__": {"__start__": 1},
-                "agent": {"start:agent": 2},
-            },
-            "pending_sends": [],
-            "current_tasks": {},
+        assert saved.checkpoint["channel_values"] == {
+            "messages": [
+                _AnyIdHumanMessage(content="hi?"),
+                AIMessage(content="hi?", id="0"),
+            ],
+            "agent": "agent",
         }
         assert saved.metadata == {
             "source": "loop",

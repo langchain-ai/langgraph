@@ -55,6 +55,8 @@ class TestPostgresSaver:
             "score": None,
         }
         self.metadata_3: CheckpointMetadata = {}
+        with PostgresSaver.from_conn_string(DEFAULT_URI) as saver:
+            saver.setup()
 
     def test_search(self):
         with PostgresSaver.from_conn_string(DEFAULT_URI) as saver:

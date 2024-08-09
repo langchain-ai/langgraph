@@ -1,4 +1,3 @@
-from collections import defaultdict
 from typing import Any, Iterator, Mapping, Optional, Sequence, TypeVar, Union
 
 from langchain_core.runnables.utils import AddableDict
@@ -102,36 +101,33 @@ def map_output_updates(
     output_tasks = [
         t for t in tasks if not t.config or TAG_HIDDEN not in t.config.get("tags")
     ]
+    if not output_tasks:
+        return
     if isinstance(output_channels, str):
-        if updated := [
+        updated = [
             (task.name, value)
             for task in output_tasks
             for chan, value in task.writes
             if chan == output_channels
-        ]:
-            grouped = defaultdict(list)
-            for node, value in updated:
-                grouped[node].append(value)
-            for node, value in grouped.items():
-                if len(value) == 1:
-                    grouped[node] = value[0]
-            yield AddableUpdatesDict(grouped)
+        ]
     else:
-        if updated := [
+        updated = [
             (
                 task.name,
                 {chan: value for chan, value in task.writes if chan in output_channels},
             )
             for task in output_tasks
             if any(chan in output_channels for chan, _ in task.writes)
-        ]:
-            grouped = defaultdict(list)
-            for node, value in updated:
-                grouped[node].append(value)
-            for node, value in grouped.items():
-                if len(value) == 1:
-                    grouped[node] = value[0]
-            yield AddableUpdatesDict(grouped)
+        ]
+    grouped = {t.name: [] for t in output_tasks}
+    for node, value in updated:
+        grouped[node].append(value)
+    for node, value in grouped.items():
+        if len(value) == 0:
+            grouped[node] = None
+        if len(value) == 1:
+            grouped[node] = value[0]
+    yield AddableUpdatesDict(grouped)
 
 
 T = TypeVar("T")
