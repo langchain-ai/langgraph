@@ -19,7 +19,7 @@ from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import get_config_list, get_executor_for_config
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
-from typing_extensions import get_args
+from typing_extensions import get_args, get_origin
 
 from langgraph.utils import RunnableCallable
 
@@ -319,16 +319,28 @@ class InjectedState(InjectedToolArg):
         self.field = field
 
 
+def _get_injections(type_: type) -> List[str]:
+    def check_args(args: Sequence) -> bool:
+        return [
+            arg
+            for arg in args[1:]
+            if isinstance(arg, InjectedState)
+            or (isinstance(arg, type) and issubclass(arg, InjectedState))
+        ]
+
+    args = get_args(type_)
+
+    if get_origin(type_) in (Optional, Union):
+        # Pydantic will type Annotated[Any, InjectedState] as typing.Optional[Annotated[Any, InjectedState]]
+        return [inj for arg in args for inj in check_args(get_args(arg))]
+    return check_args(args)
+
+
 def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
     full_schema = tool.get_input_schema()
     tool_args_to_state_fields: Dict = {}
     for name, type_ in full_schema.__annotations__.items():
-        injections = [
-            type_arg
-            for type_arg in get_args(type_)
-            if isinstance(type_arg, InjectedState)
-            or (isinstance(type_arg, type) and issubclass(type_arg, InjectedState))
-        ]
+        injections = _get_injections(type_)
         if len(injections) > 1:
             raise ValueError(
                 "A tool argument should not be annotated with InjectedState more than "
