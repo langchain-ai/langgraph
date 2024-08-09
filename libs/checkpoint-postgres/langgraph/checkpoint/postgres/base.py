@@ -11,9 +11,51 @@ from langgraph.checkpoint.base import (
     EmptyChannelError,
     get_checkpoint_id,
 )
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import ChannelProtocol
 
 MetadataInput = Optional[dict[str, Any]]
+
+"""
+To add a new migration, add a new string to the MIGRATIONS list.
+The position of the migration in the list is the version number.
+"""
+MIGRATIONS = [
+    """CREATE TABLE IF NOT EXISTS checkpoint_migrations (
+    v INTEGER PRIMARY KEY
+);""",
+    """CREATE TABLE IF NOT EXISTS checkpoints (
+    thread_id TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL DEFAULT '',
+    checkpoint_id TEXT NOT NULL,
+    parent_checkpoint_id TEXT,
+    type TEXT,
+    checkpoint JSONB NOT NULL,
+    metadata JSONB NOT NULL DEFAULT '{}',
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
+);""",
+    """CREATE TABLE IF NOT EXISTS checkpoint_blobs (
+    thread_id TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL DEFAULT '',
+    channel TEXT NOT NULL,
+    version TEXT NOT NULL,
+    type TEXT NOT NULL,
+    blob BYTEA,
+    PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
+);""",
+    """CREATE TABLE IF NOT EXISTS checkpoint_writes (
+    thread_id TEXT NOT NULL,
+    checkpoint_ns TEXT NOT NULL DEFAULT '',
+    checkpoint_id TEXT NOT NULL,
+    task_id TEXT NOT NULL,
+    idx INTEGER NOT NULL,
+    channel TEXT NOT NULL,
+    type TEXT,
+    blob BYTEA NOT NULL,
+    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
+);""",
+    "ALTER TABLE checkpoint_blobs ALTER COLUMN blob DROP not null;",
+]
 
 SELECT_SQL = """
 select
@@ -42,43 +84,6 @@ select
     ) as pending_writes
 from checkpoints """
 
-CREATE_CHECKPOINTS_SQL = """
-    CREATE TABLE IF NOT EXISTS checkpoints (
-    thread_id TEXT NOT NULL,
-    checkpoint_ns TEXT NOT NULL DEFAULT '',
-    checkpoint_id TEXT NOT NULL,
-    parent_checkpoint_id TEXT,
-    type TEXT,
-    checkpoint JSONB NOT NULL,
-    metadata JSONB NOT NULL DEFAULT '{}',
-    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id)
-);
-"""
-CREATE_CHECKPOINT_BLOBS_SQL = """
-    CREATE TABLE IF NOT EXISTS checkpoint_blobs (
-    thread_id TEXT NOT NULL,
-    checkpoint_ns TEXT NOT NULL DEFAULT '',
-    channel TEXT NOT NULL,
-    version TEXT NOT NULL,
-    type TEXT NOT NULL,
-    blob BYTEA NOT NULL,
-    PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
-);"""
-
-CREATE_CHECKPOINT_WRITES_SQL = """
-    CREATE TABLE IF NOT EXISTS checkpoint_writes (
-    thread_id TEXT NOT NULL,
-    checkpoint_ns TEXT NOT NULL DEFAULT '',
-    checkpoint_id TEXT NOT NULL,
-    task_id TEXT NOT NULL,
-    idx INTEGER NOT NULL,
-    channel TEXT NOT NULL,
-    type TEXT,
-    blob BYTEA NOT NULL,
-    PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
-);
-"""
-
 UPSERT_CHECKPOINT_BLOBS_SQL = """
     INSERT INTO checkpoint_blobs (thread_id, checkpoint_ns, channel, version, type, blob)
     VALUES (%s, %s, %s, %s, %s, %s)
@@ -103,12 +108,11 @@ UPSERT_CHECKPOINT_WRITES_SQL = """
 
 class BasePostgresSaver(BaseCheckpointSaver):
     SELECT_SQL = SELECT_SQL
-    CREATE_CHECKPOINTS_SQL = CREATE_CHECKPOINTS_SQL
-    CREATE_CHECKPOINT_BLOBS_SQL = CREATE_CHECKPOINT_BLOBS_SQL
-    CREATE_CHECKPOINT_WRITES_SQL = CREATE_CHECKPOINT_WRITES_SQL
+    MIGRATIONS = MIGRATIONS
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
+    jsonplus_serde = JsonPlusSerializer()
 
     def _load_checkpoint(self, checkpoint: dict[str, Any]) -> Checkpoint:
         if len(checkpoint["pending_sends"]) == 2 and all(
@@ -137,6 +141,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
         return {
             k.decode(): self.serde.loads_typed((t.decode(), v))
             for k, t, v in blob_values
+            if t.decode() != "empty"
         }
 
     def _dump_blobs(
@@ -159,10 +164,13 @@ class BasePostgresSaver(BaseCheckpointSaver):
                 checkpoint_ns,
                 k,
                 ver,
-                *self.serde.dumps_typed(values[k]),
+                *(
+                    self.serde.dumps_typed(values[k])
+                    if k in values
+                    else ("empty", None)
+                ),
             )
             for k, ver in versions.items()
-            if k in values
         ]
 
     def _load_writes(
@@ -201,6 +209,19 @@ class BasePostgresSaver(BaseCheckpointSaver):
             )
             for idx, (channel, value) in enumerate(writes)
         ]
+
+    def _load_metadata(self, metadata: dict[str, Any]) -> dict[str, Any]:
+        return self.jsonplus_serde.loads(self.jsonplus_serde.dumps(metadata))
+
+    def _dump_metadata(self, metadata) -> str:
+        serialized_metadata_type, serialized_metadata = self.jsonplus_serde.dumps_typed(
+            metadata
+        )
+        if serialized_metadata_type != "json":
+            raise TypeError(
+                f"Failed to properly serialize metadata -- expected 'json', got '{serialized_metadata_type}'"
+            )
+        return serialized_metadata.decode()
 
     def get_next_version(self, current: Optional[str], channel: ChannelProtocol) -> str:
         if current is None:

@@ -575,7 +575,7 @@ typing-extensions = ">=4.7"
 
 [[package]]
 name = "gigagraph"
-version = "0.1.19"
+version = "0.2.2"
 description = "Building stateful, multi-actor applications with LLMs"
 optional = false
 python-versions = ">=3.9.0,<4.0"
@@ -584,6 +584,7 @@ develop = true
 
 [package.dependencies]
 gigachain-core = ">=0.2.27,<0.3"
+gigagraph-checkpoint = "^1.0.2"
 
 [package.source]
 type = "directory"
@@ -591,7 +592,7 @@ url = "libs/langgraph"
 
 [[package]]
 name = "gigagraph-checkpoint"
-version = "1.0.0"
+version = "1.0.2"
 description = "Library with base interfaces for GigaGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -616,7 +617,7 @@ develop = true
 
 [package.dependencies]
 aiosqlite = "^0.20.0"
-gigagraph-checkpoint = "^1.0.0"
+gigagraph-checkpoint = "^1.0.1"
 
 [package.source]
 type = "directory"

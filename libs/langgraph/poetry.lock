@@ -1046,7 +1046,7 @@ pydantic = ">=1"
 
 [[package]]
 name = "gigagraph-checkpoint"
-version = "1.0.1"
+version = "1.0.2"
 description = "Library with base interfaces for GigaGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1062,7 +1062,7 @@ url = "../checkpoint"
 
 [[package]]
 name = "gigagraph-checkpoint-postgres"
-version = "1.0.0"
+version = "1.0.1"
 description = "Library with a Postgres implementation of GigaGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -4298,4 +4298,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "e159b081eda47614ca8c5fbafb8fa19a8da40d384e787c3986509de9a1d66ae4"
+content-hash = "f0d317c9cae8ece03954dac4291362be22cc44eb74cfab382c78c2a7b1e729e8"

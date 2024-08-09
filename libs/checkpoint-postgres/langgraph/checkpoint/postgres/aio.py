@@ -4,6 +4,7 @@ from typing import Any, AsyncIterator, Optional
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
+from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
 
@@ -21,8 +22,6 @@ from langgraph.checkpoint.serde.base import SerializerProtocol
 class AsyncPostgresSaver(BasePostgresSaver):
     lock: asyncio.Lock
 
-    is_setup: bool
-
     def __init__(
         self,
         conn: AsyncConnection,
@@ -33,7 +32,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         self.conn = conn
         self.pipe = pipe
         self.lock = asyncio.Lock()
-        self.is_setup = False
 
     @classmethod
     @asynccontextmanager
@@ -65,22 +63,26 @@ class AsyncPostgresSaver(BasePostgresSaver):
         already exist. It is called automatically when needed and should not be called
         directly by the user.
         """
-        if self.is_setup:
-            return
         async with self.lock:
-            create_table_queries = [
-                self.CREATE_CHECKPOINTS_SQL,
-                self.CREATE_CHECKPOINT_BLOBS_SQL,
-                self.CREATE_CHECKPOINT_WRITES_SQL,
-            ]
-            async with self.conn.cursor() as cur:
-                for query in create_table_queries:
-                    await cur.execute(query)
-
+            async with self.conn.cursor(binary=True) as cur:
+                try:
+                    version = (
+                        await cur.execute(
+                            "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                        )
+                    ).fetchone()["v"]
+                except UndefinedTable:
+                    version = -1
+                for v, migration in zip(
+                    range(version + 1, len(self.MIGRATIONS)),
+                    self.MIGRATIONS[version + 1 :],
+                ):
+                    await cur.execute(migration)
+                    await cur.execute(
+                        f"INSERT INTO checkpoint_migrations (v) VALUES ({v})"
+                    )
             if self.pipe:
                 await self.pipe.sync()
-
-            self.is_setup = True
 
     async def alist(
         self,
@@ -90,7 +92,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
-        await self.setup()
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
         if limit:
@@ -111,7 +112,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                         self._load_blobs, value["channel_values"]
                     ),
                 },
-                value["metadata"],
+                self._load_metadata(value["metadata"]),
                 {
                     "configurable": {
                         "thread_id": value["thread_id"],
@@ -124,7 +125,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
             )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
-        await self.setup()
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -157,7 +157,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             self._load_blobs, value["channel_values"]
                         ),
                     },
-                    value["metadata"],
+                    self._load_metadata(value["metadata"]),
                     {
                         "configurable": {
                             "thread_id": thread_id,
@@ -177,7 +177,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        await self.setup()
         configurable = config["configurable"].copy()
         thread_id = configurable.pop("thread_id")
         checkpoint_ns = configurable.pop("checkpoint_ns")
@@ -214,7 +213,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     checkpoint["id"],
                     checkpoint_id,
                     Jsonb(self._dump_checkpoint(copy)),
-                    Jsonb(metadata),
+                    self._dump_metadata(metadata),
                 ),
             )
         return next_config
@@ -240,7 +239,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
     @asynccontextmanager
     async def _cursor(self, *, pipeline: bool = False) -> AsyncIterator[AsyncCursor]:
-        await self.setup()
         if self.pipe:
             # a connection in pipeline mode can be used concurrently
             # in multiple threads/coroutines, but only one cursor can be
@@ -249,7 +247,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 async with self.conn.cursor(binary=True) as cur:
                     yield cur
             finally:
-                await self.pipe.sync()
+                if pipeline:
+                    await self.pipe.sync()
         elif pipeline:
             # a connection not in pipeline mode can only be used by one
             # thread/coroutine at a time, so we acquire a lock
