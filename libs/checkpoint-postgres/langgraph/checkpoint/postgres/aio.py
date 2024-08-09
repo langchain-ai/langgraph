@@ -59,18 +59,17 @@ class AsyncPostgresSaver(BasePostgresSaver):
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.
 
-        This method creates the necessary tables in the SQLite database if they don't
-        already exist. It is called automatically when needed and should not be called
-        directly by the user.
+        This method creates the necessary tables in the Postgres database if they don't
+        already exist and runs database migrations. It MUST be called directly by the user
+        the first time checkpointer is used.
         """
         async with self.lock:
             async with self.conn.cursor(binary=True) as cur:
                 try:
-                    version = (
-                        await cur.execute(
-                            "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                        )
-                    ).fetchone()["v"]
+                    results = await cur.execute(
+                        "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                    )
+                    version = (await results.fetchone())["v"]
                 except UndefinedTable:
                     version = -1
                 for v, migration in zip(
@@ -92,6 +91,20 @@ class AsyncPostgresSaver(BasePostgresSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> AsyncIterator[CheckpointTuple]:
+        """List checkpoints from the database asynchronously.
+
+        This method retrieves a list of checkpoint tuples from the Postgres database based
+        on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
+
+        Args:
+            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            limit (Optional[int]): Maximum number of checkpoints to return.
+
+        Yields:
+            AsyncIterator[CheckpointTuple]: An asynchronous iterator of matching checkpoint tuples.
+        """
         where, args = self._search_where(config, filter, before)
         query = self.SELECT_SQL + where + " ORDER BY checkpoint_id DESC"
         if limit:
@@ -125,6 +138,19 @@ class AsyncPostgresSaver(BasePostgresSaver):
             )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Get a checkpoint tuple from the database asynchronously.
+
+        This method retrieves a checkpoint tuple from the Postgres database based on the
+        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
+        for the given thread ID is retrieved.
+
+        Args:
+            config (RunnableConfig): The config to use for retrieving the checkpoint.
+
+        Returns:
+            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+        """
         thread_id = config["configurable"]["thread_id"]
         checkpoint_id = get_checkpoint_id(config)
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -177,6 +203,20 @@ class AsyncPostgresSaver(BasePostgresSaver):
         metadata: CheckpointMetadata,
         new_versions: ChannelVersions,
     ) -> RunnableConfig:
+        """Save a checkpoint to the database asynchronously.
+
+        This method saves a checkpoint to the Postgres database. The checkpoint is associated
+        with the provided config and its parent config (if any).
+
+        Args:
+            config (RunnableConfig): The config to associate with the checkpoint.
+            checkpoint (Checkpoint): The checkpoint to save.
+            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (ChannelVersions): New channel versions as of this write.
+
+        Returns:
+            RunnableConfig: Updated configuration after storing the checkpoint.
+        """
         configurable = config["configurable"].copy()
         thread_id = configurable.pop("thread_id")
         checkpoint_ns = configurable.pop("checkpoint_ns")
@@ -201,7 +241,6 @@ class AsyncPostgresSaver(BasePostgresSaver):
                     thread_id,
                     checkpoint_ns,
                     copy.pop("channel_values"),
-                    copy["channel_versions"],
                     new_versions,
                 ),
             )
@@ -224,6 +263,15 @@ class AsyncPostgresSaver(BasePostgresSaver):
         writes: list[tuple[str, Any]],
         task_id: str,
     ) -> None:
+        """Store intermediate writes linked to a checkpoint asynchronously.
+
+        This method saves intermediate writes associated with a checkpoint to the database.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
+            task_id (str): Identifier for the task creating the writes.
+        """
         async with self._cursor() as cur:
             await cur.executemany(
                 self.UPSERT_CHECKPOINT_WRITES_SQL,

@@ -2,8 +2,7 @@ import asyncio
 import json
 import operator
 from collections import Counter
-from contextlib import AbstractAsyncContextManager, asynccontextmanager, contextmanager
-from types import TracebackType
+from contextlib import asynccontextmanager, contextmanager
 from typing import (
     Annotated,
     Any,
@@ -65,19 +64,6 @@ from tests.memory_assert import (
     MemorySaverAssertImmutable,
 )
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
-
-
-class NoneContextManager(AbstractAsyncContextManager):
-    async def __aenter__(self) -> None:
-        return None
-
-    async def __aexit__(
-        self,
-        __exc_type: Optional[type[BaseException]],
-        __exc_value: Optional[BaseException],
-        __traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
-        return
 
 
 async def test_checkpoint_errors() -> None:
