@@ -40,7 +40,7 @@ MIGRATIONS = [
     channel TEXT NOT NULL,
     version TEXT NOT NULL,
     type TEXT NOT NULL,
-    blob BYTEA NOT NULL,
+    blob BYTEA,
     PRIMARY KEY (thread_id, checkpoint_ns, channel, version)
 );""",
     """CREATE TABLE IF NOT EXISTS checkpoint_writes (
@@ -54,6 +54,7 @@ MIGRATIONS = [
     blob BYTEA NOT NULL,
     PRIMARY KEY (thread_id, checkpoint_ns, checkpoint_id, task_id, idx)
 );""",
+    "ALTER TABLE checkpoint_blobs ALTER COLUMN blob DROP not null;",
 ]
 
 SELECT_SQL = """
@@ -140,6 +141,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
         return {
             k.decode(): self.serde.loads_typed((t.decode(), v))
             for k, t, v in blob_values
+            if t.decode() != "empty"
         }
 
     def _dump_blobs(
@@ -148,13 +150,9 @@ class BasePostgresSaver(BaseCheckpointSaver):
         checkpoint_ns: str,
         values: dict[str, Any],
         versions: dict[str, str],
-        new_versions: Optional[dict[str, str]],
     ) -> list[tuple[str, str, str, str, str, bytes]]:
         if not versions:
             return []
-
-        if new_versions:
-            versions = new_versions
 
         return [
             (
@@ -162,10 +160,13 @@ class BasePostgresSaver(BaseCheckpointSaver):
                 checkpoint_ns,
                 k,
                 ver,
-                *self.serde.dumps_typed(values[k]),
+                *(
+                    self.serde.dumps_typed(values[k])
+                    if k in values
+                    else ("empty", None)
+                ),
             )
             for k, ver in versions.items()
-            if k in values
         ]
 
     def _load_writes(

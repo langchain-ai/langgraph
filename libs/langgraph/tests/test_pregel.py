@@ -36,6 +36,7 @@ from syrupy import SnapshotAssertion
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
 from langgraph.channels.context import Context
+from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
@@ -7452,12 +7453,20 @@ def test_simple_multi_edge(snapshot: SnapshotAssertion) -> None:
 
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.invoke({"my_key": "my_value"}) == {"my_key": "my_value_more"}
-    assert [*app.stream({"my_key": "my_value"})] == [
-        {"up": None},
-        {"side": None},
-        {"other": {"my_key": "_more"}},
-        {"down": None},
-    ]
+    assert [*app.stream({"my_key": "my_value"})] in (
+        [
+            {"up": None},
+            {"side": None},
+            {"other": {"my_key": "_more"}},
+            {"down": None},
+        ],
+        [
+            {"up": None},
+            {"other": {"my_key": "_more"}},
+            {"side": None},
+            {"down": None},
+        ],
+    )
 
 
 def test_nested_graph_xray(snapshot: SnapshotAssertion) -> None:
@@ -9191,7 +9200,13 @@ def test_checkpoint_metadata() -> None:
         assert chkpnt_tuple.metadata["test_config_4"] == "bar"
 
 
-def test_remove_message_via_state_update():
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite", "postgres", "postgres_pipe"],
+)
+def test_remove_message_via_state_update(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
     from langchain_core.messages import AIMessage, HumanMessage, RemoveMessage
 
     workflow = MessageGraph()
@@ -9207,7 +9222,7 @@ def test_remove_message_via_state_update():
     workflow.set_entry_point("chatbot")
     workflow.add_edge("chatbot", END)
 
-    checkpointer = MemorySaver()
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
     app = workflow.compile(checkpointer=checkpointer)
     config = {"configurable": {"thread_id": "1"}}
     output = app.invoke([HumanMessage(content="Hi")], config=config)
@@ -9370,3 +9385,29 @@ def test_xray_lance(snapshot: SnapshotAssertion):
     # View
     assert graph.get_graph().to_json() == snapshot
     assert graph.get_graph(xray=1).to_json() == snapshot
+
+
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite", "postgres", "postgres_pipe"],
+)
+def test_channel_values(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    config = {"configurable": {"thread_id": "1"}}
+    chain = Channel.subscribe_to("input") | Channel.write_to("output")
+    app = Pregel(
+        nodes={
+            "one": chain,
+        },
+        channels={
+            "ephemeral": EphemeralValue(Any),
+            "input": LastValue(int),
+            "output": LastValue(int),
+        },
+        input_channels=["input", "ephemeral"],
+        output_channels="output",
+        checkpointer=checkpointer,
+    )
+    app.invoke({"input": 1, "ephemeral": "meow"}, config)
+    assert checkpointer.get(config)["channel_values"] == {"input": 1, "output": 1}

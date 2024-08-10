@@ -100,6 +100,7 @@ from langgraph.pregel.types import (
     StateSnapshot,
     StreamMode,
 )
+from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 
@@ -517,6 +518,9 @@ class Pregel(
         # get last checkpoint
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        checkpoint_previous_versions = (
+            saved.checkpoint["channel_versions"] if saved else {}
+        )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
         checkpoint_config = {
@@ -606,6 +610,9 @@ class Pregel(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
 
+            new_versions = get_new_channel_versions(
+                checkpoint_previous_versions, checkpoint["channel_versions"]
+            )
             return self.checkpointer.put(
                 checkpoint_config,
                 create_checkpoint(checkpoint, channels, step + 1),
@@ -614,7 +621,7 @@ class Pregel(
                     "step": step + 1,
                     "writes": {as_node: values},
                 },
-                {},
+                new_versions,
             )
 
     async def aupdate_state(
@@ -629,6 +636,9 @@ class Pregel(
         # get last checkpoint
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        checkpoint_previous_versions = (
+            saved.checkpoint["channel_versions"] if saved else {}
+        )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
         checkpoint_config = {
@@ -716,6 +726,9 @@ class Pregel(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
 
+            new_versions = get_new_channel_versions(
+                checkpoint_previous_versions, checkpoint["channel_versions"]
+            )
             return await self.checkpointer.aput(
                 checkpoint_config,
                 create_checkpoint(checkpoint, channels, step + 1),
@@ -724,7 +737,7 @@ class Pregel(
                     "step": step + 1,
                     "writes": {as_node: values},
                 },
-                {},
+                new_versions,
             )
 
     def _defaults(
