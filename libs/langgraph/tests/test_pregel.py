@@ -60,7 +60,13 @@ from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
 )
 from langgraph.prebuilt.tool_node import ToolNode
-from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
+from langgraph.pregel import (
+    INHERIT_CHECKPOINTER,
+    Channel,
+    GraphRecursionError,
+    Pregel,
+    StateSnapshot,
+)
 from langgraph.pregel.retry import RetryPolicy
 from tests.any_str import AnyStr
 from tests.memory_assert import (
@@ -7737,7 +7743,10 @@ def test_nested_graph_interrupts(
 
     graph = StateGraph(State)
     graph.add_node("outer_1", outer_1)
-    graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
+    graph.add_node(
+        "inner",
+        inner.compile(interrupt_before=["inner_2"], checkpointer=INHERIT_CHECKPOINTER),
+    )
     graph.add_node("outer_2", outer_2)
     graph.set_entry_point("outer_1")
     graph.add_edge("outer_1", "inner")
@@ -8913,7 +8922,10 @@ def test_nested_graph_interrupts_parallel(
         return {"my_key": " and back again"}
 
     graph = StateGraph(State)
-    graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
+    graph.add_node(
+        "inner",
+        inner.compile(interrupt_before=["inner_2"], checkpointer=INHERIT_CHECKPOINTER),
+    )
     graph.add_node("outer_1", outer_1)
     graph.add_node("outer_2", outer_2)
 
@@ -8997,7 +9009,6 @@ def test_nested_graph_interrupts_parallel(
     ]
 
 
-@pytest.mark.skip
 @pytest.mark.parametrize(
     "checkpointer_name",
     ["memory", "sqlite", "postgres", "postgres_pipe"],
@@ -9005,7 +9016,7 @@ def test_nested_graph_interrupts_parallel(
 def test_doubly_nested_graph_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    checkpointer = request.getfixturevalue(checkpointer_name)
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
 
     class State(TypedDict):
         my_key: str
@@ -9032,7 +9043,12 @@ def test_doubly_nested_graph_interrupts(
     grandchild.set_finish_point("grandchild_2")
 
     child = StateGraph(ChildState)
-    child.add_node("child_1", grandchild.compile(interrupt_before=["grandchild_2"]))
+    child.add_node(
+        "child_1",
+        grandchild.compile(
+            interrupt_before=["grandchild_2"], checkpointer=INHERIT_CHECKPOINTER
+        ),
+    )
     child.set_entry_point("child_1")
     child.set_finish_point("child_1")
 
@@ -9044,7 +9060,7 @@ def test_doubly_nested_graph_interrupts(
 
     graph = StateGraph(State)
     graph.add_node("parent_1", parent_1)
-    graph.add_node("child", child.compile())
+    graph.add_node("child", child.compile(checkpointer=INHERIT_CHECKPOINTER))
     graph.add_node("parent_2", parent_2)
     graph.set_entry_point("parent_1")
     graph.add_edge("parent_1", "child")
@@ -9136,7 +9152,10 @@ def test_nested_graph_state(
 
     graph = StateGraph(State)
     graph.add_node("outer_1", outer_1)
-    graph.add_node("inner", inner.compile(interrupt_before=["inner_2"]))
+    graph.add_node(
+        "inner",
+        inner.compile(interrupt_before=["inner_2"], checkpointer=INHERIT_CHECKPOINTER),
+    )
     graph.add_node("outer_2", outer_2)
     graph.set_entry_point("outer_1")
     graph.add_edge("outer_1", "inner")
@@ -9541,6 +9560,251 @@ def test_nested_graph_state(
             subgraph_state_snapshots=None,
         ),
     ]
+
+
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite", "postgres", "postgres_pipe"],
+)
+def test_doubly_nested_graph_state(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    class State(TypedDict):
+        my_key: str
+
+    class ChildState(TypedDict):
+        my_key: str
+
+    class GrandChildState(TypedDict):
+        my_key: str
+
+    def grandchild_1(state: ChildState):
+        return {"my_key": state["my_key"] + " here"}
+
+    def grandchild_2(state: ChildState):
+        return {
+            "my_key": state["my_key"] + " and there",
+        }
+
+    grandchild = StateGraph(GrandChildState)
+    grandchild.add_node("grandchild_1", grandchild_1)
+    grandchild.add_node("grandchild_2", grandchild_2)
+    grandchild.add_edge("grandchild_1", "grandchild_2")
+    grandchild.set_entry_point("grandchild_1")
+    grandchild.set_finish_point("grandchild_2")
+
+    child = StateGraph(ChildState)
+    child.add_node(
+        "child_1",
+        grandchild.compile(
+            interrupt_before=["grandchild_2"], checkpointer=INHERIT_CHECKPOINTER
+        ),
+    )
+    child.set_entry_point("child_1")
+    child.set_finish_point("child_1")
+
+    def parent_1(state: State):
+        return {"my_key": "hi " + state["my_key"]}
+
+    def parent_2(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("parent_1", parent_1)
+    graph.add_node("child", child.compile(checkpointer=INHERIT_CHECKPOINTER))
+    graph.add_node("parent_2", parent_2)
+    graph.set_entry_point("parent_1")
+    graph.add_edge("parent_1", "child")
+    graph.add_edge("child", "parent_2")
+    graph.set_finish_point("parent_2")
+
+    app = graph.compile(checkpointer=checkpointer)
+
+    # test invoke w/ nested interrupt
+    config = {"configurable": {"thread_id": "1"}}
+    app.invoke({"my_key": "my value"}, config, debug=True)
+    assert app.get_state(config) == StateSnapshot(
+        values={"my_key": "hi my value"},
+        next=("child",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {"parent_1": {"my_key": "hi my value"}},
+            "step": 1,
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        subgraph_state_snapshots=None,
+    )
+    assert app.get_state(config, include_subgraph_state=True) == StateSnapshot(
+        values={"my_key": "hi my value"},
+        next=("child",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {"parent_1": {"my_key": "hi my value"}},
+            "step": 1,
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        subgraph_state_snapshots={
+            "child": StateSnapshot(
+                values={"my_key": "hi my value"},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "child",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "writes": None, "step": 0},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "child",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots={
+                    "child_1": StateSnapshot(
+                        values={"my_key": "hi my value here"},
+                        next=(),
+                        config={
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": "child|child_1",
+                                "checkpoint_id": AnyStr(),
+                            }
+                        },
+                        metadata={
+                            "source": "loop",
+                            "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+                            "step": 1,
+                        },
+                        created_at=AnyStr(),
+                        parent_config={
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": "child|child_1",
+                                "checkpoint_id": AnyStr(),
+                            }
+                        },
+                        subgraph_state_snapshots=None,
+                    )
+                },
+            )
+        },
+    )
+    app.invoke(None, config, debug=True)
+    assert app.get_state(config, include_subgraph_state=True) == StateSnapshot(
+        values={"my_key": "hi my value here and there and back again"},
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {
+                "parent_2": {"my_key": "hi my value here and there and back again"}
+            },
+            "step": 3,
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        subgraph_state_snapshots={
+            "child": StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "child",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"child_1": {"my_key": "hi my value here and there"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "child",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots={
+                    "child_1": StateSnapshot(
+                        values={"my_key": "hi my value here and there"},
+                        next=(),
+                        config={
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": "child|child_1",
+                                "checkpoint_id": AnyStr(),
+                            }
+                        },
+                        metadata={
+                            "source": "loop",
+                            "writes": {
+                                "grandchild_2": {"my_key": "hi my value here and there"}
+                            },
+                            "step": 2,
+                        },
+                        created_at=AnyStr(),
+                        parent_config={
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": "child|child_1",
+                                "checkpoint_id": AnyStr(),
+                            }
+                        },
+                        subgraph_state_snapshots=None,
+                    )
+                },
+            )
+        },
+    )
 
 
 def test_repeat_condition(snapshot: SnapshotAssertion) -> None:

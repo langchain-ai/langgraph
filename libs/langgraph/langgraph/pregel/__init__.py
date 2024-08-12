@@ -13,6 +13,7 @@ from typing import (
     Callable,
     Dict,
     Iterator,
+    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -113,6 +114,10 @@ WriteValue = Union[
     Callable[[Input], Awaitable[Output]],
     Any,
 ]
+
+
+INHERIT_CHECKPOINTER = "inherit_checkpointer"
+CheckpointerType = Union[BaseCheckpointSaver, Literal["inherit_checkpointer"]]
 
 
 class Channel:
@@ -218,7 +223,7 @@ class Pregel(
     debug: bool = Field(default_factory=get_debug)
     """Whether to print debug information during execution. Defaults to False."""
 
-    checkpointer: Optional[BaseCheckpointSaver] = None
+    checkpointer: Optional[CheckpointerType] = None
     """Checkpointer used to save and load graph state. Defaults to None."""
 
     retry_policy: Optional[RetryPolicy] = None
@@ -275,6 +280,7 @@ class Pregel(
                 + (
                     self.checkpointer.config_specs
                     if self.checkpointer is not None
+                    and self.checkpointer != INHERIT_CHECKPOINTER
                     else []
                 )
                 + (
@@ -950,10 +956,23 @@ class Pregel(
         if config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None:
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
+
+            if self.checkpointer is None:
+                raise ValueError(
+                    "Missing checkpointer for subgraph. "
+                    "Please compile the subgraph graph with checkpointer=INHERIT_CHECKPOINTER (from langgraph.pregel import INHERIT_CHECKPOINTER)."
+                )
+
+            if self.checkpointer != INHERIT_CHECKPOINTER:
+                raise ValueError(
+                    "Custom checkpointers for subgraphs are not allowed. "
+                    "Please compile the subgraph graph with checkpointer=INHERIT_CHECKPOINTER (from langgraph.pregel import INHERIT_CHECKPOINTER)."
+                )
+
         if (
             config is not None
             and config.get("configurable", {}).get(CONFIG_KEY_CHECKPOINTER)
-            and (interrupt_after or interrupt_before)
+            and self.checkpointer == INHERIT_CHECKPOINTER
         ):
             checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
                 CONFIG_KEY_CHECKPOINTER

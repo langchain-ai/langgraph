@@ -24,7 +24,6 @@ from langchain_core.runnables.graph import Graph as DrawableGraph
 from langchain_core.runnables.graph import Node as DrawableNode
 
 from langgraph.channels.ephemeral_value import EphemeralValue
-from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import (
     CHECKPOINT_NAMESPACE_SEPARATOR,
     END,
@@ -33,7 +32,7 @@ from langgraph.constants import (
     Send,
 )
 from langgraph.errors import InvalidUpdateError
-from langgraph.pregel import Channel, Pregel
+from langgraph.pregel import Channel, CheckpointerType, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
@@ -369,7 +368,7 @@ class Graph:
 
     def compile(
         self,
-        checkpointer: Optional[BaseCheckpointSaver] = None,
+        checkpointer: Optional[CheckpointerType] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
