@@ -912,7 +912,11 @@ class Pregel(
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
 
-            if (interrupt_before or interrupt_after) and parent_checkpointer is not None and self.checkpointer is None:
+            if (
+                (interrupt_before or interrupt_after)
+                and parent_checkpointer is not None
+                and self.checkpointer is None
+            ):
                 raise ValueError(
                     "Missing checkpointer for a subgraph with interrupts. "
                     "Please compile the subgraph graph with checkpointer=INHERIT_CHECKPOINTER (from langgraph.pregel import INHERIT_CHECKPOINTER)."
