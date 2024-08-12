@@ -52,6 +52,7 @@ from langgraph.channels.base import (
     BaseChannel,
 )
 from langgraph.channels.context import Context
+from langgraph.channels.last_value import LastValue
 from langgraph.channels.manager import (
     AsyncChannelsManager,
     ChannelsManager,
@@ -360,7 +361,12 @@ class Pregel(
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
         config = saved.config if saved else config
         with ChannelsManager(
-            self.channels, checkpoint, config
+            {
+                k: LastValue(None) if isinstance(c, Context) else c
+                for k, c in self.channels.items()
+            },
+            checkpoint,
+            config,
         ) as channels, ManagedValuesManager(
             self.managed_values_dict, ensure_config(config)
         ) as managed:
@@ -375,7 +381,7 @@ class Pregel(
             )
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
-                tuple(name for name, _ in next_tasks),
+                tuple(t.name for t in next_tasks),
                 saved.config if saved else config,
                 saved.metadata if saved else None,
                 saved.checkpoint["ts"] if saved else None,
@@ -392,7 +398,12 @@ class Pregel(
 
         config = saved.config if saved else config
         async with AsyncChannelsManager(
-            self.channels, checkpoint, config
+            {
+                k: LastValue(None) if isinstance(c, Context) else c
+                for k, c in self.channels.items()
+            },
+            checkpoint,
+            config,
         ) as channels, AsyncManagedValuesManager(
             self.managed_values_dict, ensure_config(config)
         ) as managed:
@@ -407,7 +418,7 @@ class Pregel(
             )
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
-                tuple(name for name, _ in next_tasks),
+                tuple(t.name for t in next_tasks),
                 saved.config if saved else config,
                 saved.metadata if saved else None,
                 saved.checkpoint["ts"] if saved else None,
@@ -434,7 +445,12 @@ class Pregel(
             config, before=before, limit=limit, filter=filter
         ):
             with ChannelsManager(
-                self.channels, checkpoint, config
+                {
+                    k: LastValue(None) if isinstance(c, Context) else c
+                    for k, c in self.channels.items()
+                },
+                checkpoint,
+                config,
             ) as channels, ManagedValuesManager(
                 self.managed_values_dict, ensure_config(config)
             ) as managed:
@@ -449,7 +465,7 @@ class Pregel(
                 )
                 yield StateSnapshot(
                     read_channels(channels, self.stream_channels_asis),
-                    tuple(name for name, _ in next_tasks),
+                    tuple(t.name for t in next_tasks),
                     config,
                     metadata,
                     checkpoint["ts"],
@@ -480,7 +496,12 @@ class Pregel(
             _,
         ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             async with AsyncChannelsManager(
-                self.channels, checkpoint, config
+                {
+                    k: LastValue(None) if isinstance(c, Context) else c
+                    for k, c in self.channels.items()
+                },
+                checkpoint,
+                config,
             ) as channels, AsyncManagedValuesManager(
                 self.managed_values_dict, ensure_config(config)
             ) as managed:
@@ -495,7 +516,7 @@ class Pregel(
                 )
                 yield StateSnapshot(
                     read_channels(channels, self.stream_channels_asis),
-                    tuple(name for name, _ in next_tasks),
+                    tuple(t.name for t in next_tasks),
                     config,
                     metadata,
                     checkpoint["ts"],

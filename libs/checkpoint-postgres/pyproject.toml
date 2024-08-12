@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint-postgres"
-version = "1.0.2"
+version = "1.0.3"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
 license = "MIT"

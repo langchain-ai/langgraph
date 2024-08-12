@@ -739,17 +739,6 @@
       }),
     }),
     'properties': dict({
-      'answer': dict({
-        'title': 'Answer',
-        'type': 'string',
-      }),
-      'docs': dict({
-        'items': dict({
-          'type': 'string',
-        }),
-        'title': 'Docs',
-        'type': 'array',
-      }),
       'inner': dict({
         '$ref': '#/definitions/InnerObject',
       }),
@@ -761,29 +750,13 @@
     'required': list([
       'query',
       'inner',
-      'docs',
     ]),
-    'title': 'State',
+    'title': 'Input',
     'type': 'object',
   })
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1.2
   dict({
-    'definitions': dict({
-      'InnerObject': dict({
-        'properties': dict({
-          'yo': dict({
-            'title': 'Yo',
-            'type': 'integer',
-          }),
-        }),
-        'required': list([
-          'yo',
-        ]),
-        'title': 'InnerObject',
-        'type': 'object',
-      }),
-    }),
     'properties': dict({
       'answer': dict({
         'title': 'Answer',
@@ -796,20 +769,12 @@
         'title': 'Docs',
         'type': 'array',
       }),
-      'inner': dict({
-        '$ref': '#/definitions/InnerObject',
-      }),
-      'query': dict({
-        'title': 'Query',
-        'type': 'string',
-      }),
     }),
     'required': list([
-      'query',
-      'inner',
+      'answer',
       'docs',
     ]),
-    'title': 'State',
+    'title': 'Output',
     'type': 'object',
   })
 # ---
@@ -844,25 +809,6 @@
       }),
     }),
     'properties': dict({
-      'answer': dict({
-        'anyOf': list([
-          dict({
-            'type': 'string',
-          }),
-          dict({
-            'type': 'null',
-          }),
-        ]),
-        'default': None,
-        'title': 'Answer',
-      }),
-      'docs': dict({
-        'items': dict({
-          'type': 'string',
-        }),
-        'title': 'Docs',
-        'type': 'array',
-      }),
       'inner': dict({
         '$ref': '#/$defs/InnerObject',
       }),
@@ -874,41 +820,17 @@
     'required': list([
       'query',
       'inner',
-      'docs',
     ]),
-    'title': 'State',
+    'title': 'Input',
     'type': 'object',
   })
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2.2
   dict({
-    '$defs': dict({
-      'InnerObject': dict({
-        'properties': dict({
-          'yo': dict({
-            'title': 'Yo',
-            'type': 'integer',
-          }),
-        }),
-        'required': list([
-          'yo',
-        ]),
-        'title': 'InnerObject',
-        'type': 'object',
-      }),
-    }),
     'properties': dict({
       'answer': dict({
-        'anyOf': list([
-          dict({
-            'type': 'string',
-          }),
-          dict({
-            'type': 'null',
-          }),
-        ]),
-        'default': None,
         'title': 'Answer',
+        'type': 'string',
       }),
       'docs': dict({
         'items': dict({
@@ -917,20 +839,12 @@
         'title': 'Docs',
         'type': 'array',
       }),
-      'inner': dict({
-        '$ref': '#/$defs/InnerObject',
-      }),
-      'query': dict({
-        'title': 'Query',
-        'type': 'string',
-      }),
     }),
     'required': list([
-      'query',
-      'inner',
+      'answer',
       'docs',
     ]),
-    'title': 'State',
+    'title': 'Output',
     'type': 'object',
   })
 # ---
