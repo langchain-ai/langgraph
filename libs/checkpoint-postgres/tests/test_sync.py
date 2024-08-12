@@ -88,27 +88,14 @@ class TestPostgresSaver:
             search_results_4 = list(saver.list(None, filter=query_4))
             assert len(search_results_4) == 0
 
-            # search by config (defaults to root graph checkpoints)
+            # search by config (defaults to checkpoints across all namespaces)
             search_results_5 = list(
                 saver.list({"configurable": {"thread_id": "thread-2"}})
             )
-            assert len(search_results_5) == 1
-            assert search_results_5[0].config["configurable"]["checkpoint_ns"] == ""
-
-            # search by config and checkpoint_ns
-            search_results_6 = list(
-                saver.list(
-                    {
-                        "configurable": {
-                            "thread_id": "thread-2",
-                            "checkpoint_ns": "inner",
-                        }
-                    }
-                )
-            )
-            assert len(search_results_6) == 1
-            assert (
-                search_results_6[0].config["configurable"]["checkpoint_ns"] == "inner"
-            )
+            assert len(search_results_5) == 2
+            assert {
+                search_results_5[0].config["configurable"]["checkpoint_ns"],
+                search_results_5[1].config["configurable"]["checkpoint_ns"],
+            } == {"", "inner"}
 
             # TODO: test before and limit params
