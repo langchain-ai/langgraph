@@ -7629,13 +7629,13 @@ async def test_nested_graph_state(
         my_key: str
         my_other_key: str
 
-    def inner_1(state: InnerState):
+    async def inner_1(state: InnerState):
         return {
             "my_key": state["my_key"] + " here",
             "my_other_key": state["my_key"],
         }
 
-    def inner_2(state: InnerState):
+    async def inner_2(state: InnerState):
         return {
             "my_key": state["my_key"] + " and there",
             "my_other_key": state["my_key"],
@@ -7651,10 +7651,10 @@ async def test_nested_graph_state(
     class State(TypedDict):
         my_key: str
 
-    def outer_1(state: State):
+    async def outer_1(state: State):
         return {"my_key": "hi " + state["my_key"]}
 
-    def outer_2(state: State):
+    async def outer_2(state: State):
         return {"my_key": state["my_key"] + " and back again"}
 
     graph = StateGraph(State)
@@ -7699,7 +7699,7 @@ async def test_nested_graph_state(
         },
         subgraph_state_snapshots=None,
     )
-    assert app.get_state(config, include_subgraph_state=True) == StateSnapshot(
+    assert await app.aget_state(config, include_subgraph_state=True) == StateSnapshot(
         values={"my_key": "hi my value"},
         next=("inner",),
         config={
@@ -7755,7 +7755,9 @@ async def test_nested_graph_state(
             )
         },
     )
-    assert list(app.get_state_history(config, include_subgraph_state=True)) == [
+    assert [
+        s async for s in app.aget_state_history(config, include_subgraph_state=True)
+    ] == [
         StateSnapshot(
             values={"my_key": "hi my value"},
             next=("inner",),
@@ -8089,10 +8091,10 @@ async def test_doubly_nested_graph_state(
     class GrandChildState(TypedDict):
         my_key: str
 
-    def grandchild_1(state: ChildState):
+    async def grandchild_1(state: ChildState):
         return {"my_key": state["my_key"] + " here"}
 
-    def grandchild_2(state: ChildState):
+    async def grandchild_2(state: ChildState):
         return {
             "my_key": state["my_key"] + " and there",
         }
@@ -8114,10 +8116,10 @@ async def test_doubly_nested_graph_state(
     child.set_entry_point("child_1")
     child.set_finish_point("child_1")
 
-    def parent_1(state: State):
+    async def parent_1(state: State):
         return {"my_key": "hi " + state["my_key"]}
 
-    def parent_2(state: State):
+    async def parent_2(state: State):
         return {"my_key": state["my_key"] + " and back again"}
 
     graph = StateGraph(State)

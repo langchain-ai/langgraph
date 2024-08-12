@@ -157,7 +157,6 @@ class MemorySaver(
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
-        include_nested_checkpoints: bool = False,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints from the in-memory storage.
 
@@ -178,16 +177,7 @@ class MemorySaver(
             config["configurable"].get("checkpoint_ns", "") if config else ""
         )
         for thread_id in thread_ids:
-            checkpoint_ns_iter = (
-                (
-                    key
-                    for key in self.storage[thread_id].keys()
-                    if key.startswith(checkpoint_ns)
-                )
-                if include_nested_checkpoints
-                else [checkpoint_ns]
-            )
-            for checkpoint_ns in checkpoint_ns_iter:
+            for checkpoint_ns in self.storage[thread_id].keys():
                 for checkpoint_id, (
                     checkpoint,
                     metadata_b,
@@ -330,7 +320,6 @@ class MemorySaver(
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
-        include_nested_checkpoints: bool = False,
     ) -> AsyncIterator[CheckpointTuple]:
         """Asynchronous version of list.
 
@@ -351,7 +340,6 @@ class MemorySaver(
                 before=before,
                 limit=limit,
                 filter=filter,
-                include_nested_checkpoints=include_nested_checkpoints,
             ),
             config,
         )

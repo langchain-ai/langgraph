@@ -70,9 +70,6 @@ def search_where(
     if config is not None:
         wheres.append("thread_id = ?")
         param_values.append(config["configurable"]["thread_id"])
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        wheres.append("checkpoint_ns = ?")
-        param_values.append(checkpoint_ns)
 
     # construct predicate for metadata filter
     if filter:
