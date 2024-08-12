@@ -1,4 +1,5 @@
 import dataclasses
+import decimal
 import importlib
 import json
 from collections import deque
@@ -52,6 +53,8 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(obj.__class__, kwargs=obj.dict())
         elif isinstance(obj, UUID):
             return self._encode_constructor_args(UUID, args=[obj.hex])
+        elif isinstance(obj, decimal.Decimal):
+            return self._encode_constructor_args(decimal.Decimal, args=[str(obj)])
         elif isinstance(obj, (set, frozenset, deque)):
             return self._encode_constructor_args(type(obj), args=[list(obj)])
         elif isinstance(obj, (IPv4Address, IPv4Interface, IPv4Network)):
