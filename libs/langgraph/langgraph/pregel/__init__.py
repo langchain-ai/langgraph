@@ -52,15 +52,16 @@ from langgraph.channels.base import (
     BaseChannel,
 )
 from langgraph.channels.context import Context
+from langgraph.channels.last_value import LastValue
 from langgraph.channels.manager import (
     AsyncChannelsManager,
     ChannelsManager,
-    create_checkpoint,
 )
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     CheckpointTuple,
     copy_checkpoint,
+    create_checkpoint,
     empty_checkpoint,
 )
 from langgraph.constants import (
@@ -102,6 +103,7 @@ from langgraph.pregel.types import (
     StateSnapshot,
     StreamMode,
 )
+from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 
@@ -358,9 +360,14 @@ class Pregel(
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
         config = saved.config if saved else config
         with ChannelsManager(
-            self.channels, checkpoint, config
+            {
+                k: LastValue(None) if isinstance(c, Context) else c
+                for k, c in self.channels.items()
+            },
+            checkpoint,
+            config,
         ) as channels, ManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
             next_tasks = prepare_next_tasks(
                 checkpoint,
@@ -373,7 +380,7 @@ class Pregel(
             )
             return StateSnapshot(
                 values=read_channels(channels, self.stream_channels_asis),
-                next=tuple(name for name, _ in next_tasks),
+                next=tuple(t.name for t in next_tasks),
                 config=saved.config if saved else config,
                 metadata=saved.metadata if saved else None,
                 created_at=saved.checkpoint["ts"] if saved else None,
@@ -386,9 +393,14 @@ class Pregel(
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
         config = saved.config if saved else config
         async with AsyncChannelsManager(
-            self.channels, checkpoint, config
+            {
+                k: LastValue(None) if isinstance(c, Context) else c
+                for k, c in self.channels.items()
+            },
+            checkpoint,
+            config,
         ) as channels, AsyncManagedValuesManager(
-            self.managed_values_dict, ensure_config(config), self
+            self.managed_values_dict, ensure_config(config)
         ) as managed:
             next_tasks = prepare_next_tasks(
                 checkpoint,
@@ -401,7 +413,7 @@ class Pregel(
             )
             return StateSnapshot(
                 values=read_channels(channels, self.stream_channels_asis),
-                next=tuple(name for name, _ in next_tasks),
+                next=tuple(t.name for t in next_tasks),
                 config=saved.config if saved else config,
                 metadata=saved.metadata if saved else None,
                 created_at=saved.checkpoint["ts"] if saved else None,
@@ -554,9 +566,14 @@ class Pregel(
                 yield state_snapshot
             else:
                 with ChannelsManager(
-                    self.channels, checkpoint, config
+                    {
+                        k: LastValue(None) if isinstance(c, Context) else c
+                        for k, c in self.channels.items()
+                    },
+                    checkpoint,
+                    config,
                 ) as channels, ManagedValuesManager(
-                    self.managed_values_dict, ensure_config(config), self
+                    self.managed_values_dict, ensure_config(config)
                 ) as managed:
                     next_tasks = prepare_next_tasks(
                         checkpoint,
@@ -567,9 +584,10 @@ class Pregel(
                         -1,
                         for_execution=False,
                     )
+                    
                     yield StateSnapshot(
                         read_channels(channels, self.stream_channels_asis),
-                        tuple(name for name, _ in next_tasks),
+                        tuple(t.name for t in next_tasks),
                         config,
                         metadata,
                         checkpoint["ts"],
@@ -602,14 +620,18 @@ class Pregel(
         ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             if include_subgraph_state:
                 state_snapshot = await self.aget_state(
-                    config, include_subgraph_state=True
-                )
+                    config, include_subgraph_state=True)
                 yield state_snapshot
             else:
-                async with AsyncChannelsManager(
-                    self.channels, checkpoint, config
+                 async with AsyncChannelsManager(
+                    {
+                        k: LastValue(None) if isinstance(c, Context) else c
+                        for k, c in self.channels.items()
+                    },
+                    checkpoint,
+                    config,
                 ) as channels, AsyncManagedValuesManager(
-                    self.managed_values_dict, ensure_config(config), self
+                    self.managed_values_dict, ensure_config(config)
                 ) as managed:
                     next_tasks = prepare_next_tasks(
                         checkpoint,
@@ -622,7 +644,7 @@ class Pregel(
                     )
                     yield StateSnapshot(
                         read_channels(channels, self.stream_channels_asis),
-                        tuple(name for name, _ in next_tasks),
+                        tuple(t.name for t in next_tasks),
                         config,
                         metadata,
                         checkpoint["ts"],
@@ -632,7 +654,7 @@ class Pregel(
     def update_state(
         self,
         config: RunnableConfig,
-        values: dict[str, Any] | Any,
+        values: Optional[Union[dict[str, Any], Any]],
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
         """Update the state of the graph with the given values, as if they came from
@@ -645,8 +667,39 @@ class Pregel(
         # get last checkpoint
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        checkpoint_previous_versions = (
+            saved.checkpoint["channel_versions"] if saved else {}
+        )
+        step = saved.metadata.get("step", -1) if saved else -1
+        # merge configurable fields with previous checkpoint config
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                # TODO: add proper support for updating nested subgraph state
+                "checkpoint_ns": "",
+            },
+        }
+        if saved:
+            checkpoint_config = {
+                "configurable": {
+                    **config.get("configurable", {}),
+                    **saved.config["configurable"],
+                }
+            }
         # find last node that updated the state, if not provided
-        if as_node is None and not any(
+        if values is None and as_node is None:
+            return self.checkpointer.put(
+                checkpoint_config,
+                create_checkpoint(checkpoint, None, step),
+                {
+                    "source": "update",
+                    "step": step,
+                    "writes": {},
+                },
+                {},
+            )
+        elif as_node is None and not any(
             v for vv in checkpoint["versions_seen"].values() for v in vv.values()
         ):
             if (
@@ -705,26 +758,19 @@ class Pregel(
             apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-            step = saved.metadata.get("step", -2) + 1 if saved else -1
 
-            # merge configurable fields with previous checkpoint config
-            checkpoint_config = config
-            if saved:
-                checkpoint_config = {
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    }
-                }
-
+            new_versions = get_new_channel_versions(
+                checkpoint_previous_versions, checkpoint["channel_versions"]
+            )
             return self.checkpointer.put(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step),
+                create_checkpoint(checkpoint, channels, step + 1),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {as_node: values},
                 },
+                new_versions,
             )
 
     async def aupdate_state(
@@ -739,8 +785,39 @@ class Pregel(
         # get last checkpoint
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        checkpoint_previous_versions = (
+            saved.checkpoint["channel_versions"] if saved else {}
+        )
+        step = saved.metadata.get("step", -1) if saved else -1
+        # merge configurable fields with previous checkpoint config
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                # TODO: add proper support for updating nested subgraph state
+                "checkpoint_ns": "",
+            },
+        }
+        if saved:
+            checkpoint_config = {
+                "configurable": {
+                    **config.get("configurable", {}),
+                    **saved.config["configurable"],
+                }
+            }
         # find last node that updated the state, if not provided
-        if as_node is None and not saved:
+        if values is None and as_node is None:
+            return await self.checkpointer.aput(
+                checkpoint_config,
+                create_checkpoint(checkpoint, None, step),
+                {
+                    "source": "update",
+                    "step": step,
+                    "writes": {},
+                },
+                {},
+            )
+        elif as_node is None and not saved:
             if (
                 isinstance(self.input_channels, str)
                 and self.input_channels in self.nodes
@@ -797,26 +874,19 @@ class Pregel(
             apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-            step = saved.metadata.get("step", -2) + 1 if saved else -1
 
-            # merge configurable fields with previous checkpoint config
-            checkpoint_config = config
-            if saved:
-                checkpoint_config = {
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    }
-                }
-
+            new_versions = get_new_channel_versions(
+                checkpoint_previous_versions, checkpoint["channel_versions"]
+            )
             return await self.checkpointer.aput(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step),
+                create_checkpoint(checkpoint, channels, step + 1),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {as_node: values},
                 },
+                new_versions,
             )
 
     def _defaults(
@@ -850,8 +920,10 @@ class Pregel(
         if config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None:
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
-        if config is not None and config.get("configurable", {}).get(
-            CONFIG_KEY_CHECKPOINTER
+        if (
+            config is not None
+            and config.get("configurable", {}).get(CONFIG_KEY_CHECKPOINTER)
+            and (interrupt_after or interrupt_before)
         ):
             checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
                 CONFIG_KEY_CHECKPOINTER

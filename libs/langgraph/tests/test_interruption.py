@@ -1,10 +1,18 @@
 from typing import TypedDict
 
-from langgraph.checkpoint.memory import MemorySaver
+import pytest
+from pytest_mock import MockerFixture
+
 from langgraph.graph import END, START, StateGraph
 
 
-def test_interruption_without_state_updates():
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite", "postgres", "postgres_pipe"],
+)
+def test_interruption_without_state_updates(
+    request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
+) -> None:
     """Test interruption without state updates. This test confirms that
     interrupting doesn't require a state key having been updated in the prev step"""
 
@@ -23,9 +31,8 @@ def test_interruption_without_state_updates():
     builder.add_edge("step_2", "step_3")
     builder.add_edge("step_3", END)
 
-    memory = MemorySaver()
-
-    graph = builder.compile(checkpointer=memory, interrupt_after="*")
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+    graph = builder.compile(checkpointer=checkpointer, interrupt_after="*")
 
     initial_input = {"input": "hello world"}
     thread = {"configurable": {"thread_id": "1"}}
@@ -40,7 +47,13 @@ def test_interruption_without_state_updates():
     assert graph.get_state(thread).next == ()
 
 
-async def test_interruption_without_state_updates_async():
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe"],
+)
+async def test_interruption_without_state_updates_async(
+    request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
+):
     """Test interruption without state updates. This test confirms that
     interrupting doesn't require a state key having been updated in the prev step"""
 
@@ -59,9 +72,8 @@ async def test_interruption_without_state_updates_async():
     builder.add_edge("step_2", "step_3")
     builder.add_edge("step_3", END)
 
-    memory = MemorySaver()
-
-    graph = builder.compile(checkpointer=memory, interrupt_after="*")
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+    graph = builder.compile(checkpointer=checkpointer, interrupt_after="*")
 
     initial_input = {"input": "hello world"}
     thread = {"configurable": {"thread_id": "1"}}

@@ -28,7 +28,6 @@ from langgraph.channels.base import BaseChannel
 from langgraph.channels.manager import (
     AsyncChannelsManager,
     ChannelsManager,
-    create_checkpoint,
 )
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
@@ -37,6 +36,7 @@ from langgraph.checkpoint.base import (
     CheckpointTuple,
     PendingWrite,
     copy_checkpoint,
+    create_checkpoint,
     empty_checkpoint,
 )
 from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_RESUMING, INPUT, INTERRUPT
@@ -61,6 +61,7 @@ from langgraph.pregel.executor import (
 )
 from langgraph.pregel.io import map_input, map_output_updates, map_output_values, single
 from langgraph.pregel.types import PregelExecutableTask
+from langgraph.pregel.utils import get_new_channel_versions
 
 if TYPE_CHECKING:
     from langgraph.pregel import Pregel
@@ -100,8 +101,11 @@ class PregelLoop:
     checkpoint_config: RunnableConfig
     checkpoint_metadata: CheckpointMetadata
     checkpoint_pending_writes: List[PendingWrite]
+    # (thread_id, checkpoint_ns -> channel_versions)
+    checkpoint_previous_versions: dict[str, Union[str, float, int]]
 
     step: int
+    stop: int
     status: Literal[
         "pending", "done", "interrupt_before", "interrupt_after", "out_of_steps"
     ]
@@ -142,7 +146,10 @@ class PregelLoop:
                     **self.checkpoint_config,
                     "configurable": {
                         **self.checkpoint_config["configurable"],
-                        "thread_ts": self.checkpoint["id"],
+                        "checkpoint_ns": self.config["configurable"].get(
+                            "checkpoint_ns", ""
+                        ),
+                        "checkpoint_id": self.checkpoint["id"],
                     },
                 },
                 writes,
@@ -203,7 +210,7 @@ class PregelLoop:
             return False
 
         # check if iteration limit is reached
-        if self.step > self.config["recursion_limit"]:
+        if self.step > self.stop:
             self.status = "out_of_steps"
             return False
 
@@ -314,8 +321,28 @@ class PregelLoop:
                 # this is achieved by writing child checkpoints as progress is made
                 # (so that error recovery / resuming from interrupt don't lose work)
                 # but doing so always with an id equal to that of the parent checkpoint
-                id=self.config["configurable"]["thread_ts"] if self.is_nested else None,
+                id=self.config["configurable"]["checkpoint_id"]
+                if self.is_nested
+                else None,
             )
+
+            self.checkpoint_config = {
+                **self.checkpoint_config,
+                "configurable": {
+                    **self.checkpoint_config["configurable"],
+                    "checkpoint_ns": self.config["configurable"].get(
+                        "checkpoint_ns", ""
+                    ),
+                },
+            }
+
+            channel_versions = self.checkpoint["channel_versions"].copy()
+            new_versions = get_new_channel_versions(
+                self.checkpoint_previous_versions, channel_versions
+            )
+
+            self.checkpoint_previous_versions = channel_versions
+
             # save it, without blocking
             # if there's a previous checkpoint save in progress, wait for it
             # ensuring checkpointers receive checkpoints in order
@@ -325,12 +352,13 @@ class PregelLoop:
                 self.checkpoint_config,
                 copy_checkpoint(self.checkpoint),
                 self.checkpoint_metadata,
+                new_versions,
             )
             self.checkpoint_config = {
                 **self.checkpoint_config,
                 "configurable": {
                     **self.checkpoint_config["configurable"],
-                    "thread_ts": self.checkpoint["id"],
+                    "checkpoint_id": self.checkpoint["id"],
                 },
             }
             # produce debug output
@@ -383,12 +411,13 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, float, int]]],
     ) -> RunnableConfig:
         try:
             if prev is not None:
                 prev.result()
         finally:
-            self.checkpointer.put(config, checkpoint, metadata)
+            self.checkpointer.put(config, checkpoint, metadata, new_versions)
 
     # context manager
 
@@ -413,12 +442,12 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             ChannelsManager(self.graph.channels, self.checkpoint, self.config)
         )
         self.managed = self.stack.enter_context(
-            ManagedValuesManager(
-                self.graph.managed_values_dict, self.config, self.graph
-            )
+            ManagedValuesManager(self.graph.managed_values_dict, self.config)
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
+        self.stop = self.step + self.config["recursion_limit"] + 1
+        self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
 
         return self
 
@@ -459,12 +488,13 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: Optional[dict[str, Union[str, float, int]]],
     ) -> RunnableConfig:
         try:
             if prev is not None:
                 await prev
         finally:
-            await self.checkpointer.aput(config, checkpoint, metadata)
+            await self.checkpointer.aput(config, checkpoint, metadata, new_versions)
 
     # context manager
 
@@ -491,12 +521,13 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             AsyncChannelsManager(self.graph.channels, self.checkpoint, self.config)
         )
         self.managed = await self.stack.enter_async_context(
-            AsyncManagedValuesManager(
-                self.graph.managed_values_dict, self.config, self.graph
-            )
+            AsyncManagedValuesManager(self.graph.managed_values_dict, self.config)
         )
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
+        self.stop = self.step + self.config["recursion_limit"] + 1
+
+        self.checkpoint_previous_versions = self.checkpoint["channel_versions"].copy()
 
         return self
 

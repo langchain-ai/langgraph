@@ -25,7 +25,7 @@ LangGraph makes it easy to persist state across graph runs. The guide below show
 - [How to manage conversation history](memory/manage-conversation-history.ipynb)
 - [How to delete messages](memory/delete-messages.ipynb)
 - [How to add summary conversation memory](memory/add-summary-conversation-history.ipynb)
-- [How to create a custom checkpointer using Postgres](persistence_postgres.ipynb)
+- [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
 
@@ -38,6 +38,7 @@ These guides cover common examples of that.
 - [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb)
 - [How to wait for user input](human_in_the_loop/wait-user-input.ipynb)
 - [How to view and update past graph state](human_in_the_loop/time-travel.ipynb)
+- [Review tool calls](human_in_the_loop/review-tool-calls.ipynb)
 
 ## Streaming
 
@@ -60,6 +61,14 @@ These guides show how to use different streaming modes.
 - [How to handle tool calling errors](tool-calling-errors.ipynb)
 - [How to pass graph state to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
+- [How to handle large numbers of tools](many-tools.ipynb)
+
+## State Management
+
+- [Use Pydantic model as state](state-model.ipynb)
+- [Use a context object in state](state-context-key.ipynb)
+- [Have a separate input and output schema](input_output_schema.ipynb)
+- [Pass private state between nodes inside the graph](pass_private_state.ipynb)
 
 ## Other
 

@@ -43,6 +43,7 @@ _MANUAL = {
         "tool-calling.ipynb",
         "tool-calling-errors.ipynb",
         "pass-config-to-tools.ipynb",
+        "many-tools.ipynb",
         "dynamic-returning-direct.ipynb",
         "managing-agent-steps.ipynb",
         "respond-in-format.ipynb",
@@ -58,6 +59,7 @@ _MANUAL = {
         "human_in_the_loop/time-travel.ipynb",
         "human_in_the_loop/edit-graph-state.ipynb",
         "human_in_the_loop/wait-user-input.ipynb",
+        "human_in_the_loop/review-tool-calls.ipynb",
         "node-retries.ipynb",
     ],
     "tutorials": [

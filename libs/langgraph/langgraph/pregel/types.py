@@ -58,7 +58,6 @@ class RetryPolicy(NamedTuple):
 
 class PregelTaskDescription(NamedTuple):
     name: str
-    input: Any
 
 
 class PregelExecutableTask(NamedTuple):

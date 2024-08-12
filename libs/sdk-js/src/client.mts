@@ -338,6 +338,17 @@ export class ThreadsClient extends BaseClient {
   }
 
   /**
+   * Copy an existing thread
+   * @param threadId ID of the thread to be copied
+   * @returns Newly copied thread
+   */
+  async copy(threadId: string): Promise<Thread> {
+    return this.fetch<Thread>(`/threads/${threadId}/copy`, {
+      method: "POST",
+    });
+  }
+
+  /**
    * Update a thread.
    *
    * @param threadId ID of the thread.
@@ -427,15 +438,18 @@ export class ThreadsClient extends BaseClient {
   async updateState<ValuesType = DefaultValues>(
     threadId: string,
     options: { values: ValuesType; checkpointId?: string; asNode?: string },
-  ): Promise<void> {
-    return this.fetch<void>(`/threads/${threadId}/state`, {
-      method: "POST",
-      json: {
-        values: options.values,
-        checkpoint_id: options.checkpointId,
-        as_node: options?.asNode,
+  ): Promise<Pick<Config, "configurable">> {
+    return this.fetch<Pick<Config, "configurable">>(
+      `/threads/${threadId}/state`,
+      {
+        method: "POST",
+        json: {
+          values: options.values,
+          checkpoint_id: options.checkpointId,
+          as_node: options?.asNode,
+        },
       },
-    });
+    );
   }
 
   /**
