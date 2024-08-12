@@ -259,6 +259,7 @@ class BaseCheckpointSaver(ABC):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        include_nested_checkpoints: bool = False,
     ) -> Iterator[CheckpointTuple]:
         """List checkpoints that match the given criteria.
 
@@ -350,6 +351,7 @@ class BaseCheckpointSaver(ABC):
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
+        include_nested_checkpoints: bool = False,
     ) -> AsyncIterator[CheckpointTuple]:
         """Asynchronously list checkpoints that match the given criteria.
 

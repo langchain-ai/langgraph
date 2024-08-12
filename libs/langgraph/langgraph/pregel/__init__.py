@@ -65,12 +65,12 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
+    CHECKPOINT_NAMESPACE_SEPARATOR,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     INTERRUPT,
-    THREAD_ID_SEPARATOR,
 )
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
@@ -422,35 +422,36 @@ class Pregel(
 
     @staticmethod
     def _assemble_state_snapshot_hierarchy(
-        root_thread_id: str, thread_id_to_state_snapshots: dict[str, StateSnapshot]
+        root_checkpoint_ns: str,
+        checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot],
     ) -> StateSnapshot:
-        thread_ids_to_visit = sorted(
-            thread_id_to_state_snapshots.keys(),
-            key=lambda x: len(x.split(THREAD_ID_SEPARATOR)),
+        checkpoint_ns_list_to_visit = sorted(
+            checkpoint_ns_to_state_snapshots.keys(),
+            key=lambda x: len(x.split(CHECKPOINT_NAMESPACE_SEPARATOR)),
         )
-        while thread_ids_to_visit:
-            thread_id = thread_ids_to_visit.pop()
-            state_snapshot = thread_id_to_state_snapshots[thread_id]
-            *path, subgraph_node = thread_id.split(THREAD_ID_SEPARATOR)
-            parent_thread_id = THREAD_ID_SEPARATOR.join(path)
-            if parent_thread_id and (
-                parent_state_snapshot := thread_id_to_state_snapshots.get(
-                    parent_thread_id
+        while checkpoint_ns_list_to_visit:
+            checkpoint_ns = checkpoint_ns_list_to_visit.pop()
+            state_snapshot = checkpoint_ns_to_state_snapshots[checkpoint_ns]
+            *path, subgraph_node = checkpoint_ns.split(CHECKPOINT_NAMESPACE_SEPARATOR)
+            parent_checkpoint_ns = CHECKPOINT_NAMESPACE_SEPARATOR.join(path)
+            if subgraph_node and (
+                parent_state_snapshot := checkpoint_ns_to_state_snapshots.get(
+                    parent_checkpoint_ns
                 )
             ):
                 parent_subgraph_snapshots = {
                     **(parent_state_snapshot.subgraph_state_snapshots or {}),
                     subgraph_node: state_snapshot,
                 }
-                thread_id_to_state_snapshots[
-                    parent_thread_id
-                ] = thread_id_to_state_snapshots[parent_thread_id]._replace(
+                checkpoint_ns_to_state_snapshots[
+                    parent_checkpoint_ns
+                ] = checkpoint_ns_to_state_snapshots[parent_checkpoint_ns]._replace(
                     subgraph_state_snapshots=parent_subgraph_snapshots
                 )
 
-        state_snapshot = thread_id_to_state_snapshots.pop(root_thread_id, None)
+        state_snapshot = checkpoint_ns_to_state_snapshots.pop(root_checkpoint_ns, None)
         if state_snapshot is None:
-            raise ValueError(f"Missing checkpoint for thread ID '{root_thread_id}'")
+            raise ValueError(f"Missing checkpoint for thread ID '{root_checkpoint_ns}'")
         return state_snapshot
 
     def get_state(
@@ -461,36 +462,51 @@ class Pregel(
             raise ValueError("No checkpointer set")
 
         if include_subgraph_state:
-            checkpoint_tuples = self.checkpointer.list(config, as_prefix=True)
+            checkpoint_tuples = self.checkpointer.list(
+                config, include_nested_checkpoints=True
+            )
         else:
             checkpoint_tuples = iter([self.checkpointer.get_tuple(config)])
 
-        thread_id = config["configurable"]["thread_id"]
-        thread_ts = config["configurable"].get("thread_ts")
-        thread_id_to_thread_ts: dict[str, str] = {}
-        thread_id_to_state_snapshots: dict[str, StateSnapshot] = {}
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = config["configurable"].get("checkpoint_id")
+        checkpoint_ns_to_checkpoint_id: dict[str, str] = {}
+        checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
         for checkpoint_tuple in checkpoint_tuples:
-            checkpoint_thread_id = checkpoint_tuple.config["configurable"]["thread_id"]
-            checkpoint_thread_ts = checkpoint_tuple.config["configurable"]["thread_ts"]
-            if thread_ts and thread_ts != checkpoint_thread_ts:
+            saved_checkpoint_ns = checkpoint_tuple.config["configurable"][
+                "checkpoint_ns"
+            ]
+            saved_checkpoint_id = checkpoint_tuple.config["configurable"][
+                "checkpoint_id"
+            ]
+            if checkpoint_id and checkpoint_id != saved_checkpoint_id:
                 continue
 
-            existing_thread_ts = thread_id_to_thread_ts.get(checkpoint_thread_id)
-            # keep only most recent thread_ts
-            if existing_thread_ts is None or checkpoint_thread_ts > existing_thread_ts:
+            existing_checkpoint_id = checkpoint_ns_to_checkpoint_id.get(
+                saved_checkpoint_ns
+            )
+            # keep only most recent checkpoint_id
+            if (
+                existing_checkpoint_id is None
+                or saved_checkpoint_id > existing_checkpoint_id
+            ):
                 state_snapshot = self._prepare_state_snapshot(checkpoint_tuple, config)
-                thread_id_to_state_snapshots[checkpoint_thread_id] = state_snapshot
-                thread_id_to_thread_ts[checkpoint_thread_id] = checkpoint_thread_ts
+                checkpoint_ns_to_state_snapshots[saved_checkpoint_ns] = state_snapshot
+                checkpoint_ns_to_checkpoint_id[
+                    saved_checkpoint_ns
+                ] = saved_checkpoint_id
 
-        if not thread_id_to_state_snapshots:
-            error_msg = f"Could not find checkpoints for thread ID '{thread_id}'"
-            if thread_ts:
-                error_msg += f" and thread TS '{thread_ts}'"
+        if not checkpoint_ns_to_state_snapshots:
+            error_msg = (
+                f"Could not find checkpoints for checkpoint NS '{checkpoint_ns}'"
+            )
+            if checkpoint_id:
+                error_msg += f" and checkpoint ID '{checkpoint_id}'"
 
             raise ValueError(error_msg)
 
         state_snapshot = self._assemble_state_snapshot_hierarchy(
-            thread_id, thread_id_to_state_snapshots
+            checkpoint_ns, checkpoint_ns_to_state_snapshots
         )
         return state_snapshot
 
@@ -502,7 +518,9 @@ class Pregel(
             raise ValueError("No checkpointer set")
 
         if include_subgraph_state:
-            checkpoint_tuples = self.checkpointer.alist(config, as_prefix=True)
+            checkpoint_tuples = self.checkpointer.alist(
+                config, include_nested_checkpoints=True
+            )
         else:
 
             async def alist_checkpoints():
@@ -510,34 +528,45 @@ class Pregel(
 
             checkpoint_tuples = alist_checkpoints()
 
-        thread_id = config["configurable"]["thread_id"]
-        thread_ts = config["configurable"].get("thread_ts")
-        thread_id_to_thread_ts: dict[str, str] = {}
-        thread_id_to_state_snapshots: dict[str, StateSnapshot] = {}
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = config["configurable"].get("checkpoint_id")
+        checkpoint_ns_to_checkpoint_id: dict[str, str] = {}
+        checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
         async for checkpoint_tuple in checkpoint_tuples:
-            checkpoint_thread_id = checkpoint_tuple.config["configurable"]["thread_id"]
-            checkpoint_thread_ts = checkpoint_tuple.config["configurable"]["thread_ts"]
-            if thread_ts and thread_ts != checkpoint_thread_ts:
+            saved_checkpoint_ns = checkpoint_tuple.config["configurable"][
+                "checkpoint_ns"
+            ]
+            saved_checkpoint_id = checkpoint_tuple.config["configurable"][
+                "checkpoint_id"
+            ]
+            if checkpoint_id and checkpoint_id != saved_checkpoint_id:
                 continue
 
-            existing_thread_ts = thread_id_to_thread_ts.get(checkpoint_thread_id)
-            # keep only most recent thread_ts
-            if existing_thread_ts is None or checkpoint_thread_ts > existing_thread_ts:
-                state_snapshot = await self._prepare_state_snapshot_async(
-                    checkpoint_tuple, config
-                )
-                thread_id_to_state_snapshots[checkpoint_thread_id] = state_snapshot
-                thread_id_to_thread_ts[checkpoint_thread_id] = checkpoint_thread_ts
+            existing_checkpoint_id = checkpoint_ns_to_checkpoint_id.get(
+                saved_checkpoint_ns
+            )
+            # keep only most recent checkpoint_id
+            if (
+                existing_checkpoint_id is None
+                or saved_checkpoint_id > existing_checkpoint_id
+            ):
+                state_snapshot = self._prepare_state_snapshot(checkpoint_tuple, config)
+                checkpoint_ns_to_state_snapshots[saved_checkpoint_ns] = state_snapshot
+                checkpoint_ns_to_checkpoint_id[
+                    saved_checkpoint_ns
+                ] = saved_checkpoint_id
 
-        if not thread_id_to_state_snapshots:
-            error_msg = f"Could not find checkpoints for thread ID '{thread_id}'"
-            if thread_ts:
-                error_msg += f" and thread TS '{thread_ts}'"
+        if not checkpoint_ns_to_state_snapshots:
+            error_msg = (
+                f"Could not find checkpoints for checkpoint NS '{checkpoint_ns}'"
+            )
+            if checkpoint_id:
+                error_msg += f" and checkpoint ID '{checkpoint_id}'"
 
             raise ValueError(error_msg)
 
         state_snapshot = self._assemble_state_snapshot_hierarchy(
-            thread_id, thread_id_to_state_snapshots
+            checkpoint_ns, checkpoint_ns_to_state_snapshots
         )
         return state_snapshot
 
@@ -584,7 +613,7 @@ class Pregel(
                         -1,
                         for_execution=False,
                     )
-                    
+
                     yield StateSnapshot(
                         read_channels(channels, self.stream_channels_asis),
                         tuple(t.name for t in next_tasks),
@@ -620,10 +649,11 @@ class Pregel(
         ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             if include_subgraph_state:
                 state_snapshot = await self.aget_state(
-                    config, include_subgraph_state=True)
+                    config, include_subgraph_state=True
+                )
                 yield state_snapshot
             else:
-                 async with AsyncChannelsManager(
+                async with AsyncChannelsManager(
                     {
                         k: LastValue(None) if isinstance(c, Context) else c
                         for k, c in self.channels.items()
