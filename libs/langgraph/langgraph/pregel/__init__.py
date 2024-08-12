@@ -360,11 +360,41 @@ class Pregel(
             if is_managed_value(v)
         }
 
-    def _prepare_state_snapshot(self, saved: CheckpointTuple) -> StateSnapshot:
+    def _get_nodes_and_channels(
+        self, checkpoint_ns: str
+    ) -> tuple[Mapping[str, PregelNode], Mapping[str, BaseChannel]]:
+        if checkpoint_ns == "":
+            return self.nodes, self.channels
+
+        path = checkpoint_ns.split(CHECKPOINT_NAMESPACE_SEPARATOR)
+        nodes = self.nodes
+        channels = self.channels
+        for subgraph_node_name in path:
+            if subgraph_node_name not in nodes:
+                raise ValueError(f"Couldn't find node '{subgraph_node_name}'.")
+
+            subgraph_node = nodes[subgraph_node_name].get_node()
+
+            if not isinstance(subgraph_node, RunnableSequence):
+                break
+
+            first_step = subgraph_node.steps[0]
+            if isinstance(first_step, Pregel):
+                nodes = first_step.nodes
+                channels = first_step.channels
+
+        return nodes, channels
+
+    def _prepare_state_snapshot(
+        self,
+        saved: CheckpointTuple,
+        nodes: Mapping[str, PregelNode],
+        channels: Mapping[str, BaseChannel],
+    ) -> StateSnapshot:
         with ChannelsManager(
             {
                 k: LastValue(None) if isinstance(c, Context) else c
-                for k, c in self.channels.items()
+                for k, c in channels.items()
             },
             saved.checkpoint,
             saved.config,
@@ -373,7 +403,7 @@ class Pregel(
         ) as managed:
             next_tasks = prepare_next_tasks(
                 saved.checkpoint,
-                self.nodes,
+                nodes,
                 channels,
                 managed,
                 saved.config,
@@ -390,12 +420,15 @@ class Pregel(
             )
 
     async def _prepare_state_snapshot_async(
-        self, saved: CheckpointTuple
+        self,
+        saved: CheckpointTuple,
+        nodes: Mapping[str, PregelNode],
+        channels: Mapping[str, BaseChannel],
     ) -> StateSnapshot:
         async with AsyncChannelsManager(
             {
                 k: LastValue(None) if isinstance(c, Context) else c
-                for k, c in self.channels.items()
+                for k, c in channels.items()
             },
             saved.checkpoint,
             saved.config,
@@ -404,7 +437,7 @@ class Pregel(
         ) as managed:
             next_tasks = prepare_next_tasks(
                 saved.checkpoint,
-                self.nodes,
+                nodes,
                 channels,
                 managed,
                 saved.config,
@@ -472,6 +505,9 @@ class Pregel(
         checkpoint_id = config["configurable"].get("checkpoint_id")
         checkpoint_ns_to_checkpoint_id: dict[str, str] = {}
         checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
+        checkpoint_ns_to_nodes_and_channels: dict[
+            str, tuple[Mapping[str, PregelNode], Mapping[str, BaseChannel]]
+        ] = {}
         for checkpoint_tuple in checkpoint_tuples:
             saved_checkpoint_ns = checkpoint_tuple.config["configurable"][
                 "checkpoint_ns"
@@ -490,7 +526,17 @@ class Pregel(
                 existing_checkpoint_id is None
                 or saved_checkpoint_id > existing_checkpoint_id
             ):
-                state_snapshot = self._prepare_state_snapshot(checkpoint_tuple)
+                if saved_checkpoint_ns not in checkpoint_ns_to_nodes_and_channels:
+                    checkpoint_ns_to_nodes_and_channels[
+                        saved_checkpoint_ns
+                    ] = self._get_nodes_and_channels(saved_checkpoint_ns)
+
+                nodes, channels = checkpoint_ns_to_nodes_and_channels[
+                    saved_checkpoint_ns
+                ]
+                state_snapshot = self._prepare_state_snapshot(
+                    checkpoint_tuple, nodes, channels
+                )
                 checkpoint_ns_to_state_snapshots[saved_checkpoint_ns] = state_snapshot
                 checkpoint_ns_to_checkpoint_id[
                     saved_checkpoint_ns
@@ -526,6 +572,9 @@ class Pregel(
         checkpoint_id = config["configurable"].get("checkpoint_id")
         checkpoint_ns_to_checkpoint_id: dict[str, str] = {}
         checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
+        checkpoint_ns_to_nodes_and_channels: dict[
+            str, tuple[Mapping[str, PregelNode], Mapping[str, BaseChannel]]
+        ] = {}
         async for checkpoint_tuple in checkpoint_tuples:
             saved_checkpoint_ns = checkpoint_tuple.config["configurable"][
                 "checkpoint_ns"
@@ -544,8 +593,16 @@ class Pregel(
                 existing_checkpoint_id is None
                 or saved_checkpoint_id > existing_checkpoint_id
             ):
+                if saved_checkpoint_ns not in checkpoint_ns_to_nodes_and_channels:
+                    checkpoint_ns_to_nodes_and_channels[
+                        saved_checkpoint_ns
+                    ] = self._get_nodes_and_channels(saved_checkpoint_ns)
+
+                nodes, channels = checkpoint_ns_to_nodes_and_channels[
+                    saved_checkpoint_ns
+                ]
                 state_snapshot = await self._prepare_state_snapshot_async(
-                    checkpoint_tuple
+                    checkpoint_tuple, nodes, channels
                 )
                 checkpoint_ns_to_state_snapshots[saved_checkpoint_ns] = state_snapshot
                 checkpoint_ns_to_checkpoint_id[
@@ -597,7 +654,10 @@ class Pregel(
                 )
                 yield state_snapshot
             else:
-                yield self._prepare_state_snapshot(checkpoint_tuple)
+                nodes, channels = self._get_nodes_and_channels(
+                    checkpoint_tuple.config["configurable"]["checkpoint_ns"]
+                )
+                yield self._prepare_state_snapshot(checkpoint_tuple, nodes, channels)
 
     async def aget_state_history(
         self,
@@ -634,7 +694,12 @@ class Pregel(
                 )
                 yield state_snapshot
             else:
-                yield await self._prepare_state_snapshot_async(checkpoint_tuple)
+                nodes, channels = self._get_nodes_and_channels(
+                    checkpoint_tuple.config["configurable"]["checkpoint_ns"]
+                )
+                yield await self._prepare_state_snapshot_async(
+                    checkpoint_tuple, nodes, channels
+                )
 
     def update_state(
         self,

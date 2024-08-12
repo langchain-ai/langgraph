@@ -7106,7 +7106,7 @@ async def test_nested_graph_interrupts(
     assert child_state_history == [
         StateSnapshot(
             values={"my_key": "hi my value here"},
-            next=(),
+            next=("inner_2",),
             config={
                 "configurable": {
                     "thread_id": "6",
@@ -7725,7 +7725,7 @@ async def test_nested_graph_state(
         subgraph_state_snapshots={
             "inner": StateSnapshot(
                 values={"my_key": "hi my value here"},
-                next=(),
+                next=("inner_2",),
                 config={
                     "configurable": {
                         "thread_id": "1",
@@ -7784,7 +7784,7 @@ async def test_nested_graph_state(
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
                     values={"my_key": "hi my value here"},
-                    next=(),
+                    next=("inner_2",),
                     config={
                         "configurable": {
                             "thread_id": "1",
@@ -8187,7 +8187,7 @@ async def test_doubly_nested_graph_state(
         subgraph_state_snapshots={
             "child": StateSnapshot(
                 values={"my_key": "hi my value"},
-                next=(),
+                next=("child_1",),
                 config={
                     "configurable": {
                         "thread_id": "1",
@@ -8207,7 +8207,7 @@ async def test_doubly_nested_graph_state(
                 subgraph_state_snapshots={
                     "child_1": StateSnapshot(
                         values={"my_key": "hi my value here"},
-                        next=(),
+                        next=("grandchild_2",),
                         config={
                             "configurable": {
                                 "thread_id": "1",
