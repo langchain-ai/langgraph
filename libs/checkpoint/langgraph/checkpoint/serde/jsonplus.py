@@ -2,6 +2,8 @@ import dataclasses
 import decimal
 import importlib
 import json
+import pathlib
+import re
 from collections import deque
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
@@ -51,6 +53,12 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(obj.__class__, kwargs=obj.model_dump())
         elif hasattr(obj, "dict") and callable(obj.dict):
             return self._encode_constructor_args(obj.__class__, kwargs=obj.dict())
+        elif isinstance(obj, pathlib.Path):
+            return self._encode_constructor_args(pathlib.Path, args=obj.parts)
+        elif isinstance(obj, re.Pattern):
+            return self._encode_constructor_args(
+                re.compile, args=[obj.pattern, obj.flags]
+            )
         elif isinstance(obj, UUID):
             return self._encode_constructor_args(UUID, args=[obj.hex])
         elif isinstance(obj, decimal.Decimal):
