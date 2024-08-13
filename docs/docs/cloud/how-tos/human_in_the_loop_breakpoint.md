@@ -98,7 +98,7 @@ And, now let's compile it with a breakpoint before the tool node:
 
     ```bash
     curl --request POST \
-     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",

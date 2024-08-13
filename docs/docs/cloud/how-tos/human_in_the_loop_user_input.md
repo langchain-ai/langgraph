@@ -96,7 +96,7 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
 
     ```bash
     curl --request POST \
-     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",
@@ -168,18 +168,20 @@ Because we are treating this as a tool call, we will need to update the state as
 
     ```bash
     curl --request GET \
-     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/state \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
      | jq -r '.values.messages[-1].tool_calls[0].id' \
-     | xargs -I {} sh -c '
+     | sh -c '
+         TOOL_CALL_ID="$1"
+         
          # Construct the JSON payload
-         JSON_PAYLOAD=$(printf "{\"messages\": [{\"tool_call_id\": \"%s\", \"type\": \"tool\", \"content\": \"san francisco\"}], \"as_node\": \"ask_human\"}" {})
+         JSON_PAYLOAD=$(printf "{\"messages\": [{\"tool_call_id\": \"%s\", \"type\": \"tool\", \"content\": \"san francisco\"}], \"as_node\": \"ask_human\"}" "$TOOL_CALL_ID")
          
          # Send the updated state
          curl --request POST \
-              --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/state \
+              --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
               --header "Content-Type: application/json" \
               --data "${JSON_PAYLOAD}"
-     '
+     ' _ 
     ```
 
 Output:
@@ -227,7 +229,7 @@ We can now tell the agent to continue. We can just pass in None as the input to 
 
     ```bash
     curl --request POST \                                                                             
-     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",

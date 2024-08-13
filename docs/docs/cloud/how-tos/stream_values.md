@@ -96,13 +96,13 @@ Now we can stream by values, which streams the full state of the graph after eac
 
     ```bash
     curl --request POST \
-     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",
        \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in la\"}]},
        \"stream_mode\": [
-         \"updates\"
+         \"values\"
        ]
      }" | \
      sed 's/\r$//' | \
@@ -200,13 +200,13 @@ If we want to just get the final result, we can use this endpoint and just keep 
 
     ```bash
     curl --request POST \
-     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",
        \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in la\"}]},
        \"stream_mode\": [
-         \"updates\"
+         \"values\"
        ]
      }" | \
      sed 's/\r$//' | \

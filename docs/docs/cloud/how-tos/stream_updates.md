@@ -109,7 +109,7 @@ Now we can stream by updates, which outputs updates made to the state by each no
 
     ```bash
     curl --request POST \
-     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",

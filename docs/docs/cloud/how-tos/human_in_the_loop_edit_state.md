@@ -90,7 +90,7 @@ Now let's invoke our graph, making sure to interrupt before the `action` node.
 
     ```bash
     curl --request POST \
-     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",
@@ -179,10 +179,10 @@ Now, let's assume we actually meant to search for the weather in Sidi Frej (anot
 === "CURL"
 
     ```bash
-    curl --request GET --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/state | \                                                                                      
+    curl --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | \                                                                                      
     jq '.values.messages[-1] | (.tool_calls[0].args = {"query": "current weather in Sidi Frej"})' | \
     curl --request POST \
-      --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/state \
+      --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
       --header 'Content-Type: application/json' \
       --data @-
     ```
@@ -234,7 +234,7 @@ Now we can resume our graph run but with the updated state:
 
     ```bash
     curl --request POST \                                                                             
-     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
      --data "{
        \"assistant_id\": \"agent\",
