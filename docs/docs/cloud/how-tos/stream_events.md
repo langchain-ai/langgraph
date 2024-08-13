@@ -246,7 +246,7 @@ Output:
     
     
     Receiving new event of type: events...
-    
+    {'event': 'on_chat_model_stream', 'data': {'chunk': {'content': 'd', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'AIMessageChunk', 'name': None, 'id': 'run-028a68fb-6435-4b46-a156-c3326f73985c', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None, 'tool_call_chunks': []}}, 'run_id': '028a68fb-6435-4b46-a156-c3326f73985c', 'name': 'FakeListChatModel', 'tags': ['seq:step:1'], 'metadata': {'graph_id': 'agent', 'created_by': 'system', 'run_id': '1ef301a5-b867-67de-9e9e-a32e53c5b1f8', 'user_id': '', 'thread_id': '7196a3aa-763c-4a8d-bfda-12fbfe1cd727', 'assistant_id': 'fe096781-5601-53d2-b2f6-0d3403f7e9ca', 'langgraph_step': 8, 'langgraph_node': 'agent', 'langgraph_triggers': ['tool'], 'langgraph_task_idx': 0, 'ls_model_type': 'chat'}, 'parent_ids': ['1ef301a5-b867-67de-9e9e-a32e53c5b1f8', '1f4f95d0-0ce1-4061-85d4-946446bbd3e5']}
     
     
     
