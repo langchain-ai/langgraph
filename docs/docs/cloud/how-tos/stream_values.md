@@ -33,12 +33,25 @@ First let's set up our client and thread:
     console.log(thread)
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url whatever-your-deployment-url-is/threads \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "metadata": {}
+      }'
+    ```
+
 Output:
 
     {'thread_id': 'bfc68029-1f7b-400f-beab-6f9032a52da4',
      'created_at': '2024-06-24T21:30:07.980789+00:00',
      'updated_at': '2024-06-24T21:30:07.980789+00:00',
-     'metadata': {}}
+     'metadata': {},
+     'status': 'idle',
+     'config': {}}
 
 Now we can stream by values, which streams the full state of the graph after each node has finished executing:
 
@@ -60,7 +73,6 @@ Now we can stream by values, which streams the full state of the graph after eac
     ```
 
 === "Javascript"
-    
 
     ```js
     const input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
@@ -78,6 +90,41 @@ Now we can stream by values, which streams the full state of the graph after eac
       console.log(chunk.data)
       console.log("\n\n")
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in la\"}]},
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     ' 
     ```
 
 
@@ -148,6 +195,34 @@ If we want to just get the final result, we can use this endpoint and just keep 
       finalAnswer = chunk.data;
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in la\"}]},
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^data:/ { 
+         sub(/^data: /, "", $0)   
+         data_content = $0          
+     }    
+     END {                                               
+         if (data_content != "") {
+             print data_content
+         }
+     }         
+     '
+    ```
+
 
 Output:
 

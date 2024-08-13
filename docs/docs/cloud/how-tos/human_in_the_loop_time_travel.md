@@ -29,6 +29,17 @@ First, we need to setup our client so that we can communicate with our hosted gr
     const thread = await client.threads.create();
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url whatever-your-deployment-url-is/threads \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "metadata": {}
+      }'
+    ```
+
 ## Replay a state
 
 ### Initial invocation
@@ -69,6 +80,41 @@ Before replaying a state - we need to create states to replay from! In order to 
       }
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"Please search the weather in SF\"}]},
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
+    ```
     
 Output:
 
@@ -98,6 +144,12 @@ Now let's get our list of states, and invoke from the third state (right before 
     // We can confirm that this state is correct by checking the 'next' attribute and seeing that it is the tool call node
     const stateToReplay = states[2];
     console.log(stateToReplay['next']);
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request GET --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/history | jq -r '.[2].next'
     ```
 
 Output:
@@ -141,6 +193,43 @@ To rerun from a state, we need to pass in the `checkpoint_id` into the config of
     }
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request GET --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/history | jq -r '.[2].checkpoint_id' | {  
+    read checkpoint_id   
+    curl --request POST \                                                            
+         --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+         --header 'Content-Type: application/json' \
+         --data "{                     
+           \"assistant_id\": \"agent\",
+           \"config\": {\"configurable\": {\"thread_ts\": \"$checkpoint_id\"}},
+           \"stream_mode\": [
+             \"updates\"
+           ]   
+         }" | \           
+         sed 's/\r$//' | \
+         awk '      
+         /^event:/ {                                              
+             if (data_content != "" && event_type != "metadata") {
+                 print data_content "\n"
+             }                      
+             sub(/^event: /, "", $0)
+             event_type = $0  
+             data_content = ""
+         }         
+         /^data:/ {                
+             sub(/^data: /, "", $0)
+             data_content = $0
+         }    
+         END {                                                    
+             if (data_content != "" && event_type != "metadata") {
+                 print data_content "\n"
+             }
+         }
+         ' 
+    ```
+
 Output:
 
     {'action': {'messages': [{'content': '["I looked up: current weather in San Francisco. Result: It\'s sunny in San Francisco, but you better look out if you\'re a Gemini 😈."]', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'tool', 'name': 'search', 'id': 'eba650e5-400e-4938-8508-f878dcbcc532', 'tool_call_id': 'toolu_011vroKUtWU7SBdrngpgpFMn'}]}}
@@ -181,6 +270,25 @@ Let's show how to do this to edit the state at a particular point in time. Let's
     const newState = await client.threads.updateState(thread['thread_id'],{values:{"messages":[lastMessage]},checkpointId:stateToReplay['checkpoint_id']});
     ```
 
+=== "CURL"
+
+    ```bash
+    curl -s --request GET --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/history | \                     
+    jq -c '
+        .[2] as $state_to_replay | 
+        .[2].values.messages[-1] as $last_message |              
+        $last_message |                                                                                      
+        (.tool_calls[0].args = {"query": "current weather in SF"}) as $updated_last_message |
+        {
+            values: { messages: $updated_last_message },  
+            checkpoint_id: $state_to_replay.checkpoint_id                                                     
+        }' | \                    
+    curl --request POST \
+        --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/state \
+        --header 'Content-Type: application/json' \
+        --data @-
+    ```
+
 Now we can rerun our graph with this new config, starting from the `new_state`, which is a branch of our `state_to_replay`:
 
 === "Python"
@@ -214,6 +322,43 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl -s --request GET --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/state | \
+    jq -r '.config.configurable.thread_id' | \
+    xargs -I{} curl --request POST \
+        --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+        --header 'Content-Type: application/json' \
+        --data '{
+          "assistant_id": "agent",
+          "config": {"configurable": {"thread_ts": "{}"}},
+          "stream_mode": [
+            "updates"
+          ]
+        }' | \
+    sed 's/\r$//' | \
+    awk '
+    /^event:/ {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+        sub(/^event: /, "", $0)
+        event_type = $0
+        data_content = ""
+    }
+    /^data:/ {
+        sub(/^data: /, "", $0)
+        data_content = $0
+    }
+    END {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+    }
+    '
     ```
 
 Output:

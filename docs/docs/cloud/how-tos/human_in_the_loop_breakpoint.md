@@ -36,6 +36,17 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     const thread = await client.threads.create();
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url whatever-your-deployment-url-is/threads \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "metadata": {}
+      }'
+    ```
+
 ## Adding a breakpoint
 
 We now want to add a breakpoint in our graph run, which we will do before a tool is called.
@@ -81,6 +92,42 @@ And, now let's compile it with a breakpoint before the tool node:
       console.log(chunk.data);
       console.log("\n\n");
     }
+    ```
+    
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf\"}]},
+       \"interrupt_before\": [\"action\"],
+       \"stream_mode\": [
+         \"messages\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:

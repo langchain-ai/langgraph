@@ -63,7 +63,9 @@ Output:
     {'thread_id': 'e1431c95-e241-4d1d-a252-27eceb1e5c86',
      'created_at': '2024-06-21T15:48:59.808924+00:00',
      'updated_at': '2024-06-21T15:48:59.808924+00:00',
-     'metadata': {}}
+     'metadata': {},
+     'status': 'idle',
+     'config': {}}
 
 Let's also define a helper function for better formatting of the tool calls in messages
 

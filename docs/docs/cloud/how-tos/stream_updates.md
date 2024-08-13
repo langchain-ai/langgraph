@@ -33,13 +33,25 @@ First let's set up our client and thread:
     console.log(thread)
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url whatever-your-deployment-url-is/threads \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "metadata": {}
+      }'
+    ```
 
 Output:
 
     {'thread_id': '979e3c89-a702-4882-87c2-7a59a250ce16',
      'created_at': '2024-06-21T15:22:07.453100+00:00',
      'updated_at': '2024-06-21T15:22:07.453100+00:00',
-     'metadata': {}}
+     'metadata': {},
+     'status': 'idle',
+     'config': {}}
 
 Now we can stream by updates, which outputs updates made to the state by each node after it has executed:
 
@@ -91,6 +103,41 @@ Now we can stream by updates, which outputs updates made to the state by each no
       console.log(chunk.data)
       console.log("\n\n")
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url whatever-your-deployment-url-is/threads/_YOUR_THREAD_ID_/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"What's the weather in la\"}]},
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
