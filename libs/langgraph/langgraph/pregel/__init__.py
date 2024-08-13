@@ -506,14 +506,15 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
+        checkpoint_tuple = self.checkpointer.get_tuple(config)
         if include_subgraph_state:
             checkpoint_tuples = self.checkpointer.list(config)
         else:
-            checkpoint_tuple = self.checkpointer.get_tuple(config)
             checkpoint_tuples = iter([checkpoint_tuple] if checkpoint_tuple else [])
 
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = config["configurable"].get("checkpoint_id")
+        checkpoint_config = checkpoint_tuple.config if checkpoint_tuple else config
+        checkpoint_ns = checkpoint_config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = checkpoint_config["configurable"].get("checkpoint_id")
         checkpoint_ns_to_checkpoint_id: dict[str, str] = {}
         checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
         checkpoint_ns_to_nodes_and_channels: dict[
@@ -526,7 +527,7 @@ class Pregel(
             saved_checkpoint_id = checkpoint_tuple.config["configurable"][
                 "checkpoint_id"
             ]
-            if checkpoint_id and checkpoint_id != saved_checkpoint_id:
+            if checkpoint_id != saved_checkpoint_id:
                 continue
 
             existing_checkpoint_id = checkpoint_ns_to_checkpoint_id.get(
@@ -570,19 +571,20 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
+        checkpoint_tuple = await self.checkpointer.aget_tuple(config)
         if include_subgraph_state:
             checkpoint_tuples = self.checkpointer.alist(config)
         else:
 
             async def alist_checkpoints():
-                checkpoint_tuple = await self.checkpointer.aget_tuple(config)
                 if checkpoint_tuple:
                     yield checkpoint_tuple
 
             checkpoint_tuples = alist_checkpoints()
 
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_id = config["configurable"].get("checkpoint_id")
+        checkpoint_config = checkpoint_tuple.config if checkpoint_tuple else config
+        checkpoint_ns = checkpoint_config["configurable"].get("checkpoint_ns", "")
+        checkpoint_id = checkpoint_config["configurable"].get("checkpoint_id")
         checkpoint_ns_to_checkpoint_id: dict[str, str] = {}
         checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
         checkpoint_ns_to_nodes_and_channels: dict[
@@ -595,7 +597,7 @@ class Pregel(
             saved_checkpoint_id = checkpoint_tuple.config["configurable"][
                 "checkpoint_id"
             ]
-            if checkpoint_id and checkpoint_id != saved_checkpoint_id:
+            if checkpoint_id != saved_checkpoint_id:
                 continue
 
             existing_checkpoint_id = checkpoint_ns_to_checkpoint_id.get(
