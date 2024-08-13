@@ -1,13 +1,26 @@
 import dataclasses
+import decimal
 import importlib
 import json
-from datetime import datetime, timedelta, timezone
+import pathlib
+import re
+from collections import deque
+from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
+from ipaddress import (
+    IPv4Address,
+    IPv4Interface,
+    IPv4Network,
+    IPv6Address,
+    IPv6Interface,
+    IPv6Network,
+)
 from typing import Any, Optional
 from uuid import UUID
 
 from langchain_core.load.load import Reviver
 from langchain_core.load.serializable import Serializable
+from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.types import SendProtocol
@@ -40,19 +53,44 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(obj.__class__, kwargs=obj.model_dump())
         elif hasattr(obj, "dict") and callable(obj.dict):
             return self._encode_constructor_args(obj.__class__, kwargs=obj.dict())
+        elif isinstance(obj, pathlib.Path):
+            return self._encode_constructor_args(pathlib.Path, args=obj.parts)
+        elif isinstance(obj, re.Pattern):
+            return self._encode_constructor_args(
+                re.compile, args=[obj.pattern, obj.flags]
+            )
         elif isinstance(obj, UUID):
             return self._encode_constructor_args(UUID, args=[obj.hex])
-        elif isinstance(obj, (set, frozenset)):
+        elif isinstance(obj, decimal.Decimal):
+            return self._encode_constructor_args(decimal.Decimal, args=[str(obj)])
+        elif isinstance(obj, (set, frozenset, deque)):
             return self._encode_constructor_args(type(obj), args=[list(obj)])
+        elif isinstance(obj, (IPv4Address, IPv4Interface, IPv4Network)):
+            return self._encode_constructor_args(obj.__class__, args=[str(obj)])
+        elif isinstance(obj, (IPv6Address, IPv6Interface, IPv6Network)):
+            return self._encode_constructor_args(obj.__class__, args=[str(obj)])
+
         elif isinstance(obj, datetime):
             return self._encode_constructor_args(
                 datetime, method="fromisoformat", args=[obj.isoformat()]
             )
         elif isinstance(obj, timezone):
             return self._encode_constructor_args(timezone, args=obj.__getinitargs__())
+        elif isinstance(obj, ZoneInfo):
+            return self._encode_constructor_args(ZoneInfo, args=[obj.key])
         elif isinstance(obj, timedelta):
             return self._encode_constructor_args(
                 timedelta, args=[obj.days, obj.seconds, obj.microseconds]
+            )
+        elif isinstance(obj, date):
+            return self._encode_constructor_args(
+                date, args=[obj.year, obj.month, obj.day]
+            )
+        elif isinstance(obj, time):
+            return self._encode_constructor_args(
+                time,
+                args=[obj.hour, obj.minute, obj.second, obj.microsecond, obj.tzinfo],
+                kwargs={"fold": obj.fold},
             )
         elif dataclasses.is_dataclass(obj):
             return self._encode_constructor_args(
