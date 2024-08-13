@@ -27,7 +27,7 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
 
     ```bash
     curl --request POST \
-      --url whatever-your-deployment-url-is/threads \
+      --url <DEPLOYMENY_URL>/threads \
       --header 'Content-Type: application/json' \
       --data '{
         "metadata": {}

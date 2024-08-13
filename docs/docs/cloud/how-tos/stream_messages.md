@@ -58,6 +58,17 @@ First let's set up our client and thread:
     console.log(thread)
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENY_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "metadata": {}
+      }'
+    ```
+
 Output:
 
     {'thread_id': 'e1431c95-e241-4d1d-a252-27eceb1e5c86',
@@ -67,7 +78,7 @@ Output:
      'status': 'idle',
      'config': {}}
 
-Let's also define a helper function for better formatting of the tool calls in messages
+Let's also define a helper function for better formatting of the tool calls in messages (for CURL we will define a helper script called `process_stream.sh`)
 
 === "Python"
 
@@ -96,6 +107,69 @@ Let's also define a helper function for better formatting of the tool calls in m
       return "No tool calls";
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    # process_stream.sh
+
+    format_tool_calls() {
+        echo "$1" | jq -r 'map("Tool Call ID: \(.id), Function: \(.name), Arguments: \(.args)") | join("\n")'
+    }
+
+    process_data_item() {
+        local data_item="$1"
+
+        if echo "$data_item" | jq -e '.role == "user"' > /dev/null; then
+            echo "Human: $(echo "$data_item" | jq -r '.content')"
+        else
+            local tool_calls=$(echo "$data_item" | jq -r '.tool_calls // []')
+            local invalid_tool_calls=$(echo "$data_item" | jq -r '.invalid_tool_calls // []')
+            local content=$(echo "$data_item" | jq -r '.content // ""')
+            local response_metadata=$(echo "$data_item" | jq -r '.response_metadata // {}')
+
+            if [ -n "$content" ] && [ "$content" != "null" ]; then
+                echo "AI: $content"
+            fi
+
+            if [ "$tool_calls" != "[]" ]; then
+                echo "Tool Calls:"
+                format_tool_calls "$tool_calls"
+            fi
+
+            if [ "$invalid_tool_calls" != "[]" ]; then
+                echo "Invalid Tool Calls:"
+                format_tool_calls "$invalid_tool_calls"
+            fi
+
+            if [ "$response_metadata" != "{}" ]; then
+                local finish_reason=$(echo "$response_metadata" | jq -r '.finish_reason // "N/A"')
+                echo "Response Metadata: Finish Reason - $finish_reason"
+            fi
+        fi
+    }
+
+    while IFS=': ' read -r key value; do
+        case "$key" in
+            event)
+                event="$value"
+                ;;
+            data)
+                if [ "$event" = "metadata" ]; then
+                    run_id=$(echo "$value" | jq -r '.run_id')
+                    echo "Metadata: Run ID - $run_id"
+                    echo "------------------------------------------------"
+                elif [ "$event" = "messages/partial" ]; then
+                    echo "$value" | jq -c '.[]' | while read -r data_item; do
+                        process_data_item "$data_item"
+                    done
+                    echo "------------------------------------------------"
+                fi
+                ;;
+        esac
+    done
+    ```
+
 
 Now we can stream by messages, which will return complete messages (at the end of node execution) as well as tokens for any messages generated inside a node:
 
@@ -202,6 +276,23 @@ Now we can stream by messages, which will return complete messages (at the end o
       }
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+    --header 'Content-Type: application/json' \
+    --data "{
+    \"assistant_id\": \"agent\",
+    \"config\":{\"configurable\":{\"model_name\":\"openai\"}},
+    \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"What's the weather in sf\"}]},
+    \"stream_mode\": [
+    \"messages\"
+    ]
+    }" | sed 's/\r$//' | ./process_stream.sh
+    ```
+
 
 Output:
 

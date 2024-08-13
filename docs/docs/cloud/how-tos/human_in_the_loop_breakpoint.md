@@ -40,7 +40,7 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
 
     ```bash
     curl --request POST \
-      --url whatever-your-deployment-url-is/threads \
+      --url <DEPLOYMENY_URL>/threads \
       --header 'Content-Type: application/json' \
       --data '{
         "metadata": {}

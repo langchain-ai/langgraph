@@ -33,7 +33,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
 
     ```bash
     curl --request POST \
-      --url whatever-your-deployment-url-is/threads \
+      --url <DEPLOYMENY_URL>/threads \
       --header 'Content-Type: application/json' \
       --data '{
         "metadata": {}

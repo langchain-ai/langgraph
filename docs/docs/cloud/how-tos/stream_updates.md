@@ -37,7 +37,7 @@ First let's set up our client and thread:
 
     ```bash
     curl --request POST \
-      --url whatever-your-deployment-url-is/threads \
+      --url <DEPLOYMENY_URL>/threads \
       --header 'Content-Type: application/json' \
       --data '{
         "metadata": {}
