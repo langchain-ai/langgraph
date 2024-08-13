@@ -8318,6 +8318,368 @@ async def test_doubly_nested_graph_state(
     )
 
 
+@pytest.mark.repeat(10)
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe"],
+)
+async def test_send_to_nested_graphs(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    class OverallState(TypedDict):
+        subjects: list[str]
+        jokes: Annotated[list[str], operator.add]
+
+    async def continue_to_jokes(state: OverallState):
+        return [Send("generate_joke", {"subject": s}) for s in state["subjects"]]
+
+    class JokeState(TypedDict):
+        subject: str
+
+    async def edit(state: JokeState):
+        subject = state["subject"]
+        return {"subject": f"{subject} - hohoho"}
+
+    # subgraph
+    subgraph = StateGraph(input=JokeState, output=OverallState)
+    subgraph.add_node("edit", edit)
+    subgraph.add_node(
+        "generate", lambda state: {"jokes": [f"Joke about {state['subject']}"]}
+    )
+    subgraph.set_entry_point("edit")
+    subgraph.add_edge("edit", "generate")
+    subgraph.set_finish_point("generate")
+
+    # parent graph
+    builder = StateGraph(OverallState)
+    builder.add_node(
+        "generate_joke",
+        subgraph.compile(
+            checkpointer=INHERIT_CHECKPOINTER, interrupt_before=["generate"]
+        ),
+    )
+    builder.add_conditional_edges(START, continue_to_jokes)
+    builder.add_edge("generate_joke", END)
+
+    graph = builder.compile(checkpointer=checkpointer)
+    config = {"configurable": {"thread_id": "1"}}
+
+    # invoke and pause at nested interrupt
+    assert await graph.ainvoke({"subjects": ["cats", "dogs"]}, config=config) == {
+        "subjects": ["cats", "dogs"],
+        "jokes": [],
+    }
+    actual_snapshot = await graph.aget_state(config, include_subgraph_state=True)
+    subgraph_nodes = list(actual_snapshot.subgraph_state_snapshots.keys())
+    assert len(subgraph_nodes) == 2
+    for subgraph_node in subgraph_nodes:
+        assert subgraph_node.split(":")[0] == "generate_joke"
+
+    expected_snapshot = StateSnapshot(
+        values={"subjects": ["cats", "dogs"], "jokes": []},
+        next=("generate_joke", "generate_joke"),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={"source": "loop", "writes": None, "step": 0},
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        subgraph_state_snapshots={
+            subgraph_nodes[0]: StateSnapshot(
+                values={"jokes": []},
+                next=("generate",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": subgraph_nodes[0],
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "writes": {"edit": None}, "step": 1},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": subgraph_nodes[0],
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+            subgraph_nodes[1]: StateSnapshot(
+                values={"jokes": []},
+                next=("generate",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": subgraph_nodes[1],
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={"source": "loop", "writes": {"edit": None}, "step": 1},
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": subgraph_nodes[1],
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+        },
+    )
+    assert actual_snapshot == expected_snapshot
+
+    # continue past interrupt
+    assert await graph.ainvoke(None, config=config) == {
+        "subjects": ["cats", "dogs"],
+        "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+    }
+
+    actual_snapshot = await graph.aget_state(config, include_subgraph_state=True)
+    subgraph_nodes, _ = zip(
+        *(
+            sorted(
+                actual_snapshot.subgraph_state_snapshots.items(),
+                key=lambda x: x[1].values["jokes"][0],
+            )
+        )
+    )
+    assert len(subgraph_nodes) == 2
+    for subgraph_node in subgraph_nodes:
+        assert subgraph_node.split(":")[0] == "generate_joke"
+    expected_snapshot = StateSnapshot(
+        values={
+            "subjects": ["cats", "dogs"],
+            "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+        },
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {
+                "generate_joke": [
+                    {"jokes": ["Joke about cats - hohoho"]},
+                    {"jokes": ["Joke about dogs - hohoho"]},
+                ]
+            },
+            "step": 1,
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        subgraph_state_snapshots={
+            subgraph_nodes[0]: StateSnapshot(
+                values={"jokes": ["Joke about cats - hohoho"]},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": subgraph_nodes[0],
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"generate": {"jokes": ["Joke about cats - hohoho"]}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": subgraph_nodes[0],
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+            subgraph_nodes[1]: StateSnapshot(
+                values={"jokes": ["Joke about dogs - hohoho"]},
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": subgraph_nodes[1],
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"generate": {"jokes": ["Joke about dogs - hohoho"]}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": subgraph_nodes[1],
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots=None,
+            ),
+        },
+    )
+    assert actual_snapshot == expected_snapshot
+
+    # test full history
+    actual_history = [
+        c async for c in graph.aget_state_history(config, include_subgraph_state=True)
+    ]
+    expected_history = [
+        StateSnapshot(
+            values={
+                "subjects": ["cats", "dogs"],
+                "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+            },
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "generate_joke": [
+                        {"jokes": ["Joke about cats - hohoho"]},
+                        {"jokes": ["Joke about dogs - hohoho"]},
+                    ]
+                },
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"subjects": ["cats", "dogs"], "jokes": []},
+            next=("generate_joke", "generate_joke"),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "loop", "writes": None, "step": 0},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                subgraph_nodes[0]: StateSnapshot(
+                    values={"jokes": ["Joke about cats - hohoho"]},
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": subgraph_nodes[0],
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {"generate": {"jokes": ["Joke about cats - hohoho"]}},
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": subgraph_nodes[0],
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                ),
+                subgraph_nodes[1]: StateSnapshot(
+                    values={"jokes": ["Joke about dogs - hohoho"]},
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": subgraph_nodes[1],
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {"generate": {"jokes": ["Joke about dogs - hohoho"]}},
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": subgraph_nodes[1],
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                ),
+            },
+        ),
+        StateSnapshot(
+            values={"jokes": []},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "input",
+                "writes": {"subjects": ["cats", "dogs"]},
+                "step": -1,
+            },
+            created_at=AnyStr(),
+            parent_config=None,
+            subgraph_state_snapshots=None,
+        ),
+    ]
+    assert actual_history == expected_history
+
+
 async def test_checkpoint_metadata() -> None:
     """This test verifies that a run's configurable fields are merged with the
     previous checkpoint config for each step in the run.

@@ -27,6 +27,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.constants import (
     CHECKPOINT_NAMESPACE_SEPARATOR,
     END,
+    SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
     START,
     TAG_HIDDEN,
     Send,
@@ -159,10 +160,15 @@ class Graph:
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
-        if isinstance(node, str) and CHECKPOINT_NAMESPACE_SEPARATOR in node:
-            raise ValueError(
-                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
-            )
+        if isinstance(node, str):
+            for character in (
+                CHECKPOINT_NAMESPACE_SEPARATOR,
+                SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
+            ):
+                if character in node:
+                    raise ValueError(
+                        f"'{character}' is a reserved character and is not allowed in the node names."
+                    )
 
         if self.compiled:
             logger.warning(

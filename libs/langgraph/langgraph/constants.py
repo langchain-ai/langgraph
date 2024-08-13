@@ -1,4 +1,5 @@
-from typing import Any
+from typing import Any, Optional
+from uuid import uuid4
 
 INPUT = "__input__"
 CONFIG_KEY_SEND = "__pregel_send"
@@ -22,6 +23,7 @@ START = "__start__"
 END = "__end__"
 
 CHECKPOINT_NAMESPACE_SEPARATOR = "|"
+SEND_CHECKPOINT_NAMESPACE_SEPARATOR = ":"
 
 
 class Send:
@@ -40,6 +42,7 @@ class Send:
     Attributes:
         node (str): The name of the target node to send the message to.
         arg (Any): The state or message to send to the target node.
+        id (str): ID associated with the Send.
 
     Examples:
         >>> from typing import Annotated
@@ -67,23 +70,26 @@ class Send:
 
     node: str
     arg: Any
+    id: Optional[str]
 
-    def __init__(self, /, node: str, arg: Any) -> None:
+    def __init__(self, /, node: str, arg: Any, id: Optional[str] = None) -> None:
         """
         Initialize a new instance of the Send class.
 
         Args:
             node (str): The name of the target node to send the message to.
             arg (Any): The state or message to send to the target node.
+            id (str): ID associated with the Send.
         """
         self.node = node
         self.arg = arg
+        self.id = id or str(uuid4())
 
     def __hash__(self) -> int:
         return hash((self.node, self.arg))
 
     def __repr__(self) -> str:
-        return f"Send(node={self.node!r}, arg={self.arg!r})"
+        return f"Send(node={self.node!r}, arg={self.arg!r}, id={self.id!r})"
 
     def __eq__(self, value: object) -> bool:
         return (

@@ -72,6 +72,7 @@ from langgraph.constants import (
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     INTERRUPT,
+    SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
 )
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
@@ -370,6 +371,15 @@ class Pregel(
         nodes = self.nodes
         channels = self.channels
         for subgraph_node_name in path:
+            # if we have this separator it means we have a node that was triggered by Send
+            if SEND_CHECKPOINT_NAMESPACE_SEPARATOR in subgraph_node_name:
+                name_parts = subgraph_node_name.split(
+                    SEND_CHECKPOINT_NAMESPACE_SEPARATOR
+                )
+                if len(name_parts) != 2:
+                    raise ValueError(f"Malformed node name '{subgraph_node_name}'")
+
+                subgraph_node_name = name_parts[0]
             if subgraph_node_name not in nodes:
                 raise ValueError(f"Couldn't find node '{subgraph_node_name}'.")
 
@@ -1190,8 +1200,7 @@ class Pregel(
                         )
                         if not done:
                             break  # timed out
-                        for fut in done:
-                            task = futures.pop(fut)
+                        for fut, task in zip(done, [futures.pop(fut) for fut in done]):
                             if fut.exception() is not None:
                                 # we got an exception, break out of while loop
                                 # exception will be handled in panic_or_proceed
@@ -1435,8 +1444,7 @@ class Pregel(
                         )
                         if not done:
                             break  # timed out
-                        for fut in done:
-                            task = futures.pop(fut)
+                        for fut, task in zip(done, [futures.pop(fut) for fut in done]):
                             if fut.exception() is not None:
                                 # we got an exception, break out of while loop
                                 # exception will be handled in panic_or_proceed
