@@ -989,6 +989,7 @@ class Pregel(
 
             if (
                 parent_checkpointer is not None
+                and self.checkpointer is not None
                 and self.checkpointer != INHERIT_CHECKPOINTER
             ):
                 raise ValueError(
@@ -996,11 +997,14 @@ class Pregel(
                     "Please compile the subgraph graph with checkpointer=INHERIT_CHECKPOINTER (from langgraph.pregel import INHERIT_CHECKPOINTER)."
                 )
 
-        checkpointer = (
-            parent_checkpointer
-            if parent_checkpointer is not None
-            else self.checkpointer
-        )
+        if (
+            parent_checkpointer is not None
+            and self.checkpointer == INHERIT_CHECKPOINTER
+        ):
+            checkpointer = parent_checkpointer
+        else:
+            checkpointer = self.checkpointer
+
         return (
             debug,
             stream_mode,
