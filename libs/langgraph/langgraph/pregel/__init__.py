@@ -499,7 +499,8 @@ class Pregel(
         if include_subgraph_state:
             checkpoint_tuples = self.checkpointer.list(config)
         else:
-            checkpoint_tuples = iter([self.checkpointer.get_tuple(config)])
+            checkpoint_tuple = self.checkpointer.get_tuple(config)
+            checkpoint_tuples = iter([checkpoint_tuple] if checkpoint_tuple else [])
 
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = config["configurable"].get("checkpoint_id")
@@ -544,7 +545,7 @@ class Pregel(
 
         if not checkpoint_ns_to_state_snapshots:
             return StateSnapshot(
-                values={}, next=(), config=config, checkpoint=empty_checkpoint()
+                values={}, next=(), config=config, metadata=None, created_at=None
             )
 
         state_snapshot = self._assemble_state_snapshot_hierarchy(
@@ -564,7 +565,9 @@ class Pregel(
         else:
 
             async def alist_checkpoints():
-                yield await self.checkpointer.aget_tuple(config)
+                checkpoint_tuple = await self.checkpointer.aget_tuple(config)
+                if checkpoint_tuple:
+                    yield checkpoint_tuple
 
             checkpoint_tuples = alist_checkpoints()
 
@@ -611,7 +614,7 @@ class Pregel(
 
         if not checkpoint_ns_to_state_snapshots:
             return StateSnapshot(
-                values={}, next=(), config=config, checkpoint=empty_checkpoint()
+                values={}, next=(), config=config, metadata=None, created_at=None
             )
 
         state_snapshot = self._assemble_state_snapshot_hierarchy(
