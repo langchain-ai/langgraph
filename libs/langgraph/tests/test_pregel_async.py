@@ -8398,6 +8398,803 @@ async def test_doubly_nested_graph_state(
     )
 
 
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe"],
+)
+async def test_nested_graph_update_state(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    class InnerState(TypedDict):
+        my_key: str
+        my_other_key: str
+
+    async def inner_1(state: InnerState):
+        return {"my_key": state["my_key"] + " here", "my_other_key": state["my_key"]}
+
+    async def inner_2(state: InnerState):
+        return {
+            "my_key": state["my_key"] + " and there",
+            "my_other_key": state["my_key"],
+        }
+
+    inner = StateGraph(InnerState)
+    inner.add_node("inner_1", inner_1)
+    inner.add_node("inner_2", inner_2)
+    inner.add_edge("inner_1", "inner_2")
+    inner.set_entry_point("inner_1")
+    inner.set_finish_point("inner_2")
+
+    class State(TypedDict):
+        my_key: str
+
+    async def outer_1(state: State):
+        return {"my_key": "hi " + state["my_key"]}
+
+    async def outer_2(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("outer_1", outer_1)
+    graph.add_node(
+        "inner",
+        inner.compile(interrupt_before=["inner_2"]),
+    )
+    graph.add_node("outer_2", outer_2)
+    graph.set_entry_point("outer_1")
+    graph.add_edge("outer_1", "inner")
+    graph.add_edge("inner", "outer_2")
+    graph.set_finish_point("outer_2")
+    app = graph.compile(checkpointer=checkpointer)
+
+    # update a node before interrupt in subgraph
+    config = {"configurable": {"thread_id": "1"}}
+    child_config = {"configurable": {"thread_id": "1", "checkpoint_ns": "inner"}}
+    await app.ainvoke({"my_key": "meow"}, config=config, debug=True)
+    latest_config = (await app.aget_state(config)).config
+    updated_config = await app.aupdate_state(
+        latest_config, {"my_key": "hi bark here"}, as_node="inner|inner_1"
+    )
+    assert [
+        s async for s in app.aget_state_history(config, include_subgraph_state=True)
+    ] == [
+        # last snapshot is the update for the subgraph
+        StateSnapshot(
+            values={"my_key": "hi bark here"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 2,
+                "source": "update",
+                "writes": {"outer_1": {"my_key": "hi bark here"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={"my_key": "hi bark here", "my_other_key": "hi meow"},
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "step": 2,
+                        "source": "update",
+                        "writes": {"inner_1": {"my_key": "hi bark here"}},
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 1,
+                "source": "loop",
+                "writes": {"outer_1": {"my_key": "hi meow"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "step": 1,
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi meow here",
+                                "my_other_key": "hi meow",
+                            }
+                        },
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "meow"},
+            next=("outer_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"step": 0, "source": "loop", "writes": None},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"step": -1, "source": "input", "writes": {"my_key": "meow"}},
+            created_at=AnyStr(),
+            parent_config=None,
+            subgraph_state_snapshots=None,
+        ),
+    ]
+    assert [s async for s in app.aget_state_history(child_config)] == [
+        # last snapshot is the update for the subgraph
+        StateSnapshot(
+            values={"my_key": "hi bark here", "my_other_key": "hi meow"},
+            next=("inner_2",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 2,
+                "source": "update",
+                "writes": {"inner_1": {"my_key": "hi bark here"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+            next=("inner_2",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 1,
+                "source": "loop",
+                "writes": {
+                    "inner_1": {"my_key": "hi meow here", "my_other_key": "hi meow"}
+                },
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+    ]
+    # restart from interrupt
+    await app.ainvoke(None, updated_config)
+    assert [
+        s async for s in app.aget_state_history(config, include_subgraph_state=True)
+    ] == [
+        StateSnapshot(
+            values={"my_key": "hi bark here and there and back again"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 4,
+                "source": "loop",
+                "writes": {
+                    "outer_2": {"my_key": "hi bark here and there and back again"}
+                },
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi bark here and there"},
+            next=("outer_2",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 3,
+                "source": "loop",
+                "writes": {"inner": {"my_key": "hi bark here and there"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi bark here"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 2,
+                "source": "update",
+                "writes": {"outer_1": {"my_key": "hi bark here"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi bark here and there",
+                        "my_other_key": "hi bark here",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "step": 3,
+                        "source": "loop",
+                        "writes": {
+                            "inner_2": {
+                                "my_key": "hi bark here and there",
+                                "my_other_key": "hi bark here",
+                            }
+                        },
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 1,
+                "source": "loop",
+                "writes": {"outer_1": {"my_key": "hi meow"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "step": 1,
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi meow here",
+                                "my_other_key": "hi meow",
+                            }
+                        },
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "meow"},
+            next=("outer_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"step": 0, "source": "loop", "writes": None},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"step": -1, "source": "input", "writes": {"my_key": "meow"}},
+            created_at=AnyStr(),
+            parent_config=None,
+            subgraph_state_snapshots=None,
+        ),
+    ]
+    assert [s async for s in app.aget_state_history(child_config)] == [
+        StateSnapshot(
+            values={"my_key": "hi bark here and there", "my_other_key": "hi bark here"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 3,
+                "source": "loop",
+                "writes": {
+                    "inner_2": {
+                        "my_key": "hi bark here and there",
+                        "my_other_key": "hi bark here",
+                    }
+                },
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+            next=("inner_2",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 1,
+                "source": "loop",
+                "writes": {
+                    "inner_1": {"my_key": "hi meow here", "my_other_key": "hi meow"}
+                },
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+    ]
+
+    # update last node after interrupt in subgraph
+    config = {"configurable": {"thread_id": "2"}}
+    child_config = {"configurable": {"thread_id": "2", "checkpoint_ns": "inner"}}
+    await app.ainvoke({"my_key": "meow"}, config=config, debug=True)
+    latest_config = (await app.aget_state(config)).config
+    updated_config = await app.aupdate_state(
+        latest_config, {"my_key": "hi bark here and there"}, as_node="inner|inner_2"
+    )
+    await app.ainvoke(None, updated_config)
+    assert [
+        s async for s in app.aget_state_history(config, include_subgraph_state=True)
+    ] == [
+        StateSnapshot(
+            values={"my_key": "hi bark here and there and back again"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "outer_2": {"my_key": "hi bark here and there and back again"}
+                },
+                "step": 4,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi bark here and there"},
+            next=("outer_2",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "loop", "writes": {"inner": None}, "step": 3},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi bark here and there"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "update",
+                "step": 2,
+                "writes": {"outer_1": {"my_key": "hi bark here and there"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi bark here and there",
+                        "my_other_key": "hi meow",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "update",
+                        "step": 2,
+                        "writes": {"inner_2": {"my_key": "hi bark here and there"}},
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"outer_1": {"my_key": "hi meow"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi meow here",
+                        "my_other_key": "hi meow",
+                    },
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi meow here",
+                                "my_other_key": "hi meow",
+                            }
+                        },
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "meow"},
+            next=("outer_1",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "loop", "writes": None, "step": 0},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "input", "writes": {"my_key": "meow"}, "step": -1},
+            created_at=AnyStr(),
+            parent_config=None,
+            subgraph_state_snapshots=None,
+        ),
+    ]
+    assert [s async for s in app.aget_state_history(child_config)] == [
+        StateSnapshot(
+            values={"my_key": "hi bark here and there", "my_other_key": "hi meow"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "update",
+                "step": 2,
+                "writes": {"inner_2": {"my_key": "hi bark here and there"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+            next=("inner_2",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "inner_1": {"my_key": "hi meow here", "my_other_key": "hi meow"}
+                },
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "inner",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+    ]
+
+
 @pytest.mark.repeat(10)
 @pytest.mark.parametrize(
     "checkpointer_name",
