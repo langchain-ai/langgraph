@@ -86,7 +86,7 @@ class Send:
         self.id = id or str(uuid4())
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg))
+        return hash((self.node, self.arg, self.id))
 
     def __repr__(self) -> str:
         return f"Send(node={self.node!r}, arg={self.arg!r}, id={self.id!r})"
