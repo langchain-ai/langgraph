@@ -114,7 +114,7 @@ Output:
 
 ## Example of approving tool
 
-Let's now look at what it looks like to approve a tool call
+Let's now look at what it looks like to approve a tool call. Note that we don't need to pass an interrupt to our streaming calls because the graph (defined [here](../../how-tos/human_in_the_loop/review-tool-calls.ipynb#simple-usage)) was already compiled with an interrupt before the `human_review_node`.
 
 === "Python"
 
