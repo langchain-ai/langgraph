@@ -75,12 +75,14 @@ Whichever way you choose to execute runs on a thread is fine, as long as you ens
 
 ## Copying a thread
 
-After you have created a thread and executed some runs on it, you may wish to copy the thread. This will create a new thread with the same history as the existing thread, and then allow you to continue executing runs. You may wish to create multiple copies in order to experiment with different runs.
+After you have created a thread and executed some runs on it, you may wish to copy the thread. This will create a new thread with the same history as the existing thread, and then allow you to continue executing runs.
+
+### Create copy
 
 === "Python"
 
     ```python
-    copied_thread = await client.threads.copy("a74af490-f5e4-4a32-bdcf-526ab8534594")
+    copied_thread = await client.threads.copy(<THREAD_ID>)
     ```
 
 === "Javascript"
@@ -88,3 +90,12 @@ After you have created a thread and executed some runs on it, you may wish to co
     ```js
     let copiedThread = await client.threads.copy(<THREAD_ID>);
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/copy \
+    --header 'Content-Type: application/json'
+    ```
+
+### Verify copy
