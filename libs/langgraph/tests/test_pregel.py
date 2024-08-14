@@ -10,6 +10,7 @@ from typing import (
     Any,
     Dict,
     Generator,
+    Iterator,
     List,
     Literal,
     Optional,
@@ -2555,21 +2556,47 @@ def test_conditional_entrypoint_to_multiple_state_graph(
     }
 
 
-def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
+def test_conditional_state_graph(
+    snapshot: SnapshotAssertion, mocker: MockerFixture
+) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
 
+    setup = mocker.Mock()
+    teardown = mocker.Mock()
+
+    @contextmanager
+    def assert_ctx_once() -> Iterator[None]:
+        assert setup.call_count == 0
+        assert teardown.call_count == 0
+        try:
+            yield
+        finally:
+            assert setup.call_count == 1
+            assert teardown.call_count == 1
+            setup.reset_mock()
+            teardown.reset_mock()
+
+    @contextmanager
+    def make_httpx_client() -> Iterator[httpx.Client]:
+        setup()
+        with httpx.Client() as client:
+            try:
+                yield client
+            finally:
+                teardown()
+
     class AgentState(TypedDict, total=False):
         input: Annotated[str, UntrackedValue]
         agent_outcome: Optional[Union[AgentAction, AgentFinish]]
         intermediate_steps: Annotated[list[tuple[AgentAction, str]], operator.add]
-        session: Annotated[httpx.Client, Context(httpx.Client)]
+        session: Annotated[httpx.Client, Context(make_httpx_client)]
 
     class ToolState(TypedDict, total=False):
         agent_outcome: Union[AgentAction, AgentFinish]
-        session: Annotated[httpx.Client, Context(httpx.Client)]
+        session: Annotated[httpx.Client, Context(make_httpx_client)]
 
     # Assemble the tools
     @tool()
@@ -2652,84 +2679,88 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
-    assert app.invoke({"input": "what is weather in sf"}) == {
-        "input": "what is weather in sf",
-        "intermediate_steps": [
-            (
-                AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:query",
-                ),
-                "result for query",
-            ),
-            (
-                AgentAction(
-                    tool="search_api",
-                    tool_input="another",
-                    log="tool:search_api:another",
-                ),
-                "result for another",
-            ),
-        ],
-        "agent_outcome": AgentFinish(
-            return_values={"answer": "answer"}, log="finish:answer"
-        ),
-    }
-
-    assert [*app.stream({"input": "what is weather in sf"})] == [
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-            }
-        },
-        {
-            "tools": {
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:query",
-                        ),
-                        "result for query",
-                    )
-                ],
-            }
-        },
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="another",
-                    log="tool:search_api:another",
-                ),
-            }
-        },
-        {
-            "tools": {
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="another",
-                            log="tool:search_api:another",
-                        ),
-                        "result for another",
+    with assert_ctx_once():
+        assert app.invoke({"input": "what is weather in sf"}) == {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
                     ),
-                ],
-            }
-        },
-        {
-            "agent": {
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "answer"}, log="finish:answer"
+                    "result for query",
                 ),
-            }
-        },
-    ]
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="another",
+                        log="tool:search_api:another",
+                    ),
+                    "result for another",
+                ),
+            ],
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "answer"}, log="finish:answer"
+            ),
+        }
+
+    with assert_ctx_once():
+        assert [*app.stream({"input": "what is weather in sf"})] == [
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+            {
+                "tools": {
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                }
+            },
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="another",
+                        log="tool:search_api:another",
+                    ),
+                }
+            },
+            {
+                "tools": {
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="another",
+                                log="tool:search_api:another",
+                            ),
+                            "result for another",
+                        ),
+                    ],
+                }
+            },
+            {
+                "agent": {
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "answer"}, log="finish:answer"
+                    ),
+                }
+            },
+        ]
 
     # test state get/update methods with interrupt_after
 
@@ -2739,17 +2770,21 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    assert [
-        c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
-    ] == [
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-            }
-        },
-    ]
+    with assert_ctx_once():
+        assert [
+            c
+            for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
+        ] == [
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        ]
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -2777,16 +2812,17 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
 
-    app_w_interrupt.update_state(
-        config,
-        {
-            "agent_outcome": AgentAction(
-                tool="search_api",
-                tool_input="query",
-                log="tool:search_api:a different query",
-            )
-        },
-    )
+    with assert_ctx_once():
+        app_w_interrupt.update_state(
+            config,
+            {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                )
+            },
+        )
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -2816,41 +2852,43 @@ def test_conditional_state_graph(snapshot: SnapshotAssertion) -> None:
         parent_config=[*app_w_interrupt.checkpointer.list(config, limit=2)][-1].config,
     )
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
-        {
-            "tools": {
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:a different query",
-                        ),
-                        "result for query",
-                    )
-                ],
-            }
-        },
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="another",
-                    log="tool:search_api:another",
-                ),
-            }
-        },
-    ]
+    with assert_ctx_once():
+        assert [c for c in app_w_interrupt.stream(None, config)] == [
+            {
+                "tools": {
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                }
+            },
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="another",
+                        log="tool:search_api:another",
+                    ),
+                }
+            },
+        ]
 
-    app_w_interrupt.update_state(
-        config,
-        {
-            "agent_outcome": AgentFinish(
-                return_values={"answer": "a really nice answer"},
-                log="finish:a really nice answer",
-            )
-        },
-    )
+    with assert_ctx_once():
+        app_w_interrupt.update_state(
+            config,
+            {
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "a really nice answer"},
+                    log="finish:a really nice answer",
+                )
+            },
+        )
 
     assert app_w_interrupt.get_state(config) == StateSnapshot(
         values={
@@ -6866,9 +6904,33 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
-    snapshot: SnapshotAssertion,
+    snapshot: SnapshotAssertion, mocker: MockerFixture
 ) -> None:
     from langchain_core.pydantic_v1 import BaseModel, ValidationError
+
+    setup = mocker.Mock()
+    teardown = mocker.Mock()
+
+    @contextmanager
+    def assert_ctx_once() -> Iterator[None]:
+        assert setup.call_count == 0
+        assert teardown.call_count == 0
+        try:
+            yield
+        finally:
+            assert setup.call_count == 1
+            assert teardown.call_count == 1
+            setup.reset_mock()
+            teardown.reset_mock()
+
+    @contextmanager
+    def make_httpx_client() -> Iterator[httpx.Client]:
+        setup()
+        with httpx.Client() as client:
+            try:
+                yield client
+            finally:
+                teardown()
 
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -6883,10 +6945,22 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         yo: int
 
     class State(BaseModel):
+        class Config:
+            arbitrary_types_allowed = True
+
         query: str
         inner: InnerObject
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
+        client: Annotated[httpx.Client, Context(make_httpx_client)]
+
+    class Input(BaseModel):
+        query: str
+        inner: InnerObject
+
+    class Output(BaseModel):
+        answer: str
+        docs: list[str]
 
     class StateUpdate(BaseModel):
         query: Optional[str] = None
@@ -6914,7 +6988,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         assert isinstance(data, State)
         return "retriever_two"
 
-    workflow = StateGraph(State)
+    workflow = StateGraph(State, input=Input, output=Output)
 
     workflow.add_node("rewrite_query", rewrite_query)
     workflow.add_node("analyzer_one", analyzer_one)
@@ -6937,23 +7011,25 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     assert app.get_input_schema().schema() == snapshot
     assert app.get_output_schema().schema() == snapshot
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError), assert_ctx_once():
         app.invoke({"query": {}})
 
-    assert app.invoke({"query": "what is weather in sf", "inner": {"yo": 1}}) == {
-        "query": "analyzed: query: what is weather in sf",
-        "docs": ["doc1", "doc2", "doc3", "doc4"],
-        "answer": "doc1,doc2,doc3,doc4",
-        "inner": {"yo": 1},
-    }
+    with assert_ctx_once():
+        assert app.invoke({"query": "what is weather in sf", "inner": {"yo": 1}}) == {
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+            "answer": "doc1,doc2,doc3,doc4",
+        }
 
-    assert [*app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
+    with assert_ctx_once():
+        assert [
+            *app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})
+        ] == [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ]
 
     app_w_interrupt = workflow.compile(
         checkpointer=MemorySaverAssertImmutable(),
@@ -6961,37 +7037,64 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    assert [
-        c
-        for c in app_w_interrupt.stream(
-            {"query": "what is weather in sf", "inner": {"yo": 1}}, config
-        )
-    ] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-    ]
+    with assert_ctx_once():
+        assert [
+            c
+            for c in app_w_interrupt.stream(
+                {"query": "what is weather in sf", "inner": {"yo": 1}}, config
+            )
+        ] == [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        ]
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
+    with assert_ctx_once():
+        assert [c for c in app_w_interrupt.stream(None, config)] == [
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ]
 
-    assert app_w_interrupt.update_state(
-        config, {"docs": ["doc5"]}, as_node="rewrite_query"
-    ) == {
-        "configurable": {
-            "thread_id": "1",
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
+    with assert_ctx_once():
+        assert app_w_interrupt.update_state(
+            config, {"docs": ["doc5"]}, as_node="rewrite_query"
+        ) == {
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_id": AnyStr(),
+                "checkpoint_ns": "",
+            }
         }
-    }
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
-    snapshot: SnapshotAssertion,
+    snapshot: SnapshotAssertion, mocker: MockerFixture
 ) -> None:
-    from pydantic import BaseModel, ValidationError
+    from pydantic import BaseModel, ConfigDict, ValidationError
+
+    setup = mocker.Mock()
+    teardown = mocker.Mock()
+
+    @contextmanager
+    def assert_ctx_once() -> Iterator[None]:
+        assert setup.call_count == 0
+        assert teardown.call_count == 0
+        try:
+            yield
+        finally:
+            assert setup.call_count == 1
+            assert teardown.call_count == 1
+            setup.reset_mock()
+            teardown.reset_mock()
+
+    @contextmanager
+    def make_httpx_client() -> Iterator[httpx.Client]:
+        setup()
+        with httpx.Client() as client:
+            try:
+                yield client
+            finally:
+                teardown()
 
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -7006,15 +7109,26 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
         yo: int
 
     class State(BaseModel):
+        model_config = ConfigDict(arbitrary_types_allowed=True)
+
         query: str
         inner: InnerObject
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
+        client: Annotated[httpx.Client, Context(make_httpx_client)]
 
     class StateUpdate(BaseModel):
         query: Optional[str] = None
         answer: Optional[str] = None
         docs: Optional[list[str]] = None
+
+    class Input(BaseModel):
+        query: str
+        inner: InnerObject
+
+    class Output(BaseModel):
+        answer: str
+        docs: list[str]
 
     def rewrite_query(data: State) -> State:
         return {"query": f"query: {data.query}"}
@@ -7036,7 +7150,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
         assert isinstance(data, State)
         return "retriever_two"
 
-    workflow = StateGraph(State)
+    workflow = StateGraph(State, input=Input, output=Output)
 
     workflow.add_node("rewrite_query", rewrite_query)
     workflow.add_node("analyzer_one", analyzer_one)
@@ -7059,23 +7173,25 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     assert app.get_input_schema().schema() == snapshot
     assert app.get_output_schema().schema() == snapshot
 
-    with pytest.raises(ValidationError):
+    with pytest.raises(ValidationError), assert_ctx_once():
         app.invoke({"query": {}})
 
-    assert app.invoke({"query": "what is weather in sf", "inner": {"yo": 1}}) == {
-        "query": "analyzed: query: what is weather in sf",
-        "docs": ["doc1", "doc2", "doc3", "doc4"],
-        "answer": "doc1,doc2,doc3,doc4",
-        "inner": {"yo": 1},
-    }
+    with assert_ctx_once():
+        assert app.invoke({"query": "what is weather in sf", "inner": {"yo": 1}}) == {
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+            "answer": "doc1,doc2,doc3,doc4",
+        }
 
-    assert [*app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
+    with assert_ctx_once():
+        assert [
+            *app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})
+        ] == [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ]
 
     app_w_interrupt = workflow.compile(
         checkpointer=MemorySaverAssertImmutable(),
@@ -7083,31 +7199,34 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    assert [
-        c
-        for c in app_w_interrupt.stream(
-            {"query": "what is weather in sf", "inner": {"yo": 1}}, config
-        )
-    ] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-    ]
+    with assert_ctx_once():
+        assert [
+            c
+            for c in app_w_interrupt.stream(
+                {"query": "what is weather in sf", "inner": {"yo": 1}}, config
+            )
+        ] == [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        ]
 
-    assert [c for c in app_w_interrupt.stream(None, config)] == [
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
+    with assert_ctx_once():
+        assert [c for c in app_w_interrupt.stream(None, config)] == [
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ]
 
-    assert app_w_interrupt.update_state(
-        config, {"docs": ["doc5"]}, as_node="rewrite_query"
-    ) == {
-        "configurable": {
-            "thread_id": "1",
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
+    with assert_ctx_once():
+        assert app_w_interrupt.update_state(
+            config, {"docs": ["doc5"]}, as_node="rewrite_query"
+        ) == {
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_id": AnyStr(),
+                "checkpoint_ns": "",
+            }
         }
-    }
 
 
 def test_in_one_fan_out_state_graph_waiting_edge_plus_regular() -> None:

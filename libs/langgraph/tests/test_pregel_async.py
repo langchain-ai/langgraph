@@ -2664,11 +2664,26 @@ async def test_conditional_graph() -> None:
     ]
 
 
-async def test_conditional_graph_state() -> None:
+async def test_conditional_graph_state(mocker: MockerFixture) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
+
+    setup = mocker.Mock()
+    teardown = mocker.Mock()
+
+    @asynccontextmanager
+    async def assert_ctx_once() -> AsyncIterator[None]:
+        assert setup.call_count == 0
+        assert teardown.call_count == 0
+        try:
+            yield
+        finally:
+            assert setup.call_count == 1
+            assert teardown.call_count == 1
+            setup.reset_mock()
+            teardown.reset_mock()
 
     class MyPydanticContextModel(BaseModel):
         class Config:
@@ -2682,11 +2697,13 @@ async def test_conditional_graph_state() -> None:
         config: RunnableConfig,
     ) -> AsyncIterator[MyPydanticContextModel]:
         assert isinstance(config, dict)
+        setup()
         session = httpx.AsyncClient()
         try:
             yield MyPydanticContextModel(session=session, something_else="hello")
         finally:
             await session.aclose()
+            teardown()
 
     class AgentState(TypedDict):
         input: Annotated[str, UntrackedValue]
@@ -2768,86 +2785,91 @@ async def test_conditional_graph_state() -> None:
 
     app = workflow.compile()
 
-    assert await app.ainvoke({"input": "what is weather in sf"}) == {
-        "input": "what is weather in sf",
-        "intermediate_steps": [
-            (
-                AgentAction(
-                    tool="search_api",
-                    tool_input="query",
-                    log="tool:search_api:query",
-                ),
-                "result for query",
-            ),
-            (
-                AgentAction(
-                    tool="search_api",
-                    tool_input="another",
-                    log="tool:search_api:another",
-                ),
-                "result for another",
-            ),
-        ],
-        "agent_outcome": AgentFinish(
-            return_values={"answer": "answer"}, log="finish:answer"
-        ),
-    }
-
-    assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-            }
-        },
-        {
-            "tools": {
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:query",
-                        ),
-                        "result for query",
-                    )
-                ],
-            }
-        },
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="another",
-                    log="tool:search_api:another",
-                ),
-            }
-        },
-        {
-            "tools": {
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="another",
-                            log="tool:search_api:another",
-                        ),
-                        "result for another",
+    async with assert_ctx_once():
+        assert await app.ainvoke({"input": "what is weather in sf"}) == {
+            "input": "what is weather in sf",
+            "intermediate_steps": [
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
                     ),
-                ],
-            }
-        },
-        {
-            "agent": {
-                "agent_outcome": AgentFinish(
-                    return_values={"answer": "answer"}, log="finish:answer"
+                    "result for query",
                 ),
-            }
-        },
-    ]
+                (
+                    AgentAction(
+                        tool="search_api",
+                        tool_input="another",
+                        log="tool:search_api:another",
+                    ),
+                    "result for another",
+                ),
+            ],
+            "agent_outcome": AgentFinish(
+                return_values={"answer": "answer"}, log="finish:answer"
+            ),
+        }
 
-    patches = [c async for c in app.astream_log({"input": "what is weather in sf"})]
+    async with assert_ctx_once():
+        assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+            {
+                "tools": {
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                }
+            },
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="another",
+                        log="tool:search_api:another",
+                    ),
+                }
+            },
+            {
+                "tools": {
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="another",
+                                log="tool:search_api:another",
+                            ),
+                            "result for another",
+                        ),
+                    ],
+                }
+            },
+            {
+                "agent": {
+                    "agent_outcome": AgentFinish(
+                        return_values={"answer": "answer"}, log="finish:answer"
+                    ),
+                }
+            },
+        ]
+
+    async with assert_ctx_once():
+        patches = [c async for c in app.astream_log({"input": "what is weather in sf"})]
     patch_paths = {op["path"] for log in patches for op in log.ops}
 
     # Check that agent (one of the nodes) has its output streamed to the logs
@@ -2887,20 +2909,23 @@ async def test_conditional_graph_state() -> None:
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    assert [
-        c
-        async for c in app_w_interrupt.astream(
-            {"input": "what is weather in sf"}, config
-        )
-    ] == [
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api", tool_input="query", log="tool:search_api:query"
-                ),
-            }
-        },
-    ]
+    async with assert_ctx_once():
+        assert [
+            c
+            async for c in app_w_interrupt.astream(
+                {"input": "what is weather in sf"}, config
+            )
+        ] == [
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="query",
+                        log="tool:search_api:query",
+                    ),
+                }
+            },
+        ]
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
@@ -2934,16 +2959,17 @@ async def test_conditional_graph_state() -> None:
         ][-1].config,
     )
 
-    await app_w_interrupt.aupdate_state(
-        config,
-        {
-            "agent_outcome": AgentAction(
-                tool="search_api",
-                tool_input="query",
-                log="tool:search_api:a different query",
-            )
-        },
-    )
+    async with assert_ctx_once():
+        await app_w_interrupt.aupdate_state(
+            config,
+            {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                )
+            },
+        )
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
@@ -2977,41 +3003,43 @@ async def test_conditional_graph_state() -> None:
         ][-1].config,
     )
 
-    assert [c async for c in app_w_interrupt.astream(None, config)] == [
-        {
-            "tools": {
-                "intermediate_steps": [
-                    (
-                        AgentAction(
-                            tool="search_api",
-                            tool_input="query",
-                            log="tool:search_api:a different query",
-                        ),
-                        "result for query",
-                    )
-                ],
-            }
-        },
-        {
-            "agent": {
-                "agent_outcome": AgentAction(
-                    tool="search_api",
-                    tool_input="another",
-                    log="tool:search_api:another",
-                ),
-            }
-        },
-    ]
+    async with assert_ctx_once():
+        assert [c async for c in app_w_interrupt.astream(None, config)] == [
+            {
+                "tools": {
+                    "intermediate_steps": [
+                        (
+                            AgentAction(
+                                tool="search_api",
+                                tool_input="query",
+                                log="tool:search_api:a different query",
+                            ),
+                            "result for query",
+                        )
+                    ],
+                }
+            },
+            {
+                "agent": {
+                    "agent_outcome": AgentAction(
+                        tool="search_api",
+                        tool_input="another",
+                        log="tool:search_api:another",
+                    ),
+                }
+            },
+        ]
 
-    await app_w_interrupt.aupdate_state(
-        config,
-        {
-            "agent_outcome": AgentFinish(
-                return_values={"answer": "a really nice answer"},
-                log="finish:a really nice answer",
-            )
-        },
-    )
+    async with assert_ctx_once():
+        await app_w_interrupt.aupdate_state(
+            config,
+            {
+                "agent_outcome": AgentFinish(
+                    return_values={"answer": "a really nice answer"},
+                    log="finish:a really nice answer",
+                )
+            },
+        )
 
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
@@ -5462,9 +5490,33 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
 
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
-    snapshot: SnapshotAssertion,
+    snapshot: SnapshotAssertion, mocker: MockerFixture
 ) -> None:
     from langchain_core.pydantic_v1 import BaseModel, ValidationError
+
+    setup = mocker.Mock()
+    teardown = mocker.Mock()
+
+    @asynccontextmanager
+    async def assert_ctx_once() -> AsyncIterator[None]:
+        assert setup.call_count == 0
+        assert teardown.call_count == 0
+        try:
+            yield
+        finally:
+            assert setup.call_count == 1
+            assert teardown.call_count == 1
+            setup.reset_mock()
+            teardown.reset_mock()
+
+    @asynccontextmanager
+    async def make_httpx_client() -> AsyncIterator[httpx.AsyncClient]:
+        setup()
+        async with httpx.AsyncClient() as client:
+            try:
+                yield client
+            finally:
+                teardown()
 
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -5476,9 +5528,20 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         return sorted(operator.add(x, y))
 
     class State(BaseModel):
+        class Config:
+            arbitrary_types_allowed = True
+
         query: str
         answer: Optional[str] = None
         docs: Annotated[list[str], sorted_add]
+        client: Annotated[httpx.AsyncClient, Context(make_httpx_client)]
+
+    class Input(BaseModel):
+        query: str
+
+    class Output(BaseModel):
+        answer: str
+        docs: list[str]
 
     class StateUpdate(BaseModel):
         query: Optional[str] = None
@@ -5505,7 +5568,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
         assert isinstance(data, State)
         return "retriever_two"
 
-    workflow = StateGraph(State)
+    workflow = StateGraph(State, input=Input, output=Output)
 
     workflow.add_node("rewrite_query", rewrite_query)
     workflow.add_node("analyzer_one", analyzer_one)
@@ -5526,22 +5589,24 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
 
     assert app.get_graph().draw_ascii() == snapshot
 
-    with pytest.raises(ValidationError):
-        await app.ainvoke({"query": {}})
+    async with assert_ctx_once():
+        with pytest.raises(ValidationError):
+            await app.ainvoke({"query": {}})
 
-    assert await app.ainvoke({"query": "what is weather in sf"}) == {
-        "query": "analyzed: query: what is weather in sf",
-        "docs": ["doc1", "doc2", "doc3", "doc4"],
-        "answer": "doc1,doc2,doc3,doc4",
-    }
+    async with assert_ctx_once():
+        assert await app.ainvoke({"query": "what is weather in sf"}) == {
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+            "answer": "doc1,doc2,doc3,doc4",
+        }
 
-    assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
+    async with assert_ctx_once():
+        assert [c async for c in app.astream({"query": "what is weather in sf"})] == [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ]
 
     app_w_interrupt = workflow.compile(
         checkpointer=MemorySaverAssertImmutable(),
@@ -5549,31 +5614,63 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    assert [
-        c
-        async for c in app_w_interrupt.astream(
-            {"query": "what is weather in sf"}, config
-        )
-    ] == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}},
-    ]
+    async with assert_ctx_once():
+        assert [
+            c
+            async for c in app_w_interrupt.astream(
+                {"query": "what is weather in sf"}, config
+            )
+        ] == [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        ]
 
-    assert [c async for c in app_w_interrupt.astream(None, config)] == [
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
+    async with assert_ctx_once():
+        assert [c async for c in app_w_interrupt.astream(None, config)] == [
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ]
 
-    assert await app_w_interrupt.aupdate_state(
-        config, {"docs": ["doc5"]}, as_node="rewrite_query"
-    ) == {
-        "configurable": {
-            "thread_id": "1",
-            "checkpoint_id": AnyStr(),
-            "checkpoint_ns": "",
+    assert await app_w_interrupt.aget_state(config) == StateSnapshot(
+        values={
+            "query": "analyzed: query: what is weather in sf",
+            "answer": "doc1,doc2,doc3,doc4",
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+        },
+        next=(),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+            "step": 4,
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+    )
+
+    async with assert_ctx_once():
+        assert await app_w_interrupt.aupdate_state(
+            config, {"docs": ["doc5"]}, as_node="rewrite_query"
+        ) == {
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_id": AnyStr(),
+                "checkpoint_ns": "",
+            }
         }
-    }
 
 
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(

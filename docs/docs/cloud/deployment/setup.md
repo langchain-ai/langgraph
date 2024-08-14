@@ -7,6 +7,10 @@ This walkthrough is based on [this repository](https://github.com/langchain-ai/l
 !!! tip "Setup with pyproject.toml"
     If you prefer using poetry for dependency management, check out [this how-to guide](./setup_pyproject.md) on using `pyproject.toml` for LangGraph Cloud.
 
+!!! tip "Setup with a Monorepo"
+    If you are interested in deploying a graph located inside a monorepo, take a look at [this](https://github.com/langchain-ai/langgraph-example-monorepo) repository for an example of how to do so.
+
+
 The final repo structure will look something like this:
 
 ```bash

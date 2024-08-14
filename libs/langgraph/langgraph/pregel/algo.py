@@ -328,7 +328,7 @@ def prepare_next_tasks(
                     )
                 )
         else:
-            tasks.append(PregelTaskDescription(packet.node, packet.arg))
+            tasks.append(PregelTaskDescription(packet.node))
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
@@ -348,7 +348,11 @@ def prepare_next_tasks(
             > seen.get(chan, null_version)
         ):
             try:
-                val = next(_proc_input(step, name, proc, managed, channels))
+                val = next(
+                    _proc_input(
+                        step, name, proc, managed, channels, for_execution=for_execution
+                    )
+                )
             except StopIteration:
                 continue
 
@@ -403,7 +407,12 @@ def prepare_next_tasks(
                                         PregelTaskWrites(name, writes, triggers),
                                         config,
                                     ),
-                                    CONFIG_KEY_CHECKPOINTER: checkpointer,
+                                    CONFIG_KEY_CHECKPOINTER: (
+                                        checkpointer
+                                        or config["configurable"].get(
+                                            CONFIG_KEY_CHECKPOINTER
+                                        )
+                                    ),
                                     CONFIG_KEY_RESUMING: is_resuming,
                                     "checkpoint_id": checkpoint["id"],
                                     "checkpoint_ns": checkpoint_ns,
@@ -415,7 +424,7 @@ def prepare_next_tasks(
                         )
                     )
             else:
-                tasks.append(PregelTaskDescription(name, val))
+                tasks.append(PregelTaskDescription(name))
     return tasks
 
 
@@ -425,6 +434,8 @@ def _proc_input(
     proc: PregelNode,
     managed: ManagedValueMapping,
     channels: Mapping[str, BaseChannel],
+    *,
+    for_execution: bool,
 ) -> Iterator[Any]:
     # If all trigger channels subscribed by this process are not empty
     # then invoke the process with the values of all non-empty channels
@@ -444,7 +455,7 @@ def _proc_input(
             for key, chan in proc.channels.items():
                 if is_managed_value(chan):
                     managed_values[key] = managed[key](
-                        step, PregelTaskDescription(name, val)
+                        step, PregelTaskDescription(name)
                     )
 
             val.update(managed_values)
@@ -465,7 +476,7 @@ def _proc_input(
         )
 
     # If the process has a mapper, apply it to the value
-    if proc.mapper is not None:
+    if for_execution and proc.mapper is not None:
         val = proc.mapper(val)
 
     yield val
