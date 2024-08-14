@@ -6,7 +6,7 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url="<DEPLOYMENT_URL>")
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -17,12 +17,22 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    const client = new Client({ apiUrl:"<DEPLOYMENT_URL>" });
     // create thread
     const thread = await client.threads.create();
     console.log(thread)
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "metadata": {}
+      }'
+    ```
 
 Output:
 
@@ -30,7 +40,9 @@ Output:
     {'thread_id': '3f4c64e0-f792-4a5e-aa07-a4404e06e0bd',
      'created_at': '2024-06-24T22:16:29.301522+00:00',
      'updated_at': '2024-06-24T22:16:29.301522+00:00',
-     'metadata': {}}
+     'metadata': {},
+     'status': 'idle',
+     'config': {}}
 
 
 
@@ -89,6 +101,41 @@ Streaming events produces responses containing an `event` key (in addition to ot
       console.log(chunk.data)
       console.log("\n\n")
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"What's the weather in sf\"}]},
+       \"stream_mode\": [
+         \"events\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     ' 
     ```
 
 Output:
@@ -258,9 +305,11 @@ Token-by-token streaming can be implemented with the `events` streaming mode. Th
     ):
         if (
             chunk.event == "events" and
-            chunk.data["event"] == "on_chat_model_stream"
+            chunk.data["event"] == "on_chat_model_stream" and
+            len(chunk.data["data"]["chunk"]["content"]) > 0 and
+            'text' in chunk.data["data"]["chunk"]["content"][0]
         ):
-            llm_response += chunk.data["data"]["chunk"]["content"]
+            llm_response += chunk.data["data"]["chunk"]["content"][0]['text']
             print(llm_response)
     ```
 
@@ -278,21 +327,88 @@ Token-by-token streaming can be implemented with the `events` streaming mode. Th
       }
     );
     for await (const chunk of streamResponse) {
-      if (chunk.event === "events" && chunk.data.event === "on_chat_model_stream") {
-        llmResponse += chunk.data.data.chunk.content;
+      if (chunk.event === "events" && chunk.data.event === "on_chat_model_stream" && chunk.data.chunk.content.length > 0 && 'text' in chunk.data.chunk.content[0]) {
+        llmResponse += chunk.data.data.chunk.content[0].text;
         console.log(llmResponse);
       }
     }
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"What's the weather in sf\"}]},
+       \"stream_mode\": [
+         \"events\"
+       ]
+     }" | sed 's/\r$//' | awk '
+    /^event:/ { event = $2 }
+    /^data:/ {
+        json_data = substr($0, index($0, $2))
+
+        if (event == "events") {
+        print json_data
+        }
+    }' | jq -r '
+        select(.event == "on_chat_model_stream") |
+        .data.chunk.content[] | .text // empty
+    ' | awk '
+    BEGIN { llm_response="" }
+    $0 != "" && $0 != "null" {
+        llm_response = llm_response $0
+        print llm_response
+    }'
+    ```
+
 Output:
 
-    b
-    be
-    beg
-    begi
-    begin
-    begine
-    beginen
-    beginend
+    The
+    The search
+    The search results provide
+    The search results provide the current weather conditions
+    The search results provide the current weather conditions in San Francisco.
+    The search results provide the current weather conditions in San Francisco. According
+    The search results provide the current weather conditions in San Francisco. According to the data,
+    The search results provide the current weather conditions in San Francisco. According to the data, as
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12,
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024,
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C).
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The win
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is bl
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 k
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph).
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70%
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility is 6
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility is 6 miles
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility is 6 miles (10 km
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility is 6 miles (10 km).
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility is 6 miles (10 km). Overall
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility is 6 miles (10 km). Overall, it appears
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility is 6 miles (10 km). Overall, it appears to be a nice
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility is 6 miles (10 km). Overall, it appears to be a nice sunny day in San
+    The search results provide the current weather conditions in San Francisco. According to the data, as of 3:19 PM on August 12, 2024, the weather in San Francisco is sunny with a temperature of 60.8°F (16°C). The wind is blowing from the west-southwest at 13.4 mph (21.6 kph). The humidity is 70% and visibility is 6 miles (10 km). Overall, it appears to be a nice sunny day in San Francisco.
+
 
