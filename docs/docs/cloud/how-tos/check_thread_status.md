@@ -40,7 +40,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
 
 ## Find idle threads
 
-We can use the following commands to find threads that are idle:
+We can use the following commands to find threads that are idle, which means that all runs executed on the thread have finished running:
 
 === "Python"
 
@@ -75,7 +75,7 @@ Output:
 
 ## Find interrupted threads
 
-We can use the following commands to find threads that have been interrupted in the middle of a run: 
+We can use the following commands to find threads that have been interrupted in the middle of a run, which could either mean an error occured before the run finished or a human-in-the-loop breakpoint was reached and the run is waiting to continue: 
 
 === "Python"
 
@@ -180,13 +180,13 @@ The search endpoint for threads also allows you to filter on metadata, which can
 === "Python"
 
     ```python
-    print(await client.threads.search(metadata={"foo":"bar"},limit=1))
+    print((await client.threads.search(metadata={"foo":"bar"},limit=1))[0]['status'])
     ```
 
 === "Javascript"
 
     ```js
-    console.log(await client.threads.search({metadata: {"foo":"bar"},limit: 1}));
+    console.log((await client.threads.search({metadata: {"foo":"bar"},limit: 1}))[0].status);
     ```
 
 === "CURL"
@@ -195,14 +195,9 @@ The search endpoint for threads also allows you to filter on metadata, which can
     curl --request POST \  
     --url <DEPLOYMENT_URL>/threads/search \
     --header 'Content-Type: application/json' \
-    --data '{"metadata": {"foo":"bar"}, "limit": 1}'
+    --data '{"metadata": {"foo":"bar"}, "limit": 1}' | jq -r '.[0].status'
     ```
 
 Output:
 
-    [{'thread_id': '323e1557-db89-4f78-8361-c2b4e58dd348',
-    'created_at': '2024-08-14T18:11:54.788901+00:00',
-    'updated_at': '2024-08-14T18:11:54.788901+00:00',
-    'metadata': {'foo': 'bar'},
-    'status': 'idle',
-    'config': {}}]
+    'idle'
