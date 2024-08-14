@@ -8602,7 +8602,7 @@ def test_nested_graph_interrupts(
     ]
     assert child_state_history == [
         StateSnapshot(
-            values={"my_key": "hi my value here"},
+            values={"my_key": "hi my value here", "my_other_key": "hi my value"},
             next=("inner_2",),
             config={
                 "configurable": {
@@ -9140,6 +9140,7 @@ def test_nested_graph_state(
 
     class State(TypedDict):
         my_key: str
+        other_parent_key: str
 
     def outer_1(state: State):
         return {"my_key": "hi " + state["my_key"]}
@@ -9214,7 +9215,7 @@ def test_nested_graph_state(
         },
         subgraph_state_snapshots={
             "inner": StateSnapshot(
-                values={"my_key": "hi my value here"},
+                values={"my_key": "hi my value here", "my_other_key": "hi my value"},
                 next=("inner_2",),
                 config={
                     "configurable": {
@@ -9271,7 +9272,10 @@ def test_nested_graph_state(
             },
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
-                    values={"my_key": "hi my value here"},
+                    values={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -9376,7 +9380,10 @@ def test_nested_graph_state(
         {"configurable": {"thread_id": "1", "checkpoint_ns": "inner"}}
     )
     assert child_snapshot == StateSnapshot(
-        values={"my_key": "hi my value here and there"},
+        values={
+            "my_key": "hi my value here and there",
+            "my_other_key": "hi my value here",
+        },
         next=(),
         config={
             "configurable": {
@@ -9519,7 +9526,10 @@ def test_nested_graph_state(
             },
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
-                    values={"my_key": "hi my value here and there"},
+                    values={
+                        "my_key": "hi my value here and there",
+                        "my_other_key": "hi my value here",
+                    },
                     next=(),
                     config={
                         "configurable": {
@@ -10713,6 +10723,13 @@ def test_send_to_nested_graphs(
     for subgraph_node in subgraph_nodes:
         assert subgraph_node.split(":")[0] == "generate_joke"
 
+    subgraph_state_snapshots = {
+        subgraph_node: graph.get_state(
+            {"configurable": {"thread_id": "1", "checkpoint_ns": subgraph_node}}
+        )
+        for subgraph_node in subgraph_nodes
+    }
+
     expected_snapshot = StateSnapshot(
         values={"subjects": ["cats", "dogs"], "jokes": []},
         next=("generate_joke", "generate_joke"),
@@ -10732,50 +10749,7 @@ def test_send_to_nested_graphs(
                 "checkpoint_id": AnyStr(),
             }
         },
-        subgraph_state_snapshots={
-            subgraph_nodes[0]: StateSnapshot(
-                values={"jokes": []},
-                next=("generate",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": subgraph_nodes[0],
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={"source": "loop", "writes": {"edit": None}, "step": 1},
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": subgraph_nodes[0],
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                subgraph_state_snapshots=None,
-            ),
-            subgraph_nodes[1]: StateSnapshot(
-                values={"jokes": []},
-                next=("generate",),
-                config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": subgraph_nodes[1],
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                metadata={"source": "loop", "writes": {"edit": None}, "step": 1},
-                created_at=AnyStr(),
-                parent_config={
-                    "configurable": {
-                        "thread_id": "1",
-                        "checkpoint_ns": subgraph_nodes[1],
-                        "checkpoint_id": AnyStr(),
-                    }
-                },
-                subgraph_state_snapshots=None,
-            ),
-        },
+        subgraph_state_snapshots=subgraph_state_snapshots,
     )
     assert actual_snapshot == expected_snapshot
 
