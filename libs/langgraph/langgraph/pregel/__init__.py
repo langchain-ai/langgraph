@@ -13,7 +13,6 @@ from typing import (
     Callable,
     Dict,
     Iterator,
-    Literal,
     Mapping,
     Optional,
     Sequence,
@@ -115,10 +114,6 @@ WriteValue = Union[
     Callable[[Input], Awaitable[Output]],
     Any,
 ]
-
-
-INHERIT_CHECKPOINTER = "inherit_checkpointer"
-CheckpointerType = Union[BaseCheckpointSaver, Literal["inherit_checkpointer"]]
 
 
 class Channel:
@@ -334,6 +329,16 @@ async def _prepare_state_snapshot_async(
         )
 
 
+def _has_nested_interrupts(
+    graph: Pregel,
+) -> bool:
+    for child in graph.subgraphs:
+        if child.interrupt_after_nodes or child.interrupt_before_nodes:
+            return True
+    else:
+        return False
+
+
 class Pregel(
     RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
 ):
@@ -363,7 +368,7 @@ class Pregel(
     debug: bool = Field(default_factory=get_debug)
     """Whether to print debug information during execution. Defaults to False."""
 
-    checkpointer: Optional[CheckpointerType] = None
+    checkpointer: Optional[BaseCheckpointSaver] = None
     """Checkpointer used to save and load graph state. Defaults to None."""
 
     retry_policy: Optional[RetryPolicy] = None
@@ -420,7 +425,6 @@ class Pregel(
                 + (
                     self.checkpointer.config_specs
                     if self.checkpointer is not None
-                    and self.checkpointer != INHERIT_CHECKPOINTER
                     else []
                 )
                 + (
@@ -499,6 +503,18 @@ class Pregel(
             for k, v in node.channels.items()
             if is_managed_value(v)
         }
+
+    @property
+    def subgraphs(self) -> Iterator[Pregel]:
+        for node in self.nodes.values():
+            if isinstance(node.bound, Pregel):
+                yield node.bound
+                yield from node.bound.subgraphs
+            elif isinstance(node.bound, RunnableSequence):
+                for runnable in node.bound.steps:
+                    if isinstance(runnable, Pregel):
+                        yield runnable
+                        yield from runnable.subgraphs
 
     def get_state(
         self, config: RunnableConfig, *, include_subgraph_state: bool = False
@@ -1009,44 +1025,19 @@ class Pregel(
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-
-        if config and config.get("configurable", {}).get(CONFIG_KEY_CHECKPOINTER):
-            parent_checkpointer = config["configurable"][CONFIG_KEY_CHECKPOINTER]
-        else:
-            parent_checkpointer = None
-
         if config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None:
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
-
-            if (
-                (interrupt_before or interrupt_after)
-                and parent_checkpointer is not None
-                and self.checkpointer is None
-            ):
-                raise ValueError(
-                    "Missing checkpointer for a subgraph with interrupts. "
-                    "Please compile the subgraph graph with checkpointer=INHERIT_CHECKPOINTER (from langgraph.pregel import INHERIT_CHECKPOINTER)."
-                )
-
-            if (
-                parent_checkpointer is not None
-                and self.checkpointer is not None
-                and self.checkpointer != INHERIT_CHECKPOINTER
-            ):
-                raise ValueError(
-                    "Custom checkpointers for subgraphs are not allowed. "
-                    "Please compile the subgraph graph with checkpointer=INHERIT_CHECKPOINTER (from langgraph.pregel import INHERIT_CHECKPOINTER)."
-                )
-
         if (
-            parent_checkpointer is not None
-            and self.checkpointer == INHERIT_CHECKPOINTER
+            config is not None
+            and config.get("configurable", {}).get(CONFIG_KEY_CHECKPOINTER)
+            and (interrupt_before or interrupt_after or _has_nested_interrupts(self))
         ):
-            checkpointer = parent_checkpointer
+            checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
+                CONFIG_KEY_CHECKPOINTER
+            ]
         else:
             checkpointer = self.checkpointer
-
         return (
             debug,
             stream_mode,

@@ -61,7 +61,6 @@ from langgraph.prebuilt.chat_agent_executor import (
 )
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
-    INHERIT_CHECKPOINTER,
     Channel,
     GraphRecursionError,
     Pregel,
@@ -7745,7 +7744,7 @@ def test_nested_graph_interrupts(
     graph.add_node("outer_1", outer_1)
     graph.add_node(
         "inner",
-        inner.compile(interrupt_before=["inner_2"], checkpointer=INHERIT_CHECKPOINTER),
+        inner.compile(interrupt_before=["inner_2"]),
     )
     graph.add_node("outer_2", outer_2)
     graph.set_entry_point("outer_1")
@@ -8924,7 +8923,7 @@ def test_nested_graph_interrupts_parallel(
     graph = StateGraph(State)
     graph.add_node(
         "inner",
-        inner.compile(interrupt_before=["inner_2"], checkpointer=INHERIT_CHECKPOINTER),
+        inner.compile(interrupt_before=["inner_2"]),
     )
     graph.add_node("outer_1", outer_1)
     graph.add_node("outer_2", outer_2)
@@ -9045,9 +9044,7 @@ def test_doubly_nested_graph_interrupts(
     child = StateGraph(ChildState)
     child.add_node(
         "child_1",
-        grandchild.compile(
-            interrupt_before=["grandchild_2"], checkpointer=INHERIT_CHECKPOINTER
-        ),
+        grandchild.compile(interrupt_before=["grandchild_2"]),
     )
     child.set_entry_point("child_1")
     child.set_finish_point("child_1")
@@ -9060,7 +9057,7 @@ def test_doubly_nested_graph_interrupts(
 
     graph = StateGraph(State)
     graph.add_node("parent_1", parent_1)
-    graph.add_node("child", child.compile(checkpointer=INHERIT_CHECKPOINTER))
+    graph.add_node("child", child.compile())
     graph.add_node("parent_2", parent_2)
     graph.set_entry_point("parent_1")
     graph.add_edge("parent_1", "child")
@@ -9154,7 +9151,7 @@ def test_nested_graph_state(
     graph.add_node("outer_1", outer_1)
     graph.add_node(
         "inner",
-        inner.compile(interrupt_before=["inner_2"], checkpointer=INHERIT_CHECKPOINTER),
+        inner.compile(interrupt_before=["inner_2"]),
     )
     graph.add_node("outer_2", outer_2)
     graph.set_entry_point("outer_1")
@@ -9632,9 +9629,7 @@ def test_doubly_nested_graph_state(
     child = StateGraph(ChildState)
     child.add_node(
         "child_1",
-        grandchild.compile(
-            interrupt_before=["grandchild_2"], checkpointer=INHERIT_CHECKPOINTER
-        ),
+        grandchild.compile(interrupt_before=["grandchild_2"]),
     )
     child.set_entry_point("child_1")
     child.set_finish_point("child_1")
@@ -9647,7 +9642,7 @@ def test_doubly_nested_graph_state(
 
     graph = StateGraph(State)
     graph.add_node("parent_1", parent_1)
-    graph.add_node("child", child.compile(checkpointer=INHERIT_CHECKPOINTER))
+    graph.add_node("child", child.compile())
     graph.add_node("parent_2", parent_2)
     graph.set_entry_point("parent_1")
     graph.add_edge("parent_1", "child")
@@ -9917,9 +9912,7 @@ def test_send_to_nested_graphs(
     builder = StateGraph(OverallState)
     builder.add_node(
         "generate_joke",
-        subgraph.compile(
-            checkpointer=INHERIT_CHECKPOINTER, interrupt_before=["generate"]
-        ),
+        subgraph.compile(interrupt_before=["generate"]),
     )
     builder.add_conditional_edges(START, continue_to_jokes)
     builder.add_edge("generate_joke", END)
