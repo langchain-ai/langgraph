@@ -22,7 +22,7 @@ If you would like to reload the app, don't use Command+R as you might normally d
 
 ## How does automatic rebuilding work?
 
-One of the best features of LangGraph Studio is that it automatically rebuilds your image when you change the source code. This allows for a super fast development and testing cycle which makes it easy to iterate on your graph. There are two different ways that LangGraph rebuilds your image: either by editing the image or completely rebuilding it.
+One of the key features of LangGraph Studio is that it automatically rebuilds your image when you change the source code. This allows for a super fast development and testing cycle which makes it easy to iterate on your graph. There are two different ways that LangGraph rebuilds your image: either by editing the image or completely rebuilding it.
 
 ### Rebuilds from source code changes
 
@@ -35,11 +35,11 @@ If you edit your graph configuration file (`langgraph.json`) or the dependencies
 
 ## Why is my graph taking so long to startup?
 
-The LangGraph Studio interacts with the LangGraph API through API calls. To stay aligned with ongoing updates, the API requires regular rebuilding. As a result, you may occasionally experience slight delays when starting up your graphs.
+The LangGraph Studio interacts with a local LangGraph API server. To stay aligned with ongoing updates, the LangGraph API requires regular rebuilding. As a result, you may occasionally experience slight delays when starting up your project.
 
 ## Why are extra edges showing up in my graph?
 
-If you don't define your conditional edges carefully, you might notice extra edges appearing in your graph. This is because without proper definition, LangGraph Studio assumes the conditional edge could access all other nodes. In order for this to not be the case, you need to be explicit about how you define conditional edges. There are two ways you can do this:
+If you don't define your conditional edges carefully, you might notice extra edges appearing in your graph. This is because without proper definition, LangGraph Studio assumes the conditional edge could access all other nodes. In order for this to not be the case, you need to be explicit about how you define the nodes the conditional edge routes to. There are two ways you can do this:
 
 ### Solution 1: Include a path map
 
