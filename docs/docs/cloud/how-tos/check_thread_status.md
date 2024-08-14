@@ -75,7 +75,7 @@ Output:
 
 ## Find interrupted threads
 
-We can use the following commands to find threads that have been interrupted in the middle of a run, which could either mean an error occured before the run finished or a human-in-the-loop breakpoint was reached and the run is waiting to continue: 
+We can use the following commands to find threads that have been interrupted in the middle of a run, which could either mean an error occurred before the run finished or a human-in-the-loop breakpoint was reached and the run is waiting to continue: 
 
 === "Python"
 
