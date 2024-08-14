@@ -1,7 +1,5 @@
 # Check the Status of your Threads
 
-There are a variety of reasons you would want
-
 ## Setup
 
 To start, we can setup our client with whatever URL you are hosting your graph from:
