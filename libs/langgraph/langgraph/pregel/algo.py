@@ -407,7 +407,12 @@ def prepare_next_tasks(
                                         PregelTaskWrites(name, writes, triggers),
                                         config,
                                     ),
-                                    CONFIG_KEY_CHECKPOINTER: checkpointer,
+                                    CONFIG_KEY_CHECKPOINTER: (
+                                        checkpointer
+                                        or config["configurable"].get(
+                                            CONFIG_KEY_CHECKPOINTER
+                                        )
+                                    ),
                                     CONFIG_KEY_RESUMING: is_resuming,
                                     "checkpoint_id": checkpoint["id"],
                                     "checkpoint_ns": checkpoint_ns,
