@@ -24,7 +24,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
 
     ```python
     from langgraph_sdk import get_client
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url="<DEPLOYMENT_URL>")
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -34,9 +34,20 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    const client = new Client({ apiUrl:"<DEPLOYMENT_URL>" });
     const assistantId = "agent";
     const thread = await client.threads.create();
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{
+        "metadata": {}
+      }'
     ```
 
 ## Waiting for user input
@@ -80,6 +91,42 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
       }
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"Use the search tool to ask the user where they are, then look up the weather there\"}]},
+       \"interrupt_before\": [\"ask_human\"],
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
+    ```
     
 Output:
 
@@ -117,11 +164,31 @@ Because we are treating this as a tool call, we will need to update the state as
     await client.threads.updateState(thread['thread_id'], {values: {"messages": toolMessage}, asNode:"ask_human"})
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request GET \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+     | jq -r '.values.messages[-1].tool_calls[0].id' \
+     | sh -c '
+         TOOL_CALL_ID="$1"
+         
+         # Construct the JSON payload
+         JSON_PAYLOAD=$(printf "{\"messages\": [{\"tool_call_id\": \"%s\", \"type\": \"tool\", \"content\": \"san francisco\"}], \"as_node\": \"ask_human\"}" "$TOOL_CALL_ID")
+         
+         # Send the updated state
+         curl --request POST \
+              --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+              --header "Content-Type: application/json" \
+              --data "${JSON_PAYLOAD}"
+     ' _ 
+    ```
+
 Output:
 
-    {'configurable': {'thread_id': '10d0ee61-db47-48fc-a58c-109a1e68cd73',
-      'thread_ts': '1ef32729-3cc3-6647-8002-14dcb621b46e'}}
-
+    {'configurable': {'thread_id': 'a9f322ae-4ed1-41ec-942b-38cb3d342c3a',
+    'checkpoint_ns': '',
+    'checkpoint_id': '1ef58e97-a623-63dd-8002-39a9a9b20be3'}}
 
 
 ### Invoking after receiving human input
@@ -133,7 +200,7 @@ We can now tell the agent to continue. We can just pass in None as the input to 
     ```python
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant_id, # graph_id
+        assistant_id,
         input=None,
         stream_mode="updates",
     ):
@@ -156,6 +223,40 @@ We can now tell the agent to continue. We can just pass in None as the input to 
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \                                                                             
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }"| \ 
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
