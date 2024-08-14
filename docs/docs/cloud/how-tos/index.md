@@ -74,3 +74,4 @@ Other guides that may prove helpful!
 - [How to convert LangGraph calls to LangGraph cloud calls](cloud_examples/langgraph_to_langgraph_cloud.ipynb)
 - [How to integrate webhooks](cloud_examples/webhooks.ipynb)
 - [How to copy threads](./copy_threads.md)
+- [How to check status of your threads](./check_thread_status.md)
