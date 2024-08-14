@@ -9970,7 +9970,7 @@ def test_nested_graph_update_state(
             },
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
-                    values={"my_key": "hi bark here"},
+                    values={"my_key": "hi bark here", "my_other_key": "hi meow"},
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -10021,7 +10021,7 @@ def test_nested_graph_update_state(
             },
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
-                    values={"my_key": "hi meow here"},
+                    values={"my_key": "hi meow here", "my_other_key": "hi meow"},
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -10092,7 +10092,7 @@ def test_nested_graph_update_state(
     assert list(app.get_state_history(child_config)) == [
         # last snapshot is the update for the subgraph
         StateSnapshot(
-            values={"my_key": "hi bark here"},
+            values={"my_key": "hi bark here", "my_other_key": "hi meow"},
             next=("inner_2",),
             config={
                 "configurable": {
@@ -10117,7 +10117,7 @@ def test_nested_graph_update_state(
             subgraph_state_snapshots=None,
         ),
         StateSnapshot(
-            values={"my_key": "hi meow here"},
+            values={"my_key": "hi meow here", "my_other_key": "hi meow"},
             next=("inner_2",),
             config={
                 "configurable": {
@@ -10224,7 +10224,10 @@ def test_nested_graph_update_state(
             },
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
-                    values={"my_key": "hi bark here and there"},
+                    values={
+                        "my_key": "hi bark here and there",
+                        "my_other_key": "hi bark here",
+                    },
                     next=(),
                     config={
                         "configurable": {
@@ -10280,7 +10283,7 @@ def test_nested_graph_update_state(
             },
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
-                    values={"my_key": "hi meow here"},
+                    values={"my_key": "hi meow here", "my_other_key": "hi meow"},
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -10350,7 +10353,7 @@ def test_nested_graph_update_state(
     ]
     assert list(app.get_state_history(child_config)) == [
         StateSnapshot(
-            values={"my_key": "hi bark here and there"},
+            values={"my_key": "hi bark here and there", "my_other_key": "hi bark here"},
             next=(),
             config={
                 "configurable": {
@@ -10380,7 +10383,7 @@ def test_nested_graph_update_state(
             subgraph_state_snapshots=None,
         ),
         StateSnapshot(
-            values={"my_key": "hi meow here"},
+            values={"my_key": "hi meow here", "my_other_key": "hi meow"},
             next=("inner_2",),
             config={
                 "configurable": {
@@ -10491,7 +10494,10 @@ def test_nested_graph_update_state(
             },
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
-                    values={"my_key": "hi bark here and there"},
+                    values={
+                        "my_key": "hi bark here and there",
+                        "my_other_key": "hi meow",
+                    },
                     next=(),
                     config={
                         "configurable": {
@@ -10542,7 +10548,10 @@ def test_nested_graph_update_state(
             },
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
-                    values={"my_key": "hi meow here"},
+                    values={
+                        "my_key": "hi meow here",
+                        "my_other_key": "hi meow",
+                    },
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -10612,7 +10621,7 @@ def test_nested_graph_update_state(
     ]
     assert list(app.get_state_history(child_config)) == [
         StateSnapshot(
-            values={"my_key": "hi bark here and there"},
+            values={"my_key": "hi bark here and there", "my_other_key": "hi meow"},
             next=(),
             config={
                 "configurable": {
@@ -10637,7 +10646,7 @@ def test_nested_graph_update_state(
             subgraph_state_snapshots=None,
         ),
         StateSnapshot(
-            values={"my_key": "hi meow here"},
+            values={"my_key": "hi meow here", "my_other_key": "hi meow"},
             next=("inner_2",),
             config={
                 "configurable": {

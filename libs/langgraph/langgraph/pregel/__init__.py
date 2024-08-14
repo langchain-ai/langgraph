@@ -798,7 +798,10 @@ class Pregel(
             elif as_node is None and not any(
                 v for vv in checkpoint["versions_seen"].values() for v in vv.values()
             ):
-                if isinstance(graph.input_channels, str) and graph.input_channels in graph.nodes:
+                if (
+                    isinstance(graph.input_channels, str)
+                    and graph.input_channels in graph.nodes
+                ):
                     as_node = graph.input_channels
             elif as_node is None:
                 last_seen_by_node = sorted(
@@ -817,7 +820,7 @@ class Pregel(
             if as_node not in graph.nodes:
                 raise InvalidUpdateError(f"Node {as_node} does not exist")
             # update channels
-            with ChannelsManager(channels, checkpoint, config) as channels:
+            with ChannelsManager(graph.channels, checkpoint, config) as channels:
                 # create task to run all writers of the chosen node
                 writers = graph.nodes[as_node].get_writers()
                 if not writers:
