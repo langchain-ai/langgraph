@@ -46,6 +46,7 @@ When creating complex graphs, leaving every decision up to the LLM can be danger
 - [How to wait for user input](./human_in_the_loop_user_input.md)
 - [How to edit graph state](./human_in_the_loop_edit_state.md)
 - [How to replay and branch from prior states](./human_in_the_loop_time_travel.md)
+- [How to review tool calls](./human_in_the_loop_review_tool_calls.md)
 
 ## LangGraph Studio
 
