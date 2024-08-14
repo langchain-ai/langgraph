@@ -99,3 +99,67 @@ After you have created a thread and executed some runs on it, you may wish to co
     ```
 
 ### Verify copy
+
+We can verify that the history from the prior thread did indeed copy over correctly:
+
+=== "Python"
+
+    ```python
+    def remove_thread_id(d):
+      if 'metadata' in d and 'thread_id' in d['metadata']:
+          del d['metadata']['thread_id']
+      return d
+
+    original_thread_history = list(map(remove_thread_id,await client.threads.get_history(<THREAD_ID>)))
+    copied_thread_history = list(map(remove_thread_id,await client.threads.get_history(copied_thread['thread_id'])))
+
+    if original_thread_history == copied_thread_history:
+      print("The histories are the same.")
+    else:
+      print("The histories are different.")
+    ```
+
+=== "Javascript"
+
+    ```js
+    function removeThreadId(d) {
+        if (d.metadata && d.metadata.thread_id) {
+            delete d.metadata.thread_id;
+        }
+        return d;
+    }
+
+    // Assuming `client.threads.getHistory(threadId)` is an async function that returns a list of dicts
+    async function compareThreadHistories(threadId, copiedThreadId) {
+        const originalThreadHistory = (await client.threads.getHistory(threadId)).map(removeThreadId);
+        const copiedThreadHistory = (await client.threads.getHistory(copiedThreadId)).map(removeThreadId);
+
+        // Compare the two histories
+        if (JSON.stringify(originalThreadHistory) === JSON.stringify(copiedThreadHistory)) {
+            console.log("The histories are the same.");
+        } else {
+            console.log("The histories are different.");
+        }
+    }
+
+    // Example usage
+    compareThreadHistories(<THREAD_ID>, copiedThread.thread_id);
+    ```
+
+=== "CURL"
+
+    ```bash
+    if diff <(
+        curl --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/history | jq -S 'map(del(.metadata.thread_id))'
+    ) <(
+        curl --request GET --url <DEPLOYMENT_URL>/threads/<COPIED_THREAD_ID>/history | jq -S 'map(del(.metadata.thread_id))'
+    ) >/dev/null; then
+        echo "The histories are the same."
+    else
+        echo "The histories are different."
+    fi
+    ```
+
+Output:
+
+    The histories are the same.
