@@ -121,18 +121,21 @@ class JsonPlusSerializer(SerializerProtocol):
             and value.get("type", None) == "constructor"
             and value.get("id", None) is not None
         ):
-            # Get module and class name
-            [*module, name] = value["id"]
-            # Import module
-            mod = importlib.import_module(".".join(module))
-            # Import class
-            cls = getattr(mod, name)
-            # Instantiate class
-            if value["method"] is not None:
-                method = getattr(cls, value["method"])
-                return method(*value["args"], **value["kwargs"])
-            else:
-                return cls(*value["args"], **value["kwargs"])
+            try:
+                # Get module and class name
+                [*module, name] = value["id"]
+                # Import module
+                mod = importlib.import_module(".".join(module))
+                # Import class
+                cls = getattr(mod, name)
+                # Instantiate class
+                if value["method"] is not None:
+                    method = getattr(cls, value["method"])
+                    return method(*value["args"], **value["kwargs"])
+                else:
+                    return cls(*value["args"], **value["kwargs"])
+            except (ImportError, AttributeError):
+                return None
 
         return LC_REVIVER(value)
 
