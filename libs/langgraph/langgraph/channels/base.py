@@ -33,6 +33,11 @@ class BaseChannel(Generic[Value, Update, C], ABC):
 
     # serialize/deserialize methods
 
+    def tap(self) -> Optional[C]:
+        """Return the current checkpoint of the channel, without consuming it.
+        By default, it just calls checkpoint()."""
+        return self.checkpoint()
+
     @abstractmethod
     def checkpoint(self) -> Optional[C]:
         """Return a serializable representation of the channel's current state.

@@ -18,10 +18,11 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    cast,
 )
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
-from langchain_core.runnables import RunnableConfig
+from langchain_core.runnables import RunnableConfig, patch_config
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel
@@ -40,6 +41,7 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
+    CONFIG_KEY_KV,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     ERROR,
@@ -52,6 +54,7 @@ from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValueMapping,
     ManagedValuesManager,
+    WritableManagedValue,
 )
 from langgraph.pregel.algo import (
     PregelTaskWrites,
@@ -182,12 +185,15 @@ class PregelLoop:
         elif all(task.writes for task in self.tasks):
             writes = [w for t in self.tasks for w in t.writes]
             # all tasks have finished
-            apply_writes(
+            mv_writes = apply_writes(
                 self.checkpoint,
                 self.channels,
                 self.tasks,
                 self.checkpointer_get_next_version,
             )
+            # apply writes to managed values
+            for key, values in mv_writes.items():
+                self._update_mv(key, values)
             # produce values output
             self.stream.extend(
                 ("values", v)
@@ -324,12 +330,13 @@ class PregelLoop:
                 manager=None,
             )
             # apply input writes
-            apply_writes(
+            mv_writes = apply_writes(
                 self.checkpoint,
                 self.channels,
                 discard_tasks + [PregelTaskWrites(INPUT, input_writes, [])],
                 self.checkpointer_get_next_version,
             )
+            assert not mv_writes
             # save input checkpoint
             self._put_checkpoint({"source": "input", "writes": self.input})
         else:
@@ -395,6 +402,9 @@ class PregelLoop:
         # increment step
         self.step += 1
 
+    def _update_mv(self, key: str, values: Sequence[Any]) -> None:
+        raise NotImplementedError
+
     def _suppress_interrupt(
         self,
         exc_type: Optional[Type[BaseException]],
@@ -438,6 +448,9 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         finally:
             self.checkpointer.put(config, checkpoint, metadata, new_versions)
 
+    def _update_mv(self, key: str, values: Sequence[Any]) -> None:
+        return self.submit(cast(WritableManagedValue, self.managed[key]).update, values)
+
     # context manager
 
     def __enter__(self) -> Self:
@@ -461,7 +474,10 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             ChannelsManager(self.graph.channels, self.checkpoint, self.config)
         )
         self.managed = self.stack.enter_context(
-            ManagedValuesManager(self.graph.managed_values_dict, self.config)
+            ManagedValuesManager(
+                self.graph.managed_values_dict,
+                patch_config(self.config, configurable={CONFIG_KEY_KV: self.graph.kv}),
+            )
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "pending"
@@ -515,6 +531,11 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         finally:
             await self.checkpointer.aput(config, checkpoint, metadata, new_versions)
 
+    def _update_mv(self, key: str, values: Sequence[Any]) -> None:
+        return self.submit(
+            cast(WritableManagedValue, self.managed[key]).aupdate, values
+        )
+
     # context manager
 
     async def __aenter__(self) -> Self:
@@ -540,7 +561,10 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             AsyncChannelsManager(self.graph.channels, self.checkpoint, self.config)
         )
         self.managed = await self.stack.enter_async_context(
-            AsyncManagedValuesManager(self.graph.managed_values_dict, self.config)
+            AsyncManagedValuesManager(
+                self.graph.managed_values_dict,
+                patch_config(self.config, configurable={CONFIG_KEY_KV: self.graph.kv}),
+            )
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "pending"

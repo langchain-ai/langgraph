@@ -58,6 +58,8 @@ from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
+from langgraph.kv.memory import MemoryKV
+from langgraph.managed.scoped_value import ScopedValue
 from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
 )
@@ -165,6 +167,7 @@ def test_graph_validation() -> None:
 
     class State(TypedDict):
         hello: str
+        shared_things: Annotated[dict[str, dict[str, Any]], ScopedValue("assistant_id")]
 
     def node_a(state: State) -> State:
         # typo
@@ -6202,10 +6205,34 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
+        shared: Annotated[
+            dict[str, dict[str, Any]], ScopedValue.configure("assistant_id")
+        ]
+
+    def assert_shared_value(data: State, config: RunnableConfig) -> State:
+        assert "shared" in data
+        if thread_id := config["configurable"].get("thread_id"):
+            if thread_id == "1":
+                # this is the first thread, so should not see a value
+                assert data["shared"] == {}
+                return {"shared": {"1": {"hello": "world"}}}
+            elif thread_id == "2":
+                # this should get value saved by thread 1
+                assert data["shared"] == {"1": {"hello": "world"}}
+            elif thread_id == "3":
+                # this is a different assistant, so should not see previous value
+                assert data["shared"] == {}
+        return {}
+
+    def tool_two_slow(data: State, config: RunnableConfig) -> State:
+        return {"my_key": " slow", **assert_shared_value(data, config)}
+
+    def tool_two_fast(data: State, config: RunnableConfig) -> State:
+        return {"my_key": " fast", **assert_shared_value(data, config)}
 
     tool_two_graph = StateGraph(State)
-    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
-    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    tool_two_graph.add_node("tool_two_slow", tool_two_slow)
+    tool_two_graph.add_node("tool_two_fast", tool_two_fast)
     tool_two_graph.set_conditional_entry_point(
         lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
     )
@@ -6223,14 +6250,16 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
 
     with SqliteSaver.from_conn_string(":memory:") as saver:
         tool_two = tool_two_graph.compile(
-            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
+            kv=MemoryKV(),
+            checkpointer=saver,
+            interrupt_before=["tool_two_fast", "tool_two_slow"],
         )
 
         # missing thread_id
         with pytest.raises(ValueError, match="thread_id"):
             tool_two.invoke({"my_key": "value", "market": "DE"})
 
-        thread1 = {"configurable": {"thread_id": "1"}}
+        thread1 = {"configurable": {"thread_id": "1", "assistant_id": "a"}}
         # stop when about to enter node
         assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
             "my_key": "value ⛰️",
@@ -6282,7 +6311,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
 
-        thread2 = {"configurable": {"thread_id": "2"}}
+        thread2 = {"configurable": {"thread_id": "2", "assistant_id": "a"}}
         # stop when about to enter node
         assert tool_two.invoke({"my_key": "value", "market": "US"}, thread2) == {
             "my_key": "value",
@@ -6322,7 +6351,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
 
-        thread3 = {"configurable": {"thread_id": "3"}}
+        thread3 = {"configurable": {"thread_id": "3", "assistant_id": "b"}}
         # stop when about to enter node
         assert tool_two.invoke({"my_key": "value", "market": "US"}, thread3) == {
             "my_key": "value",
