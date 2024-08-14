@@ -241,14 +241,14 @@ def tools_condition(
         >>>
         >>> graph_builder = StateGraph(State)
         >>> graph_builder.add_node("tools", ToolNode(tools))
-        >>> graph_builder.add_node("chatbot", llm.bind_tools(tools))
+        >>> graph_builder.add_node("chatbot", lambda state: {"messages":llm.bind_tools(tools).invoke(state['messages'])})
         >>> graph_builder.add_edge("tools", "chatbot")
         >>> graph_builder.add_conditional_edges(
         ...     "chatbot", tools_condition
         ... )
         >>> graph_builder.set_entry_point("chatbot")
         >>> graph = graph_builder.compile()
-        >>> graph.invoke([("user", "What's 329993 divided by 13662?")])
+        >>> graph.invoke({"messages": {"role": "user", "content": "What's 329993 divided by 13662?"}})
         ```
     """
     if isinstance(state, list):
