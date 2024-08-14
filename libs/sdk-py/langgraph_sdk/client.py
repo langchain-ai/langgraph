@@ -1449,6 +1449,28 @@ class RunsClient:
         """  # noqa: E501
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
 
+    def join_stream(self, thread_id: str, run_id: str) -> AsyncIterator[StreamPart]:
+        """Stream output from a run in real-time, until the run is done.
+        Output is not buffered, so any output produced before this call will
+        not be received here.
+
+        Args:
+            thread_id: The thread ID to join.
+            run_id: The run ID to join.
+
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.runs.join(
+                thread_id="thread_id_to_join",
+                run_id="run_id_to_join"
+            )
+
+        """  # noqa: E501
+        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
+
     async def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.
 
