@@ -21,7 +21,7 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
 
     ```python
     from langgraph_sdk import get_client
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url="<DEPLOYMENT_URL>")
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -31,7 +31,7 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    const client = new Client({ apiUrl:"<DEPLOYMENT_URL>" });
     const assistantId = "agent"
     const thread = await client.threads.create();
     ```
@@ -40,7 +40,7 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
 
     ```bash
     curl --request POST \
-      --url <DEPLOYMENY_URL>/threads \
+      --url <DEPLOYMENT_URL>/threads \
       --header 'Content-Type: application/json' \
       --data '{
         "metadata": {}
