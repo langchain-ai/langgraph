@@ -1,10 +1,10 @@
 # Copying Threads
 
-You may wish to copy an existing thread in order to keep the existing history and experiment with different runs in the future.
+You may wish to copy (i.e. "fork") an existing thread in order to keep the existing thread's history and create independent runs that do not affect the original thread. This guide shows how you can do that.
 
 ## Setup
 
-To copy a thread, we must first set up our client and also create a thread we wish to copy. 
+This code assumes you already have a thread to copy. You can read about what a thread is [here](https://langchain-ai.github.io/langgraph/cloud/concepts/api/#threads) and learn how to stream a run on a thread in [these how-to guides](https://langchain-ai.github.io/langgraph/cloud/how-tos/#streaming).
 
 ### SDK initialization
 
@@ -40,42 +40,11 @@ First, we need to setup our client so that we can communicate with our hosted gr
       }'
     ```
 
-### Thread creation
-
-In order to copy a thread - you need to create one first. While it won't throw an error if you try to copy a thread before doing any runs, it doesn't really make sense to copy an empty thread, so in practice you need to create the thread and then execute some runs on it.
-
-Here is how you can create a thread:
-
-=== "Python"
-
-    ```python
-    thread = await client.threads.create()
-    ```
-
-=== "Javascript"
-
-    ```js
-    const thread = await client.threads.create();
-    ```
-
-=== "CURL"
-
-    ```bash
-    curl --request POST \
-      --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json' \
-      --data '{
-        "metadata": {}
-      }'
-    ```
-
-There are a few ways to execute runs on a thread. You can [stream runs](https://langchain-ai.github.io/langgraph/cloud/how-tos/#streaming), execute them in the [background](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/background_run/), or even [setup cron jobs](https://langchain-ai.github.io/langgraph/cloud/how-tos/cloud_examples/cron_jobs/) to execute runs on a schedule. 
-
-Whichever way you choose to execute runs on a thread is fine, as long as you ensure that you have properly executed at least one run on your thread before proceeding.
-
 ## Copying a thread
 
-After you have created a thread and executed some runs on it, you may wish to copy the thread. This will create a new thread with the same history as the existing thread, and then allow you to continue executing runs.
+The code below assumes that a thread you'd like to copy already exists.
+
+Copying a thread will create a new thread with the same history as the existing thread, and then allow you to continue executing runs.
 
 ### Create copy
 
@@ -113,10 +82,10 @@ We can verify that the history from the prior thread did indeed copy over correc
     original_thread_history = list(map(remove_thread_id,await client.threads.get_history(<THREAD_ID>)))
     copied_thread_history = list(map(remove_thread_id,await client.threads.get_history(copied_thread['thread_id'])))
 
-    if original_thread_history == copied_thread_history:
-      print("The histories are the same.")
-    else:
-      print("The histories are different.")
+    # Compare the two histories
+    assert original_thread_history == copied_thread_history
+    # if we made it here the assertion passed!
+    print("The histories are the same.")
     ```
 
 === "Javascript"
@@ -135,11 +104,9 @@ We can verify that the history from the prior thread did indeed copy over correc
         const copiedThreadHistory = (await client.threads.getHistory(copiedThreadId)).map(removeThreadId);
 
         // Compare the two histories
-        if (JSON.stringify(originalThreadHistory) === JSON.stringify(copiedThreadHistory)) {
-            console.log("The histories are the same.");
-        } else {
-            console.log("The histories are different.");
-        }
+        console.assert(JSON.stringify(originalThreadHistory) === JSON.stringify(copiedThreadHistory))
+        // if we made it here the assertion passed!
+        console.log("The histories are the same.");
     }
 
     // Example usage
