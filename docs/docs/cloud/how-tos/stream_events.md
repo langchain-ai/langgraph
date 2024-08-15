@@ -17,7 +17,7 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:<DEPLOYMENT_URL> });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
     // create thread
     const thread = await client.threads.create();
     console.log(thread)

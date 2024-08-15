@@ -38,7 +38,7 @@ Now, let's import our required packages and instantiate our client, assistant, a
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:<DEPLOYMENT_URL> });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
     const assistantId = "agent";
     const thread = await client.threads.create();
     ```

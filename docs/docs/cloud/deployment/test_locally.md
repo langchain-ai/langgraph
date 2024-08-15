@@ -59,7 +59,7 @@ You can either initialize by passing authentication or by setting an environment
     import { Client } from "@langchain/langgraph-sdk";
 
     // only set the apiUrl if you changed the default port when calling langgraph up
-    const client = new Client({ apiUrl:<DEPLOYMENT_URL>, apiKey:<LANGCHAIN_API_KEY> });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL>, apiKey: <LANGCHAIN_API_KEY> });
     const assistantId = "agent"
     const thread = await client.threads.create();
     ```
