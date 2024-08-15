@@ -6278,6 +6278,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi my value here",
+                                "my_other_key": "hi my value",
+                            }
+                        },
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
         ),
         StateSnapshot(
             values={"my_key": "my value"},
@@ -6394,6 +6429,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here and there",
+                        "my_other_key": "hi my value here",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_2": {
+                                "my_key": "hi my value here and there",
+                                "my_other_key": "hi my value here",
+                            }
+                        },
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
             },
         ),
         StateSnapshot(
@@ -6571,6 +6641,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "4",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi my value here",
+                                "my_other_key": "hi my value",
+                            }
+                        },
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "4",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
         ),
         StateSnapshot(
             values={"my_key": "my value"},
@@ -6692,6 +6797,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here and there",
+                        "my_other_key": "hi my value here",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "4",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_2": {
+                                "my_key": "hi my value here and there",
+                                "my_other_key": "hi my value here",
+                            }
+                        },
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "4",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
             },
         ),
         StateSnapshot(
@@ -6772,6 +6912,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "5",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi my value here",
+                                "my_other_key": "hi my value",
+                            }
+                        },
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "5",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
         ),
         StateSnapshot(
             values={"my_key": "my value"},
@@ -6817,6 +6992,7 @@ async def test_nested_graph_interrupts(
             "my_key": "hi my value here and there",
         },
     ]
+    # interrupted after "inner"
     assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
@@ -6864,6 +7040,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here and there",
+                        "my_other_key": "hi my value here",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "5",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_2": {
+                                "my_key": "hi my value here and there",
+                                "my_other_key": "hi my value here",
+                            }
+                        },
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "5",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
             },
         ),
         StateSnapshot(
@@ -6984,6 +7195,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here and there",
+                        "my_other_key": "hi my value here",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "5",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_2": {
+                                "my_key": "hi my value here and there",
+                                "my_other_key": "hi my value here",
+                            }
+                        },
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "5",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
         ),
         StateSnapshot(
             values={"my_key": "my value"},
@@ -7054,6 +7300,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi my value here",
+                                "my_other_key": "hi my value",
+                            }
+                        },
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
             },
         ),
         StateSnapshot(
@@ -7174,6 +7455,40 @@ async def test_nested_graph_interrupts(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi my value here",
+                                "my_other_key": "hi my value",
+                            }
+                        },
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                ),
+            },
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
@@ -7197,6 +7512,40 @@ async def test_nested_graph_interrupts(
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi my value here",
+                                "my_other_key": "hi my value",
+                            }
+                        },
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                ),
             },
         ),
         StateSnapshot(
@@ -7317,6 +7666,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_id": AnyStr(),
                 }
             },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here",
+                        "my_other_key": "hi my value",
+                    },
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi my value here",
+                                "my_other_key": "hi my value",
+                            }
+                        },
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
@@ -7340,6 +7724,41 @@ async def test_nested_graph_interrupts(
                     "checkpoint_ns": "",
                     "checkpoint_id": AnyStr(),
                 }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi my value here and there",
+                        "my_other_key": "hi my value here",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "inner_2": {
+                                "my_key": "hi my value here and there",
+                                "my_other_key": "hi my value here",
+                            }
+                        },
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "6",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
             },
         ),
         StateSnapshot(
@@ -7672,32 +8091,7 @@ async def test_nested_graph_state(
     config = {"configurable": {"thread_id": "1"}}
     await app.ainvoke({"my_key": "my value"}, config, debug=True)
     # test state w/ nested subgraph state (right after interrupt)
-    assert await app.aget_state(config, include_subgraph_state=False) == StateSnapshot(
-        values={"my_key": "hi my value"},
-        next=("inner",),
-        config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        metadata={
-            "source": "loop",
-            "writes": {"outer_1": {"my_key": "hi my value"}},
-            "step": 1,
-        },
-        created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        subgraph_state_snapshots=None,
-    )
-    assert await app.aget_state(config, include_subgraph_state=True) == StateSnapshot(
+    assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value"},
         next=("inner",),
         config={
@@ -7756,9 +8150,7 @@ async def test_nested_graph_state(
             )
         },
     )
-    assert [
-        s async for s in app.aget_state_history(config, include_subgraph_state=True)
-    ] == [
+    assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value"},
             next=("inner",),
@@ -7861,7 +8253,7 @@ async def test_nested_graph_state(
     ]
     await app.ainvoke(None, config, debug=True)
     # test state w/ nested subgraph state (after resuming from interrupt)
-    assert await app.aget_state(config, include_subgraph_state=True) == StateSnapshot(
+    assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
         next=(),
         config={
@@ -7933,7 +8325,6 @@ async def test_nested_graph_state(
                 "checkpoint_id": child_snapshot.config["configurable"]["checkpoint_id"],
             }
         },
-        include_subgraph_state=True,
     ) == StateSnapshot(
         values={"my_key": "hi my value"},
         next=("inner",),
@@ -7960,9 +8351,7 @@ async def test_nested_graph_state(
         subgraph_state_snapshots={"inner": child_snapshot},
     )
     # test full history at the end
-    assert [
-        s async for s in app.aget_state_history(config, include_subgraph_state=True)
-    ] == [
+    assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value here and there and back again"},
             next=(),
@@ -8201,31 +8590,6 @@ async def test_doubly_nested_graph_state(
                 "checkpoint_id": AnyStr(),
             }
         },
-        subgraph_state_snapshots=None,
-    )
-    assert await app.aget_state(config, include_subgraph_state=True) == StateSnapshot(
-        values={"my_key": "hi my value"},
-        next=("child",),
-        config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        metadata={
-            "source": "loop",
-            "writes": {"parent_1": {"my_key": "hi my value"}},
-            "step": 1,
-        },
-        created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
-            }
-        },
         subgraph_state_snapshots={
             "child": StateSnapshot(
                 values={"my_key": "hi my value"},
@@ -8277,7 +8641,7 @@ async def test_doubly_nested_graph_state(
         },
     )
     await app.ainvoke(None, config, debug=True)
-    assert await app.aget_state(config, include_subgraph_state=True) == StateSnapshot(
+    assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
         next=(),
         config={
@@ -8335,7 +8699,6 @@ async def test_doubly_nested_graph_state(
     # test getting child snapshot
     child_snapshot = await app.aget_state(
         {"configurable": {"thread_id": "1", "checkpoint_ns": "child"}},
-        include_subgraph_state=True,
     )
     assert child_snapshot == StateSnapshot(
         values={"my_key": "hi my value here and there"},
@@ -8370,7 +8733,6 @@ async def test_doubly_nested_graph_state(
                 "checkpoint_id": child_snapshot.config["configurable"]["checkpoint_id"],
             }
         },
-        include_subgraph_state=True,
     ) == StateSnapshot(
         values={"my_key": "hi my value"},
         next=("child",),
@@ -8449,7 +8811,7 @@ async def test_send_to_nested_graphs(
         "subjects": ["cats", "dogs"],
         "jokes": [],
     }
-    actual_snapshot = await graph.aget_state(config, include_subgraph_state=True)
+    actual_snapshot = await graph.aget_state(config)
     subgraph_nodes = list(actual_snapshot.subgraph_state_snapshots.keys())
     assert len(subgraph_nodes) == 2
     for subgraph_node in subgraph_nodes:
@@ -8490,7 +8852,7 @@ async def test_send_to_nested_graphs(
         "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
     }
 
-    actual_snapshot = await graph.aget_state(config, include_subgraph_state=True)
+    actual_snapshot = await graph.aget_state(config)
     expected_snapshot = StateSnapshot(
         values={
             "subjects": ["cats", "dogs"],
@@ -8526,9 +8888,7 @@ async def test_send_to_nested_graphs(
     assert actual_snapshot == expected_snapshot
 
     # test full history
-    actual_history = [
-        c async for c in graph.aget_state_history(config, include_subgraph_state=True)
-    ]
+    actual_history = [c async for c in graph.aget_state_history(config)]
     # get subgraph node state for expected history
     subgraph_state_snapshots = {
         subgraph_node: await graph.aget_state(
