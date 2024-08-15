@@ -10,7 +10,7 @@ from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
-from langgraph.constants import INTERRUPT, TAG_HIDDEN
+from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.types import PregelExecutableTask
 
@@ -127,12 +127,10 @@ def map_debug_checkpoint(
         "timestamp": checkpoint["ts"],
         "step": step,
         "payload": {
-            "id": checkpoint["id"],
             "config": config,
             "values": read_channels(channels, stream_channels),
             "metadata": metadata,
             "next": [t.name for t in tasks],
-            "interrupts": [v for tid, n, v in pending_writes or [] if n == INTERRUPT],
         },
     }
 

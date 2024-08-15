@@ -233,7 +233,7 @@ class PregelLoop:
             self.stream.extend(
                 ("debug", v)
                 for v in map_debug_checkpoint(
-                    self.step,
+                    self.step - 1,  # printing checkpoint for previous step
                     self.checkpoint_config,
                     self.channels,
                     self.graph.stream_channels_asis,
