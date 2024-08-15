@@ -31,7 +31,7 @@ Then, let's import our required packages and instantiate our client, assistant, 
     from langchain_core.messages import convert_to_messages
     from langgraph_sdk import get_client
 
-    client = get_client(url="<DEPLOYMENT_URL>")
+    client = get_client(url=<DEPLOYMENT_URL>)
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -42,7 +42,7 @@ Then, let's import our required packages and instantiate our client, assistant, 
     import { Client } from "@langchain/langgraph-sdk";
     
 
-    const client = new Client({ apiUrl:"<DEPLOYMENT_URL>" });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
     const assistantId = "agent";
     const thread = await client.threads.create();
     ```

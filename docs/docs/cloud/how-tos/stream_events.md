@@ -6,7 +6,7 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="<DEPLOYMENT_URL>")
+    client = get_client(url=<DEPLOYMENT_URL>)
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -17,7 +17,7 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"<DEPLOYMENT_URL>" });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
     // create thread
     const thread = await client.threads.create();
     console.log(thread)
@@ -28,10 +28,7 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json' \
-      --data '{
-        "metadata": {}
-      }'
+      --header 'Content-Type: application/json'
     ```
 
 Output:
