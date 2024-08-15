@@ -66,6 +66,12 @@ Now that we have set everything up on our local file system, we are ready to hos
 
 ## Test the graph build locally
 
+### Using LangGraph Studio Desktop (recommended)
+
+Testing your graph locally is incredibly easy to do by using LangGraph Studio Desktop. The studio provides an easy-to-use user interface and allows quick development cycles for auto updating your graph when you modify code, which makes it easier to iterate and test your graph. In addition, the studio provides in depth trace views of each graph run, which makes it easy to debug your graph by inspecting individual steps. You can download the app [here](https://langgraph-studio.vercel.app/api/mac/arm64/latest) and can read about how to use it in [this walkthrough](https://github.com/langchain-ai/langgraph-studio/blob/main/README.md).
+
+### Using the LangGraph CLI
+
 Before deploying to the cloud, we probably want to test the building of our graph locally. This is useful to make sure we have configured our [CLI configuration file][langgraph.json] correctly and our graph runs.
 
 In order to do this we can first install the LangGraph CLI
