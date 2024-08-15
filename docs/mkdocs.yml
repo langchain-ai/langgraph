@@ -243,6 +243,8 @@ nav:
               - JS/TS: "cloud/reference/sdk/js_ts_sdk_ref.md"
           - CLI: "cloud/reference/cli.md"
           - Environment Variables: "cloud/reference/env_var.md"
+      - FAQ:
+          - Studio: "cloud/faq/studio.md"
 
 markdown_extensions:
   - abbr
