@@ -23,7 +23,7 @@ The LangGraph Cloud API exposes functionality of your LangGraph application thro
 
 LangGraph Cloud is seamlessly integrated with [LangSmith](https://www.langchain.com/langsmith) and is accessible from within the LangSmith UI.
 
-LangGraph Cloud projects can be tested and debugged using the [LangGraph Studio Desktop](https://github.com/langchain-ai/langgraph-studio). 
+LangGraph Cloud applications can be tested and debugged using the [LangGraph Studio Desktop](https://github.com/langchain-ai/langgraph-studio). 
 
 ## Key Features
 
