@@ -70,7 +70,7 @@ Now that we have set everything up on our local file system, we are ready to hos
 
 ![LangGraph Studio Desktop](./img/graph_video_poster.png)
 
-LangGraph Studio offers a new way to develop LLM applications by providing a specialized agent IDE that enables visualization, interaction, and debugging of complex agentic applications
+Testing your graph locally is easy with LangGraph Studio Desktop. LangGraph Studio offers a new way to develop LLM applications by providing a specialized agent IDE that enables visualization, interaction, and debugging of complex agentic applications
 
 With visual graphs and the ability to edit state, you can better understand agent workflows and iterate faster. LangGraph Studio integrates with [LangSmith](https://smith.langchain.com) so you can collaborate with teammates to debug failure modes.
 
