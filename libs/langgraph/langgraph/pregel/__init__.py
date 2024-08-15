@@ -741,9 +741,22 @@ class Pregel(
                     }
                 }
 
+            # if we're writing a subgraph update for a key that's not in the parent graph channels,
+            # we ignore the values for that key in parent graph updates
+            if (
+                isinstance(values, dict)
+                and len(checkpoint_ns_and_as_node_pairs) > 1
+                and set(values) - set(graph.channels)
+            ):
+                values_to_write = {
+                    k: v for k, v in values.items() if k in graph.channels
+                } or None
+            else:
+                values_to_write = values
+
             # find last node that updated the state, if not provided
-            if values is None and as_node is None:
-                return self.checkpointer.put(
+            if values_to_write is None and as_node is None:
+                write_config = self.checkpointer.put(
                     checkpoint_config,
                     create_checkpoint(checkpoint, None, step, id=id),
                     {
@@ -753,6 +766,11 @@ class Pregel(
                     },
                     {},
                 )
+
+                if parent_config is None:
+                    parent_config = write_config
+
+                continue
             elif as_node is None and not any(
                 v for vv in checkpoint["versions_seen"].values() for v in vv.values()
             ):
@@ -785,7 +803,7 @@ class Pregel(
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 task = PregelExecutableTask(
                     as_node,
-                    values,
+                    values_to_write,
                     RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                     deque(),
                     None,
@@ -822,7 +840,7 @@ class Pregel(
                     {
                         "source": "update",
                         "step": step + 1,
-                        "writes": {as_node: values},
+                        "writes": {as_node: values_to_write},
                     },
                     new_versions,
                 )
@@ -888,8 +906,21 @@ class Pregel(
                     }
                 }
 
+            # if we're writing a subgraph update for a key that's not in the parent graph channels,
+            # we ignore the values for that key in parent graph updates
+            if (
+                isinstance(values, dict)
+                and len(checkpoint_ns_and_as_node_pairs) > 1
+                and set(values) - set(graph.channels)
+            ):
+                values_to_write = {
+                    k: v for k, v in values.items() if k in graph.channels
+                } or None
+            else:
+                values_to_write = values
+
             # find last node that updated the state, if not provided
-            if values is None and as_node is None:
+            if values_to_write is None and as_node is None:
                 return await self.checkpointer.aput(
                     checkpoint_config,
                     create_checkpoint(checkpoint, None, step, id=id),
@@ -934,7 +965,7 @@ class Pregel(
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 task = PregelExecutableTask(
                     as_node,
-                    values,
+                    values_to_write,
                     RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                     deque(),
                     None,
@@ -971,7 +1002,7 @@ class Pregel(
                     {
                         "source": "update",
                         "step": step + 1,
-                        "writes": {as_node: values},
+                        "writes": {as_node: values_to_write},
                     },
                     new_versions,
                 )
