@@ -5320,6 +5320,7 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
+        interrupts=(Interrupt(when="after", node="agent", value=None),),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
@@ -5447,6 +5448,7 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
+        interrupts=(Interrupt(when="after", node="agent", value=None),),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
@@ -5549,6 +5551,7 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
+        interrupts=(Interrupt(when="before", node="tools", value=None),),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
@@ -5594,6 +5597,7 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
+        interrupts=(Interrupt(when="before", node="tools", value=None),),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
@@ -5676,6 +5680,7 @@ def test_root_graph(
         ],
         tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
+        interrupts=(Interrupt(when="before", node="tools", value=None),),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         metadata={
@@ -6234,6 +6239,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value ⛰️", "market": "DE"},
             tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
+            interrupts=(Interrupt(when="before", node="tool_two_slow", value=None),),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={"source": "loop", "step": 0, "writes": None},
@@ -6268,6 +6274,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value", "market": "US"},
             tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
+            interrupts=(Interrupt(when="before", node="tool_two_fast", value=None),),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
             metadata={"source": "loop", "step": 0, "writes": None},
@@ -6302,6 +6309,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value", "market": "US"},
             tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
+            interrupts=(Interrupt(when="before", node="tool_two_fast", value=None),),
             config=tool_two.checkpointer.get_tuple(thread3).config,
             created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
             metadata={"source": "loop", "step": 0, "writes": None},
@@ -6606,6 +6614,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared", "market": "DE"},
             tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
+            interrupts=(Interrupt(when="before", node="tool_two_slow", value=None),),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={
@@ -6644,6 +6653,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared", "market": "US"},
             tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
+            interrupts=(Interrupt(when="before", node="tool_two_fast", value=None),),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
             metadata={
@@ -6691,6 +6701,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             },
             tasks=(PregelTask(AnyStr(), "finish"),),
             next=("finish",),
+            interrupts=(Interrupt(when="before", node="finish", value=None),),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={
@@ -6739,6 +6750,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared", "market": "DE"},
             tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
+            interrupts=(Interrupt(when="after", node="prepare", value=None),),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
             metadata={
@@ -6777,6 +6789,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "value prepared", "market": "US"},
             tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
+            interrupts=(Interrupt(when="after", node="prepare", value=None),),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
             metadata={
@@ -6832,6 +6845,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
             values={"my_key": "key prepared", "market": "DE"},
             tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
+            interrupts=(Interrupt(when="after", node="prepare", value=None),),
             config=tool_two.checkpointer.get_tuple(thread3).config,
             created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
             metadata={
