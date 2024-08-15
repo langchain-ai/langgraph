@@ -68,7 +68,11 @@ Now that we have set everything up on our local file system, we are ready to hos
 
 ### Using LangGraph Studio Desktop (recommended)
 
-Testing your graph locally is incredibly easy to do by using LangGraph Studio Desktop. The studio provides an easy-to-use user interface and allows quick development cycles for auto updating your graph when you modify code, which makes it easier to iterate and test your graph. In addition, the studio provides in depth trace views of each graph run, which makes it easy to debug your graph by inspecting individual steps. You can download the app [here](https://langgraph-studio.vercel.app/api/mac/arm64/latest) and can read about how to use it in [this walkthrough](https://github.com/langchain-ai/langgraph-studio/blob/main/README.md).
+![LangGraph Studio Desktop](./img/graph_video_poster.png)
+
+LangGraph Studio offers a new way to develop LLM applications by providing a specialized agent IDE that enables visualization, interaction, and debugging of complex agentic applications
+
+With visual graphs and the ability to edit state, you can better understand agent workflows and iterate faster. LangGraph Studio integrates with [LangSmith](https://smith.langchain.com) so you can collaborate with teammates to debug failure modes.
 
 ### Using the LangGraph CLI
 
