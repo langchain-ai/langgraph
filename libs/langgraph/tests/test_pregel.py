@@ -6260,6 +6260,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": -1,
                         "writes": {"my_key": "value", "market": "DE"},
                     },
+                    "next": ["__start__"],
                 },
             },
             {
@@ -6287,6 +6288,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 0,
                         "writes": None,
                     },
+                    "next": ["prepare"],
                 },
             },
             {
@@ -6335,6 +6337,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 1,
                         "writes": {"prepare": {"my_key": " prepared"}},
                     },
+                    "next": ["tool_two_slow"],
                 },
             },
             {
@@ -6383,6 +6386,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 2,
                         "writes": {"tool_two_slow": {"my_key": " slow"}},
                     },
+                    "next": ["finish"],
                 },
             },
             {
@@ -6431,6 +6435,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 3,
                         "writes": {"finish": {"my_key": " finished"}},
                     },
+                    "next": [],
                 },
             },
         ]

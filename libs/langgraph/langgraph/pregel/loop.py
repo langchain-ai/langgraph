@@ -228,6 +228,22 @@ class PregelLoop:
             is_resuming=self.input is INPUT_RESUMING,
         )
 
+        # produce debug output
+        if self._checkpointer_put_after_previous is not None:
+            self.stream.extend(
+                ("debug", v)
+                for v in map_debug_checkpoint(
+                    self.step - 1,  # printing checkpoint for previous step
+                    self.checkpoint_config,
+                    self.channels,
+                    self.graph.stream_channels_asis,
+                    self.checkpoint_metadata,
+                    self.checkpoint,
+                    self.tasks,
+                    self.checkpoint_pending_writes,
+                )
+            )
+
         # if no more tasks, we're done
         if not self.tasks:
             self.status = "done"
@@ -361,17 +377,6 @@ class PregelLoop:
                     "checkpoint_id": self.checkpoint["id"],
                 },
             }
-            # produce debug output
-            self.stream.extend(
-                ("debug", v)
-                for v in map_debug_checkpoint(
-                    self.step,
-                    self.checkpoint_config,
-                    self.channels,
-                    self.graph.stream_channels_asis,
-                    self.checkpoint_metadata,
-                )
-            )
         # increment step
         self.step += 1
 
