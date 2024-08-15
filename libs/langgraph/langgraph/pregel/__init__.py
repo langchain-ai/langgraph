@@ -681,7 +681,7 @@ class Pregel(
         self,
         config: RunnableConfig,
         values: Optional[Union[dict[str, Any], Any]],
-        as_node: Optional[str] = None,
+        as_node: Optional[str | list[str]] = None,
     ) -> RunnableConfig:
         """Update the state of the graph with the given values, as if they came from
         node `as_node`. If `as_node` is not provided, it will be set to the last node
@@ -698,8 +698,8 @@ class Pregel(
         if checkpoint_ns != "":
             raise ValueError("Can only send update from the root graph")
 
-        if isinstance(as_node, str) and CHECKPOINT_NAMESPACE_SEPARATOR in as_node:
-            *path, as_node = as_node.split(CHECKPOINT_NAMESPACE_SEPARATOR)
+        if isinstance(as_node, list):
+            *path, as_node = as_node
             checkpoint_ns_and_as_node_pairs = [("", None)]
             # we'll write a matching checkpoint for each parent during the update
             checkpoint_ns_and_as_node_pairs.extend(
@@ -853,7 +853,7 @@ class Pregel(
         self,
         config: RunnableConfig,
         values: dict[str, Any] | Any,
-        as_node: Optional[str] = None,
+        as_node: Optional[str | list[str]] = None,
     ) -> RunnableConfig:
         # get last checkpoint
         saved = await self.checkpointer.aget_tuple(config)
@@ -863,8 +863,8 @@ class Pregel(
         if checkpoint_ns != "":
             raise ValueError("Can only send update from the root graph")
 
-        if isinstance(as_node, str) and CHECKPOINT_NAMESPACE_SEPARATOR in as_node:
-            *path, as_node = as_node.split(CHECKPOINT_NAMESPACE_SEPARATOR)
+        if isinstance(as_node, list):
+            *path, as_node = as_node
             checkpoint_ns_and_as_node_pairs = [("", None)]
             # we'll write a matching checkpoint for each parent during the update
             checkpoint_ns_and_as_node_pairs.extend(

@@ -8817,7 +8817,7 @@ async def test_nested_graph_update_state(
     await app.ainvoke({"my_key": "meow"}, config=config, debug=True)
     latest_config = (await app.aget_state(config)).config
     updated_config = await app.aupdate_state(
-        latest_config, {"my_key": "hi bark here"}, as_node="inner|inner_1"
+        latest_config, {"my_key": "hi bark here"}, as_node=["inner", "inner_1"]
     )
     assert [s async for s in app.aget_state_history(config)] == [
         # last snapshot is the update for the subgraph
@@ -9293,7 +9293,7 @@ async def test_nested_graph_update_state(
     await app.ainvoke({"my_key": "meow"}, config=config, debug=True)
     latest_config = (await app.aget_state(config)).config
     updated_config = await app.aupdate_state(
-        latest_config, {"my_key": "hi bark here and there"}, as_node="inner|inner_2"
+        latest_config, {"my_key": "hi bark here and there"}, as_node=["inner", "inner_2"]
     )
     await app.ainvoke(None, updated_config)
     assert [s async for s in app.aget_state_history(config)] == [
