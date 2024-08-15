@@ -38,6 +38,46 @@ Ready!
 
 We can now interact with the API server using the LangGraph SDK. First, we need to start our client, select our assistant (in this case a graph we called "agent", make sure to select the proper assistant you wish to test).
 
+You can either initialize by passing authentication or by setting an environment variable.
+
+#### Initialize with authentication
+
+=== "Python"
+
+    ```python
+    from langgraph_sdk import get_client
+
+    # only pass the url argument to get_client() if you changed the default port when calling langgraph up
+    client = get_client(url=<DEPLOYMENT_URL>,api_key=<LANGCHAIN_API_KEY>)
+    assistant_id = "agent"
+    thread = await client.threads.create()
+    ```
+
+=== "Javascript"
+
+    ```js
+    import { Client } from "@langchain/langgraph-sdk";
+
+    // only set the apiUrl if you changed the default port when calling langgraph up
+    const client = new Client({ apiUrl:<DEPLOYMENT_URL>, apiKey:<LANGCHAIN_API_KEY> });
+    const assistantId = "agent"
+    const thread = await client.threads.create();
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json'
+      --header 'x-api-key: <LANGCHAIN_API_KEY>'
+    ```
+  
+
+#### Initialize with environment variables
+
+If you have a `LANGCHAIN_API_KEY` set in your environment, you do not need to explicitly pass authentication to the client
+
 === "Python"
 
     ```python
@@ -58,6 +98,14 @@ We can now interact with the API server using the LangGraph SDK. First, we need 
     const client = new Client();
     const assistantId = "agent"
     const thread = await client.threads.create();
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json'
     ```
 
 Now we can invoke our graph to ensure it is working. Make sure to change the input to match the proper schema for your graph. 
@@ -94,6 +142,41 @@ Now we can invoke our graph to ensure it is working. Make sure to change the inp
       console.log(chunk.data);
       console.log("\n\n");
     }
+    ```
+
+  === "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf\"}]},
+       \"stream_mode\": [
+         \"events\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     ' 
     ```
 
 If your graph works correctly, you should see your graph output displayed in the console. Of course, there are many more ways you might need to test your graph, for a full list of commands you can send with the SDK, see the [Python](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/python_sdk_ref/) and [JS/TS](https://langchain-ai.github.io/langgraph/cloud/reference/sdk/js_ts_sdk_ref/) references.

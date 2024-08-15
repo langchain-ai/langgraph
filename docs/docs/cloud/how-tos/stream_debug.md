@@ -9,7 +9,7 @@ First let's set up our client and thread:
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="<DEPLOYMENT_URL>")
+    client = get_client(url=<DEPLOYMENT_URL>)
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -20,7 +20,7 @@ First let's set up our client and thread:
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"<DEPLOYMENT_URL>" });
+    const client = new Client({ apiUrl:<DEPLOYMENT_URL> });
     // create thread
     const thread = await client.threads.create();
     console.log(thread)

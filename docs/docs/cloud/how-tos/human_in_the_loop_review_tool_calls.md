@@ -28,7 +28,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
 
     ```python
     from langgraph_sdk import get_client
-    client = get_client(url="<DEPLOYMENT_URL>")
+    client = get_client(url=<DEPLOYMENT_URL>)
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -38,7 +38,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"<DEPLOYMENT_URL>" });
+    const client = new Client({ apiUrl:<DEPLOYMENT_URL> });
     const assistantId = "agent";
     const thread = await client.threads.create();
     ```
