@@ -404,9 +404,7 @@ class PregelLoop:
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        print("trying to suppress", exc_value)
         if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
-            print("suppressing")
             self.put_writes(
                 str(UUID(int=0)), [(INTERRUPT, i) for i in exc_value.args[0]]
             )
