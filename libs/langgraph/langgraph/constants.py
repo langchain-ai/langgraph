@@ -1,5 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Literal
+from typing import Any, Literal, Union
 
 INPUT = "__input__"
 CONFIG_KEY_SEND = "__pregel_send"
@@ -99,5 +99,11 @@ class Send:
 @dataclass
 class Interrupt:
     when: Literal["before", "during", "after"]
-    node: str
+    node: Union[str, list[str]]
     value: Any = None
+
+    def __post_init__(self):
+        if isinstance(self.node, str):
+            self.node = [p for p in self.node.split("|") if p]
+            if len(self.node) == 1:
+                self.node = self.node[0]
