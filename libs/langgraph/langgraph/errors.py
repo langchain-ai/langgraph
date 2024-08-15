@@ -41,10 +41,10 @@ class GraphInterrupt(Exception):
 class NodeInterrupt(GraphInterrupt):
     """Raised by a node to interrupt execution."""
 
-    def __init__(self, value: Any = None) -> None:
+    def __init__(self, *values: Any) -> None:
         config = ensure_config()
         node = config["configurable"]["checkpoint_ns"]
-        super().__init__([Interrupt("during", node, value)])
+        super().__init__([Interrupt("during", node, v) for v in values])
 
 
 class EmptyInputError(Exception):
