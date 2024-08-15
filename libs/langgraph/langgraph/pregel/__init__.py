@@ -507,26 +507,19 @@ class Pregel(
                         yield runnable
                         yield from runnable.subgraphs
 
-    def get_state(
-        self, config: RunnableConfig, *, include_subgraph_state: bool = False
-    ) -> StateSnapshot:
+    def get_state(self, config: RunnableConfig) -> StateSnapshot:
         """Get the current state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
         checkpoint_tuple = self.checkpointer.get_tuple(config)
-        if include_subgraph_state:
-            checkpoint_tuples = self.checkpointer.list(config)
-        else:
-            checkpoint_tuples = iter([checkpoint_tuple] if checkpoint_tuple else [])
-
         checkpoint_config = checkpoint_tuple.config if checkpoint_tuple else config
         checkpoint_ns = checkpoint_config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = checkpoint_config["configurable"].get("checkpoint_id")
         checkpoint_ns_to_checkpoint_id: dict[str, str] = {}
         checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
         checkpoint_ns_to_graph: dict[str, Pregel] = {}
-        for checkpoint_tuple in checkpoint_tuples:
+        for checkpoint_tuple in self.checkpointer.list(config):
             saved_checkpoint_ns = checkpoint_tuple.config["configurable"][
                 "checkpoint_ns"
             ]
@@ -568,31 +561,19 @@ class Pregel(
         )
         return state_snapshot
 
-    async def aget_state(
-        self, config: RunnableConfig, *, include_subgraph_state: bool = False
-    ) -> StateSnapshot:
+    async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
         """Get the current state of the graph."""
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
         checkpoint_tuple = await self.checkpointer.aget_tuple(config)
-        if include_subgraph_state:
-            checkpoint_tuples = self.checkpointer.alist(config)
-        else:
-
-            async def alist_checkpoints():
-                if checkpoint_tuple:
-                    yield checkpoint_tuple
-
-            checkpoint_tuples = alist_checkpoints()
-
         checkpoint_config = checkpoint_tuple.config if checkpoint_tuple else config
         checkpoint_ns = checkpoint_config["configurable"].get("checkpoint_ns", "")
         checkpoint_id = checkpoint_config["configurable"].get("checkpoint_id")
         checkpoint_ns_to_checkpoint_id: dict[str, str] = {}
         checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
         checkpoint_ns_to_graph: dict[str, Pregel] = {}
-        async for checkpoint_tuple in checkpoint_tuples:
+        async for checkpoint_tuple in self.checkpointer.alist(config):
             saved_checkpoint_ns = checkpoint_tuple.config["configurable"][
                 "checkpoint_ns"
             ]
@@ -641,7 +622,6 @@ class Pregel(
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
-        include_subgraph_state: bool = False,
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         if not self.checkpointer:
@@ -663,20 +643,8 @@ class Pregel(
                 # only list root checkpoints here
                 continue
 
-            if include_subgraph_state:
-                state_snapshot = self.get_state(
-                    checkpoint_tuple.config, include_subgraph_state=True
-                )
-                yield state_snapshot
-            else:
-                graph = _get_subgraph(
-                    self,
-                    checkpoint_tuple.config["configurable"]["checkpoint_ns"],
-                )
-                yield _prepare_state_snapshot(
-                    checkpoint_tuple,
-                    graph,
-                )
+            state_snapshot = self.get_state(checkpoint_tuple.config)
+            yield state_snapshot
 
     async def aget_state_history(
         self,
@@ -685,7 +653,6 @@ class Pregel(
         filter: Optional[Dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
-        include_subgraph_state: bool = False,
     ) -> AsyncIterator[StateSnapshot]:
         """Get the history of the state of the graph."""
         if not self.checkpointer:
@@ -707,20 +674,8 @@ class Pregel(
                 # only list root checkpoints here
                 continue
 
-            if include_subgraph_state:
-                state_snapshot = await self.aget_state(
-                    checkpoint_tuple.config, include_subgraph_state=True
-                )
-                yield state_snapshot
-            else:
-                graph = _get_subgraph(
-                    self,
-                    checkpoint_tuple.config["configurable"]["checkpoint_ns"],
-                )
-                yield await _prepare_state_snapshot_async(
-                    checkpoint_tuple,
-                    graph,
-                )
+            state_snapshot = await self.aget_state(checkpoint_tuple.config)
+            yield state_snapshot
 
     def update_state(
         self,
