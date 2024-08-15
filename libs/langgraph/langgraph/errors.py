@@ -1,4 +1,9 @@
+from typing import Any
+
+from langchain_core.runnables import ensure_config
+
 from langgraph.checkpoint.base import EmptyChannelError
+from langgraph.constants import Interrupt
 
 
 class GraphRecursionError(RecursionError):
@@ -29,7 +34,17 @@ class InvalidUpdateError(Exception):
 class GraphInterrupt(Exception):
     """Raised when a subgraph is interrupted."""
 
-    pass
+    def __init__(self, interrupts: list[Interrupt]) -> None:
+        super().__init__(interrupts)
+
+
+class NodeInterrupt(GraphInterrupt):
+    """Raised by a node to interrupt execution."""
+
+    def __init__(self, value: Any = None) -> None:
+        config = ensure_config()
+        node = config["configurable"]["checkpoint_ns"]
+        super().__init__([Interrupt("during", node, value)])
 
 
 class EmptyInputError(Exception):

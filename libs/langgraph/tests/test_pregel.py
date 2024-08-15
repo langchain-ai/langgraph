@@ -52,8 +52,8 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.constants import ERROR, Send
-from langgraph.errors import InvalidUpdateError
+from langgraph.constants import ERROR, Interrupt, Send
+from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
@@ -6118,6 +6118,66 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
             },
         ),
     ]
+
+
+def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    def tool_two_node(s: State) -> State:
+        if s["market"] == "DE":
+            raise NodeInterrupt("Just because...")
+        return {"my_key": " all good"}
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two", tool_two_node)
+    tool_two_graph.add_edge(START, "tool_two")
+    tool_two = tool_two_graph.compile()
+
+    assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
+        "my_key": "value",
+        "market": "DE",
+    }
+    assert tool_two.invoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value all good",
+        "market": "US",
+    }
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        tool_two = tool_two_graph.compile(checkpointer=saver)
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            tool_two.invoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
+            "my_key": "value ⛰️",
+            "market": "DE",
+        }
+        assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
+            {
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+            },
+            {
+                "source": "input",
+                "step": -1,
+                "writes": {"my_key": "value ⛰️", "market": "DE"},
+            },
+        ]
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value ⛰️", "market": "DE"},
+            next=("tool_two",),
+            interrupts=(Interrupt("during", "tool_two", "Just because..."),),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+            metadata={"source": "loop", "step": 0, "writes": None},
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
 
 
 def test_start_branch_then(snapshot: SnapshotAssertion) -> None:

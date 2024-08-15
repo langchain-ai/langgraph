@@ -2,6 +2,7 @@ from typing import (
     Any,
     AsyncGenerator,
     Generator,
+    Literal,
     Optional,
     Protocol,
     Sequence,
@@ -64,3 +65,10 @@ class SendProtocol(Protocol):
 
     def __eq__(self, value: object) -> bool:
         ...
+
+
+@runtime_checkable
+class InterruptProtocol(Protocol):
+    when: Literal["before", "during", "after"]
+    node: str
+    value: Any

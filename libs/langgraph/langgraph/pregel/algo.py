@@ -68,18 +68,18 @@ def should_interrupt(
     checkpoint: Checkpoint,
     interrupt_nodes: Union[All, Sequence[str]],
     tasks: list[PregelExecutableTask],
-) -> bool:
+) -> list[str]:
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()
     seen = checkpoint["versions_seen"].get(INTERRUPT, {})
+    # interrupt if any channel has been updated since last interrupt
+    any_updates_since_prev_interrupt = any(
+        version > seen.get(chan, null_version)
+        for chan, version in checkpoint["channel_versions"].items()
+    )
+    # and any triggered node is in interrupt_nodes list
     return (
-        # interrupt if any channel has been updated since last interrupt
-        any(
-            version > seen.get(chan, null_version)
-            for chan, version in checkpoint["channel_versions"].items()
-        )
-        # and any triggered node is in interrupt_nodes list
-        and any(
+        [
             task.name
             for task in tasks
             if (
@@ -87,7 +87,9 @@ def should_interrupt(
                 if interrupt_nodes == "*"
                 else task.name in interrupt_nodes
             )
-        )
+        ]
+        if any_updates_since_prev_interrupt
+        else []
     )
 
 

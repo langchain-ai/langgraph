@@ -23,7 +23,7 @@ from langchain_core.load.serializable import Serializable
 from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.base import SerializerProtocol
-from langgraph.checkpoint.serde.types import SendProtocol
+from langgraph.checkpoint.serde.types import InterruptProtocol, SendProtocol
 
 LC_REVIVER = Reviver()
 
@@ -105,6 +105,11 @@ class JsonPlusSerializer(SerializerProtocol):
         elif isinstance(obj, SendProtocol):
             return self._encode_constructor_args(
                 obj.__class__, kwargs={"node": obj.node, "arg": obj.arg}
+            )
+        elif isinstance(obj, InterruptProtocol):
+            return self._encode_constructor_args(
+                obj.__class__,
+                kwargs={"when": obj.when, "node": obj.node, "value": obj.value},
             )
         elif isinstance(obj, (bytes, bytearray)):
             return self._encode_constructor_args(

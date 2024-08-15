@@ -1,4 +1,5 @@
-from typing import Any
+from dataclasses import dataclass
+from typing import Any, Literal
 
 INPUT = "__input__"
 CONFIG_KEY_SEND = "__pregel_send"
@@ -93,3 +94,10 @@ class Send:
             and self.node == value.node
             and self.arg == value.arg
         )
+
+
+@dataclass
+class Interrupt:
+    when: Literal["before", "during", "after"]
+    node: str
+    value: Any = None
