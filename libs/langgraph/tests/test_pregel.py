@@ -1238,7 +1238,6 @@ def test_invoke_checkpoint(mocker: MockerFixture, caplog) -> None:
     assert checkpoint["channel_values"].get("total") == 2
     # total is now 2, so output is 2+3=5
     assert app.invoke(3, {"configurable": {"thread_id": "1"}}) == 5
-    assert 0
     assert errored_once, "errored and retried"
     checkpoint = memory.get({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
