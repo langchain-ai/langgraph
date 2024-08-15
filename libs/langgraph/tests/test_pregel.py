@@ -1,4 +1,5 @@
 import json
+import logging
 import operator
 import time
 import warnings
@@ -1191,7 +1192,8 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
     assert app.invoke(2) == [3, 3]
 
 
-def test_invoke_checkpoint(mocker: MockerFixture) -> None:
+def test_invoke_checkpoint(mocker: MockerFixture, caplog) -> None:
+    caplog.set_level(logging.INFO)
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
     errored_once = False
 
@@ -1236,6 +1238,7 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     assert checkpoint["channel_values"].get("total") == 2
     # total is now 2, so output is 2+3=5
     assert app.invoke(3, {"configurable": {"thread_id": "1"}}) == 5
+    assert 0
     assert errored_once, "errored and retried"
     checkpoint = memory.get({"configurable": {"thread_id": "1"}})
     assert checkpoint is not None
