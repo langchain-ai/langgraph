@@ -3,6 +3,7 @@ import logging
 import random
 import time
 from typing import Optional
+import traceback
 
 from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
 
@@ -49,7 +50,9 @@ def run_with_retry(
             )
             # log the retry
             logger.info(
-                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}"
+                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) due to:\n"
+                f"{exc.__class__.__name__}: {exc}\n"
+                f"{traceback.format_exc()}"
             )
 
 
