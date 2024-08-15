@@ -10782,7 +10782,9 @@ def test_nested_graph_update_state(
     app.invoke({"my_key": "meow"}, config=config, debug=True)
     latest_config = app.get_state(config).config
     updated_config = app.update_state(
-        latest_config, {"my_key": "hi bark here and there"}, as_node=["inner", "inner_2"]
+        latest_config,
+        {"my_key": "hi bark here and there"},
+        as_node=["inner", "inner_2"],
     )
     app.invoke(None, updated_config)
     assert list(app.get_state_history(config)) == [

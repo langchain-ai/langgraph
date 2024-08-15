@@ -687,123 +687,111 @@ class Pregel(
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        if not self.checkpointer:
+        checkpointer = self.checkpointer or config["configurable"].get("checkpointer")
+        if not checkpointer:
             raise ValueError("No checkpointer set")
 
+        has_nested_interrupts = _has_nested_interrupts(self)
+        if (
+            has_nested_interrupts
+            and as_node is not None
+            and not isinstance(as_node, list)
+        ):
+            raise ValueError(
+                "Since your graph has subgraphs with interrupts, you need to set 'as_node' to None or a list that defines a path to subgraph node that will be creating an update."
+            )
+
         # get last checkpoint
-        saved = self.checkpointer.get_tuple(config)
+        saved = checkpointer.get_tuple(config)
+        checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        checkpoint_previous_versions = (
+            saved.checkpoint["channel_versions"] if saved else {}
+        )
         step = saved.metadata.get("step", -1) if saved else -1
-        id = str(uuid6(clock_seq=step + 1))
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        if checkpoint_ns != "":
-            raise ValueError("Can only send update from the root graph")
 
         if isinstance(as_node, list):
-            *path, as_node = as_node
-            checkpoint_ns_and_as_node_pairs = [("", None)]
-            # we'll write a matching checkpoint for each parent during the update
-            checkpoint_ns_and_as_node_pairs.extend(
-                [
-                    (
-                        CHECKPOINT_NAMESPACE_SEPARATOR.join(path[:idx]),
-                        None if idx != len(path) else as_node,
-                    )
-                    for idx in range(1, len(path) + 1)
-                ]
-            )
+            subgraph_as_node = as_node
+            as_node = as_node[0] if len(as_node) == 1 else None
         else:
-            checkpoint_ns_and_as_node_pairs = [("", as_node)]
+            subgraph_as_node = as_node
 
-        parent_config = None
-        for checkpoint_ns, as_node in checkpoint_ns_and_as_node_pairs:
-            graph = _get_subgraph(self, checkpoint_ns)
-            # merge configurable fields with previous checkpoint config
+        # merge configurable fields with previous checkpoint config
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                "checkpoint_ns": checkpoint_ns,
+            },
+        }
+        if saved:
             checkpoint_config = {
-                **config,
                 "configurable": {
-                    **config["configurable"],
-                    "checkpoint_ns": checkpoint_ns,
-                },
-            }
-            # get last checkpoint
-            saved = self.checkpointer.get_tuple(checkpoint_config)
-            checkpoint = (
-                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-            )
-            checkpoint_previous_versions = (
-                saved.checkpoint["channel_versions"] if saved else {}
-            )
-            if saved:
-                checkpoint_config = {
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    }
+                    **config.get("configurable", {}),
+                    **saved.config["configurable"],
                 }
+            }
 
-            # if we're writing a subgraph update for a key that's not in the parent graph channels,
-            # we ignore the values for that key in parent graph updates
+        # if we're writing a subgraph update for a key that's not in the parent graph channels,
+        # we ignore the values for that key in parent graph updates
+        if (
+            isinstance(values, dict)
+            and has_nested_interrupts
+            and set(values) - set(self.channels)
+        ):
+            values = {k: v for k, v in values.items() if k in self.channels} or None
+
+        checkpoint_id = config["configurable"].get(
+            "update_checkpoint_id", str(uuid6(clock_seq=step + 1))
+        )
+        write_config = None
+        # find last node that updated the state, if not provided
+        if values is None and as_node is None:
+            write_config = checkpointer.put(
+                checkpoint_config,
+                create_checkpoint(checkpoint, None, step, id=checkpoint_id),
+                {
+                    "source": "update",
+                    "step": step,
+                    "writes": {},
+                },
+                {},
+            )
+        elif as_node is None and not any(
+            v for vv in checkpoint["versions_seen"].values() for v in vv.values()
+        ):
             if (
-                isinstance(values, dict)
-                and len(checkpoint_ns_and_as_node_pairs) > 1
-                and set(values) - set(graph.channels)
+                isinstance(self.input_channels, str)
+                and self.input_channels in self.nodes
             ):
-                values_to_write = {
-                    k: v for k, v in values.items() if k in graph.channels
-                } or None
-            else:
-                values_to_write = values
+                as_node = self.input_channels
+        elif as_node is None:
+            last_seen_by_node = sorted(
+                (v, n)
+                for n, seen in checkpoint["versions_seen"].items()
+                for v in seen.values()
+            )
+            # if two nodes updated the state at the same time, it's ambiguous
+            if last_seen_by_node:
+                if len(last_seen_by_node) == 1:
+                    as_node = last_seen_by_node[0][1]
+                elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                    as_node = last_seen_by_node[-1][1]
 
-            # find last node that updated the state, if not provided
-            if values_to_write is None and as_node is None:
-                write_config = self.checkpointer.put(
-                    checkpoint_config,
-                    create_checkpoint(checkpoint, None, step, id=id),
-                    {
-                        "source": "update",
-                        "step": step,
-                        "writes": {},
-                    },
-                    {},
-                )
-
-                if parent_config is None:
-                    parent_config = write_config
-
-                continue
-            elif as_node is None and not any(
-                v for vv in checkpoint["versions_seen"].values() for v in vv.values()
-            ):
-                if (
-                    isinstance(graph.input_channels, str)
-                    and graph.input_channels in graph.nodes
-                ):
-                    as_node = graph.input_channels
-            elif as_node is None:
-                last_seen_by_node = sorted(
-                    (v, n)
-                    for n, seen in checkpoint["versions_seen"].items()
-                    for v in seen.values()
-                )
-                # if two nodes updated the state at the same time, it's ambiguous
-                if last_seen_by_node:
-                    if len(last_seen_by_node) == 1:
-                        as_node = last_seen_by_node[0][1]
-                    elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                        as_node = last_seen_by_node[-1][1]
+        if write_config is None:
             if as_node is None:
                 raise InvalidUpdateError("Ambiguous update, specify as_node")
-            if as_node not in graph.nodes:
+            if as_node not in self.nodes:
                 raise InvalidUpdateError(f"Node {as_node} does not exist")
             # update channels
-            with ChannelsManager(graph.channels, checkpoint, config) as channels:
+            with ChannelsManager(self.channels, checkpoint, config) as channels:
                 # create task to run all writers of the chosen node
-                writers = graph.nodes[as_node].get_writers()
+                writers = self.nodes[as_node].get_writers()
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 task = PregelExecutableTask(
                     as_node,
-                    values_to_write,
+                    values,
                     RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                     deque(),
                     None,
@@ -828,26 +816,66 @@ class Pregel(
                 )
                 # apply to checkpoint and save
                 apply_writes(
-                    checkpoint, channels, [task], self.checkpointer.get_next_version
+                    checkpoint, channels, [task], checkpointer.get_next_version
                 )
 
                 new_versions = get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 )
-                write_config = self.checkpointer.put(
+                write_config = checkpointer.put(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, channels, step + 1, id=id),
+                    create_checkpoint(checkpoint, channels, step + 1, id=checkpoint_id),
                     {
                         "source": "update",
                         "step": step + 1,
-                        "writes": {as_node: values_to_write},
+                        "writes": {as_node: values},
                     },
                     new_versions,
                 )
-                if parent_config is None:
-                    parent_config = write_config
 
-        return parent_config
+        # apply writes to all relevant subgraph nodes
+        for name, node in self.nodes.items():
+            if (
+                isinstance(subgraph_as_node, list)
+                and len(subgraph_as_node) > 1
+                and name != subgraph_as_node[0]
+            ):
+                continue
+
+            subgraph_checkpoint_ns = (
+                f"{checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
+                if checkpoint_ns
+                else name
+            )
+            subgraph_config = {
+                **config,
+                "configurable": {
+                    **config["configurable"],
+                    "checkpointer": checkpointer,
+                    "checkpoint_ns": subgraph_checkpoint_ns,
+                    # we want all update checkpoints to share the same ID
+                    "update_checkpoint_id": checkpoint_id,
+                },
+            }
+            subgraph_as_node = (
+                subgraph_as_node[1:]
+                if isinstance(subgraph_as_node, list)
+                else subgraph_as_node
+            )
+            if isinstance(node.bound, Pregel):
+                node.bound.update_state(
+                    subgraph_config,
+                    values,
+                    as_node=subgraph_as_node,
+                )
+            elif isinstance(node.bound, RunnableSequence):
+                for runnable in node.bound.steps:
+                    if isinstance(runnable, Pregel):
+                        runnable.update_state(
+                            subgraph_config, values, as_node=subgraph_as_node
+                        )
+
+        return write_config
 
     async def aupdate_state(
         self,
@@ -855,117 +883,113 @@ class Pregel(
         values: dict[str, Any] | Any,
         as_node: Optional[str | list[str]] = None,
     ) -> RunnableConfig:
+        checkpointer = self.checkpointer or config["configurable"].get("checkpointer")
+        if not checkpointer:
+            raise ValueError("No checkpointer set")
+
+        has_nested_interrupts = _has_nested_interrupts(self)
+        if (
+            has_nested_interrupts
+            and as_node is not None
+            and not isinstance(as_node, list)
+        ):
+            raise ValueError(
+                "Since your graph has subgraphs with interrupts, you need to set 'as_node' to None or a list that defines a path to subgraph node that will be creating an update."
+            )
+
         # get last checkpoint
-        saved = await self.checkpointer.aget_tuple(config)
+        saved = await checkpointer.aget_tuple(config)
+        checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
+        checkpoint_previous_versions = (
+            saved.checkpoint["channel_versions"] if saved else {}
+        )
         step = saved.metadata.get("step", -1) if saved else -1
-        id = str(uuid6(clock_seq=step + 1))
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        if checkpoint_ns != "":
-            raise ValueError("Can only send update from the root graph")
 
         if isinstance(as_node, list):
-            *path, as_node = as_node
-            checkpoint_ns_and_as_node_pairs = [("", None)]
-            # we'll write a matching checkpoint for each parent during the update
-            checkpoint_ns_and_as_node_pairs.extend(
-                [
-                    (
-                        CHECKPOINT_NAMESPACE_SEPARATOR.join(path[:idx]),
-                        None if idx != len(path) else as_node,
-                    )
-                    for idx in range(1, len(path) + 1)
-                ]
-            )
+            subgraph_as_node = as_node
+            as_node = as_node[0] if len(as_node) == 1 else None
         else:
-            checkpoint_ns_and_as_node_pairs = [("", as_node)]
+            subgraph_as_node = as_node
 
-        parent_config = None
-        for checkpoint_ns, as_node in checkpoint_ns_and_as_node_pairs:
-            graph = _get_subgraph(self, checkpoint_ns)
-            # merge configurable fields with previous checkpoint config
+        # merge configurable fields with previous checkpoint config
+        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+        checkpoint_config = {
+            **config,
+            "configurable": {
+                **config["configurable"],
+                "checkpoint_ns": checkpoint_ns,
+            },
+        }
+        if saved:
             checkpoint_config = {
-                **config,
                 "configurable": {
-                    **config["configurable"],
-                    "checkpoint_ns": checkpoint_ns,
-                },
-            }
-            # get last checkpoint
-            saved = await self.checkpointer.aget_tuple(checkpoint_config)
-            checkpoint = (
-                copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
-            )
-            checkpoint_previous_versions = (
-                saved.checkpoint["channel_versions"] if saved else {}
-            )
-            if saved:
-                checkpoint_config = {
-                    "configurable": {
-                        **config.get("configurable", {}),
-                        **saved.config["configurable"],
-                    }
+                    **config.get("configurable", {}),
+                    **saved.config["configurable"],
                 }
+            }
 
-            # if we're writing a subgraph update for a key that's not in the parent graph channels,
-            # we ignore the values for that key in parent graph updates
+        # if we're writing a subgraph update for a key that's not in the parent graph channels,
+        # we ignore the values for that key in parent graph updates
+        if (
+            isinstance(values, dict)
+            and has_nested_interrupts
+            and set(values) - set(self.channels)
+        ):
+            values = {k: v for k, v in values.items() if k in self.channels} or None
+
+        checkpoint_id = config["configurable"].get(
+            "update_checkpoint_id", str(uuid6(clock_seq=step + 1))
+        )
+        write_config = None
+        # find last node that updated the state, if not provided
+        if values is None and as_node is None:
+            write_config = await checkpointer.aput(
+                checkpoint_config,
+                create_checkpoint(checkpoint, None, step, id=checkpoint_id),
+                {
+                    "source": "update",
+                    "step": step,
+                    "writes": {},
+                },
+                {},
+            )
+        elif as_node is None and not any(
+            v for vv in checkpoint["versions_seen"].values() for v in vv.values()
+        ):
             if (
-                isinstance(values, dict)
-                and len(checkpoint_ns_and_as_node_pairs) > 1
-                and set(values) - set(graph.channels)
+                isinstance(self.input_channels, str)
+                and self.input_channels in self.nodes
             ):
-                values_to_write = {
-                    k: v for k, v in values.items() if k in graph.channels
-                } or None
-            else:
-                values_to_write = values
+                as_node = self.input_channels
+        elif as_node is None:
+            last_seen_by_node = sorted(
+                (v, n)
+                for n, seen in checkpoint["versions_seen"].items()
+                for v in seen.values()
+            )
+            # if two nodes updated the state at the same time, it's ambiguous
+            if last_seen_by_node:
+                if len(last_seen_by_node) == 1:
+                    as_node = last_seen_by_node[0][1]
+                elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
+                    as_node = last_seen_by_node[-1][1]
 
-            # find last node that updated the state, if not provided
-            if values_to_write is None and as_node is None:
-                return await self.checkpointer.aput(
-                    checkpoint_config,
-                    create_checkpoint(checkpoint, None, step, id=id),
-                    {
-                        "source": "update",
-                        "step": step,
-                        "writes": {},
-                    },
-                    {},
-                )
-            elif as_node is None and not any(
-                v for vv in checkpoint["versions_seen"].values() for v in vv.values()
-            ):
-                if (
-                    isinstance(graph.input_channels, str)
-                    and graph.input_channels in graph.nodes
-                ):
-                    as_node = graph.input_channels
-            elif as_node is None:
-                last_seen_by_node = sorted(
-                    (v, n)
-                    for n, seen in checkpoint["versions_seen"].items()
-                    for v in seen.values()
-                )
-                # if two nodes updated the state at the same time, it's ambiguous
-                if last_seen_by_node:
-                    if len(last_seen_by_node) == 1:
-                        as_node = last_seen_by_node[0][1]
-                    elif last_seen_by_node[-1][0] != last_seen_by_node[-2][0]:
-                        as_node = last_seen_by_node[-1][1]
+        if write_config is None:
             if as_node is None:
                 raise InvalidUpdateError("Ambiguous update, specify as_node")
-            if as_node not in graph.nodes:
+            if as_node not in self.nodes:
                 raise InvalidUpdateError(f"Node {as_node} does not exist")
-            # update channels, acting as the chosen node
+            # update channels
             async with AsyncChannelsManager(
-                graph.channels, checkpoint, config
+                self.channels, checkpoint, config
             ) as channels:
                 # create task to run all writers of the chosen node
-                writers = graph.nodes[as_node].get_writers()
+                writers = self.nodes[as_node].get_writers()
                 if not writers:
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 task = PregelExecutableTask(
                     as_node,
-                    values_to_write,
+                    values,
                     RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                     deque(),
                     None,
@@ -990,26 +1014,66 @@ class Pregel(
                 )
                 # apply to checkpoint and save
                 apply_writes(
-                    checkpoint, channels, [task], self.checkpointer.get_next_version
+                    checkpoint, channels, [task], checkpointer.get_next_version
                 )
 
                 new_versions = get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 )
-                write_config = await self.checkpointer.aput(
+                write_config = await checkpointer.aput(
                     checkpoint_config,
-                    create_checkpoint(checkpoint, channels, step + 1, id=id),
+                    create_checkpoint(checkpoint, channels, step + 1, id=checkpoint_id),
                     {
                         "source": "update",
                         "step": step + 1,
-                        "writes": {as_node: values_to_write},
+                        "writes": {as_node: values},
                     },
                     new_versions,
                 )
-                if parent_config is None:
-                    parent_config = write_config
 
-        return parent_config
+        # apply writes to all relevant subgraph nodes
+        for name, node in self.nodes.items():
+            if (
+                isinstance(subgraph_as_node, list)
+                and len(subgraph_as_node) > 1
+                and name != subgraph_as_node[0]
+            ):
+                continue
+
+            subgraph_checkpoint_ns = (
+                f"{checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
+                if checkpoint_ns
+                else name
+            )
+            subgraph_config = {
+                **config,
+                "configurable": {
+                    **config["configurable"],
+                    "checkpointer": checkpointer,
+                    "checkpoint_ns": subgraph_checkpoint_ns,
+                    # we want all update checkpoints to share the same ID
+                    "update_checkpoint_id": checkpoint_id,
+                },
+            }
+            subgraph_as_node = (
+                subgraph_as_node[1:]
+                if isinstance(subgraph_as_node, list)
+                else subgraph_as_node
+            )
+            if isinstance(node.bound, Pregel):
+                await node.bound.aupdate_state(
+                    subgraph_config,
+                    values,
+                    as_node=subgraph_as_node,
+                )
+            elif isinstance(node.bound, RunnableSequence):
+                for runnable in node.bound.steps:
+                    if isinstance(runnable, Pregel):
+                        await runnable.aupdate_state(
+                            subgraph_config, values, as_node=subgraph_as_node
+                        )
+
+        return write_config
 
     def _defaults(
         self,
