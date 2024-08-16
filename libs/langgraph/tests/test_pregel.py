@@ -11041,6 +11041,1459 @@ def test_nested_graph_update_state(
         ),
     ]
 
+    # test with as_node=None
+    config = {"configurable": {"thread_id": "3"}}
+    child_config = {"configurable": {"thread_id": "3", "checkpoint_ns": "inner"}}
+    app.invoke({"my_key": "meow"}, config=config, debug=True)
+    latest_config = app.get_state(config).config
+    updated_config = app.update_state(
+        latest_config, {"my_key": "hi bark here"}, as_node=None
+    )
+    assert list(app.get_state_history(config)) == [
+        # last snapshot is the update for the subgraph
+        StateSnapshot(
+            values={"my_key": "hi bark here"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 2,
+                "source": "update",
+                "writes": {"outer_1": {"my_key": "hi bark here"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={"my_key": "hi bark here", "my_other_key": "hi meow"},
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "3",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "step": 2,
+                        "source": "update",
+                        "writes": {"inner_1": {"my_key": "hi bark here"}},
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "3",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 1,
+                "source": "loop",
+                "writes": {"outer_1": {"my_key": "hi meow"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "3",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "step": 1,
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi meow here",
+                                "my_other_key": "hi meow",
+                            }
+                        },
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "3",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "meow"},
+            next=("outer_1",),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"step": 0, "source": "loop", "writes": None},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"step": -1, "source": "input", "writes": {"my_key": "meow"}},
+            created_at=AnyStr(),
+            parent_config=None,
+            subgraph_state_snapshots=None,
+        ),
+    ]
+    # restart from interrupt
+    app.invoke(None, updated_config)
+    assert list(app.get_state_history(config)) == [
+        StateSnapshot(
+            values={"my_key": "hi bark here and there and back again"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 4,
+                "source": "loop",
+                "writes": {
+                    "outer_2": {"my_key": "hi bark here and there and back again"}
+                },
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi bark here and there"},
+            next=("outer_2",),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 3,
+                "source": "loop",
+                "writes": {"inner": {"my_key": "hi bark here and there"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi bark here"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 2,
+                "source": "update",
+                "writes": {"outer_1": {"my_key": "hi bark here"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={
+                        "my_key": "hi bark here and there",
+                        "my_other_key": "hi bark here",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "3",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "step": 3,
+                        "source": "loop",
+                        "writes": {
+                            "inner_2": {
+                                "my_key": "hi bark here and there",
+                                "my_other_key": "hi bark here",
+                            }
+                        },
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "3",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow"},
+            next=("inner",),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "step": 1,
+                "source": "loop",
+                "writes": {"outer_1": {"my_key": "hi meow"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "inner": StateSnapshot(
+                    values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+                    next=("inner_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "3",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "step": 1,
+                        "source": "loop",
+                        "writes": {
+                            "inner_1": {
+                                "my_key": "hi meow here",
+                                "my_other_key": "hi meow",
+                            }
+                        },
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "3",
+                            "checkpoint_ns": "inner",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "meow"},
+            next=("outer_1",),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"step": 0, "source": "loop", "writes": None},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "3",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"step": -1, "source": "input", "writes": {"my_key": "meow"}},
+            created_at=AnyStr(),
+            parent_config=None,
+            subgraph_state_snapshots=None,
+        ),
+    ]
+
+
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite", "postgres", "postgres_pipe"],
+)
+def test_doubly_nested_graph_update_state(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    class State(TypedDict):
+        my_key: str
+
+    class ChildState(TypedDict):
+        my_key: str
+
+    class GrandChildState(TypedDict):
+        my_key: str
+
+    def grandchild_1(state: ChildState):
+        return {"my_key": state["my_key"] + " here"}
+
+    def grandchild_2(state: ChildState):
+        return {
+            "my_key": state["my_key"] + " and there",
+        }
+
+    grandchild = StateGraph(GrandChildState)
+    grandchild.add_node("grandchild_1", grandchild_1)
+    grandchild.add_node("grandchild_2", grandchild_2)
+    grandchild.add_edge("grandchild_1", "grandchild_2")
+    grandchild.set_entry_point("grandchild_1")
+    grandchild.set_finish_point("grandchild_2")
+
+    child = StateGraph(ChildState)
+    child.add_node(
+        "child_1",
+        grandchild.compile(interrupt_before=["grandchild_2"]),
+    )
+    child.set_entry_point("child_1")
+    child.set_finish_point("child_1")
+
+    def parent_1(state: State):
+        return {"my_key": "hi " + state["my_key"]}
+
+    def parent_2(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("parent_1", parent_1)
+    graph.add_node("child", child.compile())
+    graph.add_node("parent_2", parent_2)
+    graph.set_entry_point("parent_1")
+    graph.add_edge("parent_1", "child")
+    graph.add_edge("child", "parent_2")
+    graph.set_finish_point("parent_2")
+
+    app = graph.compile(checkpointer=checkpointer)
+
+    # test updating grandchild node
+    config = {"configurable": {"thread_id": "1"}}
+    child_config = {"configurable": {"thread_id": "1", "checkpoint_ns": "child"}}
+    grandchild_config = {
+        "configurable": {"thread_id": "1", "checkpoint_ns": "child|child_1"}
+    }
+    assert list(app.stream({"my_key": "my value"}, config)) == [
+        {"parent_1": {"my_key": "hi my value"}}
+    ]
+    assert list(app.get_state_history(config)) == [
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("child",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"parent_1": {"my_key": "hi my value"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child": StateSnapshot(
+                    values={"my_key": "hi my value"},
+                    next=("child_1",),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={"source": "loop", "writes": None, "step": 0},
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots={
+                        "child_1": StateSnapshot(
+                            values={"my_key": "hi my value here"},
+                            next=("grandchild_2",),
+                            config={
+                                "configurable": {
+                                    "thread_id": "1",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            metadata={
+                                "source": "loop",
+                                "writes": {
+                                    "grandchild_1": {"my_key": "hi my value here"}
+                                },
+                                "step": 1,
+                            },
+                            created_at=AnyStr(),
+                            parent_config={
+                                "configurable": {
+                                    "thread_id": "1",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            subgraph_state_snapshots=None,
+                        )
+                    },
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "my value"},
+            next=("parent_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "loop", "writes": None, "step": 0},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "input", "writes": {"my_key": "my value"}, "step": -1},
+            created_at=AnyStr(),
+            parent_config=None,
+            subgraph_state_snapshots=None,
+        ),
+    ]
+    assert list(app.get_state_history(child_config)) == [
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("child_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "loop", "writes": None, "step": 0},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child_1": StateSnapshot(
+                    values={"my_key": "hi my value here"},
+                    next=("grandchild_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        )
+    ]
+    assert list(app.get_state_history(grandchild_config)) == [
+        StateSnapshot(
+            values={"my_key": "hi my value here"},
+            next=("grandchild_2",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        )
+    ]
+
+    app.update_state(
+        config,
+        {"my_key": "hi meow value here"},
+        as_node=["child", "child_1", "grandchild_1"],
+    )
+    assert list(app.stream(None, config)) == [
+        {"child": {"my_key": "hi meow value here and there"}},
+        {"parent_2": {"my_key": "hi meow value here and there and back again"}},
+    ]
+    assert list(app.get_state_history(config)) == [
+        StateSnapshot(
+            values={"my_key": "hi meow value here and there and back again"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "parent_2": {
+                        "my_key": "hi meow value here and there and back again"
+                    }
+                },
+                "step": 4,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow value here and there"},
+            next=("parent_2",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"child": {"my_key": "hi meow value here and there"}},
+                "step": 3,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow value here"},
+            next=("child",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "update",
+                "step": 2,
+                "writes": {"parent_1": {"my_key": "hi meow value here"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child": StateSnapshot(
+                    values={"my_key": "hi meow value here and there"},
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "child_1": {"my_key": "hi meow value here and there"}
+                        },
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots={
+                        "child_1": StateSnapshot(
+                            values={"my_key": "hi meow value here and there"},
+                            next=(),
+                            config={
+                                "configurable": {
+                                    "thread_id": "1",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            metadata={
+                                "source": "loop",
+                                "writes": {
+                                    "grandchild_2": {
+                                        "my_key": "hi meow value here and there"
+                                    }
+                                },
+                                "step": 3,
+                            },
+                            created_at=AnyStr(),
+                            parent_config={
+                                "configurable": {
+                                    "thread_id": "1",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            subgraph_state_snapshots=None,
+                        )
+                    },
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("child",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"parent_1": {"my_key": "hi my value"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child": StateSnapshot(
+                    values={"my_key": "hi my value"},
+                    next=("child_1",),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={"source": "loop", "writes": None, "step": 0},
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots={
+                        "child_1": StateSnapshot(
+                            values={"my_key": "hi my value here"},
+                            next=("grandchild_2",),
+                            config={
+                                "configurable": {
+                                    "thread_id": "1",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            metadata={
+                                "source": "loop",
+                                "writes": {
+                                    "grandchild_1": {"my_key": "hi my value here"}
+                                },
+                                "step": 1,
+                            },
+                            created_at=AnyStr(),
+                            parent_config={
+                                "configurable": {
+                                    "thread_id": "1",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            subgraph_state_snapshots=None,
+                        )
+                    },
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "my value"},
+            next=("parent_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "loop", "writes": None, "step": 0},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "input", "writes": {"my_key": "my value"}, "step": -1},
+            created_at=AnyStr(),
+            parent_config=None,
+            subgraph_state_snapshots=None,
+        ),
+    ]
+    assert list(app.get_state_history(child_config)) == [
+        StateSnapshot(
+            values={"my_key": "hi meow value here and there"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"child_1": {"my_key": "hi meow value here and there"}},
+                "step": 2,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child_1": StateSnapshot(
+                    values={"my_key": "hi meow value here and there"},
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "grandchild_2": {"my_key": "hi meow value here and there"}
+                        },
+                        "step": 3,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("child_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "loop", "writes": None, "step": 0},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child_1": StateSnapshot(
+                    values={"my_key": "hi my value here"},
+                    next=("grandchild_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+    ]
+    assert list(app.get_state_history(grandchild_config)) == [
+        StateSnapshot(
+            values={"my_key": "hi meow value here and there"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"grandchild_2": {"my_key": "hi meow value here and there"}},
+                "step": 3,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value here"},
+            next=("grandchild_2",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+    ]
+
+    # test as_node=None
+    config = {"configurable": {"thread_id": "2"}}
+    child_config = {"configurable": {"thread_id": "2", "checkpoint_ns": "child"}}
+    grandchild_config = {
+        "configurable": {"thread_id": "2", "checkpoint_ns": "child|child_1"}
+    }
+    assert list(app.stream({"my_key": "my value"}, config)) == [
+        {"parent_1": {"my_key": "hi my value"}}
+    ]
+    app.update_state(config, {"my_key": "hi meow value here"}, as_node=None)
+    assert list(app.stream(None, config)) == [
+        {"child": {"my_key": "hi meow value here and there"}},
+        {"parent_2": {"my_key": "hi meow value here and there and back again"}},
+    ]
+    assert list(app.get_state_history(config)) == [
+        StateSnapshot(
+            values={"my_key": "hi meow value here and there and back again"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {
+                    "parent_2": {
+                        "my_key": "hi meow value here and there and back again"
+                    }
+                },
+                "step": 4,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow value here and there"},
+            next=("parent_2",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"child": {"my_key": "hi meow value here and there"}},
+                "step": 3,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi meow value here"},
+            next=("child",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "update",
+                "step": 2,
+                "writes": {"parent_1": {"my_key": "hi meow value here"}},
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child": StateSnapshot(
+                    values={"my_key": "hi meow value here and there"},
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "child_1": {"my_key": "hi meow value here and there"}
+                        },
+                        "step": 2,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots={
+                        "child_1": StateSnapshot(
+                            values={"my_key": "hi meow value here and there"},
+                            next=(),
+                            config={
+                                "configurable": {
+                                    "thread_id": "2",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            metadata={
+                                "source": "loop",
+                                "writes": {
+                                    "grandchild_2": {
+                                        "my_key": "hi meow value here and there"
+                                    }
+                                },
+                                "step": 3,
+                            },
+                            created_at=AnyStr(),
+                            parent_config={
+                                "configurable": {
+                                    "thread_id": "2",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            subgraph_state_snapshots=None,
+                        )
+                    },
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("child",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"parent_1": {"my_key": "hi my value"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child": StateSnapshot(
+                    values={"my_key": "hi my value"},
+                    next=("child_1",),
+                    config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={"source": "loop", "writes": None, "step": 0},
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "child",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots={
+                        "child_1": StateSnapshot(
+                            values={"my_key": "hi my value here"},
+                            next=("grandchild_2",),
+                            config={
+                                "configurable": {
+                                    "thread_id": "2",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            metadata={
+                                "source": "loop",
+                                "writes": {
+                                    "grandchild_1": {"my_key": "hi my value here"}
+                                },
+                                "step": 1,
+                            },
+                            created_at=AnyStr(),
+                            parent_config={
+                                "configurable": {
+                                    "thread_id": "2",
+                                    "checkpoint_ns": "child|child_1",
+                                    "checkpoint_id": AnyStr(),
+                                }
+                            },
+                            subgraph_state_snapshots=None,
+                        )
+                    },
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "my value"},
+            next=("parent_1",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "loop", "writes": None, "step": 0},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={},
+            next=("__start__",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "input", "writes": {"my_key": "my value"}, "step": -1},
+            created_at=AnyStr(),
+            parent_config=None,
+            subgraph_state_snapshots=None,
+        ),
+    ]
+    assert list(app.get_state_history(child_config)) == [
+        StateSnapshot(
+            values={"my_key": "hi meow value here and there"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"child_1": {"my_key": "hi meow value here and there"}},
+                "step": 2,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child_1": StateSnapshot(
+                    values={"my_key": "hi meow value here and there"},
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {
+                            "grandchild_2": {"my_key": "hi meow value here and there"}
+                        },
+                        "step": 3,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value"},
+            next=("child_1",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={"source": "loop", "writes": None, "step": 0},
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "child",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots={
+                "child_1": StateSnapshot(
+                    values={"my_key": "hi my value here"},
+                    next=("grandchild_2",),
+                    config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+                        "step": 1,
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "2",
+                            "checkpoint_ns": "child|child_1",
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    subgraph_state_snapshots=None,
+                )
+            },
+        ),
+    ]
+    assert list(app.get_state_history(grandchild_config)) == [
+        StateSnapshot(
+            values={"my_key": "hi meow value here and there"},
+            next=(),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"grandchild_2": {"my_key": "hi meow value here and there"}},
+                "step": 3,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+        StateSnapshot(
+            values={"my_key": "hi my value here"},
+            next=("grandchild_2",),
+            config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "source": "loop",
+                "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+                "step": 1,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "2",
+                    "checkpoint_ns": "child|child_1",
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            subgraph_state_snapshots=None,
+        ),
+    ]
+
 
 @pytest.mark.repeat(10)
 @pytest.mark.parametrize(
