@@ -735,7 +735,7 @@ class Pregel(
         # if we're writing a subgraph update for a key that's not in the parent graph channels,
         # we ignore the values for that key in parent graph updates
         if isinstance(values, dict) and all(k not in self.channels for k in values):
-            values_to_write = None
+            values_to_write = None if has_nested_interrupts else values
         else:
             values_to_write = values
 
@@ -933,7 +933,7 @@ class Pregel(
         # if we're writing a subgraph update for a key that's not in the parent graph channels,
         # we ignore the values for that key in parent graph updates
         if isinstance(values, dict) and all(k not in self.channels for k in values):
-            values_to_write = None
+            values_to_write = None if has_nested_interrupts else values
         else:
             values_to_write = values
 
