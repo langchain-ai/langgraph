@@ -18,7 +18,6 @@ from langgraph.managed.base import (
     ConfiguredManagedValue,
     WritableManagedValue,
 )
-from langgraph.pregel.types import PregelTaskDescription
 
 V = dict[str, Any]
 
@@ -66,7 +65,7 @@ class ScopedValue(WritableManagedValue[Value, Update]):
                 f"Scope {scope} for shared state key not in config.configurable"
             )
 
-    def __call__(self, step: int, task: PregelTaskDescription) -> Value:
+    def __call__(self, step: int) -> Value:
         return self.value.copy()
 
     def _process_update(
