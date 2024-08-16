@@ -19,7 +19,7 @@ from typing import (
     TypeVar,
     Union,
 )
-from uuid import UUID
+from uuid import UUID, uuid5
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
@@ -208,16 +208,17 @@ class PregelLoop:
                 }
             )
             # after execution, check if we should interrupt
-            if nodes := should_interrupt(self.checkpoint, interrupt_after, self.tasks):
+            if tasks := should_interrupt(self.checkpoint, interrupt_after, self.tasks):
                 self.status = "interrupt_after"
-                checkpoint_ns = self.config["configurable"].get("checkpoint_ns", "")
-                interrupts = [Interrupt("after", f"{checkpoint_ns}|{n}") for n in nodes]
+                interrupts = [
+                    (t.id, Interrupt(str(uuid5(UUID(t.id), "after")), "after"))
+                    for t in tasks
+                ]
+                for tid, interrupt in interrupts:
+                    self.put_writes(tid, [(INTERRUPT, interrupt)])
                 if self.is_nested:
-                    raise GraphInterrupt(interrupts)
+                    raise GraphInterrupt([i[1] for i in interrupts])
                 else:
-                    self.put_writes(
-                        str(UUID(int=0)), [(INTERRUPT, i) for i in interrupts]
-                    )
                     return False
         else:
             return False
@@ -265,7 +266,7 @@ class PregelLoop:
         # if there are pending writes from a previous loop, apply them
         if self.checkpoint_pending_writes:
             for tid, k, v in self.checkpoint_pending_writes:
-                if k == ERROR:  # TODO same for INTERRUPT
+                if k in (ERROR, INTERRUPT):
                     continue
                 if task := next((t for t in self.tasks if t.id == tid), None):
                     task.writes.append((k, v))
@@ -280,14 +281,17 @@ class PregelLoop:
             )
 
         # before execution, check if we should interrupt
-        if nodes := should_interrupt(self.checkpoint, interrupt_before, self.tasks):
+        if tasks := should_interrupt(self.checkpoint, interrupt_before, self.tasks):
             self.status = "interrupt_before"
-            checkpoint_ns = self.config["configurable"].get("checkpoint_ns", "")
-            interrupts = [Interrupt("before", f"{checkpoint_ns}|{n}") for n in nodes]
+            interrupts = [
+                (t.id, Interrupt(str(uuid5(UUID(t.id), "before")), "before"))
+                for t in tasks
+            ]
+            for tid, interrupt in interrupts:
+                self.put_writes(tid, [(INTERRUPT, interrupt)])
             if self.is_nested:
-                raise GraphInterrupt(interrupts)
+                raise GraphInterrupt([i[1] for i in interrupts])
             else:
-                self.put_writes(str(UUID(int=0)), [(INTERRUPT, i) for i in interrupts])
                 return False
 
         # produce debug output
@@ -405,9 +409,6 @@ class PregelLoop:
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
         if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
-            self.put_writes(
-                str(UUID(int=0)), [(INTERRUPT, i) for i in exc_value.args[0]]
-            )
             return True
 
 

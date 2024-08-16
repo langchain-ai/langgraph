@@ -1,11 +1,12 @@
 from dataclasses import dataclass
-from typing import Any, Literal, Union
+from typing import Any, Literal
 
 INPUT = "__input__"
 CONFIG_KEY_SEND = "__pregel_send"
 CONFIG_KEY_READ = "__pregel_read"
 CONFIG_KEY_CHECKPOINTER = "__pregel_checkpointer"
 CONFIG_KEY_RESUMING = "__pregel_resuming"
+CONFIG_KEY_TASK_ID = "__pregel_task_id"
 INTERRUPT = "__interrupt__"
 ERROR = "__error__"
 TASKS = "__pregel_tasks"
@@ -17,6 +18,7 @@ RESERVED = {
     CONFIG_KEY_READ,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_TASK_ID,
     INPUT,
 }
 TAG_HIDDEN = "langsmith:hidden"
@@ -98,12 +100,6 @@ class Send:
 
 @dataclass
 class Interrupt:
+    id: str
     when: Literal["before", "during", "after"]
-    node: Union[str, list[str]]
     value: Any = None
-
-    def __post_init__(self):
-        if isinstance(self.node, str):
-            self.node = [p for p in self.node.split("|") if p]
-            if len(self.node) == 1:
-                self.node = self.node[0]

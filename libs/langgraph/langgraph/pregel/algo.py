@@ -38,6 +38,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_TASK_ID,
     INTERRUPT,
     RESERVED,
     TAG_HIDDEN,
@@ -68,7 +69,7 @@ def should_interrupt(
     checkpoint: Checkpoint,
     interrupt_nodes: Union[All, Sequence[str]],
     tasks: list[PregelExecutableTask],
-) -> list[str]:
+) -> list[PregelExecutableTask]:
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()
     seen = checkpoint["versions_seen"].get(INTERRUPT, {})
@@ -80,7 +81,7 @@ def should_interrupt(
     # and any triggered node is in interrupt_nodes list
     return (
         [
-            task.name
+            task
             for task in tasks
             if (
                 (not task.config or TAG_HIDDEN not in task.config.get("tags"))
@@ -310,6 +311,7 @@ def prepare_next_tasks(
                                 else None
                             ),
                             configurable={
+                                CONFIG_KEY_TASK_ID: task_id,
                                 # deque.extend is thread-safe
                                 CONFIG_KEY_SEND: partial(
                                     local_write, writes.extend, processes, channels
@@ -400,6 +402,7 @@ def prepare_next_tasks(
                                     else None
                                 ),
                                 configurable={
+                                    CONFIG_KEY_TASK_ID: task_id,
                                     # deque.extend is thread-safe
                                     CONFIG_KEY_SEND: partial(
                                         local_write, writes.extend, processes, channels

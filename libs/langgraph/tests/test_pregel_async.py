@@ -47,7 +47,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
-from langgraph.constants import ERROR, Send
+from langgraph.constants import ERROR, Interrupt, Send
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
@@ -5165,7 +5165,13 @@ async def test_branch_then() -> None:
         }
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value prepared", "market": "DE"},
-            tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_two_slow",
+                    interrupts=(Interrupt(AnyStr(), "before"),),
+                ),
+            ),
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
@@ -5211,7 +5217,13 @@ async def test_branch_then() -> None:
         }
         assert await tool_two.aget_state(thread2) == StateSnapshot(
             values={"my_key": "value prepared", "market": "US"},
-            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_two_fast",
+                    interrupts=(Interrupt(AnyStr(), "before"),),
+                ),
+            ),
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
