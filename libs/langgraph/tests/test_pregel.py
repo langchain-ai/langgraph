@@ -1,4 +1,5 @@
 import json
+import logging
 import operator
 import time
 import warnings
@@ -1191,7 +1192,8 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
     assert app.invoke(2) == [3, 3]
 
 
-def test_invoke_checkpoint(mocker: MockerFixture) -> None:
+def test_invoke_checkpoint(mocker: MockerFixture, caplog) -> None:
+    caplog.set_level(logging.INFO)
     add_one = mocker.Mock(side_effect=lambda x: x["total"] + x["input"])
     errored_once = False
 
@@ -6260,6 +6262,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": -1,
                         "writes": {"my_key": "value", "market": "DE"},
                     },
+                    "next": ["__start__"],
                 },
             },
             {
@@ -6287,6 +6290,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 0,
                         "writes": None,
                     },
+                    "next": ["prepare"],
                 },
             },
             {
@@ -6335,6 +6339,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 1,
                         "writes": {"prepare": {"my_key": " prepared"}},
                     },
+                    "next": ["tool_two_slow"],
                 },
             },
             {
@@ -6383,6 +6388,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 2,
                         "writes": {"tool_two_slow": {"my_key": " slow"}},
                     },
+                    "next": ["finish"],
                 },
             },
             {
@@ -6431,6 +6437,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 3,
                         "writes": {"finish": {"my_key": " finished"}},
                     },
+                    "next": [],
                 },
             },
         ]

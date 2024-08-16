@@ -9,7 +9,7 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
 from langgraph.constants import TAG_HIDDEN
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.types import PregelExecutableTask
@@ -118,16 +118,19 @@ def map_debug_checkpoint(
     channels: Mapping[str, BaseChannel],
     stream_channels: Union[str, Sequence[str]],
     metadata: CheckpointMetadata,
+    checkpoint: Checkpoint,
+    tasks: list[PregelExecutableTask],
+    pending_writes: list[PendingWrite],
 ) -> Iterator[DebugOutputCheckpoint]:
-    ts = datetime.now(timezone.utc).isoformat()
     yield {
         "type": "checkpoint",
-        "timestamp": ts,
+        "timestamp": checkpoint["ts"],
         "step": step,
         "payload": {
             "config": config,
             "values": read_channels(channels, stream_channels),
             "metadata": metadata,
+            "next": [t.name for t in tasks],
         },
     }
 
