@@ -150,3 +150,4 @@ async def AsyncManagedValuesManager(
 
 
 ChannelKeyPlaceholder = object()
+ChannelTypePlaceholder = object()

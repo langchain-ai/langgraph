@@ -1,3 +1,4 @@
+import collections.abc
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
     Any,
@@ -5,10 +6,11 @@ from typing import (
     Iterator,
     Optional,
     Sequence,
+    Type,
 )
 
 from langchain_core.runnables import RunnableConfig
-from typing_extensions import Self
+from typing_extensions import NotRequired, Required, Self
 
 from langgraph.constants import CONFIG_KEY_KV
 from langgraph.errors import InvalidUpdateError
@@ -24,6 +26,17 @@ V = dict[str, Any]
 
 Value = dict[str, V]
 Update = dict[str, Optional[V]]
+
+
+# Adapted from typing_extensions
+def _strip_extras(t):
+    """Strips Annotated, Required and NotRequired from a given type."""
+    if hasattr(t, "__origin__"):
+        return _strip_extras(t.__origin__)
+    if hasattr(t, "__origin__") and t.__origin__ in (Required, NotRequired):
+        return _strip_extras(t.__args__[0])
+
+    return t
 
 
 class SharedValue(WritableManagedValue[Value, Update]):
@@ -51,7 +64,16 @@ class SharedValue(WritableManagedValue[Value, Update]):
                 value.value = saved[value.ns]
             yield value
 
-    def __init__(self, config: RunnableConfig, *, scope: str, key: str) -> None:
+    def __init__(
+        self, config: RunnableConfig, *, typ: Type[Any], scope: str, key: str
+    ) -> None:
+        if typ := _strip_extras(typ):
+            if typ not in (
+                dict,
+                collections.abc.Mapping,
+                collections.abc.MutableMapping,
+            ):
+                raise ValueError("SharedValue must be a dict")
         self.scope = scope
         self.config = config
         self.value: Value = {}
