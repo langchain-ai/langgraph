@@ -6,9 +6,11 @@ CONFIG_KEY_READ = "__pregel_read"
 CONFIG_KEY_CHECKPOINTER = "__pregel_checkpointer"
 CONFIG_KEY_RESUMING = "__pregel_resuming"
 INTERRUPT = "__interrupt__"
+ERROR = "__error__"
 TASKS = "__pregel_tasks"
 RESERVED = {
     INTERRUPT,
+    ERROR,
     TASKS,
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,
