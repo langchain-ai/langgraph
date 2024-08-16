@@ -122,6 +122,7 @@ def local_write(
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
     writes: Sequence[tuple[str, Any]],
+    managed: ManagedValueMapping,
 ) -> None:
     for chan, value in writes:
         if chan == TASKS:
@@ -131,7 +132,7 @@ def local_write(
                 )
             if value.node not in processes:
                 raise InvalidUpdateError(f"Invalid node name {value.node} in packet")
-        elif chan not in channels:
+        elif chan not in channels and chan not in managed:
             logger.warning(f"Skipping write for channel '{chan}' which has no readers")
     commit(writes)
 
@@ -321,7 +322,11 @@ def prepare_next_tasks(
                                 CONFIG_KEY_TASK_ID: task_id,
                                 # deque.extend is thread-safe
                                 CONFIG_KEY_SEND: partial(
-                                    local_write, writes.extend, processes, channels
+                                    local_write,
+                                    writes.extend,
+                                    processes,
+                                    channels,
+                                    managed,
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,
@@ -412,7 +417,11 @@ def prepare_next_tasks(
                                     CONFIG_KEY_TASK_ID: task_id,
                                     # deque.extend is thread-safe
                                     CONFIG_KEY_SEND: partial(
-                                        local_write, writes.extend, processes, channels
+                                        local_write,
+                                        writes.extend,
+                                        processes,
+                                        channels,
+                                        managed,
                                     ),
                                     CONFIG_KEY_READ: partial(
                                         local_read,
