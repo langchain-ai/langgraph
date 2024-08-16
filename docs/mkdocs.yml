@@ -126,9 +126,11 @@ nav:
   - "How-to Guides":
       - "how-tos/index.md"
       - Controllability:
-          - Create subgraphs: how-tos/subgraph.ipynb
           - Create branches for parallel execution: how-tos/branching.ipynb
           - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
+      - Subgraphs:
+          - Create subgraphs: how-tos/subgraph.ipynb
+          - Manage state in subgraphs: how-tos/subgraphs-manage-state.ipynb
       - Persistence:
           - Add persistence ("memory"): how-tos/persistence.ipynb
           - Manage conversation history: how-tos/memory/manage-conversation-history.ipynb

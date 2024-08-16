@@ -16,6 +16,13 @@ These how-to guides show how to achieve that controllability.
 - [How to create branches for parallel execution](branching.ipynb)
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 
+## Subgraphs
+LangGraph allows you to easily specify one graph as a node (or a subgraph) in another graph.
+This can be great for facilitating multi-agent workflows.
+
+- [How to create subgraphs](subgraph.ipynb)
+- [Manage state in subgraphs](subgraphs-manage-state.ipynb)
+
 
 ## Persistence
 
