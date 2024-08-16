@@ -1,13 +1,19 @@
 import dataclasses
+import pathlib
+import re
 import sys
 import uuid
-from datetime import datetime, timezone
+from collections import deque
+from datetime import date, datetime, time, timezone
+from decimal import Decimal
 from enum import Enum
+from ipaddress import IPv4Address
 
 import dataclasses_json
 from langchain_core.pydantic_v1 import BaseModel as LcBaseModel
 from langchain_core.runnables import RunnableMap
 from pydantic import BaseModel
+from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 
@@ -60,11 +66,24 @@ class Person:
 
 def test_serde_jsonplus() -> None:
     uid = uuid.UUID(int=1)
-    current_time = datetime(2024, 4, 19, 23, 4, 57, 51022, timezone.max)
+    deque_instance = deque([1, 2, 3])
+    tzn = ZoneInfo("America/New_York")
+    ip4 = IPv4Address("192.168.0.1")
+    current_date = date(2024, 4, 19)
+    current_time = time(23, 4, 57, 51022, timezone.max)
+    current_timestamp = datetime(2024, 4, 19, 23, 4, 57, 51022, timezone.max)
 
     to_serialize = {
-        "uid": uid,
+        "path": pathlib.Path("foo", "bar"),
+        "re": re.compile(r"foo", re.DOTALL),
+        "decimal": Decimal("1.10101"),
+        "ip4": ip4,
+        "deque": deque_instance,
+        "tzn": tzn,
+        "date": current_date,
         "time": current_time,
+        "uid": uid,
+        "timestamp": current_timestamp,
         "my_slotted_class": MyDataclassWSlots("bar", 2),
         "my_dataclass": MyDataclass("foo", 1),
         "my_enum": MyEnum.FOO,
@@ -103,7 +122,7 @@ def test_serde_jsonplus() -> None:
 
     assert dumped == (
         "json",
-        b"""{"uid": {"lc": 2, "type": "constructor", "id": ["uuid", "UUID"], "method": null, "args": ["00000000000000000000000000000001"], "kwargs": {}}, "time": {"lc": 2, "type": "constructor", "id": ["datetime", "datetime"], "method": "fromisoformat", "args": ["2024-04-19T23:04:57.051022+23:59"], "kwargs": {}}, "my_slotted_class": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyDataclassWSlots"], "method": null, "args": [], "kwargs": {"foo": "bar", "bar": 2}}, "my_dataclass": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyDataclass"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}, "my_enum": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyEnum"], "method": null, "args": ["foo"], "kwargs": {}}, "my_pydantic": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyPydantic"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}, "my_funny_pydantic": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyFunnyPydantic"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}, "person": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "Person"], "method": null, "args": [], "kwargs": {"name": "foo"}}, "a_bool": true, "a_none": null, "a_str": "foo", "a_str_nuc": "foo\\u0000", "a_str_uc": "foo \xe2\x9b\xb0\xef\xb8\x8f", "a_str_ucuc": "foo \xe2\x9b\xb0\xef\xb8\x8f\\u0000", "a_str_ucucuc": "foo \\\\u26f0\\\\ufe0f", "text": ["Hello", "Python", "Surrogate", "Example", "String", "With", "Surrogates", "Embedded", "In", "The", "Text", "\xe6\x94\xb6\xe8\x8a\xb1\xf0\x9f\x99\x84\xc2\xb7\xe5\x88\xb0"], "an_int": 1, "a_float": 1.1, "runnable_map": {"lc": 1, "type": "constructor", "id": ["langchain", "schema", "runnable", "RunnableParallel"], "kwargs": {"steps__": {}}, "name": "RunnableParallel<>", "graph": {"nodes": [{"id": 0, "type": "schema", "data": "Parallel<>Input"}, {"id": 1, "type": "schema", "data": "Parallel<>Output"}], "edges": []}}}""",
+        b"""{"path": {"lc": 2, "type": "constructor", "id": ["pathlib", "Path"], "method": null, "args": ["foo", "bar"], "kwargs": {}}, "re": {"lc": 2, "type": "constructor", "id": ["re", "compile"], "method": null, "args": ["foo", 48], "kwargs": {}}, "decimal": {"lc": 2, "type": "constructor", "id": ["decimal", "Decimal"], "method": null, "args": ["1.10101"], "kwargs": {}}, "ip4": {"lc": 2, "type": "constructor", "id": ["ipaddress", "IPv4Address"], "method": null, "args": ["192.168.0.1"], "kwargs": {}}, "deque": {"lc": 2, "type": "constructor", "id": ["collections", "deque"], "method": null, "args": [[1, 2, 3]], "kwargs": {}}, "tzn": {"lc": 2, "type": "constructor", "id": ["zoneinfo", "ZoneInfo"], "method": null, "args": ["America/New_York"], "kwargs": {}}, "date": {"lc": 2, "type": "constructor", "id": ["datetime", "date"], "method": null, "args": [2024, 4, 19], "kwargs": {}}, "time": {"lc": 2, "type": "constructor", "id": ["datetime", "time"], "method": null, "args": [23, 4, 57, 51022, {"lc": 2, "type": "constructor", "id": ["datetime", "timezone"], "method": null, "args": [{"lc": 2, "type": "constructor", "id": ["datetime", "timedelta"], "method": null, "args": [0, 86340, 0], "kwargs": {}}], "kwargs": {}}], "kwargs": {"fold": 0}}, "uid": {"lc": 2, "type": "constructor", "id": ["uuid", "UUID"], "method": null, "args": ["00000000000000000000000000000001"], "kwargs": {}}, "timestamp": {"lc": 2, "type": "constructor", "id": ["datetime", "datetime"], "method": "fromisoformat", "args": ["2024-04-19T23:04:57.051022+23:59"], "kwargs": {}}, "my_slotted_class": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyDataclassWSlots"], "method": null, "args": [], "kwargs": {"foo": "bar", "bar": 2}}, "my_dataclass": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyDataclass"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}, "my_enum": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyEnum"], "method": null, "args": ["foo"], "kwargs": {}}, "my_pydantic": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyPydantic"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}, "my_funny_pydantic": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyFunnyPydantic"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}, "person": {"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "Person"], "method": null, "args": [], "kwargs": {"name": "foo"}}, "a_bool": true, "a_none": null, "a_str": "foo", "a_str_nuc": "foo\\u0000", "a_str_uc": "foo \xe2\x9b\xb0\xef\xb8\x8f", "a_str_ucuc": "foo \xe2\x9b\xb0\xef\xb8\x8f\\u0000", "a_str_ucucuc": "foo \\\\u26f0\\\\ufe0f", "text": ["Hello", "Python", "Surrogate", "Example", "String", "With", "Surrogates", "Embedded", "In", "The", "Text", "\xe6\x94\xb6\xe8\x8a\xb1\xf0\x9f\x99\x84\xc2\xb7\xe5\x88\xb0"], "an_int": 1, "a_float": 1.1, "runnable_map": {"lc": 1, "type": "constructor", "id": ["langchain", "schema", "runnable", "RunnableParallel"], "kwargs": {"steps__": {}}, "name": "RunnableParallel<>", "graph": {"nodes": [{"id": 0, "type": "schema", "data": "Parallel<>Input"}, {"id": 1, "type": "schema", "data": "Parallel<>Output"}], "edges": []}}}""",
     )
 
     assert serde.loads_typed(dumped) == {
@@ -130,3 +149,21 @@ def test_serde_jsonplus_bytearray() -> None:
 
     assert dumped == ("bytearray", some_bytearray)
     assert serde.loads_typed(dumped) == some_bytearray
+
+
+def test_loads_cannot_find() -> None:
+    serde = JsonPlusSerializer()
+
+    dumped = (
+        "json",
+        b'{"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyPydanticccc"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}',
+    )
+
+    assert serde.loads_typed(dumped) is None, "Should return None if cannot find class"
+
+    dumped = (
+        "json",
+        b'{"lc": 2, "type": "constructor", "id": ["tests", "test_jsonpluss", "MyPydantic"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}',
+    )
+
+    assert serde.loads_typed(dumped) is None, "Should return None if cannot find module"

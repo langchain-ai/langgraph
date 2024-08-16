@@ -66,6 +66,16 @@ Now that we have set everything up on our local file system, we are ready to hos
 
 ## Test the graph build locally
 
+### Using LangGraph Studio Desktop (recommended)
+
+![LangGraph Studio Desktop](./img/graph_video_poster.png)
+
+Testing your graph locally is easy with LangGraph Studio Desktop. LangGraph Studio offers a new way to develop LLM applications by providing a specialized agent IDE that enables visualization, interaction, and debugging of complex agentic applications
+
+With visual graphs and the ability to edit state, you can better understand agent workflows and iterate faster. LangGraph Studio integrates with [LangSmith](https://smith.langchain.com) so you can collaborate with teammates to debug failure modes.
+
+### Using the LangGraph CLI
+
 Before deploying to the cloud, we probably want to test the building of our graph locally. This is useful to make sure we have configured our [CLI configuration file][langgraph.json] correctly and our graph runs.
 
 In order to do this we can first install the LangGraph CLI
