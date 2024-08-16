@@ -4,11 +4,11 @@ from typing import (
     AsyncIterator,
     Iterator,
     Optional,
-    Self,
     Sequence,
 )
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import Self
 
 from langgraph.constants import CONFIG_KEY_KV
 from langgraph.errors import InvalidUpdateError

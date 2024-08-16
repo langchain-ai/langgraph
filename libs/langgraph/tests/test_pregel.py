@@ -59,7 +59,7 @@ from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
 from langgraph.kv.memory import MemoryKV
-from langgraph.managed.scoped_value import SharedValue
+from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
 )
