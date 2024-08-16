@@ -3783,9 +3783,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     ]
 
 
-@pytest.mark.skip(
-    "Figure out how to handle update_state with keys that are not part of the channels"
-)
 @pytest.mark.parametrize("serde", [NoopSerializer(), JsonPlusSerializer()])
 def test_state_graph_packets(serde: SerializerProtocol) -> None:
     from langchain_core.language_models.fake_chat_models import (
