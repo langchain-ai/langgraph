@@ -26,11 +26,11 @@ Value = dict[str, V]
 Update = dict[str, Optional[V]]
 
 
-class ScopedValue(WritableManagedValue[Value, Update]):
+class SharedValue(WritableManagedValue[Value, Update]):
     @staticmethod
-    def configure(scope: str) -> ConfiguredManagedValue:
+    def on(scope: str) -> ConfiguredManagedValue:
         return ConfiguredManagedValue(
-            ScopedValue, {"scope": scope, "key": ChannelKeyPlaceholder}
+            SharedValue, {"scope": scope, "key": ChannelKeyPlaceholder}
         )
 
     @classmethod

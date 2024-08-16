@@ -121,8 +121,8 @@ def local_write(
     commit: Callable[[Sequence[tuple[str, Any]]], None],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
-    writes: Sequence[tuple[str, Any]],
     managed: ManagedValueMapping,
+    writes: Sequence[tuple[str, Any]],
 ) -> None:
     for chan, value in writes:
         if chan == TASKS:

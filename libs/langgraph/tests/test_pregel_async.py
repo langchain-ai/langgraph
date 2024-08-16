@@ -563,7 +563,7 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
 
     assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
     assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
-    assert await app.ainvoke(2) == 3
+    assert await app.ainvoke(2, debug=True) == 3
     assert await app.ainvoke(2, output_keys=["output"]) == {"output": 3}
 
     assert await gapp.ainvoke(2) == 3

@@ -695,7 +695,7 @@ def _get_channels(
     schema: Type[dict],
 ) -> tuple[dict[str, BaseChannel], dict[str, Type[ManagedValue]]]:
     if not hasattr(schema, "__annotations__"):
-        return {"__root__": _get_channel(schema, allow_managed=False)}, {}
+        return {"__root__": _get_channel("__root__", schema, allow_managed=False)}, {}
 
     all_keys = {
         name: _get_channel(name, typ)

@@ -59,7 +59,7 @@ from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
 from langgraph.kv.memory import MemoryKV
-from langgraph.managed.scoped_value import ScopedValue
+from langgraph.managed.scoped_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
 )
@@ -167,7 +167,9 @@ def test_graph_validation() -> None:
 
     class State(TypedDict):
         hello: str
-        shared_things: Annotated[dict[str, dict[str, Any]], ScopedValue("assistant_id")]
+        shared_things: Annotated[
+            dict[str, dict[str, Any]], SharedValue.on("assistant_id")
+        ]
 
     def node_a(state: State) -> State:
         # typo
@@ -6205,9 +6207,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
-        shared: Annotated[
-            dict[str, dict[str, Any]], ScopedValue.configure("assistant_id")
-        ]
+        shared: Annotated[dict[str, dict[str, Any]], SharedValue.on("assistant_id")]
 
     def assert_shared_value(data: State, config: RunnableConfig) -> State:
         assert "shared" in data
