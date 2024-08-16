@@ -687,7 +687,9 @@ class Pregel(
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        checkpointer = self.checkpointer or config["configurable"].get("checkpointer")
+        checkpointer = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -849,7 +851,7 @@ class Pregel(
                 **config,
                 "configurable": {
                     **config["configurable"],
-                    "checkpointer": checkpointer,
+                    CONFIG_KEY_CHECKPOINTER: checkpointer,
                     "checkpoint_ns": subgraph_checkpoint_ns,
                     # we want all update checkpoints to share the same ID
                     "update_checkpoint_id": checkpoint_id,
@@ -885,7 +887,9 @@ class Pregel(
         values: dict[str, Any] | Any,
         as_node: Optional[str | list[str]] = None,
     ) -> RunnableConfig:
-        checkpointer = self.checkpointer or config["configurable"].get("checkpointer")
+        checkpointer = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
@@ -1049,7 +1053,7 @@ class Pregel(
                 **config,
                 "configurable": {
                     **config["configurable"],
-                    "checkpointer": checkpointer,
+                    CONFIG_KEY_CHECKPOINTER: checkpointer,
                     "checkpoint_ns": subgraph_checkpoint_ns,
                     # we want all update checkpoints to share the same ID
                     "update_checkpoint_id": checkpoint_id,
