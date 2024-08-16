@@ -39,7 +39,13 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
     empty_checkpoint,
 )
-from langgraph.constants import CONFIG_KEY_READ, CONFIG_KEY_RESUMING, INPUT, INTERRUPT
+from langgraph.constants import (
+    CONFIG_KEY_READ,
+    CONFIG_KEY_RESUMING,
+    ERROR,
+    INPUT,
+    INTERRUPT,
+)
 from langgraph.errors import EmptyInputError, GraphInterrupt
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
@@ -252,6 +258,8 @@ class PregelLoop:
         # if there are pending writes from a previous loop, apply them
         if self.checkpoint_pending_writes:
             for tid, k, v in self.checkpoint_pending_writes:
+                if k == ERROR:  # TODO same for INTERRUPT
+                    continue
                 if task := next((t for t in self.tasks if t.id == tid), None):
                     task.writes.append((k, v))
 
