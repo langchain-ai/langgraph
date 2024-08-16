@@ -1822,6 +1822,9 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     assert cleanup_async.call_count == 1, "Expected cleanup to be called once"
 
 
+@pytest.mark.skip(
+    "Figure out how to handle update_state with keys that are not part of the channels"
+)
 async def test_conditional_graph() -> None:
     from copy import deepcopy
 

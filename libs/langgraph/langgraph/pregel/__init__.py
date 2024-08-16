@@ -734,19 +734,19 @@ class Pregel(
 
         # if we're writing a subgraph update for a key that's not in the parent graph channels,
         # we ignore the values for that key in parent graph updates
-        if (
-            isinstance(values, dict)
-            and has_nested_interrupts
-            and set(values) - set(self.channels)
-        ):
-            values = {k: v for k, v in values.items() if k in self.channels} or None
+        if isinstance(values, dict) and set(values) - set(self.channels):
+            values_to_write = {
+                k: v for k, v in values.items() if k in self.channels
+            } or None
+        else:
+            values_to_write = values
 
         checkpoint_id = config["configurable"].get(
             "update_checkpoint_id", str(uuid6(clock_seq=step + 1))
         )
         write_config = None
         # find last node that updated the state, if not provided
-        if values is None and as_node is None:
+        if values_to_write is None and as_node is None:
             write_config = checkpointer.put(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step, id=checkpoint_id),
@@ -791,7 +791,7 @@ class Pregel(
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 task = PregelExecutableTask(
                     as_node,
-                    values,
+                    values_to_write,
                     RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                     deque(),
                     None,
@@ -828,7 +828,7 @@ class Pregel(
                     {
                         "source": "update",
                         "step": step + 1,
-                        "writes": {as_node: values},
+                        "writes": {as_node: values_to_write},
                     },
                     new_versions,
                 )
@@ -865,6 +865,7 @@ class Pregel(
             if isinstance(node.bound, Pregel):
                 node.bound.update_state(
                     subgraph_config,
+                    # pass original values
                     values,
                     as_node=subgraph_as_node,
                 )
@@ -872,7 +873,10 @@ class Pregel(
                 for runnable in node.bound.steps:
                     if isinstance(runnable, Pregel):
                         runnable.update_state(
-                            subgraph_config, values, as_node=subgraph_as_node
+                            # pass original values
+                            subgraph_config,
+                            values,
+                            as_node=subgraph_as_node,
                         )
 
         return write_config
@@ -930,19 +934,19 @@ class Pregel(
 
         # if we're writing a subgraph update for a key that's not in the parent graph channels,
         # we ignore the values for that key in parent graph updates
-        if (
-            isinstance(values, dict)
-            and has_nested_interrupts
-            and set(values) - set(self.channels)
-        ):
-            values = {k: v for k, v in values.items() if k in self.channels} or None
+        if isinstance(values, dict) and set(values) - set(self.channels):
+            values_to_write = {
+                k: v for k, v in values.items() if k in self.channels
+            } or None
+        else:
+            values_to_write = values
 
         checkpoint_id = config["configurable"].get(
             "update_checkpoint_id", str(uuid6(clock_seq=step + 1))
         )
         write_config = None
         # find last node that updated the state, if not provided
-        if values is None and as_node is None:
+        if values_to_write is None and as_node is None:
             write_config = await checkpointer.aput(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step, id=checkpoint_id),
@@ -989,7 +993,7 @@ class Pregel(
                     raise InvalidUpdateError(f"Node {as_node} has no writers")
                 task = PregelExecutableTask(
                     as_node,
-                    values,
+                    values_to_write,
                     RunnableSequence(*writers) if len(writers) > 1 else writers[0],
                     deque(),
                     None,
@@ -1026,7 +1030,7 @@ class Pregel(
                     {
                         "source": "update",
                         "step": step + 1,
-                        "writes": {as_node: values},
+                        "writes": {as_node: values_to_write},
                     },
                     new_versions,
                 )
@@ -1063,6 +1067,7 @@ class Pregel(
             if isinstance(node.bound, Pregel):
                 await node.bound.aupdate_state(
                     subgraph_config,
+                    # pass original values
                     values,
                     as_node=subgraph_as_node,
                 )
@@ -1070,7 +1075,10 @@ class Pregel(
                 for runnable in node.bound.steps:
                     if isinstance(runnable, Pregel):
                         await runnable.aupdate_state(
-                            subgraph_config, values, as_node=subgraph_as_node
+                            # pass original values
+                            subgraph_config,
+                            values,
+                            as_node=subgraph_as_node,
                         )
 
         return write_config
