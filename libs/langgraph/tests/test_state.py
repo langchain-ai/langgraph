@@ -1,4 +1,3 @@
-import itertools
 from typing import Annotated as Annotated2
 from typing import Any
 
@@ -76,8 +75,8 @@ def test_state_schema_with_type_hint():
         graph.add_node(action)
 
     graph.set_entry_point(actions[0].__name__)
-    for a, b in itertools.pairwise(actions):
-        graph.add_edge(a.__name__, b.__name__)
+    for i in range(len(actions) - 1):
+        graph.add_edge(actions[i].__name__, actions[i + 1].__name__)
     graph.set_finish_point(actions[-1].__name__)
 
     graph = graph.compile()
