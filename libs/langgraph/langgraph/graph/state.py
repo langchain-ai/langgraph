@@ -43,6 +43,7 @@ from langgraph.graph.graph import (
 from langgraph.kv.base import BaseKV
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
+    ChannelTypePlaceholder,
     ConfiguredManagedValue,
     ManagedValue,
     is_managed_value,
@@ -760,6 +761,8 @@ def _is_field_managed_value(name: str, typ: Type[Any]) -> Optional[Type[ManagedV
                     for k, v in decoration.kwargs.items():
                         if v is ChannelKeyPlaceholder:
                             decoration.kwargs[k] = name
+                        if v is ChannelTypePlaceholder:
+                            decoration.kwargs[k] = typ.__origin__
                 return decoration
 
     return None

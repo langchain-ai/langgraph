@@ -17,6 +17,7 @@ from langgraph.errors import InvalidUpdateError
 from langgraph.kv.base import BaseKV
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
+    ChannelTypePlaceholder,
     ConfiguredManagedValue,
     WritableManagedValue,
 )
@@ -43,7 +44,12 @@ class SharedValue(WritableManagedValue[Value, Update]):
     @staticmethod
     def on(scope: str) -> ConfiguredManagedValue:
         return ConfiguredManagedValue(
-            SharedValue, {"scope": scope, "key": ChannelKeyPlaceholder}
+            SharedValue,
+            {
+                "scope": scope,
+                "key": ChannelKeyPlaceholder,
+                "typ": ChannelTypePlaceholder,
+            },
         )
 
     @classmethod
@@ -68,6 +74,7 @@ class SharedValue(WritableManagedValue[Value, Update]):
         self, config: RunnableConfig, *, typ: Type[Any], scope: str, key: str
     ) -> None:
         if typ := _strip_extras(typ):
+            print(typ)
             if typ not in (
                 dict,
                 collections.abc.Mapping,
