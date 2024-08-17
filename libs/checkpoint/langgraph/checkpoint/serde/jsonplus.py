@@ -110,6 +110,8 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(
                 obj.__class__, method="fromhex", args=[obj.hex()]
             )
+        elif isinstance(obj, BaseException):
+            return self._encode_constructor_args(obj.__class__, args=obj.args)
         else:
             raise TypeError(
                 f"Object of type {obj.__class__.__name__} is not JSON serializable"
@@ -121,18 +123,28 @@ class JsonPlusSerializer(SerializerProtocol):
             and value.get("type", None) == "constructor"
             and value.get("id", None) is not None
         ):
-            # Get module and class name
-            [*module, name] = value["id"]
-            # Import module
-            mod = importlib.import_module(".".join(module))
-            # Import class
-            cls = getattr(mod, name)
-            # Instantiate class
-            if value["method"] is not None:
-                method = getattr(cls, value["method"])
-                return method(*value["args"], **value["kwargs"])
-            else:
-                return cls(*value["args"], **value["kwargs"])
+            try:
+                # Get module and class name
+                [*module, name] = value["id"]
+                # Import module
+                mod = importlib.import_module(".".join(module))
+                # Import class
+                cls = getattr(mod, name)
+                # Instantiate class
+                if value["method"] is not None:
+                    method = getattr(cls, value["method"])
+                else:
+                    method = cls
+                if value["args"] and value["kwargs"]:
+                    return method(*value["args"], **value["kwargs"])
+                elif value["args"]:
+                    return method(*value["args"])
+                elif value["kwargs"]:
+                    return method(**value["kwargs"])
+                else:
+                    return method()
+            except (ImportError, AttributeError):
+                return None
 
         return LC_REVIVER(value)
 

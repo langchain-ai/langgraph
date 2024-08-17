@@ -49,7 +49,7 @@ from langgraph.managed.base import ManagedValueMapping, is_managed_value
 from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import All, PregelExecutableTask, PregelTaskDescription
+from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
 
 
 class WritesProtocol(Protocol):
@@ -225,7 +225,7 @@ def prepare_next_tasks(
     is_resuming: bool = False,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
-) -> list[PregelTaskDescription]:
+) -> list[PregelTask]:
     ...
 
 
@@ -258,9 +258,9 @@ def prepare_next_tasks(
     is_resuming: bool = False,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-) -> Union[list[PregelTaskDescription], list[PregelExecutableTask]]:
+) -> Union[list[PregelTask], list[PregelExecutableTask]]:
     parent_ns = config.get("configurable", {}).get("checkpoint_ns", "")
-    tasks: Union[list[PregelTaskDescription], list[PregelExecutableTask]] = []
+    tasks: Union[list[PregelTask], list[PregelExecutableTask]] = []
     # Consume pending packets
     for packet in checkpoint["pending_sends"]:
         if not isinstance(packet, Send):
@@ -269,24 +269,25 @@ def prepare_next_tasks(
         if packet.node not in processes:
             logger.warn(f"Ignoring unknown node name {packet.node} in pending sends")
             continue
+        # create task id
+        triggers = [TASKS]
+        metadata = {
+            "langgraph_step": step,
+            "langgraph_node": packet.node,
+            "langgraph_triggers": triggers,
+            "langgraph_task_idx": len(tasks),
+        }
+        checkpoint_ns = (
+            f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}"
+            if parent_ns
+            else packet.node
+        )
+        task_id = str(
+            uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
+        )
         if for_execution:
             proc = processes[packet.node]
             if node := proc.get_node():
-                triggers = [TASKS]
-                metadata = {
-                    "langgraph_step": step,
-                    "langgraph_node": packet.node,
-                    "langgraph_triggers": triggers,
-                    "langgraph_task_idx": len(tasks),
-                }
-                checkpoint_ns = (
-                    f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}"
-                    if parent_ns
-                    else packet.node
-                )
-                task_id = str(
-                    uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
-                )
                 writes = deque()
                 tasks.append(
                     PregelExecutableTask(
@@ -328,7 +329,7 @@ def prepare_next_tasks(
                     )
                 )
         else:
-            tasks.append(PregelTaskDescription(packet.node))
+            tasks.append(PregelTask(task_id, packet.node))
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
@@ -356,26 +357,27 @@ def prepare_next_tasks(
             except StopIteration:
                 continue
 
+            # create task id
+            metadata = {
+                "langgraph_step": step,
+                "langgraph_node": name,
+                "langgraph_triggers": triggers,
+                "langgraph_task_idx": len(tasks),
+            }
+            checkpoint_ns = (
+                f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
+                if parent_ns
+                else name
+            )
+            task_id = str(
+                uuid5(
+                    UUID(checkpoint["id"]),
+                    json.dumps((checkpoint_ns, metadata)),
+                )
+            )
+
             if for_execution:
                 if node := proc.get_node():
-                    metadata = {
-                        "langgraph_step": step,
-                        "langgraph_node": name,
-                        "langgraph_triggers": triggers,
-                        "langgraph_task_idx": len(tasks),
-                    }
-                    checkpoint_ns = (
-                        f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
-                        if parent_ns
-                        else name
-                    )
-                    task_id = str(
-                        uuid5(
-                            UUID(checkpoint["id"]),
-                            json.dumps((checkpoint_ns, metadata)),
-                        )
-                    )
-
                     writes = deque()
                     tasks.append(
                         PregelExecutableTask(
@@ -424,7 +426,7 @@ def prepare_next_tasks(
                         )
                     )
             else:
-                tasks.append(PregelTaskDescription(name))
+                tasks.append(PregelTask(task_id, name))
     return tasks
 
 
@@ -454,9 +456,7 @@ def _proc_input(
             managed_values = {}
             for key, chan in proc.channels.items():
                 if is_managed_value(chan):
-                    managed_values[key] = managed[key](
-                        step, PregelTaskDescription(name)
-                    )
+                    managed_values[key] = managed[key](step)
 
             val.update(managed_values)
         except EmptyChannelError:

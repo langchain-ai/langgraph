@@ -68,6 +68,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    ERROR,
     INTERRUPT,
 )
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
@@ -87,6 +88,7 @@ from langgraph.pregel.debug import (
     print_step_checkpoint,
     print_step_tasks,
     print_step_writes,
+    tasks_w_writes,
 )
 from langgraph.pregel.io import (
     map_output_updates,
@@ -376,7 +378,7 @@ class Pregel(
                 channels,
                 managed,
                 config,
-                -1,
+                saved.metadata.get("step", -1) + 1 if saved else -1,
                 for_execution=False,
             )
             return StateSnapshot(
@@ -386,6 +388,7 @@ class Pregel(
                 saved.metadata if saved else None,
                 saved.checkpoint["ts"] if saved else None,
                 saved.parent_config if saved else None,
+                tasks_w_writes(next_tasks, saved.pending_writes),
             )
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
@@ -413,7 +416,7 @@ class Pregel(
                 channels,
                 managed,
                 config,
-                -1,
+                saved.metadata.get("step", -1) + 1 if saved else -1,
                 for_execution=False,
             )
             return StateSnapshot(
@@ -423,6 +426,7 @@ class Pregel(
                 saved.metadata if saved else None,
                 saved.checkpoint["ts"] if saved else None,
                 saved.parent_config if saved else None,
+                tasks_w_writes(next_tasks, saved.pending_writes),
             )
 
     def get_state_history(
@@ -441,9 +445,13 @@ class Pregel(
             and signature(self.checkpointer.list).parameters.get("filter") is None
         ):
             raise ValueError("Checkpointer does not support filtering")
-        for config, checkpoint, metadata, parent_config, _ in self.checkpointer.list(
-            config, before=before, limit=limit, filter=filter
-        ):
+        for (
+            config,
+            checkpoint,
+            metadata,
+            parent_config,
+            pending_writes,
+        ) in self.checkpointer.list(config, before=before, limit=limit, filter=filter):
             with ChannelsManager(
                 {
                     k: LastValue(None) if isinstance(c, Context) else c
@@ -460,7 +468,7 @@ class Pregel(
                     channels,
                     managed,
                     config,
-                    -1,
+                    metadata.get("step", -1) + 1,
                     for_execution=False,
                 )
                 yield StateSnapshot(
@@ -470,6 +478,7 @@ class Pregel(
                     metadata,
                     checkpoint["ts"],
                     parent_config,
+                    tasks_w_writes(next_tasks, pending_writes),
                 )
 
     async def aget_state_history(
@@ -493,7 +502,7 @@ class Pregel(
             checkpoint,
             metadata,
             parent_config,
-            _,
+            pending_writes,
         ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             async with AsyncChannelsManager(
                 {
@@ -511,7 +520,7 @@ class Pregel(
                     channels,
                     managed,
                     config,
-                    -1,
+                    metadata.get("step", -1) + 1,
                     for_execution=False,
                 )
                 yield StateSnapshot(
@@ -521,6 +530,7 @@ class Pregel(
                     metadata,
                     checkpoint["ts"],
                     parent_config,
+                    tasks_w_writes(next_tasks, pending_writes),
                 )
 
     def update_state(
@@ -935,7 +945,7 @@ class Pregel(
                     manager=run_manager,
                 ):
                     # debug flag
-                    if self.debug:
+                    if debug:
                         print_step_checkpoint(
                             loop.checkpoint_metadata,
                             loop.channels,
@@ -986,10 +996,9 @@ class Pregel(
                             break  # timed out
                         for fut in done:
                             task = futures.pop(fut)
-                            if fut.exception() is not None:
-                                # we got an exception, break out of while loop
-                                # exception will be handled in panic_or_proceed
-                                futures.clear()
+                            if exc := _exception(fut):
+                                # save error to checkpointer
+                                loop.put_writes(task.id, [(ERROR, exc)])
                             else:
                                 # save task writes to checkpointer
                                 loop.put_writes(task.id, task.writes)
@@ -1013,6 +1022,8 @@ class Pregel(
                         else:
                             # remove references to loop vars
                             del fut, task
+                        if _should_stop_others(done):
+                            break
 
                     # panic on failure or timeout
                     _panic_or_proceed(done, inflight, loop.step)
@@ -1179,7 +1190,7 @@ class Pregel(
                     manager=run_manager,
                 ):
                     # debug flag
-                    if self.debug:
+                    if debug:
                         print_step_checkpoint(
                             loop.checkpoint_metadata,
                             loop.channels,
@@ -1231,10 +1242,9 @@ class Pregel(
                             break  # timed out
                         for fut in done:
                             task = futures.pop(fut)
-                            if fut.exception() is not None:
-                                # we got an exception, break out of while loop
-                                # exception will be handled in panic_or_proceed
-                                futures.clear()
+                            if exc := _exception(fut):
+                                # save error to checkpointer
+                                loop.put_writes(task.id, [(ERROR, exc)])
                             else:
                                 # save task writes to checkpointer
                                 loop.put_writes(task.id, task.writes)
@@ -1260,6 +1270,8 @@ class Pregel(
                         else:
                             # remove references to loop vars
                             del fut, task
+                        if _should_stop_others(done):
+                            break
 
                     # panic on failure or timeout
                     _panic_or_proceed(done, inflight, loop.step, asyncio.TimeoutError)
@@ -1401,6 +1413,31 @@ class Pregel(
             return latest
         else:
             return chunks
+
+
+def _should_stop_others(
+    done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
+) -> bool:
+    for fut in done:
+        if fut.cancelled():
+            return True
+        if fut.exception() is not None:
+            # TODO don't stop others if exception is interrupt
+            return True
+    else:
+        return False
+
+
+def _exception(
+    fut: Union[concurrent.futures.Future[Any], asyncio.Task[Any]],
+) -> Optional[BaseException]:
+    if fut.cancelled():
+        if isinstance(fut, asyncio.Task):
+            return asyncio.CancelledError()
+        else:
+            return concurrent.futures.CancelledError()
+    else:
+        return fut.exception()
 
 
 def _panic_or_proceed(
