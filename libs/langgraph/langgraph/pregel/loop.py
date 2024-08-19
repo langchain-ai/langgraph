@@ -18,6 +18,7 @@ from typing import (
     Type,
     TypeVar,
     Union,
+    cast,
 )
 from uuid import UUID, uuid5
 
@@ -307,6 +308,11 @@ class PregelLoop:
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
             self.config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
+            or all(
+                cast(Interrupt, v).stay
+                for _, n, v in self.checkpoint_pending_writes
+                if n == INTERRUPT
+            )
             or self.input is None
         )
 

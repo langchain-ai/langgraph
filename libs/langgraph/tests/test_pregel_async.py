@@ -232,7 +232,8 @@ async def test_node_not_cancelled_on_other_node_interrupted(
             raise
 
     async def iambad(input: State) -> None:
-        raise NodeInterrupt("I am bad")
+        if input["hello"] != "bye":
+            raise NodeInterrupt("I am bad", stay=True)
 
     builder = StateGraph(State)
     builder.add_node("agent", awhile)
@@ -247,7 +248,12 @@ async def test_node_not_cancelled_on_other_node_interrupted(
     assert not inner_task_cancelled
     assert awhiles == 1
 
-    assert await graph.ainvoke(None, thread, debug=True) == {"hello": "again"}
+    assert await graph.ainvoke(None, thread, debug=True) is None
+
+    assert not inner_task_cancelled
+    assert awhiles == 1
+
+    assert await graph.ainvoke({"hello": "bye"}, thread) == {"hello": "again"}
 
     assert not inner_task_cancelled
     assert awhiles == 1
