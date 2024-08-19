@@ -424,6 +424,16 @@ class SqliteSaver(BaseCheckpointSaver):
             task_id (str): Identifier for the task creating the writes.
         """
         with self.lock, self.cursor() as cur:
+            cur.execute(
+                "DELETE FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? AND task_id = ? AND idx >= ?",
+                (
+                    str(config["configurable"]["thread_id"]),
+                    str(config["configurable"]["checkpoint_ns"]),
+                    str(config["configurable"]["checkpoint_id"]),
+                    task_id,
+                    len(writes),
+                ),
+            )
             cur.executemany(
                 "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [
