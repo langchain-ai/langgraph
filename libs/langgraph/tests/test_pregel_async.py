@@ -48,7 +48,7 @@ from langgraph.checkpoint.base import (
 from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from langgraph.constants import ERROR, Interrupt, Send
-from langgraph.errors import InvalidUpdateError
+from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
@@ -202,6 +202,55 @@ async def test_node_cancellation_on_other_node_exception() -> None:
         await asyncio.wait_for(graph.ainvoke(1), 0.5)
 
     assert inner_task_cancelled
+
+
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe"],
+)
+async def test_node_not_cancelled_on_other_node_interrupted(
+    checkpointer_name: str, request: pytest.FixtureRequest
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
+    class State(TypedDict):
+        hello: str
+
+    awhiles = 0
+    inner_task_cancelled = False
+
+    async def awhile(input: State) -> None:
+        nonlocal awhiles
+
+        awhiles += 1
+        try:
+            await asyncio.sleep(1)
+            return {"hello": "again"}
+        except asyncio.CancelledError:
+            nonlocal inner_task_cancelled
+            inner_task_cancelled = True
+            raise
+
+    async def iambad(input: State) -> None:
+        raise NodeInterrupt("I am bad")
+
+    builder = StateGraph(State)
+    builder.add_node("agent", awhile)
+    builder.add_node("bad", iambad)
+    builder.set_conditional_entry_point(lambda _: ["agent", "bad"], then=END)
+
+    graph = builder.compile(checkpointer=checkpointer)
+    thread = {"configurable": {"thread_id": "1"}}
+
+    assert await graph.ainvoke({"hello": "world"}, thread) == {"hello": "world"}
+
+    assert not inner_task_cancelled
+    assert awhiles == 1
+
+    assert await graph.ainvoke(None, thread, debug=True) == {"hello": "again"}
+
+    assert not inner_task_cancelled
+    assert awhiles == 1
 
 
 async def test_step_timeout_on_stream_hang() -> None:
