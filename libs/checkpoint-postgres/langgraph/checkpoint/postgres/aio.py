@@ -272,7 +272,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
         """
-        async with self._cursor() as cur:
+        async with self._cursor(pipeline=True) as cur:
             await cur.execute(
                 self.DELETE_WRITES_SQL,
                 config["configurable"]["thread_id"],
