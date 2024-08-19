@@ -432,19 +432,29 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
             task_id (str): Identifier for the task creating the writes.
         """
         await self.setup()
-        async with self.conn.executemany(
-            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            [
+        async with self.conn.cursor() as cur:
+            await cur.execute(
+                "DELETE FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? AND task_id = ? AND idx >= ?",
                 (
                     str(config["configurable"]["thread_id"]),
                     str(config["configurable"]["checkpoint_ns"]),
                     str(config["configurable"]["checkpoint_id"]),
                     task_id,
-                    idx,
-                    channel,
-                    *self.serde.dumps_typed(value),
-                )
-                for idx, (channel, value) in enumerate(writes)
-            ],
-        ):
-            await self.conn.commit()
+                    len(writes),
+                ),
+            )
+            await cur.executemany(
+                "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        str(config["configurable"]["checkpoint_ns"]),
+                        str(config["configurable"]["checkpoint_id"]),
+                        task_id,
+                        idx,
+                        channel,
+                        *self.serde.dumps_typed(value),
+                    )
+                    for idx, (channel, value) in enumerate(writes)
+                ],
+            )

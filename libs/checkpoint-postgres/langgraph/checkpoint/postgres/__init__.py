@@ -317,6 +317,14 @@ class PostgresSaver(BasePostgresSaver):
             task_id (str): Identifier for the task creating the writes.
         """
         with self._cursor() as cur:
+            cur.execute(
+                self.DELETE_WRITES_SQL,
+                config["configurable"]["thread_id"],
+                config["configurable"]["checkpoint_ns"],
+                config["configurable"]["checkpoint_id"],
+                task_id,
+                len(writes),
+            )
             cur.executemany(
                 self.UPSERT_CHECKPOINT_WRITES_SQL,
                 self._dump_writes(
