@@ -275,11 +275,13 @@ class AsyncPostgresSaver(BasePostgresSaver):
         async with self._cursor(pipeline=True) as cur:
             await cur.execute(
                 self.DELETE_WRITES_SQL,
-                config["configurable"]["thread_id"],
-                config["configurable"]["checkpoint_ns"],
-                config["configurable"]["checkpoint_id"],
-                task_id,
-                len(writes),
+                (
+                    config["configurable"]["thread_id"],
+                    config["configurable"]["checkpoint_ns"],
+                    config["configurable"]["checkpoint_id"],
+                    task_id,
+                    len(writes),
+                ),
             )
             await cur.executemany(
                 self.UPSERT_CHECKPOINT_WRITES_SQL,
