@@ -1284,7 +1284,6 @@ class Pregel(
                             # remove references to loop vars
                             del fut, task
                         if _should_stop_others(done):
-                            print("breaking early", done, inflight)
                             break
 
                     # panic on failure or timeout
@@ -1465,7 +1464,6 @@ def _panic_or_proceed(
             done.add(fut)
         else:
             inflight.add(fut)
-    print("panicking", done, inflight)
     while done:
         # if any task failed
         if exc := _exception(done.pop()):
