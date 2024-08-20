@@ -579,7 +579,7 @@ class Pregel(
                 create_checkpoint(checkpoint, None, step),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {},
                 },
                 {},
@@ -725,7 +725,7 @@ class Pregel(
                 create_checkpoint(checkpoint, None, step),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {},
                 },
                 {},
