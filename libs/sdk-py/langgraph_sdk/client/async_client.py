@@ -83,10 +83,10 @@ def get_client(
 class AsyncLangGraphClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.http = AsyncHttpClient(client)
-        self.assistants = AssistantsClient(self.http)
-        self.threads = ThreadsClient(self.http)
-        self.runs = RunsClient(self.http)
-        self.crons = CronClient(self.http)
+        self.assistants = AsyncAssistantsClient(self.http)
+        self.threads = AsyncThreadsClient(self.http)
+        self.runs = AsyncRunsClient(self.http)
+        self.crons = AsyncCronClient(self.http)
 
 
 class AsyncHttpClient:
@@ -225,7 +225,7 @@ async def decode_json(r: httpx.Response) -> Any:
     )
 
 
-class AssistantsClient:
+class AsyncAssistantsClient:
     def __init__(self, http: AsyncHttpClient) -> None:
         self.http = http
 
@@ -555,7 +555,7 @@ class AssistantsClient:
         )
 
 
-class ThreadsClient:
+class AsyncThreadsClient:
     def __init__(self, http: AsyncHttpClient) -> None:
         self.http = http
 
@@ -938,7 +938,7 @@ class ThreadsClient:
         return await self.http.post(f"/threads/{thread_id}/history", json=payload)
 
 
-class RunsClient:
+class AsyncRunsClient:
     def __init__(self, http: AsyncHttpClient) -> None:
         self.http = http
 
@@ -1465,7 +1465,7 @@ class RunsClient:
         await self.http.delete(f"/threads/{thread_id}/runs/{run_id}")
 
 
-class CronClient:
+class AsyncCronClient:
     def __init__(self, http_client: AsyncHttpClient) -> None:
         self.http = http_client
 
