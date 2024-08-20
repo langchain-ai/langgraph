@@ -197,6 +197,8 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        input_transformer: Optional[RunnableLike] = None,
+        output_transformer: Optional[RunnableLike] = None,
     ) -> None:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -221,6 +223,8 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        input_transformer: Optional[RunnableLike] = None,
+        output_transformer: Optional[RunnableLike] = None,
     ) -> None:
         """Adds a new node to the state graph.
 
@@ -244,6 +248,8 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        input_transformer: Optional[RunnableLike] = None,
+        output_transformer: Optional[RunnableLike] = None,
     ) -> None:
         """Adds a new node to the state graph.
 
@@ -329,8 +335,21 @@ class StateGraph(Graph):
             pass
         if input is not None:
             self._add_schema(input)
+
+        runnable = coerce_to_runnable(action, name=node, trace=False)
+        if input_transformer is not None:
+            runnable = (
+                coerce_to_runnable(input_transformer, name="InputTransformer", trace=False)
+                | runnable
+            )
+
+        if output_transformer is not None:
+            runnable = runnable | coerce_to_runnable(
+                output_transformer, name="OutputTransformer", trace=False
+            )
+
         self.nodes[node] = StateNodeSpec(
-            coerce_to_runnable(action, name=node, trace=False),
+            runnable,
             metadata,
             input=input or self.schema,
             retry_policy=retry,
