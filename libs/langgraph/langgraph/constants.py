@@ -102,5 +102,4 @@ class Send:
 class Interrupt:
     id: str
     when: Literal["before", "during", "after"]
-    stay: bool = False
     value: Any = None

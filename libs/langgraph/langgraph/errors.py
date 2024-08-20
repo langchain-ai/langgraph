@@ -40,17 +40,14 @@ class GraphInterrupt(Exception):
 
 
 class NodeInterrupt(GraphInterrupt):
-    """Raised by a node to interrupt execution.
+    """Raised by a node to interrupt execution."""
 
-    If stay=True, the raising node will be handle new inputs,
-    otherwise new inputs will send graph back to the start."""
-
-    def __init__(self, *values: Any, stay: bool = False) -> None:
+    def __init__(self, *values: Any) -> None:
         config = ensure_config()
         task_id = config["configurable"][CONFIG_KEY_TASK_ID]
         super().__init__(
             [
-                Interrupt(str(uuid5(UUID(task_id), f"during:{i}")), "during", stay, v)
+                Interrupt(str(uuid5(UUID(task_id), f"during:{i}")), "during", v)
                 for i, v in enumerate(values)
             ]
         )

@@ -233,7 +233,7 @@ async def test_node_not_cancelled_on_other_node_interrupted(
 
     async def iambad(input: State) -> None:
         if input["hello"] != "bye":
-            raise NodeInterrupt("I am bad", stay=True)
+            raise NodeInterrupt("I am bad")
 
     builder = StateGraph(State)
     builder.add_node("agent", awhile)
@@ -256,7 +256,7 @@ async def test_node_not_cancelled_on_other_node_interrupted(
     assert await graph.ainvoke({"hello": "bye"}, thread) == {"hello": "again"}
 
     assert not inner_task_cancelled
-    assert awhiles == 1
+    assert awhiles == 2
 
 
 async def test_step_timeout_on_stream_hang() -> None:
@@ -2421,7 +2421,13 @@ async def test_conditional_graph() -> None:
                 ),
             },
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "tools",
+                interrupts=(Interrupt(AnyStr(), "before"),),
+            ),
+        ),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -2469,7 +2475,13 @@ async def test_conditional_graph() -> None:
                 "input": "what is weather in sf",
             },
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "tools",
+                interrupts=(Interrupt(AnyStr(), "before"),),
+            ),
+        ),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -2641,7 +2653,13 @@ async def test_conditional_graph() -> None:
                 ),
             },
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "tools",
+                interrupts=(Interrupt(AnyStr(), "before"),),
+            ),
+        ),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -3207,7 +3225,13 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
             ),
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "tools",
+                interrupts=(Interrupt(AnyStr(), "before"),),
+            ),
+        ),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -3251,7 +3275,9 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
             ),
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "tools"),),
+        tasks=(
+            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
+        ),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -4801,7 +4827,13 @@ async def test_start_branch_then() -> None:
         ]
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value", "market": "DE"},
-            tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_two_slow",
+                    interrupts=(Interrupt(AnyStr(), "before"),),
+                ),
+            ),
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
@@ -4843,7 +4875,13 @@ async def test_start_branch_then() -> None:
         }
         assert await tool_two.aget_state(thread2) == StateSnapshot(
             values={"my_key": "value", "market": "US"},
-            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_two_fast",
+                    interrupts=(Interrupt(AnyStr(), "before"),),
+                ),
+            ),
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
@@ -4885,7 +4923,13 @@ async def test_start_branch_then() -> None:
         }
         assert await tool_two.aget_state(thread3) == StateSnapshot(
             values={"my_key": "value", "market": "US"},
-            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_two_fast",
+                    interrupts=(Interrupt(AnyStr(), "before"),),
+                ),
+            ),
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
@@ -4900,7 +4944,13 @@ async def test_start_branch_then() -> None:
         await tool_two.aupdate_state(thread3, {"my_key": "key"})  # appends to my_key
         assert await tool_two.aget_state(thread3) == StateSnapshot(
             values={"my_key": "valuekey", "market": "US"},
-            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_two_fast",
+                    interrupts=(Interrupt(AnyStr(), "before"),),
+                ),
+            ),
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[

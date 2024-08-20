@@ -70,6 +70,7 @@ from langgraph.constants import (
     CONFIG_KEY_SEND,
     ERROR,
     INTERRUPT,
+    Interrupt,
 )
 from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
@@ -82,6 +83,7 @@ from langgraph.pregel.algo import (
     apply_writes,
     local_read,
     prepare_next_tasks,
+    should_interrupt,
 )
 from langgraph.pregel.debug import (
     map_debug_task_results,
@@ -551,7 +553,7 @@ class Pregel(
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
-            saved.checkpoint["channel_versions"] if saved else {}
+            saved.checkpoint["channel_versions"].copy() if saved else {}
         )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
@@ -607,7 +609,11 @@ class Pregel(
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels
-        with ChannelsManager(self.channels, checkpoint, config) as channels:
+        with ChannelsManager(
+            self.channels, checkpoint, config
+        ) as channels, ManagedValuesManager(
+            self.managed_values_dict, ensure_config(config)
+        ) as managed:
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
             if not writers:
@@ -641,19 +647,48 @@ class Pregel(
             apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-
-            new_versions = get_new_channel_versions(
-                checkpoint_previous_versions, checkpoint["channel_versions"]
-            )
+            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            # check interrupt before
+            if tasks := should_interrupt(
+                checkpoint,
+                self.interrupt_before_nodes,
+                prepare_next_tasks(
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    config,
+                    step + 2,
+                    for_execution=False,
+                ),
+            ):
+                for t in tasks:
+                    self.checkpointer.put_writes(
+                        {
+                            "configurable": {
+                                **checkpoint_config["configurable"],
+                                "checkpoint_id": checkpoint["id"],
+                            }
+                        },
+                        [
+                            (
+                                INTERRUPT,
+                                Interrupt(str(uuid5(UUID(t.id), "before")), "before"),
+                            )
+                        ],
+                        t.id,
+                    )
             return self.checkpointer.put(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step + 1),
+                checkpoint,
                 {
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
                 },
-                new_versions,
+                get_new_channel_versions(
+                    checkpoint_previous_versions, checkpoint["channel_versions"]
+                ),
             )
 
     async def aupdate_state(
@@ -669,7 +704,7 @@ class Pregel(
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
-            saved.checkpoint["channel_versions"] if saved else {}
+            saved.checkpoint["channel_versions"].copy() if saved else {}
         )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
@@ -723,7 +758,11 @@ class Pregel(
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels, acting as the chosen node
-        async with AsyncChannelsManager(self.channels, checkpoint, config) as channels:
+        async with AsyncChannelsManager(
+            self.channels, checkpoint, config
+        ) as channels, AsyncManagedValuesManager(
+            self.managed_values_dict, ensure_config(config)
+        ) as managed:
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
             if not writers:
@@ -757,19 +796,54 @@ class Pregel(
             apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-
-            new_versions = get_new_channel_versions(
-                checkpoint_previous_versions, checkpoint["channel_versions"]
-            )
+            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            # check interrupt before
+            if tasks := should_interrupt(
+                checkpoint,
+                self.interrupt_before_nodes,
+                prepare_next_tasks(
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    config,
+                    step + 2,
+                    for_execution=False,
+                ),
+            ):
+                await asyncio.gather(
+                    *(
+                        self.checkpointer.aput_writes(
+                            {
+                                "configurable": {
+                                    **checkpoint_config["configurable"],
+                                    "checkpoint_id": checkpoint["id"],
+                                }
+                            },
+                            [
+                                (
+                                    INTERRUPT,
+                                    Interrupt(
+                                        str(uuid5(UUID(t.id), "before")), "before"
+                                    ),
+                                )
+                            ],
+                            t.id,
+                        )
+                        for t in tasks
+                    )
+                )
             return await self.checkpointer.aput(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step + 1),
+                checkpoint,
                 {
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
                 },
-                new_versions,
+                get_new_channel_versions(
+                    checkpoint_previous_versions, checkpoint["channel_versions"]
+                ),
             )
 
     def _defaults(
