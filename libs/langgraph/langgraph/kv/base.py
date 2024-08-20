@@ -1,9 +1,15 @@
 from typing import Any, List, Optional
 
+from langgraph.checkpoint.serde.base import SerializerProtocol
+from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
+
 V = dict[str, Any]
 
 
 class BaseKV:
+    def __init__(self, *, serde: SerializerProtocol = JsonPlusSerializer()) -> None:
+        self.serde = serde
+
     def get(self, pairs: List[tuple[str, str]]) -> dict[tuple[str, str], Optional[V]]:
         # list[(namespace, key)] -> dict[(namespace, key), value | none]
         raise NotImplementedError
