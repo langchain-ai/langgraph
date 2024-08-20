@@ -74,7 +74,6 @@ class SharedValue(WritableManagedValue[Value, Update]):
         self, config: RunnableConfig, *, typ: Type[Any], scope: str, key: str
     ) -> None:
         if typ := _strip_extras(typ):
-            print(typ)
             if typ not in (
                 dict,
                 collections.abc.Mapping,

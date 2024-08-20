@@ -52,6 +52,9 @@ from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
+from langgraph.kv.batch import AsyncBatchedKV
+from langgraph.kv.memory import MemoryKV
+from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
 )
@@ -4778,10 +4781,33 @@ async def test_start_branch_then() -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
+        shared: Annotated[dict[str, dict[str, Any]], SharedValue.on("assistant_id")]
+        other: Annotated[dict[str, dict[str, Any]], SharedValue.on("assistant_id")]
+
+    def assert_shared_value(data: State, config: RunnableConfig) -> State:
+        assert "shared" in data
+        if thread_id := config["configurable"].get("thread_id"):
+            if thread_id == "1":
+                # this is the first thread, so should not see a value
+                assert data["shared"] == {}
+                return {"shared": {"1": {"hello": "world"}}, "other": {"2": {1: 2}}}
+            elif thread_id == "2":
+                # this should get value saved by thread 1
+                assert data["shared"] == {"1": {"hello": "world"}}
+            elif thread_id == "3":
+                # this is a different assistant, so should not see previous value
+                assert data["shared"] == {}
+        return {}
+
+    def tool_two_slow(data: State, config: RunnableConfig) -> State:
+        return {"my_key": " slow", **assert_shared_value(data, config)}
+
+    def tool_two_fast(data: State, config: RunnableConfig) -> State:
+        return {"my_key": " fast", **assert_shared_value(data, config)}
 
     tool_two_graph = StateGraph(State)
-    tool_two_graph.add_node("tool_two_slow", lambda s, config: {"my_key": " slow"})
-    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    tool_two_graph.add_node("tool_two_slow", tool_two_slow)
+    tool_two_graph.add_node("tool_two_fast", tool_two_fast)
     tool_two_graph.set_conditional_entry_point(
         lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
     )
@@ -4798,14 +4824,16 @@ async def test_start_branch_then() -> None:
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
         tool_two = tool_two_graph.compile(
-            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
+            kv=AsyncBatchedKV(MemoryKV()),
+            checkpointer=saver,
+            interrupt_before=["tool_two_fast", "tool_two_slow"],
         )
 
         # missing thread_id
         with pytest.raises(ValueError, match="thread_id"):
             await tool_two.ainvoke({"my_key": "value", "market": "DE"})
 
-        thread1 = {"configurable": {"thread_id": "1"}}
+        thread1 = {"configurable": {"thread_id": "1", "assistant_id": "a"}}
         # stop when about to enter node
         assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, thread1) == {
             "my_key": "value",
@@ -4865,7 +4893,7 @@ async def test_start_branch_then() -> None:
             ][-1].config,
         )
 
-        thread2 = {"configurable": {"thread_id": "2"}}
+        thread2 = {"configurable": {"thread_id": "2", "assistant_id": "a"}}
         # stop when about to enter node
         assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread2) == {
             "my_key": "value",
@@ -4913,7 +4941,7 @@ async def test_start_branch_then() -> None:
             ][-1].config,
         )
 
-        thread3 = {"configurable": {"thread_id": "3"}}
+        thread3 = {"configurable": {"thread_id": "3", "assistant_id": "b"}}
         # stop when about to enter node
         assert await tool_two.ainvoke({"my_key": "value", "market": "US"}, thread3) == {
             "my_key": "value",
