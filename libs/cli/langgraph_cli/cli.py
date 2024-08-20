@@ -224,7 +224,7 @@ For production use, requires a license key in env var LANGGRAPH_CLOUD_LICENSE_KE
         def on_stdout(line: str):
             if "unpacking to docker.io" in line:
                 set("Starting...")
-            elif "GET /ok" in line:
+            elif "Application startup complete" in line:
                 debugger_origin = (
                     f"http://localhost:{debugger_port}"
                     if debugger_port

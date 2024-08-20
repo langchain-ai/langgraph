@@ -5,6 +5,7 @@ import warnings
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from random import randrange
 from typing import (
     Annotated,
     Any,
@@ -9682,3 +9683,41 @@ def test_channel_values(request: pytest.FixtureRequest, checkpointer_name: str) 
     )
     app.invoke({"input": 1, "ephemeral": "meow"}, config)
     assert checkpointer.get(config)["channel_values"] == {"input": 1, "output": 1}
+
+
+def test_xray_issue(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        messages: Annotated[list, add_messages]
+
+    def node(name):
+        def _node(state: State):
+            return {"messages": [("human", f"entered {name} node")]}
+
+        return _node
+
+    parent = StateGraph(State)
+    child = StateGraph(State)
+
+    child.add_node("c_one", node("c_one"))
+    child.add_node("c_two", node("c_two"))
+
+    child.add_edge("__start__", "c_one")
+    child.add_edge("c_two", "c_one")
+
+    child.add_conditional_edges(
+        "c_one", lambda x: str(randrange(0, 2)), {"0": "c_two", "1": "__end__"}
+    )
+
+    parent.add_node("p_one", node("p_one"))
+    parent.add_node("p_two", child.compile())
+
+    parent.add_edge("__start__", "p_one")
+    parent.add_edge("p_two", "p_one")
+
+    parent.add_conditional_edges(
+        "p_one", lambda x: str(randrange(0, 2)), {"0": "p_two", "1": "__end__"}
+    )
+
+    app = parent.compile()
+
+    assert app.get_graph(xray=True).draw_mermaid() == snapshot
