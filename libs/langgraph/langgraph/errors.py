@@ -1,10 +1,7 @@
 from typing import Any
-from uuid import UUID, uuid5
-
-from langchain_core.runnables import ensure_config
 
 from langgraph.checkpoint.base import EmptyChannelError
-from langgraph.constants import CONFIG_KEY_TASK_ID, Interrupt
+from langgraph.constants import Interrupt
 
 
 class GraphRecursionError(RecursionError):
@@ -43,14 +40,7 @@ class NodeInterrupt(GraphInterrupt):
     """Raised by a node to interrupt execution."""
 
     def __init__(self, *values: Any) -> None:
-        config = ensure_config()
-        task_id = config["configurable"][CONFIG_KEY_TASK_ID]
-        super().__init__(
-            [
-                Interrupt(str(uuid5(UUID(task_id), f"during:{i}")), "during", v)
-                for i, v in enumerate(values)
-            ]
-        )
+        super().__init__([Interrupt("during", v) for v in values])
 
 
 class EmptyInputError(Exception):

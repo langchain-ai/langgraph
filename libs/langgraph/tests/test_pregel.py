@@ -2195,9 +2195,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             },
         },
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2241,9 +2239,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 "input": "what is weather in sf",
             },
         },
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2404,9 +2400,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             },
         },
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3005,9 +2999,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3047,9 +3039,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3158,9 +3148,7 @@ def test_conditional_state_graph(
         values={
             "intermediate_steps": [],
         },
-        tasks=(
-            PregelTask(AnyStr(), "agent", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "agent", interrupts=(Interrupt("before"),)),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3185,9 +3173,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3240,9 +3226,7 @@ def test_conditional_state_graph(
                 )
             ],
         },
-        tasks=(
-            PregelTask(AnyStr(), "agent", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "agent", interrupts=(Interrupt("before"),)),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4848,7 +4832,7 @@ def test_message_graph(
             PregelTask(
                 AnyStr(),
                 "tools",
-                interrupts=(Interrupt(AnyStr(), "before"),),
+                interrupts=(Interrupt("before"),),
             ),
         ),
         next=("tools",),
@@ -4895,9 +4879,7 @@ def test_message_graph(
                 ],
             ),
         ],
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4979,9 +4961,7 @@ def test_message_graph(
                 id="ai2",
             ),
         ],
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5577,7 +5557,7 @@ def test_root_graph(
             PregelTask(
                 AnyStr(),
                 "tools",
-                interrupts=(Interrupt(AnyStr(), "before"),),
+                interrupts=(Interrupt("before"),),
             ),
         ),
         next=("tools",),
@@ -5624,9 +5604,7 @@ def test_root_graph(
                 ],
             ),
         ],
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5708,9 +5686,7 @@ def test_root_graph(
                 id="ai2",
             ),
         ],
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -6212,7 +6188,7 @@ def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two",
-                    interrupts=(Interrupt(AnyStr(), "during", "Just because..."),),
+                    interrupts=(Interrupt("during", "Just because..."),),
                 ),
             ),
             config=tool_two.checkpointer.get_tuple(thread1).config,
@@ -6278,7 +6254,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_slow",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_slow",),
@@ -6318,7 +6294,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_fast",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_fast",),
@@ -6358,7 +6334,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_fast",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_fast",),
@@ -6375,7 +6351,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_fast",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_fast",),
@@ -6674,7 +6650,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_slow",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_slow",),
@@ -6718,7 +6694,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_fast",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_fast",),
@@ -6767,11 +6743,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "my_key": "value prepared slow",
                 "market": "DE",
             },
-            tasks=(
-                PregelTask(
-                    AnyStr(), "finish", interrupts=(Interrupt(AnyStr(), "before"),)
-                ),
-            ),
+            tasks=(PregelTask(AnyStr(), "finish", interrupts=(Interrupt("before"),)),),
             next=("finish",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6790,11 +6762,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "my_key": "value prepared slower",
                 "market": "DE",
             },
-            tasks=(
-                PregelTask(
-                    AnyStr(), "finish", interrupts=(Interrupt(AnyStr(), "before"),)
-                ),
-            ),
+            tasks=(PregelTask(AnyStr(), "finish", interrupts=(Interrupt("before"),)),),
             next=("finish",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -7051,9 +7019,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
             "query": "analyzed: query: what is weather in sf",
             "docs": ["doc1", "doc2", "doc3", "doc4", "doc5"],
         },
-        tasks=(
-            PregelTask(AnyStr(), "qa", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "qa", interrupts=(Interrupt("before"),)),),
         next=("qa",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],

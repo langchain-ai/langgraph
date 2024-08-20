@@ -2425,7 +2425,7 @@ async def test_conditional_graph() -> None:
             PregelTask(
                 AnyStr(),
                 "tools",
-                interrupts=(Interrupt(AnyStr(), "before"),),
+                interrupts=(Interrupt("before"),),
             ),
         ),
         next=("tools",),
@@ -2479,7 +2479,7 @@ async def test_conditional_graph() -> None:
             PregelTask(
                 AnyStr(),
                 "tools",
-                interrupts=(Interrupt(AnyStr(), "before"),),
+                interrupts=(Interrupt("before"),),
             ),
         ),
         next=("tools",),
@@ -2657,7 +2657,7 @@ async def test_conditional_graph() -> None:
             PregelTask(
                 AnyStr(),
                 "tools",
-                interrupts=(Interrupt(AnyStr(), "before"),),
+                interrupts=(Interrupt("before"),),
             ),
         ),
         next=("tools",),
@@ -3229,7 +3229,7 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
             PregelTask(
                 AnyStr(),
                 "tools",
-                interrupts=(Interrupt(AnyStr(), "before"),),
+                interrupts=(Interrupt("before"),),
             ),
         ),
         next=("tools",),
@@ -3275,9 +3275,7 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
             ),
             "intermediate_steps": [],
         },
-        tasks=(
-            PregelTask(AnyStr(), "tools", interrupts=(Interrupt(AnyStr(), "before"),)),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -4831,7 +4829,7 @@ async def test_start_branch_then() -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_slow",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_slow",),
@@ -4879,7 +4877,7 @@ async def test_start_branch_then() -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_fast",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_fast",),
@@ -4927,7 +4925,7 @@ async def test_start_branch_then() -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_fast",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_fast",),
@@ -4948,7 +4946,7 @@ async def test_start_branch_then() -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_fast",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_fast",),
@@ -5274,7 +5272,7 @@ async def test_branch_then() -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_slow",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_slow",),
@@ -5326,7 +5324,7 @@ async def test_branch_then() -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two_fast",
-                    interrupts=(Interrupt(AnyStr(), "before"),),
+                    interrupts=(Interrupt("before"),),
                 ),
             ),
             next=("tool_two_fast",),

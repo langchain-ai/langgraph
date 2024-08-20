@@ -19,7 +19,6 @@ from typing import (
     TypeVar,
     Union,
 )
-from uuid import UUID, uuid5
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables import RunnableConfig
@@ -210,10 +209,7 @@ class PregelLoop:
             # after execution, check if we should interrupt
             if tasks := should_interrupt(self.checkpoint, interrupt_after, self.tasks):
                 self.status = "interrupt_after"
-                interrupts = [
-                    (t.id, Interrupt(str(uuid5(UUID(t.id), "after")), "after"))
-                    for t in tasks
-                ]
+                interrupts = [(t.id, Interrupt("after")) for t in tasks]
                 for tid, interrupt in interrupts:
                     self.put_writes(tid, [(INTERRUPT, interrupt)])
                 if self.is_nested:
@@ -283,10 +279,7 @@ class PregelLoop:
         # before execution, check if we should interrupt
         if tasks := should_interrupt(self.checkpoint, interrupt_before, self.tasks):
             self.status = "interrupt_before"
-            interrupts = [
-                (t.id, Interrupt(str(uuid5(UUID(t.id), "before")), "before"))
-                for t in tasks
-            ]
+            interrupts = [(t.id, Interrupt("before")) for t in tasks]
             for tid, interrupt in interrupts:
                 self.put_writes(tid, [(INTERRUPT, interrupt)])
             if self.is_nested:

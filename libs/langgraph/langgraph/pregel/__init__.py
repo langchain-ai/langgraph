@@ -670,12 +670,7 @@ class Pregel(
                                 "checkpoint_id": checkpoint["id"],
                             }
                         },
-                        [
-                            (
-                                INTERRUPT,
-                                Interrupt(str(uuid5(UUID(t.id), "before")), "before"),
-                            )
-                        ],
+                        [(INTERRUPT, Interrupt("before"))],
                         t.id,
                     )
             return self.checkpointer.put(
@@ -820,14 +815,7 @@ class Pregel(
                                     "checkpoint_id": checkpoint["id"],
                                 }
                             },
-                            [
-                                (
-                                    INTERRUPT,
-                                    Interrupt(
-                                        str(uuid5(UUID(t.id), "before")), "before"
-                                    ),
-                                )
-                            ],
+                            [(INTERRUPT, Interrupt("before"))],
                             t.id,
                         )
                         for t in tasks
