@@ -52,7 +52,6 @@ from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
-from langgraph.kv.batch import AsyncBatchedKV
 from langgraph.kv.memory import MemoryKV
 from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
@@ -4824,7 +4823,7 @@ async def test_start_branch_then() -> None:
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
         tool_two = tool_two_graph.compile(
-            kv=AsyncBatchedKV(MemoryKV()),
+            kv=MemoryKV(),
             checkpointer=saver,
             interrupt_before=["tool_two_fast", "tool_two_slow"],
         )

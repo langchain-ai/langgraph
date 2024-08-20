@@ -50,6 +50,8 @@ from langgraph.constants import (
     Interrupt,
 )
 from langgraph.errors import EmptyInputError, GraphInterrupt
+from langgraph.kv.base import BaseKV
+from langgraph.kv.batch import AsyncBatchedKV
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValueMapping,
@@ -103,7 +105,7 @@ class PregelLoop:
         ]
     ]
     graph: "Pregel"
-
+    kv: Optional[BaseKV]
     submit: Submit
     channels: Mapping[str, BaseChannel]
     managed: ManagedValueMapping
@@ -425,6 +427,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         graph: "Pregel",
     ) -> None:
         super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
+        self.kv = graph.kv
         self.stack = ExitStack()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
@@ -476,7 +479,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.managed = self.stack.enter_context(
             ManagedValuesManager(
                 self.graph.managed_values_dict,
-                patch_config(self.config, configurable={CONFIG_KEY_KV: self.graph.kv}),
+                patch_config(self.config, configurable={CONFIG_KEY_KV: self.kv}),
             )
         )
         self.stack.push(self._suppress_interrupt)
@@ -508,6 +511,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         graph: "Pregel",
     ) -> None:
         super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
+        self.kv = AsyncBatchedKV(graph.kv) if graph.kv else None
         self.stack = AsyncExitStack()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
@@ -563,7 +567,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         self.managed = await self.stack.enter_async_context(
             AsyncManagedValuesManager(
                 self.graph.managed_values_dict,
-                patch_config(self.config, configurable={CONFIG_KEY_KV: self.graph.kv}),
+                patch_config(self.config, configurable={CONFIG_KEY_KV: self.kv}),
             )
         )
         self.stack.push(self._suppress_interrupt)
