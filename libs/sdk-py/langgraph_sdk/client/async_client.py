@@ -2,14 +2,12 @@ from __future__ import annotations
 
 import asyncio
 import logging
-import os
 import sys
 from typing import (
     Any,
     AsyncIterator,
     Dict,
     List,
-    NamedTuple,
     Optional,
     Union,
     overload,
@@ -32,17 +30,19 @@ from langgraph_sdk.schema import (
     Run,
     RunCreate,
     StreamMode,
+    StreamPart,
     Thread,
     ThreadState,
     ThreadStatus,
 )
+from langgraph_sdk.utils import get_api_key
 
 logger = logging.getLogger(__name__)
 
 
 def get_client(
     *, url: Optional[str] = None, api_key: Optional[str] = None
-) -> LangGraphClient:
+) -> AsyncLangGraphClient:
     """Get a LangGraphClient instance.
 
     Args:
@@ -68,7 +68,7 @@ def get_client(
     headers = {
         "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
     }
-    api_key = _get_api_key(api_key)
+    api_key = get_api_key(api_key)
     if api_key:
         headers["x-api-key"] = api_key
     client = httpx.AsyncClient(
@@ -77,24 +77,19 @@ def get_client(
         timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
         headers=headers,
     )
-    return LangGraphClient(client)
+    return AsyncLangGraphClient(client)
 
 
-class StreamPart(NamedTuple):
-    event: str
-    data: dict
-
-
-class LangGraphClient:
+class AsyncLangGraphClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
-        self.http = HttpClient(client)
+        self.http = AsyncHttpClient(client)
         self.assistants = AssistantsClient(self.http)
         self.threads = ThreadsClient(self.http)
         self.runs = RunsClient(self.http)
         self.crons = CronClient(self.http)
 
 
-class HttpClient:
+class AsyncHttpClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
 
@@ -231,7 +226,7 @@ async def decode_json(r: httpx.Response) -> Any:
 
 
 class AssistantsClient:
-    def __init__(self, http: HttpClient) -> None:
+    def __init__(self, http: AsyncHttpClient) -> None:
         self.http = http
 
     async def get(self, assistant_id: str) -> Assistant:
@@ -561,7 +556,7 @@ class AssistantsClient:
 
 
 class ThreadsClient:
-    def __init__(self, http: HttpClient) -> None:
+    def __init__(self, http: AsyncHttpClient) -> None:
         self.http = http
 
     async def get(self, thread_id: str) -> Thread:
@@ -944,7 +939,7 @@ class ThreadsClient:
 
 
 class RunsClient:
-    def __init__(self, http: HttpClient) -> None:
+    def __init__(self, http: AsyncHttpClient) -> None:
         self.http = http
 
     @overload
@@ -1471,7 +1466,7 @@ class RunsClient:
 
 
 class CronClient:
-    def __init__(self, http_client: HttpClient) -> None:
+    def __init__(self, http_client: AsyncHttpClient) -> None:
         self.http = http_client
 
     async def create_for_thread(
@@ -1679,19 +1674,3 @@ class CronClient:
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         return await self.http.post("/runs/crons/search", json=payload)
-
-
-def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
-    """Get the API key from the environment.
-    Precedence:
-        1. explicit argument
-        2. LANGGRAPH_API_KEY
-        3. LANGSMITH_API_KEY
-        4. LANGCHAIN_API_KEY
-    """
-    if api_key:
-        return api_key
-    for prefix in ["LANGGRAPH", "LANGSMITH", "LANGCHAIN"]:
-        if env := os.getenv(f"{prefix}_API_KEY"):
-            return env.strip().strip('"').strip("'")
-    return None  # type: ignore
