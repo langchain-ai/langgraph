@@ -381,9 +381,9 @@ class StateGraph(Graph):
 
     def compile(
         self,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
         *,
         kv: Optional[BaseKV] = None,
-        checkpointer: Optional[BaseCheckpointSaver] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
