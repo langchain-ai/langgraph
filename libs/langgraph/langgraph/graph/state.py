@@ -40,10 +40,18 @@ from langgraph.graph.graph import (
     Graph,
     Send,
 )
-from langgraph.managed.base import ManagedValue, is_managed_value
+from langgraph.managed.base import (
+    ChannelKeyPlaceholder,
+    ChannelTypePlaceholder,
+    ConfiguredManagedValue,
+    ManagedValue,
+    is_managed_value,
+    is_writable_managed_value,
+)
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
+from langgraph.store.base import BaseStore
 from langgraph.utils import RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
@@ -374,6 +382,8 @@ class StateGraph(Graph):
     def compile(
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
+        *,
+        store: Optional[BaseStore] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
@@ -442,6 +452,7 @@ class StateGraph(Graph):
             interrupt_after_nodes=interrupt_after,
             auto_validate=False,
             debug=debug,
+            store=store,
         )
 
         compiled.attach_node(START, None)
@@ -511,7 +522,11 @@ class CompiledStateGraph(CompiledGraph):
                 if not isinstance(v, Context) and not is_managed_value(v)
             ]
         else:
-            output_keys = list(self.builder.channels)
+            output_keys = list(self.builder.channels) + [
+                k
+                for k, v in self.builder.managed.items()
+                if is_writable_managed_value(v)
+            ]
 
         def _get_state_key(
             input: Union[None, dict, Any], config: RunnableConfig, *, key: str
@@ -681,10 +696,10 @@ def _get_channels(
     schema: Type[dict],
 ) -> tuple[dict[str, BaseChannel], dict[str, Type[ManagedValue]]]:
     if not hasattr(schema, "__annotations__"):
-        return {"__root__": _get_channel(schema, allow_managed=False)}, {}
+        return {"__root__": _get_channel("__root__", schema, allow_managed=False)}, {}
 
     all_keys = {
-        name: _get_channel(typ)
+        name: _get_channel(name, typ)
         for name, typ in get_type_hints(schema, include_extras=True).items()
         if name != "__slots__"
     }
@@ -695,9 +710,9 @@ def _get_channels(
 
 
 def _get_channel(
-    annotation: Any, *, allow_managed: bool = True
+    name: str, annotation: Any, *, allow_managed: bool = True
 ) -> Union[BaseChannel, Type[ManagedValue]]:
-    if manager := _is_field_managed_value(annotation):
+    if manager := _is_field_managed_value(name, annotation):
         if allow_managed:
             return manager
         else:
@@ -736,12 +751,18 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
     return None
 
 
-def _is_field_managed_value(typ: Type[Any]) -> Optional[Type[ManagedValue]]:
+def _is_field_managed_value(name: str, typ: Type[Any]) -> Optional[Type[ManagedValue]]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1:
             decoration = get_origin(meta[-1]) or meta[-1]
             if is_managed_value(decoration):
+                if isinstance(decoration, ConfiguredManagedValue):
+                    for k, v in decoration.kwargs.items():
+                        if v is ChannelKeyPlaceholder:
+                            decoration.kwargs[k] = name
+                        if v is ChannelTypePlaceholder:
+                            decoration.kwargs[k] = typ.__origin__
                 return decoration
 
     return None

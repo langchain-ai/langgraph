@@ -121,6 +121,7 @@ def local_write(
     commit: Callable[[Sequence[tuple[str, Any]]], None],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
+    managed: ManagedValueMapping,
     writes: Sequence[tuple[str, Any]],
 ) -> None:
     for chan, value in writes:
@@ -131,7 +132,7 @@ def local_write(
                 )
             if value.node not in processes:
                 raise InvalidUpdateError(f"Invalid node name {value.node} in packet")
-        elif chan not in channels:
+        elif chan not in channels and chan not in managed:
             logger.warning(f"Skipping write for channel '{chan}' which has no readers")
     commit(writes)
 
@@ -145,7 +146,7 @@ def apply_writes(
     channels: Mapping[str, BaseChannel],
     tasks: Sequence[WritesProtocol],
     get_next_version: Optional[Callable[[int, BaseChannel], int]],
-) -> None:
+) -> dict[str, list[Any]]:
     # update seen versions
     for task in tasks:
         checkpoint["versions_seen"].setdefault(task.name, {}).update(
@@ -161,6 +162,7 @@ def apply_writes(
         max_version = max(checkpoint["channel_versions"].values())
     else:
         max_version = None
+
     # Consume all channels that were read
     for chan in {
         chan for task in tasks for chan in task.triggers if chan not in RESERVED
@@ -177,12 +179,15 @@ def apply_writes(
 
     # Group writes by channel
     pending_writes_by_channel: dict[str, list[Any]] = defaultdict(list)
+    pending_writes_by_managed: dict[str, list[Any]] = defaultdict(list)
     for task in tasks:
         for chan, val in task.writes:
             if chan == TASKS:
                 checkpoint["pending_sends"].append(val)
-            else:
+            elif chan in channels:
                 pending_writes_by_channel[chan].append(val)
+            else:
+                pending_writes_by_managed[chan].append(val)
 
     # Find the highest version of all channels
     if checkpoint["channel_versions"]:
@@ -213,6 +218,9 @@ def apply_writes(
                 checkpoint["channel_versions"][chan] = get_next_version(
                     max_version, channels[chan]
                 )
+
+    # Return managed values writes to be applied externally
+    return pending_writes_by_managed
 
 
 @overload
@@ -314,7 +322,11 @@ def prepare_next_tasks(
                                 CONFIG_KEY_TASK_ID: task_id,
                                 # deque.extend is thread-safe
                                 CONFIG_KEY_SEND: partial(
-                                    local_write, writes.extend, processes, channels
+                                    local_write,
+                                    writes.extend,
+                                    processes,
+                                    channels,
+                                    managed,
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,
@@ -405,7 +417,11 @@ def prepare_next_tasks(
                                     CONFIG_KEY_TASK_ID: task_id,
                                     # deque.extend is thread-safe
                                     CONFIG_KEY_SEND: partial(
-                                        local_write, writes.extend, processes, channels
+                                        local_write,
+                                        writes.extend,
+                                        processes,
+                                        channels,
+                                        managed,
                                     ),
                                     CONFIG_KEY_READ: partial(
                                         local_read,

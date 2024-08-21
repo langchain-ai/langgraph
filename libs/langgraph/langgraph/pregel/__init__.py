@@ -108,6 +108,7 @@ from langgraph.pregel.types import (
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.store.base import BaseStore
 
 WriteValue = Union[
     Runnable[Input, Output],
@@ -222,6 +223,9 @@ class Pregel(
 
     checkpointer: Optional[BaseCheckpointSaver] = None
     """Checkpointer used to save and load graph state. Defaults to None."""
+
+    store: Optional[BaseStore] = None
+    """Memory store to use for SharedValues. Defaults to None."""
 
     retry_policy: Optional[RetryPolicy] = None
     """Retry policy to use when running tasks. Set to None to disable."""
@@ -644,9 +648,9 @@ class Pregel(
                 ),
             )
             # apply to checkpoint and save
-            apply_writes(
+            assert not apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
-            )
+            ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             # check interrupt before
             if tasks := should_interrupt(
@@ -788,9 +792,9 @@ class Pregel(
                 ),
             )
             # apply to checkpoint and save
-            apply_writes(
+            assert not apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
-            )
+            ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             # check interrupt before
             if tasks := should_interrupt(
