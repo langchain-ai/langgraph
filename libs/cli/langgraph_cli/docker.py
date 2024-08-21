@@ -174,8 +174,8 @@ def compose(
             interval: 5s"""
 
     compose_str = f"""{volumes}services:
-{db}
 {REDIS}
+{db}
 {debugger_compose(port=debugger_port, base_url=debugger_base_url)}
     langgraph-api:
         ports:
@@ -189,8 +189,8 @@ def compose(
                 condition: service_healthy"""
     compose_str += f"""
         environment:
-            POSTGRES_URI: {postgres_uri}
             REDIS_URI: redis://langgraph-redis:6379
+            POSTGRES_URI: {postgres_uri}
 """
     if capabilities.healthcheck_start_interval:
         compose_str += """        healthcheck:
