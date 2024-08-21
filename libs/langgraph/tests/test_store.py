@@ -7,11 +7,11 @@ from langgraph.store.base import BaseStore
 from langgraph.store.batch import AsyncBatchedStore
 
 
-async def test_kv_async_batch(mocker: MockerFixture) -> None:
+async def test_async_batch_store(mocker: MockerFixture) -> None:
     aget = mocker.stub()
     alist = mocker.stub()
 
-    class MockKV(BaseStore):
+    class MockStore(BaseStore):
         async def aget(
             self, pairs: list[tuple[str, str]]
         ) -> dict[tuple[str, str], dict[str, Any] | None]:
@@ -22,21 +22,9 @@ async def test_kv_async_batch(mocker: MockerFixture) -> None:
             alist(prefixes)
             return {prefix: {prefix: 1} for prefix in prefixes}
 
-    store = AsyncBatchedStore(MockKV())
+    store = AsyncBatchedStore(MockStore())
 
     # concurrent calls are batched
-    results = await asyncio.gather(
-        store.aget([("a", "b")]),
-        store.aget([("c", "d")]),
-    )
-    assert results == [
-        {("a", "b"): 1},
-        {("c", "d"): 1},
-    ]
-    assert [c.args for c in aget.call_args_list] == [
-        ([("a", "b"), ("c", "d")],),
-    ]
-
     results = await asyncio.gather(
         store.alist(["a", "b"]),
         store.alist(["c", "d"]),

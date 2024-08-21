@@ -12,7 +12,7 @@ from typing import (
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import NotRequired, Required, Self
 
-from langgraph.constants import CONFIG_KEY_KV
+from langgraph.constants import CONFIG_KEY_STORE
 from langgraph.errors import InvalidUpdateError
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
@@ -56,8 +56,8 @@ class SharedValue(WritableManagedValue[Value, Update]):
     @contextmanager
     def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
         with super().enter(config, **kwargs) as value:
-            if value.kv is not None:
-                saved = value.kv.list([value.ns])
+            if value.store is not None:
+                saved = value.store.list([value.ns])
                 value.value = saved[value.ns]
             yield value
 
@@ -65,8 +65,8 @@ class SharedValue(WritableManagedValue[Value, Update]):
     @asynccontextmanager
     async def aenter(cls, config: RunnableConfig, **kwargs: Any) -> AsyncIterator[Self]:
         async with super().aenter(config, **kwargs) as value:
-            if value.kv is not None:
-                saved = await value.kv.alist([value.ns])
+            if value.store is not None:
+                saved = await value.store.alist([value.ns])
                 value.value = saved[value.ns]
             yield value
 
@@ -83,8 +83,8 @@ class SharedValue(WritableManagedValue[Value, Update]):
         self.scope = scope
         self.config = config
         self.value: Value = {}
-        self.kv: BaseStore = config["configurable"].get(CONFIG_KEY_KV)
-        if self.kv is None:
+        self.store: BaseStore = config["configurable"].get(CONFIG_KEY_STORE)
+        if self.store is None:
             self.ns: Optional[str] = None
         elif scope_value := config["configurable"].get(self.scope):
             self.ns = f"scoped:{scope}:{key}:{scope_value}"
@@ -114,13 +114,13 @@ class SharedValue(WritableManagedValue[Value, Update]):
         return writes
 
     def update(self, values: Sequence[Update]) -> None:
-        if self.kv is None:
+        if self.store is None:
             self._process_update(values)
         else:
-            return self.kv.put(self._process_update(values))
+            return self.store.put(self._process_update(values))
 
     async def aupdate(self, writes: Sequence[Update]) -> None:
-        if self.kv is None:
+        if self.store is None:
             self._process_update(writes)
         else:
-            return await self.kv.aput(self._process_update(writes))
+            return await self.store.aput(self._process_update(writes))

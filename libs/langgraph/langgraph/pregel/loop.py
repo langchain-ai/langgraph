@@ -41,9 +41,9 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
-    CONFIG_KEY_KV,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_STORE,
     ERROR,
     INPUT,
     INTERRUPT,
@@ -479,7 +479,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.managed = self.stack.enter_context(
             ManagedValuesManager(
                 self.graph.managed_values_dict,
-                patch_config(self.config, configurable={CONFIG_KEY_KV: self.store}),
+                patch_config(self.config, configurable={CONFIG_KEY_STORE: self.store}),
             )
         )
         self.stack.push(self._suppress_interrupt)
@@ -567,7 +567,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         self.managed = await self.stack.enter_async_context(
             AsyncManagedValuesManager(
                 self.graph.managed_values_dict,
-                patch_config(self.config, configurable={CONFIG_KEY_KV: self.store}),
+                patch_config(self.config, configurable={CONFIG_KEY_STORE: self.store}),
             )
         )
         self.stack.push(self._suppress_interrupt)
