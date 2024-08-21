@@ -5048,12 +5048,7 @@ async def test_branch_then() -> None:
                         "writes": {"my_key": "value", "market": "DE"},
                     },
                     "next": ["__start__"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "__start__",
-                        }
-                    ],
+                    "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
                 },
             },
             {
@@ -5082,12 +5077,7 @@ async def test_branch_then() -> None:
                         "writes": None,
                     },
                     "next": ["prepare"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "prepare",
-                        }
-                    ],
+                    "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
                 },
             },
             {
@@ -5138,10 +5128,7 @@ async def test_branch_then() -> None:
                     },
                     "next": ["tool_two_slow"],
                     "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "tool_two_slow",
-                        }
+                        {"id": AnyStr(), "name": "tool_two_slow", "interrupts": ()}
                     ],
                 },
             },
@@ -5192,12 +5179,7 @@ async def test_branch_then() -> None:
                         "writes": {"tool_two_slow": {"my_key": " slow"}},
                     },
                     "next": ["finish"],
-                    "tasks": [
-                        {
-                            "id": AnyStr(),
-                            "name": "finish",
-                        }
-                    ],
+                    "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": ()}],
                 },
             },
             {

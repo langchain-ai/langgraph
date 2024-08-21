@@ -6446,7 +6446,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "writes": {"my_key": "value", "market": "DE"},
                     },
                     "next": ["__start__"],
-                    "tasks": [{"id": AnyStr(), "name": "__start__"}],
+                    "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
                 },
             },
             {
@@ -6475,7 +6475,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "writes": None,
                     },
                     "next": ["prepare"],
-                    "tasks": [{"id": AnyStr(), "name": "prepare"}],
+                    "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
                 },
             },
             {
@@ -6525,7 +6525,9 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "writes": {"prepare": {"my_key": " prepared"}},
                     },
                     "next": ["tool_two_slow"],
-                    "tasks": [{"id": AnyStr(), "name": "tool_two_slow"}],
+                    "tasks": [
+                        {"id": AnyStr(), "name": "tool_two_slow", "interrupts": ()}
+                    ],
                 },
             },
             {
@@ -6575,7 +6577,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "writes": {"tool_two_slow": {"my_key": " slow"}},
                     },
                     "next": ["finish"],
-                    "tasks": [{"id": AnyStr(), "name": "finish"}],
+                    "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": ()}],
                 },
             },
             {
