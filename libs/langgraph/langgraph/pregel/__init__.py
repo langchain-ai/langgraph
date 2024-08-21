@@ -225,7 +225,7 @@ class Pregel(
     """Checkpointer used to save and load graph state. Defaults to None."""
 
     store: Optional[BaseStore] = None
-    """Key-value store to use. Defaults to None."""
+    """Memory store to use for SharedValues. Defaults to None."""
 
     retry_policy: Optional[RetryPolicy] = None
     """Retry policy to use when running tasks. Set to None to disable."""
