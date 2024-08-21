@@ -32,6 +32,7 @@ class CheckpointTask(TypedDict):
     id: str
     name: str
     error: Optional[str]
+    interrupts: list[dict]
 
 
 class CheckpointPayload(TypedDict):
@@ -149,6 +150,7 @@ def map_debug_checkpoint(
                 else {
                     "id": t.id,
                     "name": t.name,
+                    "interrupts": t.interrupts,
                 }
                 for t in tasks_w_writes(tasks, pending_writes)
             ],
