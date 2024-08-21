@@ -12,6 +12,15 @@ DEFAULT_POSTGRES_URI = (
     "postgres://postgres:postgres@langgraph-postgres:5432/postgres?sslmode=disable"
 )
 
+REDIS = """
+    langgraph-redis:
+        image: redis:6
+        healthcheck:
+            test: redis-cli ping
+            interval: 5s
+            timeout: 1s
+            retries: 5
+"""
 
 DB = """
     langgraph-postgres:
@@ -166,18 +175,22 @@ def compose(
 
     compose_str = f"""{volumes}services:
 {db}
+{REDIS}
 {debugger_compose(port=debugger_port, base_url=debugger_base_url)}
     langgraph-api:
         ports:
-            - "{port}:8000\""""
+            - "{port}:8000\"
+        depends_on:
+            langgraph-redis:
+                condition: service_healthy"""
     if include_db:
         compose_str += """
-        depends_on:
             langgraph-postgres:
                 condition: service_healthy"""
     compose_str += f"""
         environment:
             POSTGRES_URI: {postgres_uri}
+            REDIS_URI: redis://langgraph-redis:6379
 """
     if capabilities.healthcheck_start_interval:
         compose_str += """        healthcheck:

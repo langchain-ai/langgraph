@@ -58,6 +58,7 @@ from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
+from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
 )
@@ -70,7 +71,9 @@ from langgraph.pregel import (
 )
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.types import PregelTask
+from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyStr, ExceptionLike
+from tests.fake_tracer import FakeTracer
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
@@ -660,7 +663,7 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 6, "writes": 5},
+            metadata={"source": "loop", "step": 6, "writes": {"two": 5}},
             created_at=AnyStr(),
             parent_config=history[1].config,
         ),
@@ -675,7 +678,7 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 5, "writes": None},
+            metadata={"source": "loop", "step": 5, "writes": {"one": None}},
             created_at=AnyStr(),
             parent_config=history[2].config,
         ),
@@ -705,7 +708,7 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 3, "writes": None},
+            metadata={"source": "loop", "step": 3, "writes": {"one": None}},
             created_at=AnyStr(),
             parent_config=history[4].config,
         ),
@@ -735,7 +738,7 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 1, "writes": 4},
+            metadata={"source": "loop", "step": 1, "writes": {"two": 4}},
             created_at=AnyStr(),
             parent_config=history[6].config,
         ),
@@ -750,7 +753,7 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 0, "writes": None},
+            metadata={"source": "loop", "step": 0, "writes": {"one": None}},
             created_at=AnyStr(),
             parent_config=history[7].config,
         ),
@@ -1998,12 +2001,14 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
             "step": 0,
             "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 },
             },
         },
@@ -2209,12 +2214,14 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
             "step": 0,
             "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 }
             },
         },
@@ -2414,12 +2421,14 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
             "step": 0,
             "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 }
             },
         },
@@ -6142,20 +6151,34 @@ def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
         my_key: Annotated[str, operator.add]
         market: str
 
+    tool_two_node_count = 0
+
     def tool_two_node(s: State) -> State:
+        nonlocal tool_two_node_count
+        tool_two_node_count += 1
         if s["market"] == "DE":
             raise NodeInterrupt("Just because...")
         return {"my_key": " all good"}
 
     tool_two_graph = StateGraph(State)
-    tool_two_graph.add_node("tool_two", tool_two_node)
+    tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
     tool_two_graph.add_edge(START, "tool_two")
     tool_two = tool_two_graph.compile()
 
-    assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
+    tracer = FakeTracer()
+    assert tool_two.invoke(
+        {"my_key": "value", "market": "DE"}, {"callbacks": [tracer]}
+    ) == {
         "my_key": "value",
         "market": "DE",
     }
+    assert tool_two_node_count == 1, "interrupts aren't retried"
+    assert len(tracer.runs) == 1
+    run = tracer.runs[0]
+    assert run.end_time is not None
+    assert run.error is None
+    assert run.outputs == {"market": "DE", "my_key": "value"}
+
     assert tool_two.invoke({"my_key": "value", "market": "US"}) == {
         "my_key": "value all good",
         "market": "US",
@@ -6207,10 +6230,32 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
+        shared: Annotated[dict[str, dict[str, Any]], SharedValue.on("assistant_id")]
+
+    def assert_shared_value(data: State, config: RunnableConfig) -> State:
+        assert "shared" in data
+        if thread_id := config["configurable"].get("thread_id"):
+            if thread_id == "1":
+                # this is the first thread, so should not see a value
+                assert data["shared"] == {}
+                return {"shared": {"1": {"hello": "world"}}}
+            elif thread_id == "2":
+                # this should get value saved by thread 1
+                assert data["shared"] == {"1": {"hello": "world"}}
+            elif thread_id == "3":
+                # this is a different assistant, so should not see previous value
+                assert data["shared"] == {}
+        return {}
+
+    def tool_two_slow(data: State, config: RunnableConfig) -> State:
+        return {"my_key": " slow", **assert_shared_value(data, config)}
+
+    def tool_two_fast(data: State, config: RunnableConfig) -> State:
+        return {"my_key": " fast", **assert_shared_value(data, config)}
 
     tool_two_graph = StateGraph(State)
-    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
-    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
+    tool_two_graph.add_node("tool_two_slow", tool_two_slow)
+    tool_two_graph.add_node("tool_two_fast", tool_two_fast)
     tool_two_graph.set_conditional_entry_point(
         lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
     )
@@ -6228,14 +6273,16 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
 
     with SqliteSaver.from_conn_string(":memory:") as saver:
         tool_two = tool_two_graph.compile(
-            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
+            store=MemoryStore(),
+            checkpointer=saver,
+            interrupt_before=["tool_two_fast", "tool_two_slow"],
         )
 
         # missing thread_id
         with pytest.raises(ValueError, match="thread_id"):
             tool_two.invoke({"my_key": "value", "market": "DE"})
 
-        thread1 = {"configurable": {"thread_id": "1"}}
+        thread1 = {"configurable": {"thread_id": "1", "assistant_id": "a"}}
         # stop when about to enter node
         assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
             "my_key": "value ⛰️",
@@ -6287,7 +6334,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
 
-        thread2 = {"configurable": {"thread_id": "2"}}
+        thread2 = {"configurable": {"thread_id": "2", "assistant_id": "a"}}
         # stop when about to enter node
         assert tool_two.invoke({"my_key": "value", "market": "US"}, thread2) == {
             "my_key": "value",
@@ -6327,7 +6374,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
 
-        thread3 = {"configurable": {"thread_id": "3"}}
+        thread3 = {"configurable": {"thread_id": "3", "assistant_id": "b"}}
         # stop when about to enter node
         assert tool_two.invoke({"my_key": "value", "market": "US"}, thread3) == {
             "my_key": "value",
