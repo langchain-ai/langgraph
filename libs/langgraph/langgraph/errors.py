@@ -39,8 +39,8 @@ class GraphInterrupt(Exception):
 class NodeInterrupt(GraphInterrupt):
     """Raised by a node to interrupt execution."""
 
-    def __init__(self, *values: Any) -> None:
-        super().__init__([Interrupt("during", v) for v in values])
+    def __init__(self, value: Any) -> None:
+        super().__init__([Interrupt("during", value)])
 
 
 class EmptyInputError(Exception):
