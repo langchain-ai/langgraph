@@ -40,8 +40,14 @@ from langgraph_sdk.schema import (
 logger = logging.getLogger(__name__)
 
 
+RESERVED_HEADERS = ("x-api-key",)
+
+
 def get_client(
-    *, url: Optional[str] = None, api_key: Optional[str] = None
+    *,
+    url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    headers: Optional[dict[str, str]] = None,
 ) -> LangGraphClient:
     """Get a LangGraphClient instance.
 
@@ -53,6 +59,7 @@ def get_client(
                 2. LANGGRAPH_API_KEY
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
+        headers: Optional custom headers
     """
     transport: Optional[httpx.AsyncBaseTransport] = None
     if url is None:
@@ -65,17 +72,12 @@ def get_client(
             url = "http://localhost:8123"
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
-    headers = {
-        "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
-    }
-    api_key = _get_api_key(api_key)
-    if api_key:
-        headers["x-api-key"] = api_key
+
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
         timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
-        headers=headers,
+        headers=_get_headers(api_key, headers),
     )
     return LangGraphClient(client)
 
@@ -1695,3 +1697,23 @@ def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
         if env := os.getenv(f"{prefix}_API_KEY"):
             return env.strip().strip('"').strip("'")
     return None  # type: ignore
+
+
+def _get_headers(
+    api_key: Optional[str], custom_headers: Optional[dict[str, str]]
+) -> dict[str, str]:
+    """Combine api_key and custom user-provided headers."""
+    custom_headers = custom_headers or {}
+    for header in RESERVED_HEADERS:
+        if header in custom_headers:
+            raise ValueError(f"Cannot set reserved header '{header}'")
+
+    headers = {
+        "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
+        **custom_headers,
+    }
+    api_key = _get_api_key(api_key)
+    if api_key:
+        headers["x-api-key"] = api_key
+
+    return headers
