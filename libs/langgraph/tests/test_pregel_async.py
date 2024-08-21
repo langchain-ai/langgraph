@@ -876,7 +876,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 6, "writes": 5},
+            metadata={"source": "loop", "step": 6, "writes": {"two": 5}},
             created_at=AnyStr(),
             parent_config=history[1].config,
         ),
@@ -891,7 +891,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 5, "writes": None},
+            metadata={"source": "loop", "step": 5, "writes": {"one": None}},
             created_at=AnyStr(),
             parent_config=history[2].config,
         ),
@@ -921,7 +921,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 3, "writes": None},
+            metadata={"source": "loop", "step": 3, "writes": {"one": None}},
             created_at=AnyStr(),
             parent_config=history[4].config,
         ),
@@ -951,7 +951,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 1, "writes": 4},
+            metadata={"source": "loop", "step": 1, "writes": {"two": 4}},
             created_at=AnyStr(),
             parent_config=history[6].config,
         ),
@@ -966,7 +966,7 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 0, "writes": None},
+            metadata={"source": "loop", "step": 0, "writes": {"one": None}},
             created_at=AnyStr(),
             parent_config=history[7].config,
         ),
@@ -2290,12 +2290,14 @@ async def test_conditional_graph() -> None:
             "step": 0,
             "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 }
             },
         },
@@ -2516,12 +2518,14 @@ async def test_conditional_graph() -> None:
             "step": 0,
             "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 }
             },
         },
@@ -2748,12 +2752,14 @@ async def test_conditional_graph() -> None:
             "step": 0,
             "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 }
             },
         },

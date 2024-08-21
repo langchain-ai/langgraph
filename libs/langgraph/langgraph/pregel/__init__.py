@@ -340,7 +340,10 @@ class Pregel(
     @property
     def stream_channels_asis(self) -> Union[str, Sequence[str]]:
         return self.stream_channels or [
-            k for k in self.channels if not isinstance(self.channels[k], Context)
+            k
+            for k in self.channels
+            if isinstance(self.channels[k], BaseChannel)
+            and not isinstance(self.channels[k], Context)
         ]
 
     def get_state(self, config: RunnableConfig) -> StateSnapshot:
@@ -956,7 +959,6 @@ class Pregel(
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
-                graph=self,
                 nodes=self.nodes,
                 specs=self.channels,
             ) as loop:
@@ -966,7 +968,9 @@ class Pregel(
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
+                    input_keys=self.input_channels,
                     output_keys=output_keys,
+                    stream_keys=self.stream_channels_asis,
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,
                     manager=run_manager,
@@ -1212,7 +1216,6 @@ class Pregel(
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
-                graph=self,
                 nodes=self.nodes,
                 specs=self.channels,
             ) as loop:
@@ -1223,7 +1226,9 @@ class Pregel(
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
+                    input_keys=self.input_channels,
                     output_keys=output_keys,
+                    stream_keys=self.stream_channels_asis,
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,
                     manager=run_manager,
