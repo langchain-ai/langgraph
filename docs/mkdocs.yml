@@ -216,6 +216,7 @@ nav:
               - Wait for User Input: "cloud/how-tos/human_in_the_loop_user_input.md"
               - Edit Graph State: "cloud/how-tos/human_in_the_loop_edit_state.md"
               - Replay and Branch from Prior States: "cloud/how-tos/human_in_the_loop_time_travel.md"
+              - Review Tool Calls: "cloud/how-tos/human_in_the_loop_review_tool_calls.md"
           - LangGraph Studio:
               - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
               - Test Local Deployment: "cloud/how-tos/test_local_deployment.md"
@@ -230,6 +231,8 @@ nav:
               - Configure Agents: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
               - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
               - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
+              - Copy Threads: 'cloud/how-tos/copy_threads.md'
+              - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
       - Conceptual Guides:
           - API Concepts: "cloud/concepts/api.md"
           - Cloud Concepts: "cloud/concepts/cloud.md"
@@ -240,6 +243,8 @@ nav:
               - JS/TS: "cloud/reference/sdk/js_ts_sdk_ref.md"
           - CLI: "cloud/reference/cli.md"
           - Environment Variables: "cloud/reference/env_var.md"
+      - FAQ:
+          - Studio: "cloud/faq/studio.md"
 
 markdown_extensions:
   - abbr

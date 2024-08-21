@@ -290,6 +290,7 @@ class MemorySaver(
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         checkpoint_id = config["configurable"]["checkpoint_id"]
         key = (thread_id, checkpoint_ns, checkpoint_id)
+        self.writes[key] = [w for w in self.writes[key] if w[0] != task_id]
         self.writes[key].extend(
             [(task_id, c, self.serde.dumps_typed(v)) for c, v in writes]
         )

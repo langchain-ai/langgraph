@@ -9,10 +9,10 @@ from langchain_core.runnables.config import RunnableConfig
 from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import CheckpointMetadata
-from langgraph.constants import TAG_HIDDEN
+from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
+from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.io import read_channels
-from langgraph.pregel.types import PregelExecutableTask
+from langgraph.pregel.types import PregelExecutableTask, PregelTask
 
 
 class TaskPayload(TypedDict):
@@ -28,10 +28,19 @@ class TaskResultPayload(TypedDict):
     result: list[tuple[str, Any]]
 
 
+class CheckpointTask(TypedDict):
+    id: str
+    name: str
+    error: Optional[str]
+    interrupts: list[dict]
+
+
 class CheckpointPayload(TypedDict):
     config: Optional[RunnableConfig]
     metadata: CheckpointMetadata
     values: dict[str, Any]
+    next: list[str]
+    tasks: list[CheckpointTask]
 
 
 class DebugOutputBase(TypedDict):
@@ -118,16 +127,33 @@ def map_debug_checkpoint(
     channels: Mapping[str, BaseChannel],
     stream_channels: Union[str, Sequence[str]],
     metadata: CheckpointMetadata,
+    checkpoint: Checkpoint,
+    tasks: list[PregelExecutableTask],
+    pending_writes: list[PendingWrite],
 ) -> Iterator[DebugOutputCheckpoint]:
-    ts = datetime.now(timezone.utc).isoformat()
     yield {
         "type": "checkpoint",
-        "timestamp": ts,
+        "timestamp": checkpoint["ts"],
         "step": step,
         "payload": {
             "config": config,
             "values": read_channels(channels, stream_channels),
             "metadata": metadata,
+            "next": [t.name for t in tasks],
+            "tasks": [
+                {
+                    "id": t.id,
+                    "name": t.name,
+                    "error": t.error,
+                }
+                if t.error
+                else {
+                    "id": t.id,
+                    "name": t.name,
+                    "interrupts": t.interrupts,
+                }
+                for t in tasks_w_writes(tasks, pending_writes)
+            ],
         },
     }
 
@@ -166,10 +192,38 @@ def print_step_writes(
 
 
 def print_step_checkpoint(
-    step: int, channels: Mapping[str, BaseChannel], whitelist: Sequence[str]
+    metadata: CheckpointMetadata,
+    channels: Mapping[str, BaseChannel],
+    whitelist: Sequence[str],
 ) -> None:
+    step = metadata["step"]
     print(
         f"{get_colored_text(f'[{step}:checkpoint]', color='blue')} "
         + get_bolded_text(f"State at the end of step {step}:\n")
         + pformat(read_channels(channels, whitelist), depth=3)
+    )
+
+
+def tasks_w_writes(
+    tasks: list[PregelExecutableTask],
+    pending_writes: Optional[list[PendingWrite]],
+) -> tuple[PregelTask, ...]:
+    pending_writes = pending_writes or []
+    return tuple(
+        PregelTask(
+            task.id,
+            task.name,
+            next(
+                (
+                    exc
+                    for tid, n, exc in pending_writes
+                    if tid == task.id and n == ERROR
+                ),
+                None,
+            ),
+            tuple(
+                v for tid, n, v in pending_writes if tid == task.id and n == INTERRUPT
+            ),
+        )
+        for task in tasks
     )

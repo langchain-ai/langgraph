@@ -49,7 +49,8 @@ def run_with_retry(
             )
             # log the retry
             logger.info(
-                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}"
+                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
+                exc_info=exc,
             )
 
 
@@ -98,5 +99,6 @@ async def arun_with_retry(
             )
             # log the retry
             logger.info(
-                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}"
+                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
+                exc_info=exc,
             )

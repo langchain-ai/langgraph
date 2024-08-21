@@ -70,10 +70,12 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    ERROR,
     INTERRUPT,
     SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
+    Interrupt,
 )
-from langgraph.errors import GraphRecursionError, InvalidUpdateError
+from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValuesManager,
@@ -84,12 +86,14 @@ from langgraph.pregel.algo import (
     apply_writes,
     local_read,
     prepare_next_tasks,
+    should_interrupt,
 )
 from langgraph.pregel.debug import (
     map_debug_task_results,
     print_step_checkpoint,
     print_step_tasks,
     print_step_writes,
+    tasks_w_writes,
 )
 from langgraph.pregel.io import (
     map_output_updates,
@@ -274,7 +278,7 @@ def _prepare_state_snapshot(
             channels,
             managed,
             saved.config,
-            -1,
+            saved.metadata.get("step", -1) + 1,
             for_execution=False,
         )
         return StateSnapshot(
@@ -284,6 +288,7 @@ def _prepare_state_snapshot(
             metadata=saved.metadata,
             created_at=saved.checkpoint["ts"],
             parent_config=saved.parent_config,
+            tasks=tasks_w_writes(next_tasks, saved.pending_writes),
         )
 
 
@@ -306,7 +311,7 @@ async def _prepare_state_snapshot_async(
             channels,
             managed,
             saved.config,
-            -1,
+            saved.metadata.get("step", -1) + 1,
             for_execution=False,
         )
         return StateSnapshot(
@@ -316,6 +321,7 @@ async def _prepare_state_snapshot_async(
             metadata=saved.metadata,
             created_at=saved.checkpoint["ts"],
             parent_config=saved.parent_config,
+            tasks=tasks_w_writes(next_tasks, saved.pending_writes),
         )
 
 
@@ -552,7 +558,7 @@ class Pregel(
 
         if not checkpoint_ns_to_state_snapshots:
             return StateSnapshot(
-                values={}, next=(), config=config, metadata=None, created_at=None
+                values={}, next=(), config=config, metadata=None, created_at=None, tasks=()
             )
 
         state_snapshot = _assemble_state_snapshot_hierarchy(
@@ -606,7 +612,12 @@ class Pregel(
 
         if not checkpoint_ns_to_state_snapshots:
             return StateSnapshot(
-                values={}, next=(), config=config, metadata=None, created_at=None
+                values={},
+                next=(),
+                config=config,
+                metadata=None,
+                created_at=None,
+                tasks=(),
             )
 
         state_snapshot = _assemble_state_snapshot_hierarchy(
@@ -693,7 +704,7 @@ class Pregel(
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
-            saved.checkpoint["channel_versions"] if saved else {}
+            saved.checkpoint["channel_versions"].copy() if saved else {}
         )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
@@ -719,7 +730,7 @@ class Pregel(
                 create_checkpoint(checkpoint, None, step),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {},
                 },
                 {},
@@ -749,7 +760,11 @@ class Pregel(
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels
-        with ChannelsManager(self.channels, checkpoint, config) as channels:
+        with ChannelsManager(
+            self.channels, checkpoint, config
+        ) as channels, ManagedValuesManager(
+            self.managed_values_dict, ensure_config(config)
+        ) as managed:
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
             if not writers:
@@ -783,19 +798,43 @@ class Pregel(
             apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-
-            new_versions = get_new_channel_versions(
-                checkpoint_previous_versions, checkpoint["channel_versions"]
-            )
+            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            # check interrupt before
+            if tasks := should_interrupt(
+                checkpoint,
+                self.interrupt_before_nodes,
+                prepare_next_tasks(
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    config,
+                    step + 2,
+                    for_execution=False,
+                ),
+            ):
+                for t in tasks:
+                    self.checkpointer.put_writes(
+                        {
+                            "configurable": {
+                                **checkpoint_config["configurable"],
+                                "checkpoint_id": checkpoint["id"],
+                            }
+                        },
+                        [(INTERRUPT, Interrupt("before"))],
+                        t.id,
+                    )
             return self.checkpointer.put(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step + 1),
+                checkpoint,
                 {
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
                 },
-                new_versions,
+                get_new_channel_versions(
+                    checkpoint_previous_versions, checkpoint["channel_versions"]
+                ),
             )
 
     async def aupdate_state(
@@ -811,7 +850,7 @@ class Pregel(
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
-            saved.checkpoint["channel_versions"] if saved else {}
+            saved.checkpoint["channel_versions"].copy() if saved else {}
         )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
@@ -837,7 +876,7 @@ class Pregel(
                 create_checkpoint(checkpoint, None, step),
                 {
                     "source": "update",
-                    "step": step,
+                    "step": step + 1,
                     "writes": {},
                 },
                 {},
@@ -865,7 +904,11 @@ class Pregel(
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels, acting as the chosen node
-        async with AsyncChannelsManager(self.channels, checkpoint, config) as channels:
+        async with AsyncChannelsManager(
+            self.channels, checkpoint, config
+        ) as channels, AsyncManagedValuesManager(
+            self.managed_values_dict, ensure_config(config)
+        ) as managed:
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
             if not writers:
@@ -899,19 +942,47 @@ class Pregel(
             apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             )
-
-            new_versions = get_new_channel_versions(
-                checkpoint_previous_versions, checkpoint["channel_versions"]
-            )
+            checkpoint = create_checkpoint(checkpoint, channels, step + 1)
+            # check interrupt before
+            if tasks := should_interrupt(
+                checkpoint,
+                self.interrupt_before_nodes,
+                prepare_next_tasks(
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    config,
+                    step + 2,
+                    for_execution=False,
+                ),
+            ):
+                await asyncio.gather(
+                    *(
+                        self.checkpointer.aput_writes(
+                            {
+                                "configurable": {
+                                    **checkpoint_config["configurable"],
+                                    "checkpoint_id": checkpoint["id"],
+                                }
+                            },
+                            [(INTERRUPT, Interrupt("before"))],
+                            t.id,
+                        )
+                        for t in tasks
+                    )
+                )
             return await self.checkpointer.aput(
                 checkpoint_config,
-                create_checkpoint(checkpoint, channels, step + 1),
+                checkpoint,
                 {
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
                 },
-                new_versions,
+                get_new_channel_versions(
+                    checkpoint_previous_versions, checkpoint["channel_versions"]
+                ),
             )
 
     def _defaults(
@@ -948,7 +1019,7 @@ class Pregel(
         if (
             config is not None
             and config.get("configurable", {}).get(CONFIG_KEY_CHECKPOINTER)
-            and (interrupt_before or interrupt_after or _has_nested_interrupts(self))
+            and (interrupt_after or interrupt_before or _has_nested_interrupts(self))
         ):
             checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
                 CONFIG_KEY_CHECKPOINTER
@@ -1088,7 +1159,7 @@ class Pregel(
                     manager=run_manager,
                 ):
                     # debug flag
-                    if self.debug:
+                    if debug:
                         print_step_checkpoint(
                             loop.checkpoint_metadata,
                             loop.channels,
@@ -1118,6 +1189,7 @@ class Pregel(
                         for task in loop.tasks
                         if not task.writes
                     }
+                    all_futures = futures.copy()
                     end_time = (
                         self.step_timeout + time.monotonic()
                         if self.step_timeout
@@ -1138,10 +1210,17 @@ class Pregel(
                         if not done:
                             break  # timed out
                         for fut, task in zip(done, [futures.pop(fut) for fut in done]):
-                            if fut.exception() is not None:
-                                # we got an exception, break out of while loop
-                                # exception will be handled in panic_or_proceed
+                            if exc := _exception(fut):
+                                # save error to checkpointer
+                                if isinstance(exc, GraphInterrupt):
+                                    loop.put_writes(
+                                        task.id, [(INTERRUPT, i) for i in exc.args[0]]
+                                    )
+                                else:
+                                    loop.put_writes(task.id, [(ERROR, exc)])
+
                                 futures.clear()
+
                             else:
                                 # save task writes to checkpointer
                                 loop.put_writes(task.id, task.writes)
@@ -1165,9 +1244,11 @@ class Pregel(
                         else:
                             # remove references to loop vars
                             del fut, task
+                        if _should_stop_others(done):
+                            break
 
                     # panic on failure or timeout
-                    _panic_or_proceed(done, inflight, loop.step)
+                    _panic_or_proceed(all_futures, loop.step)
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
                     # debug flag
@@ -1331,7 +1412,7 @@ class Pregel(
                     manager=run_manager,
                 ):
                     # debug flag
-                    if self.debug:
+                    if debug:
                         print_step_checkpoint(
                             loop.checkpoint_metadata,
                             loop.channels,
@@ -1364,6 +1445,7 @@ class Pregel(
                         for task in loop.tasks
                         if not task.writes
                     }
+                    all_futures = futures.copy()
                     end_time = (
                         self.step_timeout + aioloop.time()
                         if self.step_timeout
@@ -1381,10 +1463,17 @@ class Pregel(
                         )
                         if not done:
                             break  # timed out
+
                         for fut, task in zip(done, [futures.pop(fut) for fut in done]):
-                            if fut.exception() is not None:
-                                # we got an exception, break out of while loop
-                                # exception will be handled in panic_or_proceed
+                            if exc := _exception(fut):
+                                # save error to checkpointer
+                                if isinstance(exc, GraphInterrupt):
+                                    loop.put_writes(
+                                        task.id, [(INTERRUPT, i) for i in exc.args[0]]
+                                    )
+                                else:
+                                    loop.put_writes(task.id, [(ERROR, exc)])
+
                                 futures.clear()
                             else:
                                 # save task writes to checkpointer
@@ -1411,9 +1500,11 @@ class Pregel(
                         else:
                             # remove references to loop vars
                             del fut, task
+                        if _should_stop_others(done):
+                            break
 
                     # panic on failure or timeout
-                    _panic_or_proceed(done, inflight, loop.step, asyncio.TimeoutError)
+                    _panic_or_proceed(all_futures, loop.step, asyncio.TimeoutError)
                     # don't keep futures around in memory longer than needed
                     del done, inflight, futures
                     # debug flag
@@ -1554,15 +1645,45 @@ class Pregel(
             return chunks
 
 
-def _panic_or_proceed(
+def _should_stop_others(
     done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
-    inflight: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
+) -> bool:
+    for fut in done:
+        if fut.cancelled():
+            return True
+        if exc := fut.exception():
+            return not isinstance(exc, GraphInterrupt)
+    else:
+        return False
+
+
+def _exception(
+    fut: Union[concurrent.futures.Future[Any], asyncio.Task[Any]],
+) -> Optional[BaseException]:
+    if fut.cancelled():
+        if isinstance(fut, asyncio.Task):
+            return asyncio.CancelledError()
+        else:
+            return concurrent.futures.CancelledError()
+    else:
+        return fut.exception()
+
+
+def _panic_or_proceed(
+    futs: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
     step: int,
     timeout_exc_cls: Type[Exception] = TimeoutError,
 ) -> None:
+    done: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
+    inflight: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
+    for fut in futs:
+        if fut.done():
+            done.add(fut)
+        else:
+            inflight.add(fut)
     while done:
         # if any task failed
-        if exc := done.pop().exception():
+        if exc := _exception(done.pop()):
             # cancel all pending tasks
             while inflight:
                 inflight.pop().cancel()

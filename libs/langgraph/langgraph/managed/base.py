@@ -3,7 +3,6 @@ from abc import ABC, abstractmethod
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from inspect import isclass
 from typing import (
-    TYPE_CHECKING,
     Any,
     AsyncGenerator,
     Generator,
@@ -16,9 +15,6 @@ from typing import (
 
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self, TypeGuard
-
-if TYPE_CHECKING:
-    from langgraph.pregel.types import PregelTaskDescription
 
 V = TypeVar("V")
 
@@ -60,7 +56,7 @@ class ManagedValue(ABC, Generic[V]):
                 pass
 
     @abstractmethod
-    def __call__(self, step: int, task: "PregelTaskDescription") -> V:
+    def __call__(self, step: int) -> V:
         ...
 
 

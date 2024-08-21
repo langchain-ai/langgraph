@@ -149,3 +149,21 @@ def test_serde_jsonplus_bytearray() -> None:
 
     assert dumped == ("bytearray", some_bytearray)
     assert serde.loads_typed(dumped) == some_bytearray
+
+
+def test_loads_cannot_find() -> None:
+    serde = JsonPlusSerializer()
+
+    dumped = (
+        "json",
+        b'{"lc": 2, "type": "constructor", "id": ["tests", "test_jsonplus", "MyPydanticccc"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}',
+    )
+
+    assert serde.loads_typed(dumped) is None, "Should return None if cannot find class"
+
+    dumped = (
+        "json",
+        b'{"lc": 2, "type": "constructor", "id": ["tests", "test_jsonpluss", "MyPydantic"], "method": null, "args": [], "kwargs": {"foo": "foo", "bar": 1}}',
+    )
+
+    assert serde.loads_typed(dumped) is None, "Should return None if cannot find module"
