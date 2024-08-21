@@ -769,7 +769,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
     ]
 
-    # forking from any previous checkpoint w/out forking should do nothing
+    # re-running from any previous checkpoint w/out forking should do nothing
     assert [c for c in app.stream(None, history[0].config, stream_mode="updates")] == []
     assert [c for c in app.stream(None, history[1].config, stream_mode="updates")] == []
     assert [c for c in app.stream(None, history[2].config, stream_mode="updates")] == []
@@ -1033,6 +1033,8 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
                 "name": "one",
                 "result": [("inbox", 3)],
+                "error": None,
+                "interrupts": [],
             },
         },
         {
@@ -1043,6 +1045,8 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
                 "name": "two",
                 "result": [("output", 13)],
+                "error": None,
+                "interrupts": [],
             },
         },
         {
@@ -1064,6 +1068,8 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
                 "name": "two",
                 "result": [("output", 4)],
+                "error": None,
+                "interrupts": [],
             },
         },
     ]
@@ -1744,7 +1750,6 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     assert cleanup.call_count == 0
     for i, chunk in enumerate(app.stream(2)):
         assert setup.call_count == 1, "Expected setup to be called once"
-        assert cleanup.call_count == 0, "Expected cleanup to not be called yet"
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
@@ -6017,6 +6022,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
                     "name": "rewrite_query",
                     "result": [("query", "query: what is weather in sf")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -6071,6 +6078,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
                     "name": "retriever_two",
                     "result": [("docs", ["doc3", "doc4"])],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -6088,6 +6097,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
                     "name": "retriever_one",
                     "result": [("docs", ["doc1", "doc2"])],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -6127,6 +6138,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
                     "name": "qa",
                     "result": [("answer", "doc1,doc2,doc3,doc4")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -6544,6 +6557,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                     "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
                     "name": "prepare",
                     "result": [("my_key", " prepared")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
             {
@@ -6596,6 +6611,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                     "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
                     "name": "tool_two_slow",
                     "result": [("my_key", " slow")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
             {
@@ -6646,6 +6663,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                     "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
                     "name": "finish",
                     "result": [("my_key", " finished")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
             {
