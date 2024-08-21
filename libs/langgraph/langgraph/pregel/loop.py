@@ -62,7 +62,13 @@ from langgraph.pregel.executor import (
     BackgroundExecutor,
     Submit,
 )
-from langgraph.pregel.io import map_input, map_output_updates, map_output_values, single
+from langgraph.pregel.io import (
+    map_input,
+    map_output_updates,
+    map_output_values,
+    read_channels,
+    single,
+)
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import PregelExecutableTask
@@ -83,6 +89,7 @@ class PregelLoop:
     checkpointer: Optional[BaseCheckpointSaver]
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
+    output_keys: Union[str, Sequence[str]]
     is_nested: bool
 
     checkpointer_get_next_version: Callable[[Optional[V]], V]
@@ -117,6 +124,7 @@ class PregelLoop:
     ]
     tasks: Sequence[PregelExecutableTask]
     stream: deque[Tuple[str, Any]]
+    output: Union[None, dict[str, Any], Any] = None
 
     # public
 
@@ -129,6 +137,7 @@ class PregelLoop:
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        output_keys: Union[str, Sequence[str]],
     ) -> None:
         self.stream = deque()
         self.input = input
@@ -137,6 +146,7 @@ class PregelLoop:
         self.checkpointer = checkpointer
         self.nodes = nodes
         self.specs = specs
+        self.output_keys = output_keys
         self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
 
     def mark_tasks_scheduled(self, tasks: Sequence[PregelExecutableTask]) -> None:
@@ -167,7 +177,6 @@ class PregelLoop:
         self,
         *,
         input_keys: Union[str, Sequence[str]],
-        output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         interrupt_after: Sequence[str] = EMPTY_SEQ,
         interrupt_before: Sequence[str] = EMPTY_SEQ,
@@ -196,7 +205,7 @@ class PregelLoop:
             # produce values output
             self.stream.extend(
                 ("values", v)
-                for v in map_output_values(output_keys, writes, self.channels)
+                for v in map_output_values(self.output_keys, writes, self.channels)
             )
             # clear pending writes
             self.checkpoint_pending_writes.clear()
@@ -204,7 +213,7 @@ class PregelLoop:
             self._put_checkpoint(
                 {
                     "source": "loop",
-                    "writes": single(map_output_updates(output_keys, self.tasks)),
+                    "writes": single(map_output_updates(self.output_keys, self.tasks)),
                 }
             )
             # after execution, check if we should interrupt
@@ -272,7 +281,7 @@ class PregelLoop:
         if all(task.writes for task in self.tasks):
             return self.tick(
                 input_keys=input_keys,
-                output_keys=output_keys,
+                stream_keys=stream_keys,
                 interrupt_after=interrupt_after,
                 interrupt_before=interrupt_before,
                 manager=manager,
@@ -406,7 +415,12 @@ class PregelLoop:
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
+        suppress = isinstance(exc_value, GraphInterrupt) and not self.is_nested
+        if suppress or exc_type is None:
+            # save final output
+            self.output = read_channels(self.channels, self.output_keys)
+        if suppress:
+            # suppress interrupt
             return True
 
 
@@ -420,6 +434,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
     ) -> None:
         super().__init__(
             input,
@@ -428,6 +443,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             store=store,
             nodes=nodes,
             specs=specs,
+            output_keys=output_keys,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -505,6 +521,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         checkpointer: Optional[BaseCheckpointSaver],
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
+        output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
     ) -> None:
         super().__init__(
             input,
@@ -513,6 +530,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             store=store,
             nodes=nodes,
             specs=specs,
+            output_keys=output_keys,
         )
         self.store = AsyncBatchedStore(self.store) if self.store else None
         self.stack = AsyncExitStack()
