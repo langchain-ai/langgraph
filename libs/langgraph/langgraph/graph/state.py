@@ -40,7 +40,7 @@ from langgraph.graph.graph import (
     Graph,
     Send,
 )
-from langgraph.kv.base import BaseKV
+from langgraph.kv.base import BaseMemory
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -383,7 +383,7 @@ class StateGraph(Graph):
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         *,
-        kv: Optional[BaseKV] = None,
+        kv: Optional[BaseMemory] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,

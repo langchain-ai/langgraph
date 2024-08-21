@@ -3,7 +3,7 @@ from typing import Any
 
 from pytest_mock import MockerFixture
 
-from langgraph.kv.base import BaseKV
+from langgraph.kv.base import BaseMemory
 from langgraph.kv.batch import AsyncBatchedKV
 
 
@@ -11,7 +11,7 @@ async def test_kv_async_batch(mocker: MockerFixture) -> None:
     aget = mocker.stub()
     alist = mocker.stub()
 
-    class MockKV(BaseKV):
+    class MockKV(BaseMemory):
         async def aget(
             self, pairs: list[tuple[str, str]]
         ) -> dict[tuple[str, str], dict[str, Any] | None]:

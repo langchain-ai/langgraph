@@ -14,7 +14,7 @@ from typing_extensions import NotRequired, Required, Self
 
 from langgraph.constants import CONFIG_KEY_KV
 from langgraph.errors import InvalidUpdateError
-from langgraph.kv.base import BaseKV
+from langgraph.kv.base import BaseMemory
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -83,7 +83,7 @@ class SharedValue(WritableManagedValue[Value, Update]):
         self.scope = scope
         self.config = config
         self.value: Value = {}
-        self.kv: BaseKV = config["configurable"].get(CONFIG_KEY_KV)
+        self.kv: BaseMemory = config["configurable"].get(CONFIG_KEY_KV)
         if self.kv is None:
             self.ns: Optional[str] = None
         elif scope_value := config["configurable"].get(self.scope):

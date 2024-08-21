@@ -50,7 +50,7 @@ from langgraph.constants import (
     Interrupt,
 )
 from langgraph.errors import EmptyInputError, GraphInterrupt
-from langgraph.kv.base import BaseKV
+from langgraph.kv.base import BaseMemory
 from langgraph.kv.batch import AsyncBatchedKV
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
@@ -105,7 +105,7 @@ class PregelLoop:
         ]
     ]
     graph: "Pregel"
-    kv: Optional[BaseKV]
+    kv: Optional[BaseMemory]
     submit: Submit
     channels: Mapping[str, BaseChannel]
     managed: ManagedValueMapping

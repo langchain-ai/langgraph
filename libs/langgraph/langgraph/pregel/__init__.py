@@ -73,7 +73,7 @@ from langgraph.constants import (
     Interrupt,
 )
 from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
-from langgraph.kv.base import BaseKV
+from langgraph.kv.base import BaseMemory
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValuesManager,
@@ -224,7 +224,7 @@ class Pregel(
     checkpointer: Optional[BaseCheckpointSaver] = None
     """Checkpointer used to save and load graph state. Defaults to None."""
 
-    kv: Optional[BaseKV] = None
+    kv: Optional[BaseMemory] = None
     """Key-value store to use. Defaults to None."""
 
     retry_policy: Optional[RetryPolicy] = None
