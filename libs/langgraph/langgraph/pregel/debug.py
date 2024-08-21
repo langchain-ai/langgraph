@@ -10,7 +10,7 @@ from langchain_core.utils.input import get_bolded_text, get_colored_text
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
-from langgraph.constants import ERROR, TAG_HIDDEN
+from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.types import PregelExecutableTask, PregelTask
 
@@ -32,6 +32,7 @@ class CheckpointTask(TypedDict):
     id: str
     name: str
     error: Optional[str]
+    interrupts: list[dict]
 
 
 class CheckpointPayload(TypedDict):
@@ -149,6 +150,7 @@ def map_debug_checkpoint(
                 else {
                     "id": t.id,
                     "name": t.name,
+                    "interrupts": t.interrupts,
                 }
                 for t in tasks_w_writes(tasks, pending_writes)
             ],
@@ -190,8 +192,11 @@ def print_step_writes(
 
 
 def print_step_checkpoint(
-    step: int, channels: Mapping[str, BaseChannel], whitelist: Sequence[str]
+    metadata: CheckpointMetadata,
+    channels: Mapping[str, BaseChannel],
+    whitelist: Sequence[str],
 ) -> None:
+    step = metadata["step"]
     print(
         f"{get_colored_text(f'[{step}:checkpoint]', color='blue')} "
         + get_bolded_text(f"State at the end of step {step}:\n")
@@ -203,6 +208,7 @@ def tasks_w_writes(
     tasks: list[PregelExecutableTask],
     pending_writes: Optional[list[PendingWrite]],
 ) -> tuple[PregelTask, ...]:
+    pending_writes = pending_writes or []
     return tuple(
         PregelTask(
             task.id,
@@ -210,11 +216,13 @@ def tasks_w_writes(
             next(
                 (
                     exc
-                    for tid, n, exc in pending_writes or []
-                    if tid == task.id
-                    if n == ERROR
+                    for tid, n, exc in pending_writes
+                    if tid == task.id and n == ERROR
                 ),
                 None,
+            ),
+            tuple(
+                v for tid, n, v in pending_writes if tid == task.id and n == INTERRUPT
             ),
         )
         for task in tasks

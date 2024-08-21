@@ -4,6 +4,7 @@ from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.constants import Interrupt
 
 
 def default_retry_on(exc: Exception) -> bool:
@@ -60,6 +61,7 @@ class PregelTask(NamedTuple):
     id: str
     name: str
     error: Optional[Exception] = None
+    interrupts: tuple[Interrupt, ...] = ()
 
 
 class PregelExecutableTask(NamedTuple):

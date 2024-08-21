@@ -38,6 +38,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_TASK_ID,
     INTERRUPT,
     RESERVED,
     TAG_HIDDEN,
@@ -68,26 +69,28 @@ def should_interrupt(
     checkpoint: Checkpoint,
     interrupt_nodes: Union[All, Sequence[str]],
     tasks: list[PregelExecutableTask],
-) -> bool:
+) -> list[PregelExecutableTask]:
     version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
     null_version = version_type()
     seen = checkpoint["versions_seen"].get(INTERRUPT, {})
+    # interrupt if any channel has been updated since last interrupt
+    any_updates_since_prev_interrupt = any(
+        version > seen.get(chan, null_version)
+        for chan, version in checkpoint["channel_versions"].items()
+    )
+    # and any triggered node is in interrupt_nodes list
     return (
-        # interrupt if any channel has been updated since last interrupt
-        any(
-            version > seen.get(chan, null_version)
-            for chan, version in checkpoint["channel_versions"].items()
-        )
-        # and any triggered node is in interrupt_nodes list
-        and any(
-            task.name
+        [
+            task
             for task in tasks
             if (
                 (not task.config or TAG_HIDDEN not in task.config.get("tags"))
                 if interrupt_nodes == "*"
                 else task.name in interrupt_nodes
             )
-        )
+        ]
+        if any_updates_since_prev_interrupt
+        else []
     )
 
 
@@ -308,6 +311,7 @@ def prepare_next_tasks(
                                 else None
                             ),
                             configurable={
+                                CONFIG_KEY_TASK_ID: task_id,
                                 # deque.extend is thread-safe
                                 CONFIG_KEY_SEND: partial(
                                     local_write, writes.extend, processes, channels
@@ -398,6 +402,7 @@ def prepare_next_tasks(
                                     else None
                                 ),
                                 configurable={
+                                    CONFIG_KEY_TASK_ID: task_id,
                                     # deque.extend is thread-safe
                                     CONFIG_KEY_SEND: partial(
                                         local_write, writes.extend, processes, channels

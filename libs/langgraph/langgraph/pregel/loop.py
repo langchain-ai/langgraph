@@ -45,6 +45,7 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
+    Interrupt,
 )
 from langgraph.errors import EmptyInputError, GraphInterrupt
 from langgraph.managed.base import (
@@ -206,10 +207,13 @@ class PregelLoop:
                 }
             )
             # after execution, check if we should interrupt
-            if should_interrupt(self.checkpoint, interrupt_after, self.tasks):
+            if tasks := should_interrupt(self.checkpoint, interrupt_after, self.tasks):
                 self.status = "interrupt_after"
+                interrupts = [(t.id, Interrupt("after")) for t in tasks]
+                for tid, interrupt in interrupts:
+                    self.put_writes(tid, [(INTERRUPT, interrupt)])
                 if self.is_nested:
-                    raise GraphInterrupt(self)
+                    raise GraphInterrupt([i[1] for i in interrupts])
                 else:
                     return False
         else:
@@ -258,7 +262,7 @@ class PregelLoop:
         # if there are pending writes from a previous loop, apply them
         if self.checkpoint_pending_writes:
             for tid, k, v in self.checkpoint_pending_writes:
-                if k == ERROR:  # TODO same for INTERRUPT
+                if k in (ERROR, INTERRUPT):
                     continue
                 if task := next((t for t in self.tasks if t.id == tid), None):
                     task.writes.append((k, v))
@@ -273,10 +277,13 @@ class PregelLoop:
             )
 
         # before execution, check if we should interrupt
-        if should_interrupt(self.checkpoint, interrupt_before, self.tasks):
+        if tasks := should_interrupt(self.checkpoint, interrupt_before, self.tasks):
             self.status = "interrupt_before"
+            interrupts = [(t.id, Interrupt("before")) for t in tasks]
+            for tid, interrupt in interrupts:
+                self.put_writes(tid, [(INTERRUPT, interrupt)])
             if self.is_nested:
-                raise GraphInterrupt()
+                raise GraphInterrupt([i[1] for i in interrupts])
             else:
                 return False
 
@@ -394,7 +401,7 @@ class PregelLoop:
         exc_value: Optional[BaseException],
         traceback: Optional[TracebackType],
     ) -> Optional[bool]:
-        if exc_type is GraphInterrupt and not self.is_nested:
+        if isinstance(exc_value, GraphInterrupt) and not self.is_nested:
             return True
 
 
@@ -409,7 +416,6 @@ class SyncPregelLoop(PregelLoop, ContextManager):
     ) -> None:
         super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
         self.stack = ExitStack()
-        self.stack.push(self._suppress_interrupt)
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.put_writes
@@ -457,6 +463,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.managed = self.stack.enter_context(
             ManagedValuesManager(self.graph.managed_values_dict, self.config)
         )
+        self.stack.push(self._suppress_interrupt)
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
@@ -486,7 +493,6 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
     ) -> None:
         super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
         self.stack = AsyncExitStack()
-        self.stack.push(self._suppress_interrupt)
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
             self.checkpointer_put_writes = checkpointer.aput_writes
@@ -536,6 +542,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         self.managed = await self.stack.enter_async_context(
             AsyncManagedValuesManager(self.graph.managed_values_dict, self.config)
         )
+        self.stack.push(self._suppress_interrupt)
         self.status = "pending"
         self.step = self.checkpoint_metadata["step"] + 1
         self.stop = self.step + self.config["recursion_limit"] + 1
