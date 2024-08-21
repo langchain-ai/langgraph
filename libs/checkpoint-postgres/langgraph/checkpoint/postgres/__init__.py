@@ -150,6 +150,7 @@ class PostgresSaver(BasePostgresSaver):
                 }
                 if value["parent_checkpoint_id"]
                 else None,
+                self._load_writes(value["pending_writes"]),
             )
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:

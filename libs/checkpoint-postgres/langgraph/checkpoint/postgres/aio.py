@@ -135,6 +135,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 }
                 if value["parent_checkpoint_id"]
                 else None,
+                await asyncio.to_thread(self._load_writes, value["pending_writes"]),
             )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
