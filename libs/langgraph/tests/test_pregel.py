@@ -6139,13 +6139,17 @@ def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
         my_key: Annotated[str, operator.add]
         market: str
 
+    tool_two_node_count = 0
+
     def tool_two_node(s: State) -> State:
+        nonlocal tool_two_node_count
+        tool_two_node_count += 1
         if s["market"] == "DE":
             raise NodeInterrupt("Just because...")
         return {"my_key": " all good"}
 
     tool_two_graph = StateGraph(State)
-    tool_two_graph.add_node("tool_two", tool_two_node)
+    tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
     tool_two_graph.add_edge(START, "tool_two")
     tool_two = tool_two_graph.compile()
 
@@ -6153,6 +6157,7 @@ def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
         "my_key": "value",
         "market": "DE",
     }
+    assert tool_two_node_count == 1, "interrupts aren't retried"
     assert tool_two.invoke({"my_key": "value", "market": "US"}) == {
         "my_key": "value all good",
         "market": "US",

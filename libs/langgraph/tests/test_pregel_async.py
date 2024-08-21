@@ -206,6 +206,82 @@ async def test_node_cancellation_on_other_node_exception() -> None:
     assert inner_task_cancelled
 
 
+async def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+
+    tool_two_node_count = 0
+
+    async def tool_two_node(s: State) -> State:
+        nonlocal tool_two_node_count
+        tool_two_node_count += 1
+        if s["market"] == "DE":
+            raise NodeInterrupt("Just because...")
+        return {"my_key": " all good"}
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
+    tool_two_graph.add_edge(START, "tool_two")
+    tool_two = tool_two_graph.compile()
+
+    assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}) == {
+        "my_key": "value",
+        "market": "DE",
+    }
+    assert tool_two_node_count == 1, "interrupts aren't retried"
+    assert await tool_two.ainvoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value all good",
+        "market": "US",
+    }
+
+    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
+        tool_two = tool_two_graph.compile(checkpointer=saver)
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1"}}
+        # stop when about to enter node
+        assert await tool_two.ainvoke(
+            {"my_key": "value ⛰️", "market": "DE"}, thread1
+        ) == {
+            "my_key": "value ⛰️",
+            "market": "DE",
+        }
+        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+            {
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+            },
+            {
+                "source": "input",
+                "step": -1,
+                "writes": {"my_key": "value ⛰️", "market": "DE"},
+            },
+        ]
+        tup = await tool_two.checkpointer.aget_tuple(thread1)
+        assert await tool_two.aget_state(thread1) == StateSnapshot(
+            values={"my_key": "value ⛰️", "market": "DE"},
+            next=("tool_two",),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_two",
+                    interrupts=(Interrupt("during", "Just because..."),),
+                ),
+            ),
+            config=tup.config,
+            created_at=tup.checkpoint["ts"],
+            metadata={"source": "loop", "step": 0, "writes": None},
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
+        )
+
+
 @pytest.mark.parametrize(
     "checkpointer_name",
     ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe"],
