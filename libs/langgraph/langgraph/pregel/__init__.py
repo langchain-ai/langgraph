@@ -1185,8 +1185,6 @@ class Pregel(
                                 else:
                                     loop.put_writes(task.id, [(ERROR, exc)])
 
-                                futures.clear()
-
                             else:
                                 # save task writes to checkpointer
                                 loop.put_writes(task.id, task.writes)
@@ -1447,7 +1445,6 @@ class Pregel(
                                 else:
                                     loop.put_writes(task.id, [(ERROR, exc)])
 
-                                futures.clear()
                             else:
                                 # save task writes to checkpointer
                                 loop.put_writes(task.id, task.writes)
