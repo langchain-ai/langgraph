@@ -167,9 +167,6 @@ def test_graph_validation() -> None:
 
     class State(TypedDict):
         hello: str
-        shared_things: Annotated[
-            dict[str, dict[str, Any]], SharedValue.on("assistant_id")
-        ]
 
     def node_a(state: State) -> State:
         # typo
