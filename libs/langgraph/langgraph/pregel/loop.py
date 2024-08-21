@@ -190,8 +190,6 @@ class PregelLoop:
                     self.step, [(task, writes)], self.stream_keys
                 )
             )
-        else:
-            raise RuntimeError
 
     def tick(
         self,
