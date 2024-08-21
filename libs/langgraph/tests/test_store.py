@@ -1,5 +1,5 @@
 import asyncio
-from typing import Any
+from typing import Any, Optional
 
 from pytest_mock import MockerFixture
 
@@ -14,7 +14,7 @@ async def test_async_batch_store(mocker: MockerFixture) -> None:
     class MockStore(BaseStore):
         async def aget(
             self, pairs: list[tuple[str, str]]
-        ) -> dict[tuple[str, str], dict[str, Any] | None]:
+        ) -> dict[tuple[str, str], Optional[dict[str, Any]]]:
             aget(pairs)
             return {pair: 1 for pair in pairs}
 
