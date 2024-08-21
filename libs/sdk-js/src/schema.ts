@@ -101,6 +101,9 @@ export interface ThreadState<ValuesType = DefaultValues> {
   metadata: Metadata;
   created_at: Optional<string>;
   parent_checkpoint_id: Optional<string>;
+
+  config: Config;
+  parent_config?: Config;
 }
 
 export interface Run {
