@@ -558,7 +558,12 @@ class Pregel(
 
         if not checkpoint_ns_to_state_snapshots:
             return StateSnapshot(
-                values={}, next=(), config=config, metadata=None, created_at=None, tasks=()
+                values={},
+                next=(),
+                config=config,
+                metadata=None,
+                created_at=None,
+                tasks=(),
             )
 
         state_snapshot = _assemble_state_snapshot_hierarchy(

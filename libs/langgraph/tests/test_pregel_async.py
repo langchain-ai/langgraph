@@ -6456,7 +6456,13 @@ async def test_nested_graph_interrupts(
     assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value"},
-            tasks=(PregelTask(AnyStr(), "inner"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                    interrupts=(Interrupt(when="before", value=None),),
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -6484,6 +6490,13 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            "inner_2",
+                            interrupts=(Interrupt(when="before", value=None),),
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -6642,6 +6655,7 @@ async def test_nested_graph_interrupts(
                         "my_other_key": "hi my value here",
                     },
                     next=(),
+                    tasks=(),
                     config={
                         "configurable": {
                             "thread_id": "1",
@@ -6761,7 +6775,13 @@ async def test_nested_graph_interrupts(
     assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value"},
-            tasks=(PregelTask(AnyStr(), "inner"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                    interrupts=(Interrupt(when="before", value=None),),
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -6830,7 +6850,13 @@ async def test_nested_graph_interrupts(
     assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value"},
-            tasks=(PregelTask(AnyStr(), "inner"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                    interrupts=(Interrupt(when="before", value=None),),
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -6858,6 +6884,13 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            "inner_2",
+                            interrupts=(Interrupt(when="before", value=None),),
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -7020,6 +7053,7 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -7109,7 +7143,13 @@ async def test_nested_graph_interrupts(
     assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value"},
-            tasks=(PregelTask(AnyStr(), "inner"),),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                    interrupts=(Interrupt(when="before", value=None),),
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -7137,6 +7177,13 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            name="inner_2",
+                            interrupts=(Interrupt(when="before", value=None),),
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -7270,6 +7317,7 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -7429,6 +7477,7 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -7510,7 +7559,9 @@ async def test_nested_graph_interrupts(
     assert state_history == [
         StateSnapshot(
             values={"my_key": "hi my value"},
-            tasks=(PregelTask(AnyStr(), "inner"),),
+            tasks=(
+                PregelTask(AnyStr(), "inner", interrupts=(Interrupt(when="before"),)),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -7538,6 +7589,11 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(), "inner_2", interrupts=(Interrupt(when="before"),)
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -7618,9 +7674,14 @@ async def test_nested_graph_interrupts(
     ]
     assert child_state_history == [
         StateSnapshot(
-            values={"my_key": "hi my value here"},
-            tasks=(),
-            next=(),
+            values={
+                "my_key": "hi my value here",
+                "my_other_key": "hi my value",
+            },
+            tasks=(
+                PregelTask(AnyStr(), "inner_2", interrupts=(Interrupt(when="before"),)),
+            ),
+            next=("inner_2",),
             config={
                 "configurable": {
                     "thread_id": "6",
@@ -7660,7 +7721,7 @@ async def test_nested_graph_interrupts(
     # check resuming from interrupt w/ checkpoint_id
     interrupt_state_snapshot, before_interrupt_state_snapshot = state_history[:2]
     before_interrupt_config = before_interrupt_state_snapshot.config
-    # going to get to interrupt again here
+    # going to get to interrupt again here, so the output is None
     assert await app.ainvoke(None, before_interrupt_config, debug=True) == {
         "my_key": "hi my value"
     }
@@ -7668,7 +7729,9 @@ async def test_nested_graph_interrupts(
     assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value"},
-            tasks=(PregelTask(AnyStr(), "inner"),),
+            tasks=(
+                PregelTask(AnyStr(), "inner", interrupts=(Interrupt(when="before"),)),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -7696,6 +7759,11 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(), "inner_2", interrupts=(Interrupt(when="before"),)
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -7727,7 +7795,9 @@ async def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
-            tasks=(PregelTask(AnyStr(), "inner"),),
+            tasks=(
+                PregelTask(AnyStr(), "inner", interrupts=(Interrupt(when="before"),)),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -7755,6 +7825,11 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(), "inner_2", interrupts=(Interrupt(when="before"),)
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -7825,9 +7900,9 @@ async def test_nested_graph_interrupts(
             parent_config=None,
         ),
     ]
-    # going to resume from interrupt
+    # going to restart from interrupt
     interrupt_config = interrupt_state_snapshot.config
-    assert (await app.ainvoke(None, interrupt_config, debug=True)) == {
+    assert await app.ainvoke(None, interrupt_config, debug=True) == {
         "my_key": "hi my value here and there and back again",
     }
     assert [s async for s in app.aget_state_history(config)] == [
@@ -7885,7 +7960,9 @@ async def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
-            tasks=(PregelTask(AnyStr(), "inner"),),
+            tasks=(
+                PregelTask(AnyStr(), "inner", interrupts=(Interrupt(when="before"),)),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -7913,6 +7990,11 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(), "inner_2", interrupts=(Interrupt(when="before"),)
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -7973,6 +8055,7 @@ async def test_nested_graph_interrupts(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -8337,6 +8420,11 @@ async def test_nested_graph_state(
     # test state w/ nested subgraph state (right after interrupt)
     assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value"},
+        tasks=(
+            PregelTask(
+                AnyStr(), "inner", interrupts=(Interrupt(when="before", value=None),)
+            ),
+        ),
         next=("inner",),
         config={
             "configurable": {
@@ -8360,10 +8448,15 @@ async def test_nested_graph_state(
         },
         subgraph_state_snapshots={
             "inner": StateSnapshot(
-                values={
-                    "my_key": "hi my value here",
-                    "my_other_key": "hi my value",
-                },
+                values={"my_key": "hi my value here", "my_other_key": "hi my value"},
+                tasks=(
+                    PregelTask(
+                        AnyStr(),
+                        name="inner_2",
+                        error=None,
+                        interrupts=(Interrupt(when="before", value=None),),
+                    ),
+                ),
                 next=("inner_2",),
                 config={
                     "configurable": {
@@ -8397,6 +8490,13 @@ async def test_nested_graph_state(
     assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                    interrupts=(Interrupt(when="before", value=None),),
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -8424,6 +8524,14 @@ async def test_nested_graph_state(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            name="inner_2",
+                            error=None,
+                            interrupts=(Interrupt(when="before", value=None),),
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -8456,6 +8564,7 @@ async def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8477,6 +8586,7 @@ async def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8499,6 +8609,7 @@ async def test_nested_graph_state(
     # test state w/ nested subgraph state (after resuming from interrupt)
     assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -8532,6 +8643,7 @@ async def test_nested_graph_state(
             "my_key": "hi my value here and there",
             "my_other_key": "hi my value here",
         },
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -8571,6 +8683,7 @@ async def test_nested_graph_state(
         },
     ) == StateSnapshot(
         values={"my_key": "hi my value"},
+        tasks=(PregelTask(AnyStr(), "inner"),),
         next=("inner",),
         config={
             "configurable": {
@@ -8598,6 +8711,7 @@ async def test_nested_graph_state(
     assert [s async for s in app.aget_state_history(config)] == [
         StateSnapshot(
             values={"my_key": "hi my value here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -8625,6 +8739,7 @@ async def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -8650,6 +8765,7 @@ async def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -8677,6 +8793,7 @@ async def test_nested_graph_state(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -8709,6 +8826,7 @@ async def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8730,6 +8848,7 @@ async def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8813,6 +8932,7 @@ async def test_doubly_nested_graph_state(
     await app.ainvoke({"my_key": "my value"}, config, debug=True)
     assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value"},
+        tasks=(PregelTask(AnyStr(), "child", interrupts=(Interrupt(when="before"),)),),
         next=("child",),
         config={
             "configurable": {
@@ -8837,6 +8957,11 @@ async def test_doubly_nested_graph_state(
         subgraph_state_snapshots={
             "child": StateSnapshot(
                 values={"my_key": "hi my value"},
+                tasks=(
+                    PregelTask(
+                        AnyStr(), "child_1", interrupts=(Interrupt(when="before"),)
+                    ),
+                ),
                 next=("child_1",),
                 config={
                     "configurable": {
@@ -8857,6 +8982,13 @@ async def test_doubly_nested_graph_state(
                 subgraph_state_snapshots={
                     "child_1": StateSnapshot(
                         values={"my_key": "hi my value here"},
+                        tasks=(
+                            PregelTask(
+                                AnyStr(),
+                                "grandchild_2",
+                                interrupts=(Interrupt(when="before"),),
+                            ),
+                        ),
                         next=("grandchild_2",),
                         config={
                             "configurable": {
@@ -8887,6 +9019,7 @@ async def test_doubly_nested_graph_state(
     await app.ainvoke(None, config, debug=True)
     assert await app.aget_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -8917,6 +9050,7 @@ async def test_doubly_nested_graph_state(
     )
     assert grandchild_snapshot == StateSnapshot(
         values={"my_key": "hi my value here and there"},
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -8946,6 +9080,7 @@ async def test_doubly_nested_graph_state(
     )
     assert child_snapshot == StateSnapshot(
         values={"my_key": "hi my value here and there"},
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -8979,6 +9114,7 @@ async def test_doubly_nested_graph_state(
         },
     ) == StateSnapshot(
         values={"my_key": "hi my value"},
+        tasks=(PregelTask(AnyStr(), "child"),),
         next=("child",),
         config={
             "configurable": {
@@ -9069,6 +9205,10 @@ async def test_send_to_nested_graphs(
     }
     expected_snapshot = StateSnapshot(
         values={"subjects": ["cats", "dogs"], "jokes": []},
+        tasks=(
+            PregelTask(AnyStr(), "generate_joke"),
+            PregelTask(AnyStr(), "generate_joke"),
+        ),
         next=("generate_joke", "generate_joke"),
         config={
             "configurable": {
@@ -9102,6 +9242,7 @@ async def test_send_to_nested_graphs(
             "subjects": ["cats", "dogs"],
             "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
         },
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -9146,6 +9287,7 @@ async def test_send_to_nested_graphs(
                 "subjects": ["cats", "dogs"],
                 "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
             },
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -9177,6 +9319,10 @@ async def test_send_to_nested_graphs(
         StateSnapshot(
             values={"subjects": ["cats", "dogs"], "jokes": []},
             next=("generate_joke", "generate_joke"),
+            tasks=(
+                PregelTask(AnyStr(), "generate_joke"),
+                PregelTask(AnyStr(), "generate_joke"),
+            ),
             config={
                 "configurable": {
                     "thread_id": "1",
@@ -9197,6 +9343,7 @@ async def test_send_to_nested_graphs(
         ),
         StateSnapshot(
             values={"jokes": []},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
