@@ -323,23 +323,30 @@ class StateGraph(Graph):
                 f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
             )
 
-        try:
-            if isfunction(action) and (
-                hints := get_type_hints(action.__call__) or get_type_hints(action)
-            ):
-                if input is None:
-                    input_hint = hints[list(hints.keys())[0]]
-                    if isinstance(input_hint, type) and get_type_hints(input_hint):
-                        input = input_hint
-        except TypeError:
-            pass
+        if input_transformer is None:
+            try:
+                if isfunction(action) and (
+                    hints := get_type_hints(action.__call__) or get_type_hints(action)
+                ):
+                    if input is None:
+                        input_hint = hints[list(hints.keys())[0]]
+                        if isinstance(input_hint, type) and get_type_hints(input_hint):
+                            input = input_hint
+            except TypeError:
+                pass
+
         if input is not None:
+            if input_transformer is not None:
+                raise ValueError("Cannot provide both input and input_transformer.")
+
             self._add_schema(input)
 
         runnable = coerce_to_runnable(action, name=node, trace=False)
         if input_transformer is not None:
             runnable = (
-                coerce_to_runnable(input_transformer, name="InputTransformer", trace=False)
+                coerce_to_runnable(
+                    input_transformer, name="InputTransformer", trace=False
+                )
                 | runnable
             )
 

@@ -9721,3 +9721,192 @@ def test_xray_issue(snapshot: SnapshotAssertion) -> None:
     app = parent.compile()
 
     assert app.get_graph(xray=True).draw_mermaid() == snapshot
+
+
+def test_input_output_transformers() -> None:
+    class State(TypedDict):
+        my_key: str
+
+    class MyNodeState(TypedDict):
+        my_node_key: str
+
+    # test only input transformer
+    def my_node(state: MyNodeState) -> State:
+        return {"my_key": "hi " + state["my_node_key"]}
+
+    graph = StateGraph(State)
+    graph.add_node(
+        "my_node",
+        my_node,
+        input_transformer=lambda state: {"my_node_key": state["my_key"]},
+    )
+    graph.set_entry_point("my_node")
+    graph.set_finish_point("my_node")
+    app = graph.compile()
+
+    assert app.invoke({"my_key": "meow"}) == {"my_key": "hi meow"}
+
+    # test only output transformer
+    def my_node(state: State) -> MyNodeState:
+        return {"my_node_key": "hi " + state["my_key"]}
+
+    graph = StateGraph(State)
+    graph.add_node(
+        "my_node",
+        my_node,
+        output_transformer=lambda state: {"my_key": state["my_node_key"]},
+    )
+    graph.set_entry_point("my_node")
+    graph.set_finish_point("my_node")
+    app = graph.compile()
+
+    assert app.invoke({"my_key": "meow"}) == {"my_key": "hi meow"}
+
+    # test both transformers
+    def my_node(state: MyNodeState) -> MyNodeState:
+        return {"my_node_key": "hi " + state["my_node_key"]}
+
+    graph = StateGraph(State)
+    graph.add_node(
+        "my_node",
+        my_node,
+        input_transformer=lambda state: {"my_node_key": state["my_key"]},
+        output_transformer=lambda state: {"my_key": state["my_node_key"]},
+    )
+    graph.set_entry_point("my_node")
+    graph.set_finish_point("my_node")
+    app = graph.compile()
+
+    assert app.invoke({"my_key": "meow"}) == {"my_key": "hi meow"}
+
+    # test raising error on input + input_transformer
+    with pytest.raises(ValueError):
+        graph = StateGraph(State)
+        graph.add_node(
+            "my_node",
+            my_node,
+            input=MyNodeState,
+            input_transformer=lambda x: {"my_node_key": x["my_key"]},
+        )
+
+
+def test_input_output_transformers_for_subgraphs() -> None:
+    # test a single subgraph
+    class State(TypedDict):
+        my_key: str
+
+    class ChildState(TypedDict):
+        my_node_key: str
+
+    def my_node(state: ChildState) -> ChildState:
+        return {"my_node_key": "hi " + state["my_node_key"]}
+
+    child_graph = StateGraph(ChildState)
+    child_graph.add_node("my_node", my_node)
+    child_graph.set_entry_point("my_node")
+    child_graph.set_finish_point("my_node")
+
+    graph = StateGraph(State)
+    graph.add_node(
+        "child",
+        child_graph.compile(),
+        input_transformer=lambda state: {"my_node_key": state["my_key"]},
+        output_transformer=lambda state: {"my_key": state["my_node_key"]},
+    )
+    graph.set_entry_point("child")
+    graph.set_finish_point("child")
+    app = graph.compile()
+
+    assert app.invoke({"my_key": "meow"}) == {"my_key": "hi meow"}
+
+    # test complex subgraph schema
+    class AnotherChildState(TypedDict):
+        my_other_node_key: str
+
+    def my_node(state: ChildState) -> ChildState:
+        return {"my_node_key": "hi " + state["my_node_key"]}
+
+    def my_other_node(state: ChildState) -> AnotherChildState:
+        return {"my_other_node_key": state["my_node_key"] + ", bye bye!"}
+
+    child_graph = StateGraph(input=ChildState, output=AnotherChildState)
+    child_graph.add_node("my_node", my_node)
+    child_graph.add_node("my_other_node", my_other_node)
+    child_graph.add_edge("my_node", "my_other_node")
+    child_graph.set_entry_point("my_node")
+    child_graph.set_finish_point("my_other_node")
+
+    graph = StateGraph(State)
+    graph.add_node(
+        "child",
+        child_graph.compile(),
+        input_transformer=lambda state: {"my_node_key": state["my_key"]},
+        output_transformer=lambda state: {"my_key": state["my_other_node_key"]},
+    )
+    graph.set_entry_point("child")
+    graph.set_finish_point("child")
+    app = graph.compile()
+
+    assert app.invoke({"my_key": "meow"}) == {"my_key": "hi meow, bye bye!"}
+
+    # test doubly-nested subgraphs
+    class State(TypedDict):
+        my_key: str
+
+    class ChildState(TypedDict):
+        my_child_key: str
+
+    class GrandChildState(TypedDict):
+        my_grandchild_key: str
+
+    def grandchild_1(state: GrandChildState):
+        return {"my_grandchild_key": state["my_grandchild_key"] + " here"}
+
+    def grandchild_2(state: GrandChildState):
+        return {
+            "my_grandchild_key": state["my_grandchild_key"] + " and there",
+        }
+
+    grandchild = StateGraph(GrandChildState)
+    grandchild.add_node("grandchild_1", grandchild_1)
+    grandchild.add_node("grandchild_2", grandchild_2)
+    grandchild.add_edge("grandchild_1", "grandchild_2")
+    grandchild.set_entry_point("grandchild_1")
+    grandchild.set_finish_point("grandchild_2")
+
+    child = StateGraph(ChildState)
+    child.add_node(
+        "child_1",
+        grandchild.compile(),
+        input_transformer=lambda state: {"my_grandchild_key": state["my_child_key"]},
+        output_transformer=lambda state: {"my_child_key": state["my_grandchild_key"]},
+    )
+    child.add_node("child_2", lambda x: x)
+    child.add_edge("child_1", "child_2")
+    child.set_entry_point("child_1")
+    child.set_finish_point("child_2")
+
+    def parent_1(state: State):
+        return {"my_key": "hi " + state["my_key"]}
+
+    def parent_2(state: State):
+        return {"my_key": state["my_key"] + " and back again"}
+
+    graph = StateGraph(State)
+    graph.add_node("parent_1", parent_1)
+    graph.add_node(
+        "child",
+        child.compile(),
+        input_transformer=lambda state: {"my_child_key": state["my_key"]},
+        output_transformer=lambda state: {"my_key": state["my_child_key"]},
+    )
+    graph.add_node("parent_2", parent_2)
+    graph.set_entry_point("parent_1")
+    graph.add_edge("parent_1", "child")
+    graph.add_edge("child", "parent_2")
+    graph.set_finish_point("parent_2")
+    app = graph.compile()
+
+    assert app.invoke({"my_key": "meow"}) == {
+        "my_key": "hi meow here and there and back again"
+    }
