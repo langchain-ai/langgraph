@@ -276,7 +276,9 @@ async def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
             config=tup.config,
             created_at=tup.checkpoint["ts"],
             metadata={"source": "loop", "step": 0, "writes": None},
-            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+            parent_config=[
+                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
+            ][-1].config,
         )
 
 
