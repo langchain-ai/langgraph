@@ -22,14 +22,10 @@ from typing import (
 )
 
 from langchain_core.callbacks import AsyncParentRunManager, ParentRunManager
-from langchain_core.runnables import RunnableConfig, patch_config
+from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.manager import (
-    AsyncChannelsManager,
-    ChannelsManager,
-)
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -43,7 +39,6 @@ from langgraph.checkpoint.base import (
 from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
-    CONFIG_KEY_STORE,
     ERROR,
     INPUT,
     INTERRUPT,
@@ -51,9 +46,8 @@ from langgraph.constants import (
 )
 from langgraph.errors import EmptyInputError, GraphInterrupt
 from langgraph.managed.base import (
-    AsyncManagedValuesManager,
     ManagedValueMapping,
-    ManagedValuesManager,
+    ManagedValueSpec,
     WritableManagedValue,
 )
 from langgraph.pregel.algo import (
@@ -70,6 +64,8 @@ from langgraph.pregel.executor import (
     Submit,
 )
 from langgraph.pregel.io import map_input, map_output_updates, map_output_values, single
+from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
+from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import PregelExecutableTask
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
@@ -88,7 +84,12 @@ EMPTY_SEQ = ()
 class PregelLoop:
     input: Optional[Any]
     config: RunnableConfig
+    store: Optional[BaseStore]
     checkpointer: Optional[BaseCheckpointSaver]
+    nodes: Mapping[str, PregelNode]
+    specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
+    is_nested: bool
+
     checkpointer_get_next_version: Callable[[Optional[V]], V]
     checkpointer_put_writes: Optional[
         Callable[[RunnableConfig, Sequence[tuple[str, Any]], str], Any]
@@ -123,7 +124,6 @@ class PregelLoop:
     ]
     tasks: Sequence[PregelExecutableTask]
     stream: deque[Tuple[str, Any]]
-    is_nested: bool
 
     # public
 
@@ -132,16 +132,20 @@ class PregelLoop:
         input: Optional[Any],
         *,
         config: RunnableConfig,
+        store: Optional[BaseStore],
         checkpointer: Optional[BaseCheckpointSaver],
+        nodes: Mapping[str, PregelNode],
+        specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         graph: "Pregel",
     ) -> None:
         self.stream = deque()
         self.input = input
         self.config = config
+        self.store = store
         self.checkpointer = checkpointer
         self.graph = graph
-        # TODO if managed values no longer needs graph we can replace with
-        # managed_specs, channel_specs
+        self.nodes = nodes
+        self.specs = specs
         self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
 
     def mark_tasks_scheduled(self, tasks: Sequence[PregelExecutableTask]) -> None:
@@ -235,7 +239,7 @@ class PregelLoop:
         # prepare next tasks
         self.tasks = prepare_next_tasks(
             self.checkpoint,
-            self.graph.nodes,
+            self.nodes,
             self.channels,
             self.managed,
             self.config,
@@ -323,7 +327,7 @@ class PregelLoop:
             # discard any unfinished tasks from previous checkpoint
             discard_tasks = prepare_next_tasks(
                 self.checkpoint,
-                self.graph.nodes,
+                self.nodes,
                 self.channels,
                 self.managed,
                 self.config,
@@ -422,11 +426,21 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         input: Optional[Any],
         *,
         config: RunnableConfig,
+        store: Optional[BaseStore],
         checkpointer: Optional[BaseCheckpointSaver],
+        nodes: Mapping[str, PregelNode],
+        specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         graph: "Pregel",
     ) -> None:
-        super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
-        self.store = graph.store
+        super().__init__(
+            input,
+            config=config,
+            checkpointer=checkpointer,
+            graph=graph,
+            store=store,
+            nodes=nodes,
+            specs=specs,
+        )
         self.stack = ExitStack()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
@@ -472,14 +486,8 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.checkpoint_pending_writes = saved.pending_writes or []
 
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
-        self.channels = self.stack.enter_context(
-            ChannelsManager(self.graph.channels, self.checkpoint, self.config)
-        )
-        self.managed = self.stack.enter_context(
-            ManagedValuesManager(
-                self.graph.managed_values_dict,
-                patch_config(self.config, configurable={CONFIG_KEY_STORE: self.store}),
-            )
+        self.channels, self.managed = self.stack.enter_context(
+            ChannelsManager(self.specs, self.checkpoint, self.config, self.store)
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "pending"
@@ -506,11 +514,22 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         input: Optional[Any],
         *,
         config: RunnableConfig,
+        store: Optional[BaseStore],
         checkpointer: Optional[BaseCheckpointSaver],
+        nodes: Mapping[str, PregelNode],
+        specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         graph: "Pregel",
     ) -> None:
-        super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
-        self.store = AsyncBatchedStore(graph.store) if graph.store else None
+        super().__init__(
+            input,
+            config=config,
+            checkpointer=checkpointer,
+            graph=graph,
+            store=store,
+            nodes=nodes,
+            specs=specs,
+        )
+        self.store = AsyncBatchedStore(self.store) if self.store else None
         self.stack = AsyncExitStack()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
@@ -560,14 +579,8 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         self.checkpoint_pending_writes = saved.pending_writes or []
 
         self.submit = await self.stack.enter_async_context(AsyncBackgroundExecutor())
-        self.channels = await self.stack.enter_async_context(
-            AsyncChannelsManager(self.graph.channels, self.checkpoint, self.config)
-        )
-        self.managed = await self.stack.enter_async_context(
-            AsyncManagedValuesManager(
-                self.graph.managed_values_dict,
-                patch_config(self.config, configurable={CONFIG_KEY_STORE: self.store}),
-            )
+        self.channels, self.managed = await self.stack.enter_async_context(
+            AsyncChannelsManager(self.specs, self.checkpoint, self.config, self.store)
         )
         self.stack.push(self._suppress_interrupt)
         self.status = "pending"

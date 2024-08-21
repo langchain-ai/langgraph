@@ -25,7 +25,6 @@ from langchain_core.runnables.config import (
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.context import Context
-from langgraph.channels.manager import ChannelsManager
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -46,9 +45,10 @@ from langgraph.constants import (
     Send,
 )
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
-from langgraph.managed.base import ManagedValueMapping, is_managed_value
+from langgraph.managed.base import ManagedValueMapping
 from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
+from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
 
@@ -105,11 +105,10 @@ def local_read(
     if fresh:
         new_checkpoint = create_checkpoint(copy_checkpoint(checkpoint), channels, -1)
         context_channels = {k: v for k, v in channels.items() if isinstance(v, Context)}
-        with ChannelsManager(
-            {k: v for k, v in channels.items() if k not in context_channels},
-            new_checkpoint,
-            config,
-        ) as channels:
+        with ChannelsManager(channels, new_checkpoint, config, skip_context=True) as (
+            channels,
+            _,
+        ):
             all_channels = {**channels, **context_channels}
             apply_writes(new_checkpoint, all_channels, [task], None)
             return read_channels(all_channels, select)
@@ -470,16 +469,10 @@ def _proc_input(
                     chan,
                     catch=chan not in proc.triggers,
                 )
+                if chan in channels
+                else managed[k](step)
                 for k, chan in proc.channels.items()
-                if isinstance(chan, str)
             }
-
-            managed_values = {}
-            for key, chan in proc.channels.items():
-                if is_managed_value(chan):
-                    managed_values[key] = managed[key](step)
-
-            val.update(managed_values)
         except EmptyChannelError:
             return
     elif isinstance(proc.channels, list):
