@@ -73,7 +73,6 @@ from langgraph.constants import (
     Interrupt,
 )
 from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
-from langgraph.kv.base import BaseMemory
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValuesManager,
@@ -109,6 +108,7 @@ from langgraph.pregel.types import (
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
+from langgraph.store.base import BaseStore
 
 WriteValue = Union[
     Runnable[Input, Output],
@@ -224,7 +224,7 @@ class Pregel(
     checkpointer: Optional[BaseCheckpointSaver] = None
     """Checkpointer used to save and load graph state. Defaults to None."""
 
-    kv: Optional[BaseMemory] = None
+    store: Optional[BaseStore] = None
     """Key-value store to use. Defaults to None."""
 
     retry_policy: Optional[RetryPolicy] = None

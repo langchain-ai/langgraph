@@ -40,7 +40,6 @@ from langgraph.graph.graph import (
     Graph,
     Send,
 )
-from langgraph.kv.base import BaseMemory
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -52,6 +51,7 @@ from langgraph.managed.base import (
 from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
+from langgraph.store.base import BaseStore
 from langgraph.utils import RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
@@ -383,7 +383,7 @@ class StateGraph(Graph):
         self,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         *,
-        kv: Optional[BaseMemory] = None,
+        store: Optional[BaseStore] = None,
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: bool = False,
@@ -452,7 +452,7 @@ class StateGraph(Graph):
             interrupt_after_nodes=interrupt_after,
             auto_validate=False,
             debug=debug,
-            kv=kv,
+            store=store,
         )
 
         compiled.attach_node(START, None)

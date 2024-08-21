@@ -52,7 +52,6 @@ from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.graph import END, Graph, StateGraph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
-from langgraph.kv.memory import MemoryKV
 from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
@@ -62,6 +61,7 @@ from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.types import PregelTask
+from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyStr, ExceptionLike
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
@@ -4823,7 +4823,7 @@ async def test_start_branch_then() -> None:
 
     async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
         tool_two = tool_two_graph.compile(
-            kv=MemoryKV(),
+            store=MemoryStore(),
             checkpointer=saver,
             interrupt_before=["tool_two_fast", "tool_two_slow"],
         )

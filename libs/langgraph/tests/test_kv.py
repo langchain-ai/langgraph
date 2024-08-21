@@ -3,15 +3,15 @@ from typing import Any
 
 from pytest_mock import MockerFixture
 
-from langgraph.kv.base import BaseMemory
-from langgraph.kv.batch import AsyncBatchedKV
+from langgraph.store.base import BaseStore
+from langgraph.store.batch import AsyncBatchedStore
 
 
 async def test_kv_async_batch(mocker: MockerFixture) -> None:
     aget = mocker.stub()
     alist = mocker.stub()
 
-    class MockKV(BaseMemory):
+    class MockKV(BaseStore):
         async def aget(
             self, pairs: list[tuple[str, str]]
         ) -> dict[tuple[str, str], dict[str, Any] | None]:
@@ -22,7 +22,7 @@ async def test_kv_async_batch(mocker: MockerFixture) -> None:
             alist(prefixes)
             return {prefix: {prefix: 1} for prefix in prefixes}
 
-    store = AsyncBatchedKV(MockKV())
+    store = AsyncBatchedStore(MockKV())
 
     # concurrent calls are batched
     results = await asyncio.gather(

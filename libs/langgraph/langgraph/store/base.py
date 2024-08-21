@@ -3,7 +3,7 @@ from typing import Any, List, Optional
 V = dict[str, Any]
 
 
-class BaseMemory:
+class BaseStore:
     def list(self, prefixes: List[str]) -> dict[str, dict[str, V]]:
         # list[namespace] -> dict[namespace, list[value]]
         raise NotImplementedError

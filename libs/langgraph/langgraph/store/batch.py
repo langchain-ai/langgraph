@@ -1,7 +1,7 @@
 import asyncio
 from typing import NamedTuple, Optional, Union
 
-from langgraph.kv.base import BaseMemory, V
+from langgraph.store.base import BaseStore, V
 
 
 class ListOp(NamedTuple):
@@ -12,8 +12,8 @@ class PutOp(NamedTuple):
     writes: list[tuple[str, str, Optional[V]]]
 
 
-class AsyncBatchedKV(BaseMemory):
-    def __init__(self, kv: BaseMemory) -> None:
+class AsyncBatchedStore(BaseStore):
+    def __init__(self, kv: BaseStore) -> None:
         self.kv = kv
         self.aqueue: dict[asyncio.Future, Union[ListOp, PutOp]] = {}
         self.task = asyncio.create_task(_run(self.aqueue, self.kv))
@@ -33,7 +33,7 @@ class AsyncBatchedKV(BaseMemory):
 
 
 async def _run(
-    aqueue: dict[asyncio.Future, Union[ListOp, PutOp]], kv: BaseMemory
+    aqueue: dict[asyncio.Future, Union[ListOp, PutOp]], kv: BaseStore
 ) -> None:
     while True:
         await asyncio.sleep(0)

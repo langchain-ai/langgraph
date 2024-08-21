@@ -50,8 +50,6 @@ from langgraph.constants import (
     Interrupt,
 )
 from langgraph.errors import EmptyInputError, GraphInterrupt
-from langgraph.kv.base import BaseMemory
-from langgraph.kv.batch import AsyncBatchedKV
 from langgraph.managed.base import (
     AsyncManagedValuesManager,
     ManagedValueMapping,
@@ -74,6 +72,8 @@ from langgraph.pregel.executor import (
 from langgraph.pregel.io import map_input, map_output_updates, map_output_values, single
 from langgraph.pregel.types import PregelExecutableTask
 from langgraph.pregel.utils import get_new_channel_versions
+from langgraph.store.base import BaseStore
+from langgraph.store.batch import AsyncBatchedStore
 
 if TYPE_CHECKING:
     from langgraph.pregel import Pregel
@@ -105,7 +105,7 @@ class PregelLoop:
         ]
     ]
     graph: "Pregel"
-    kv: Optional[BaseMemory]
+    store: Optional[BaseStore]
     submit: Submit
     channels: Mapping[str, BaseChannel]
     managed: ManagedValueMapping
@@ -427,7 +427,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         graph: "Pregel",
     ) -> None:
         super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
-        self.kv = graph.kv
+        self.store = graph.store
         self.stack = ExitStack()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
@@ -479,7 +479,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         self.managed = self.stack.enter_context(
             ManagedValuesManager(
                 self.graph.managed_values_dict,
-                patch_config(self.config, configurable={CONFIG_KEY_KV: self.kv}),
+                patch_config(self.config, configurable={CONFIG_KEY_KV: self.store}),
             )
         )
         self.stack.push(self._suppress_interrupt)
@@ -511,7 +511,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         graph: "Pregel",
     ) -> None:
         super().__init__(input, config=config, checkpointer=checkpointer, graph=graph)
-        self.kv = AsyncBatchedKV(graph.kv) if graph.kv else None
+        self.store = AsyncBatchedStore(graph.store) if graph.store else None
         self.stack = AsyncExitStack()
         if checkpointer:
             self.checkpointer_get_next_version = checkpointer.get_next_version
@@ -567,7 +567,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         self.managed = await self.stack.enter_async_context(
             AsyncManagedValuesManager(
                 self.graph.managed_values_dict,
-                patch_config(self.config, configurable={CONFIG_KEY_KV: self.kv}),
+                patch_config(self.config, configurable={CONFIG_KEY_KV: self.store}),
             )
         )
         self.stack.push(self._suppress_interrupt)

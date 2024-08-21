@@ -1,10 +1,10 @@
 from collections import defaultdict
 from typing import List, Optional
 
-from langgraph.kv.base import BaseMemory, V
+from langgraph.store.base import BaseStore, V
 
 
-class MemoryKV(BaseMemory):
+class MemoryStore(BaseStore):
     def __init__(self) -> None:
         self.data: dict[str, dict[str, V]] = defaultdict(dict)
 
