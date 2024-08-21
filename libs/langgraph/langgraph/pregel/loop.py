@@ -332,13 +332,12 @@ class PregelLoop:
                 manager=None,
             )
             # apply input writes
-            mv_writes = apply_writes(
+            assert not apply_writes(
                 self.checkpoint,
                 self.channels,
                 discard_tasks + [PregelTaskWrites(INPUT, input_writes, [])],
                 self.checkpointer_get_next_version,
-            )
-            assert not mv_writes
+            ), "Can't write to SharedValues in graph input"
             # save input checkpoint
             self._put_checkpoint({"source": "input", "writes": self.input})
         else:

@@ -650,7 +650,7 @@ class Pregel(
             # apply to checkpoint and save
             assert not apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
-            )
+            ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             # check interrupt before
             if tasks := should_interrupt(
@@ -794,7 +794,7 @@ class Pregel(
             # apply to checkpoint and save
             assert not apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
-            )
+            ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
             # check interrupt before
             if tasks := should_interrupt(
