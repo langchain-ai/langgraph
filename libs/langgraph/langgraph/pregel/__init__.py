@@ -961,6 +961,7 @@ class Pregel(
                 checkpointer=checkpointer,
                 nodes=self.nodes,
                 specs=self.channels,
+                output_keys=output_keys,
             ) as loop:
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -969,7 +970,6 @@ class Pregel(
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
                     input_keys=self.input_channels,
-                    output_keys=output_keys,
                     stream_keys=self.stream_channels_asis,
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,
@@ -1088,8 +1088,8 @@ class Pregel(
                         "without hitting a stop condition. You can increase the "
                         "limit by setting the `recursion_limit` config key."
                     )
-                # set final channel values as run output
-                run_manager.on_chain_end(read_channels(loop.channels, output_keys))
+            # set final channel values as run output
+            run_manager.on_chain_end(loop.output)
         except BaseException as e:
             run_manager.on_chain_error(e)
             raise
@@ -1218,6 +1218,7 @@ class Pregel(
                 checkpointer=checkpointer,
                 nodes=self.nodes,
                 specs=self.channels,
+                output_keys=output_keys,
             ) as loop:
                 aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model
@@ -1227,7 +1228,6 @@ class Pregel(
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
                     input_keys=self.input_channels,
-                    output_keys=output_keys,
                     stream_keys=self.stream_channels_asis,
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,
@@ -1349,13 +1349,9 @@ class Pregel(
                         "without hitting a stop condition. You can increase the "
                         "limit by setting the `recursion_limit` config key."
                     )
-
-                # set final channel values as run output
-                await run_manager.on_chain_end(
-                    read_channels(loop.channels, output_keys)
-                )
+            # set final channel values as run output
+            await run_manager.on_chain_end(loop.output)
         except BaseException as e:
-            # TODO use on_chain_end if exc is GraphInterrupt
             await asyncio.shield(run_manager.on_chain_error(e))
             raise
 

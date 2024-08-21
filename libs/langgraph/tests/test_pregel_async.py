@@ -63,6 +63,7 @@ from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyStr, ExceptionLike
+from tests.fake_tracer import FakeTracer
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
@@ -225,11 +226,20 @@ async def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
     tool_two_graph.add_edge(START, "tool_two")
     tool_two = tool_two_graph.compile()
 
-    assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}) == {
+    tracer = FakeTracer()
+    assert await tool_two.ainvoke(
+        {"my_key": "value", "market": "DE"}, {"callbacks": [tracer]}
+    ) == {
         "my_key": "value",
         "market": "DE",
     }
     assert tool_two_node_count == 1, "interrupts aren't retried"
+    assert len(tracer.runs) == 1
+    run = tracer.runs[0]
+    assert run.end_time is not None
+    assert run.error is None
+    assert run.outputs == {"market": "DE", "my_key": "value"}
+
     assert await tool_two.ainvoke({"my_key": "value", "market": "US"}) == {
         "my_key": "value all good",
         "market": "US",
