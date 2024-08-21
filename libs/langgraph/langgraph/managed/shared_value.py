@@ -58,7 +58,7 @@ class SharedValue(WritableManagedValue[Value, Update]):
         with super().enter(config, **kwargs) as value:
             if value.store is not None:
                 saved = value.store.list([value.ns])
-                value.value = saved[value.ns]
+                value.value = saved[value.ns] or {}
             yield value
 
     @classmethod
@@ -67,7 +67,7 @@ class SharedValue(WritableManagedValue[Value, Update]):
         async with super().aenter(config, **kwargs) as value:
             if value.store is not None:
                 saved = await value.store.alist([value.ns])
-                value.value = saved[value.ns]
+                value.value = saved[value.ns] or {}
             yield value
 
     def __init__(
