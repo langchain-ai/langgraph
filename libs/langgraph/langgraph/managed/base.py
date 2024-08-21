@@ -1,12 +1,9 @@
-import asyncio
 from abc import ABC, abstractmethod
-from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from inspect import isclass
 from typing import (
     Any,
-    AsyncGenerator,
     AsyncIterator,
-    Generator,
     Generic,
     Iterator,
     NamedTuple,
@@ -102,51 +99,6 @@ def is_writable_managed_value(value: Any) -> TypeGuard[Type[WritableManagedValue
         isinstance(value, ConfiguredManagedValue)
         and issubclass(value.cls, WritableManagedValue)
     )
-
-
-@contextmanager
-def ManagedValuesManager(
-    values: dict[str, ManagedValueSpec],
-    config: RunnableConfig,
-) -> Generator[ManagedValueMapping, None, None]:
-    if values:
-        with ExitStack() as stack:
-            yield {
-                key: stack.enter_context(
-                    value.cls.enter(config, **value.kwargs)
-                    if isinstance(value, ConfiguredManagedValue)
-                    else value.enter(config)
-                )
-                for key, value in values.items()
-            }
-    else:
-        yield {}
-
-
-@asynccontextmanager
-async def AsyncManagedValuesManager(
-    values: dict[str, ManagedValueSpec],
-    config: RunnableConfig,
-) -> AsyncGenerator[ManagedValueMapping, None]:
-    if values:
-        async with AsyncExitStack() as stack:
-            # create enter tasks with reference to spec
-            tasks = {
-                asyncio.create_task(
-                    stack.enter_async_context(
-                        value.cls.aenter(config, **value.kwargs)
-                        if isinstance(value, ConfiguredManagedValue)
-                        else value.aenter(config)
-                    )
-                ): key
-                for key, value in values.items()
-            }
-            # wait for all enter tasks
-            done, _ = await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
-            # build mapping from spec to result
-            yield {tasks[task]: task.result() for task in done}
-    else:
-        yield {}
 
 
 ChannelKeyPlaceholder = object()

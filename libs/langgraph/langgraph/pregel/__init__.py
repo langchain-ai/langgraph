@@ -52,11 +52,6 @@ from langgraph.channels.base import (
     BaseChannel,
 )
 from langgraph.channels.context import Context
-from langgraph.channels.last_value import LastValue
-from langgraph.channels.manager import (
-    AsyncChannelsManager,
-    ChannelsManager,
-)
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     copy_checkpoint,
@@ -73,12 +68,7 @@ from langgraph.constants import (
     Interrupt,
 )
 from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
-from langgraph.managed.base import (
-    AsyncManagedValuesManager,
-    ManagedValuesManager,
-    ManagedValueSpec,
-    is_managed_value,
-)
+from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.algo import (
     apply_writes,
     local_read,
@@ -97,6 +87,7 @@ from langgraph.pregel.io import (
     read_channels,
 )
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
+from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy, arun_with_retry, run_with_retry
 from langgraph.pregel.types import (
@@ -197,7 +188,9 @@ class Pregel(
 ):
     nodes: Mapping[str, PregelNode]
 
-    channels: Mapping[str, BaseChannel] = Field(default_factory=dict)
+    channels: Mapping[str, Union[BaseChannel, ManagedValueSpec]] = Field(
+        default_factory=dict
+    )
 
     auto_validate: bool = True
 
@@ -350,16 +343,6 @@ class Pregel(
             k for k in self.channels if not isinstance(self.channels[k], Context)
         ]
 
-    @property
-    def managed_values_dict(self) -> dict[str, ManagedValueSpec]:
-        return {
-            k: v
-            for node in self.nodes.values()
-            if isinstance(node.channels, dict)
-            for k, v in node.channels.items()
-            if is_managed_value(v)
-        }
-
     def get_state(self, config: RunnableConfig) -> StateSnapshot:
         """Get the current state of the graph."""
         if not self.checkpointer:
@@ -368,16 +351,10 @@ class Pregel(
         saved = self.checkpointer.get_tuple(config)
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
         config = saved.config if saved else config
-        with ChannelsManager(
-            {
-                k: LastValue(None) if isinstance(c, Context) else c
-                for k, c in self.channels.items()
-            },
-            checkpoint,
-            config,
-        ) as channels, ManagedValuesManager(
-            self.managed_values_dict, ensure_config(config)
-        ) as managed:
+        with ChannelsManager(self.channels, checkpoint, config, skip_context=True) as (
+            channels,
+            managed,
+        ):
             next_tasks = prepare_next_tasks(
                 checkpoint,
                 self.nodes,
@@ -408,15 +385,8 @@ class Pregel(
 
         config = saved.config if saved else config
         async with AsyncChannelsManager(
-            {
-                k: LastValue(None) if isinstance(c, Context) else c
-                for k, c in self.channels.items()
-            },
-            checkpoint,
-            config,
-        ) as channels, AsyncManagedValuesManager(
-            self.managed_values_dict, ensure_config(config)
-        ) as managed:
+            self.channels, checkpoint, config, skip_context=True
+        ) as (channels, managed):
             next_tasks = prepare_next_tasks(
                 checkpoint,
                 self.nodes,
@@ -460,15 +430,8 @@ class Pregel(
             pending_writes,
         ) in self.checkpointer.list(config, before=before, limit=limit, filter=filter):
             with ChannelsManager(
-                {
-                    k: LastValue(None) if isinstance(c, Context) else c
-                    for k, c in self.channels.items()
-                },
-                checkpoint,
-                config,
-            ) as channels, ManagedValuesManager(
-                self.managed_values_dict, ensure_config(config)
-            ) as managed:
+                self.channels, checkpoint, config, skip_context=True
+            ) as (channels, managed):
                 next_tasks = prepare_next_tasks(
                     checkpoint,
                     self.nodes,
@@ -512,15 +475,8 @@ class Pregel(
             pending_writes,
         ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
             async with AsyncChannelsManager(
-                {
-                    k: LastValue(None) if isinstance(c, Context) else c
-                    for k, c in self.channels.items()
-                },
-                checkpoint,
-                config,
-            ) as channels, AsyncManagedValuesManager(
-                self.managed_values_dict, ensure_config(config)
-            ) as managed:
+                self.channels, checkpoint, config, skip_context=True
+            ) as (channels, managed):
                 next_tasks = prepare_next_tasks(
                     checkpoint,
                     self.nodes,
@@ -613,11 +569,10 @@ class Pregel(
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels
-        with ChannelsManager(
-            self.channels, checkpoint, config
-        ) as channels, ManagedValuesManager(
-            self.managed_values_dict, ensure_config(config)
-        ) as managed:
+        with ChannelsManager(self.channels, checkpoint, config) as (
+            channels,
+            managed,
+        ):
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
             if not writers:
@@ -757,11 +712,10 @@ class Pregel(
         if as_node not in self.nodes:
             raise InvalidUpdateError(f"Node {as_node} does not exist")
         # update channels, acting as the chosen node
-        async with AsyncChannelsManager(
-            self.channels, checkpoint, config
-        ) as channels, AsyncManagedValuesManager(
-            self.managed_values_dict, ensure_config(config)
-        ) as managed:
+        async with AsyncChannelsManager(self.channels, checkpoint, config) as (
+            channels,
+            managed,
+        ):
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
             if not writers:
@@ -998,7 +952,13 @@ class Pregel(
             )
 
             with SyncPregelLoop(
-                input, config=config, checkpointer=checkpointer, graph=self
+                input,
+                config=config,
+                store=self.store,
+                checkpointer=checkpointer,
+                graph=self,
+                nodes=self.nodes,
+                specs=self.channels,
             ) as loop:
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -1248,7 +1208,13 @@ class Pregel(
                 debug=debug,
             )
             async with AsyncPregelLoop(
-                input, config=config, checkpointer=checkpointer, graph=self
+                input,
+                config=config,
+                store=self.store,
+                checkpointer=checkpointer,
+                graph=self,
+                nodes=self.nodes,
+                specs=self.channels,
             ) as loop:
                 aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model

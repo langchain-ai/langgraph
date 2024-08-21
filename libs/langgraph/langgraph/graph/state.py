@@ -44,7 +44,7 @@ from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
     ConfiguredManagedValue,
-    ManagedValue,
+    ManagedValueSpec,
     is_managed_value,
     is_writable_managed_value,
 )
@@ -129,8 +129,8 @@ class StateGraph(Graph):
 
     nodes: dict[str, StateNodeSpec]
     channels: dict[str, BaseChannel]
-    managed: dict[str, Type[ManagedValue]]
-    schemas: dict[Type[Any], dict[str, Union[BaseChannel, Type[ManagedValue]]]]
+    managed: dict[str, ManagedValueSpec]
+    schemas: dict[Type[Any], dict[str, Union[BaseChannel, ManagedValueSpec]]]
 
     def __init__(
         self,
@@ -442,7 +442,11 @@ class StateGraph(Graph):
             builder=self,
             config_type=self.config_schema,
             nodes={},
-            channels={**self.channels, START: EphemeralValue(self.input)},
+            channels={
+                **self.channels,
+                **self.managed,
+                START: EphemeralValue(self.input),
+            },
             input_channels=START,
             stream_mode="updates",
             output_channels=output_channels,
@@ -497,7 +501,7 @@ class CompiledStateGraph(CompiledGraph):
                     **{
                         k: (self.channels[k].UpdateType, None)
                         for k in self.builder.schemas[self.builder.input]
-                        if k in self.channels
+                        if isinstance(self.channels[k], BaseChannel)
                         and not isinstance(self.channels[k], Context)
                     },
                 )
@@ -572,10 +576,7 @@ class CompiledStateGraph(CompiledGraph):
             )
         else:
             input_schema = node.input if node else self.builder.schema
-            input_values = {
-                k: v if is_managed_value(v) else k
-                for k, v in self.builder.schemas[input_schema].items()
-            }
+            input_values = {k: k for k in self.builder.schemas[input_schema]}
             is_single_input = len(input_values) == 1 and "__root__" in input_values
 
             self.channels[key] = EphemeralValue(Any, guard=False)
@@ -694,7 +695,7 @@ def _coerce_state(schema: Type[Any], input: dict[str, Any]) -> dict[str, Any]:
 
 def _get_channels(
     schema: Type[dict],
-) -> tuple[dict[str, BaseChannel], dict[str, Type[ManagedValue]]]:
+) -> tuple[dict[str, BaseChannel], dict[str, ManagedValueSpec]]:
     if not hasattr(schema, "__annotations__"):
         return {"__root__": _get_channel("__root__", schema, allow_managed=False)}, {}
 
@@ -711,7 +712,7 @@ def _get_channels(
 
 def _get_channel(
     name: str, annotation: Any, *, allow_managed: bool = True
-) -> Union[BaseChannel, Type[ManagedValue]]:
+) -> Union[BaseChannel, ManagedValueSpec]:
     if manager := _is_field_managed_value(name, annotation):
         if allow_managed:
             return manager
@@ -751,7 +752,7 @@ def _is_field_binop(typ: Type[Any]) -> Optional[BinaryOperatorAggregate]:
     return None
 
 
-def _is_field_managed_value(name: str, typ: Type[Any]) -> Optional[Type[ManagedValue]]:
+def _is_field_managed_value(name: str, typ: Type[Any]) -> Optional[ManagedValueSpec]:
     if hasattr(typ, "__metadata__"):
         meta = typ.__metadata__
         if len(meta) >= 1:
