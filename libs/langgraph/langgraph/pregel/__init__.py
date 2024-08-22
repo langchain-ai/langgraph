@@ -65,16 +65,10 @@ from langgraph.constants import (
     CONFIG_KEY_SEND,
     ERROR,
     INTERRUPT,
-    Interrupt,
 )
 from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueSpec
-from langgraph.pregel.algo import (
-    apply_writes,
-    local_read,
-    prepare_next_tasks,
-    should_interrupt,
-)
+from langgraph.pregel.algo import apply_writes, local_read, prepare_next_tasks
 from langgraph.pregel.debug import (
     print_step_checkpoint,
     print_step_tasks,
@@ -570,7 +564,7 @@ class Pregel(
         # update channels
         with ChannelsManager(self.channels, checkpoint, config) as (
             channels,
-            managed,
+            _,
         ):
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
@@ -606,31 +600,6 @@ class Pregel(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-            # check interrupt before
-            if tasks := should_interrupt(
-                checkpoint,
-                self.interrupt_before_nodes,
-                prepare_next_tasks(
-                    checkpoint,
-                    self.nodes,
-                    channels,
-                    managed,
-                    config,
-                    step + 2,
-                    for_execution=False,
-                ),
-            ):
-                for t in tasks:
-                    self.checkpointer.put_writes(
-                        {
-                            "configurable": {
-                                **checkpoint_config["configurable"],
-                                "checkpoint_id": checkpoint["id"],
-                            }
-                        },
-                        [(INTERRUPT, Interrupt("before"))],
-                        t.id,
-                    )
             return self.checkpointer.put(
                 checkpoint_config,
                 checkpoint,
@@ -713,7 +682,7 @@ class Pregel(
         # update channels, acting as the chosen node
         async with AsyncChannelsManager(self.channels, checkpoint, config) as (
             channels,
-            managed,
+            _,
         ):
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
@@ -749,35 +718,6 @@ class Pregel(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
             ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-            # check interrupt before
-            if tasks := should_interrupt(
-                checkpoint,
-                self.interrupt_before_nodes,
-                prepare_next_tasks(
-                    checkpoint,
-                    self.nodes,
-                    channels,
-                    managed,
-                    config,
-                    step + 2,
-                    for_execution=False,
-                ),
-            ):
-                await asyncio.gather(
-                    *(
-                        self.checkpointer.aput_writes(
-                            {
-                                "configurable": {
-                                    **checkpoint_config["configurable"],
-                                    "checkpoint_id": checkpoint["id"],
-                                }
-                            },
-                            [(INTERRUPT, Interrupt("before"))],
-                            t.id,
-                        )
-                        for t in tasks
-                    )
-                )
             return await self.checkpointer.aput(
                 checkpoint_config,
                 checkpoint,

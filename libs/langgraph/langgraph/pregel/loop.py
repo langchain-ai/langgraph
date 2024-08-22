@@ -41,7 +41,6 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
-    Interrupt,
 )
 from langgraph.errors import EmptyInputError, GraphInterrupt
 from langgraph.managed.base import (
@@ -162,6 +161,8 @@ class PregelLoop:
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         """Put writes for a task, to be read by the next tick."""
+        if not writes:
+            return
         self.checkpoint_pending_writes.extend((task_id, k, v) for k, v in writes)
         if self.checkpointer_put_writes is not None:
             self.submit(
@@ -238,13 +239,10 @@ class PregelLoop:
                 }
             )
             # after execution, check if we should interrupt
-            if tasks := should_interrupt(self.checkpoint, interrupt_after, self.tasks):
+            if should_interrupt(self.checkpoint, interrupt_after, self.tasks):
                 self.status = "interrupt_after"
-                interrupts = [(t.id, Interrupt("after")) for t in tasks]
-                for tid, interrupt in interrupts:
-                    self.put_writes(tid, [(INTERRUPT, interrupt)])
                 if self.is_nested:
-                    raise GraphInterrupt([i[1] for i in interrupts])
+                    raise GraphInterrupt()
                 else:
                     return False
         else:
@@ -308,13 +306,10 @@ class PregelLoop:
             )
 
         # before execution, check if we should interrupt
-        if tasks := should_interrupt(self.checkpoint, interrupt_before, self.tasks):
+        if should_interrupt(self.checkpoint, interrupt_before, self.tasks):
             self.status = "interrupt_before"
-            interrupts = [(t.id, Interrupt("before")) for t in tasks]
-            for tid, interrupt in interrupts:
-                self.put_writes(tid, [(INTERRUPT, interrupt)])
             if self.is_nested:
-                raise GraphInterrupt([i[1] for i in interrupts])
+                raise GraphInterrupt()
             else:
                 return False
 
