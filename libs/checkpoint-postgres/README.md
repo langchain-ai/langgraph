@@ -44,7 +44,6 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
             }
         },
         "pending_sends": [],
-        "current_tasks": {}
     }
 
     # store checkpoint
@@ -87,7 +86,6 @@ async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
             }
         },
         "pending_sends": [],
-        "current_tasks": {}
     }
 
     # store checkpoint

@@ -41,7 +41,7 @@ def ChannelsManager(
         yield (
             {
                 k: stack.enter_context(
-                    v.from_checkpoint(checkpoint["channel_values"].get(k), config)
+                    v.from_checkpoint_named(checkpoint["channel_values"].get(k), config)
                 )
                 for k, v in channel_specs.items()
             },
@@ -95,7 +95,9 @@ async def AsyncChannelsManager(
             # channels: enter each channel with checkpoint
             {
                 k: await stack.enter_async_context(
-                    v.afrom_checkpoint(checkpoint["channel_values"].get(k), config)
+                    v.afrom_checkpoint_named(
+                        checkpoint["channel_values"].get(k), config
+                    )
                 )
                 for k, v in channel_specs.items()
             },

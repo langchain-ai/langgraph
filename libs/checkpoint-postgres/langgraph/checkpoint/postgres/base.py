@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from psycopg.types.json import Jsonb
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     BaseCheckpointSaver,
     Checkpoint,
     EmptyChannelError,
@@ -105,15 +106,6 @@ UPSERT_CHECKPOINT_WRITES_SQL = """
     ON CONFLICT (thread_id, checkpoint_ns, checkpoint_id, task_id, idx) DO NOTHING
 """
 
-DELETE_WRITES_SQL = """
-    DELETE FROM checkpoint_writes
-    WHERE thread_id = %s
-    AND checkpoint_ns = %s
-    AND checkpoint_id = %s
-    AND task_id = %s
-    AND idx >= %s
-"""
-
 
 class BasePostgresSaver(BaseCheckpointSaver):
     SELECT_SQL = SELECT_SQL
@@ -121,7 +113,6 @@ class BasePostgresSaver(BaseCheckpointSaver):
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
-    DELETE_WRITES_SQL = DELETE_WRITES_SQL
 
     jsonplus_serde = JsonPlusSerializer()
 
@@ -210,7 +201,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
                 checkpoint_ns,
                 checkpoint_id,
                 task_id,
-                idx,
+                WRITES_IDX_MAP.get(channel, idx),
                 channel,
                 *self.serde.dumps_typed(value),
             )
