@@ -137,7 +137,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         self,
         exc_type: Optional[type[BaseException]],
         exc_value: Optional[BaseException],
-        _traceback: Optional[TracebackType],
+        traceback: Optional[TracebackType],
     ) -> None:
         # cancel all tasks that should be cancelled
         for task, cancel in self.tasks.items():
