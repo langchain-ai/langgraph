@@ -283,9 +283,9 @@ def prepare_next_tasks(
             "langgraph_task_idx": len(tasks),
         }
         checkpoint_ns = (
-            f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}"
+            f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}:{packet.id}"
             if parent_ns
-            else packet.node
+            else f"{packet.node}:{packet.id}"
         )
         task_id = str(
             uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
@@ -293,21 +293,6 @@ def prepare_next_tasks(
         if for_execution:
             proc = processes[packet.node]
             if node := proc.get_node():
-                triggers = [TASKS]
-                metadata = {
-                    "langgraph_step": step,
-                    "langgraph_node": packet.node,
-                    "langgraph_triggers": triggers,
-                    "langgraph_task_idx": len(tasks),
-                }
-                checkpoint_ns = (
-                    f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}:{packet.id}"
-                    if parent_ns
-                    else f"{packet.node}:{packet.id}"
-                )
-                task_id = str(
-                    uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
-                )
                 writes = deque()
                 tasks.append(
                     PregelExecutableTask(

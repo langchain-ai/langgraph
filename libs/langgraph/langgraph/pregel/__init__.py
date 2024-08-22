@@ -77,6 +77,7 @@ from langgraph.pregel.debug import (
     print_step_writes,
     tasks_w_writes,
 )
+from langgraph.pregel.get_state import assemble_state_snapshot_hierarchy
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
@@ -89,7 +90,6 @@ from langgraph.pregel.types import (
     StreamMode,
 )
 from langgraph.pregel.utils import (
-    assemble_state_snapshot_hierarchy,
     get_new_channel_versions,
 )
 from langgraph.pregel.validate import validate_graph, validate_keys
