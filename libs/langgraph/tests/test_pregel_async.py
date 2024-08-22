@@ -285,7 +285,7 @@ async def test_dynamic_interrupt(
             PregelTask(
                 AnyStr(),
                 "tool_two",
-                interrupts=(Interrupt("during", "Just because..."),),
+                interrupts=(Interrupt("Just because..."),),
             ),
         ),
         config=tup.config,
