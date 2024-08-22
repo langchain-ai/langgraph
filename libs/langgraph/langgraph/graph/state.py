@@ -193,11 +193,6 @@ class StateGraph(Graph):
                         )
                 else:
                     self.managed[key] = managed
-            if any(
-                isinstance(c, (BinaryOperatorAggregate, Topic))
-                for c in self.channels.values()
-            ):
-                self.support_multiple_edges = True
 
     @overload
     def add_node(
@@ -362,6 +357,15 @@ class StateGraph(Graph):
             None
         """
         if isinstance(start_key, str):
+            if start_key in set(start for start, _ in self.edges) and not any(
+                isinstance(c, (BinaryOperatorAggregate, Topic))
+                for c in self.channels.values()
+            ):
+                raise ValueError(
+                    f"Already found path for node '{start_key}'.\n"
+                    "For multiple edges, use an Annotated state key."
+                )
+
             return super().add_edge(start_key, end_key)
 
         if self.compiled:
