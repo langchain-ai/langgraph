@@ -317,5 +317,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             ) as cur:
                 yield cur
         else:
-            async with self.lock, self.conn.cursor(binary=True, row_factory=dict_row) as cur:
+            async with self.lock, self.conn.cursor(
+                binary=True, row_factory=dict_row
+            ) as cur:
                 yield cur

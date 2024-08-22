@@ -355,7 +355,9 @@ class PostgresSaver(BasePostgresSaver):
         elif pipeline:
             # a connection not in pipeline mode can only be used by one
             # thread/coroutine at a time, so we acquire a lock
-            with self.lock, self.conn.pipeline(), self.conn.cursor(binary=True, row_factory=dict_row) as cur:
+            with self.lock, self.conn.pipeline(), self.conn.cursor(
+                binary=True, row_factory=dict_row
+            ) as cur:
                 yield cur
         else:
             with self.lock, self.conn.cursor(binary=True, row_factory=dict_row) as cur:
