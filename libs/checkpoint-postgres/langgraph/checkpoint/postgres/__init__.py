@@ -66,7 +66,7 @@ class PostgresSaver(BasePostgresSaver):
         the first time checkpointer is used.
         """
         with self.lock:
-            with self.conn.cursor(binary=True) as cur:
+            with self.conn.cursor(binary=True, row_factory=dict_row) as cur:
                 try:
                     version = cur.execute(
                         "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
@@ -127,30 +127,32 @@ class PostgresSaver(BasePostgresSaver):
         if limit:
             query += f" LIMIT {limit}"
         # if we change this to use .stream() we need to make sure to close the cursor
-        for value in self.conn.execute(query, args, binary=True):
-            yield CheckpointTuple(
-                {
-                    "configurable": {
-                        "thread_id": value["thread_id"],
-                        "checkpoint_ns": value["checkpoint_ns"],
-                        "checkpoint_id": value["checkpoint_id"],
+        with self._cursor() as cur:
+            cur.execute(query, args, binary=True)
+            for value in cur:
+                yield CheckpointTuple(
+                    {
+                        "configurable": {
+                            "thread_id": value["thread_id"],
+                            "checkpoint_ns": value["checkpoint_ns"],
+                            "checkpoint_id": value["checkpoint_id"],
+                        }
+                    },
+                    {
+                        **self._load_checkpoint(value["checkpoint"]),
+                        "channel_values": self._load_blobs(value["channel_values"]),
+                    },
+                    self._load_metadata(value["metadata"]),
+                    {
+                        "configurable": {
+                            "thread_id": value["thread_id"],
+                            "checkpoint_ns": value["checkpoint_ns"],
+                            "checkpoint_id": value["parent_checkpoint_id"],
+                        }
                     }
-                },
-                {
-                    **self._load_checkpoint(value["checkpoint"]),
-                    "channel_values": self._load_blobs(value["channel_values"]),
-                },
-                self._load_metadata(value["metadata"]),
-                {
-                    "configurable": {
-                        "thread_id": value["thread_id"],
-                        "checkpoint_ns": value["checkpoint_ns"],
-                        "checkpoint_id": value["parent_checkpoint_id"],
-                    }
-                }
-                if value["parent_checkpoint_id"]
-                else None,
-            )
+                    if value["parent_checkpoint_id"]
+                    else None,
+                )
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database.
@@ -198,7 +200,7 @@ class PostgresSaver(BasePostgresSaver):
             where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
 
         with self._cursor() as cur:
-            cur = self.conn.execute(
+            cur.execute(
                 self.SELECT_SQL + where,
                 args,
                 binary=True,
@@ -345,7 +347,7 @@ class PostgresSaver(BasePostgresSaver):
             # in multiple threads/coroutines, but only one cursor can be
             # used at a time
             try:
-                with self.conn.cursor(binary=True) as cur:
+                with self.conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
             finally:
                 if pipeline:
@@ -353,8 +355,8 @@ class PostgresSaver(BasePostgresSaver):
         elif pipeline:
             # a connection not in pipeline mode can only be used by one
             # thread/coroutine at a time, so we acquire a lock
-            with self.lock, self.conn.pipeline(), self.conn.cursor(binary=True) as cur:
+            with self.lock, self.conn.pipeline(), self.conn.cursor(binary=True, row_factory=dict_row) as cur:
                 yield cur
         else:
-            with self.lock, self.conn.cursor(binary=True) as cur:
+            with self.lock, self.conn.cursor(binary=True, row_factory=dict_row) as cur:
                 yield cur
