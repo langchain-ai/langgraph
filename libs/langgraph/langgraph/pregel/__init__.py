@@ -675,11 +675,21 @@ class Pregel(
         )
         step = saved.metadata.get("step", -1) if saved else -1
 
+        # name of the subgraph node that we'll be updating
+        subgraph_node_name = None
+        send_id = None
         if isinstance(as_node, list):
-            subgraph_as_node = as_node
+            if len(as_node) > 1:
+                subgraph_node_name = as_node[0]
+                if SEND_CHECKPOINT_NAMESPACE_SEPARATOR in subgraph_node_name:
+                    (
+                        subgraph_node_name,
+                        send_id,
+                    ) = subgraph_node_name.split(SEND_CHECKPOINT_NAMESPACE_SEPARATOR)
+            as_node_for_subgraphs = as_node[1:]
             as_node = as_node[0] if len(as_node) == 1 else None
         else:
-            subgraph_as_node = as_node
+            as_node_for_subgraphs = as_node
 
         # merge configurable fields with previous checkpoint config
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
@@ -801,20 +811,59 @@ class Pregel(
                     ),
                 )
 
-        # apply writes to all relevant subgraph nodes
-        for name, node in self.nodes.items():
-            if (
-                isinstance(subgraph_as_node, list)
-                and len(subgraph_as_node) > 1
-                and name != subgraph_as_node[0]
-            ):
-                continue
+        if not has_nested_interrupts:
+            return write_config
 
-            subgraph_checkpoint_ns = (
-                f"{checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
-                if checkpoint_ns
-                else name
-            )
+        # find the subgraph node to update
+        if as_node_for_subgraphs is None and subgraph_node_name is None:
+            with ChannelsManager(
+                self.channels, checkpoint, checkpoint_config, skip_context=True
+            ) as (channels, managed):
+                next_tasks = prepare_next_tasks(
+                    checkpoint,
+                    self.nodes,
+                    channels,
+                    managed,
+                    checkpoint_config,
+                    -1,
+                    for_execution=False,
+                )
+                node_names = [t.name for t in next_tasks]
+                if len(set(node_names)) > 1:
+                    raise ValueError(
+                        "Ambiguous update for subgraphs -- please specify explicit path in as_node"
+                    )
+
+                subgraph_node_name = node_names[0] if len(node_names) > 0 else None
+
+        if not subgraph_node_name:
+            return write_config
+
+        # apply writes to the relevant subgraph node
+        node = self.nodes[subgraph_node_name]
+        subgraph_checkpoint_ns = (
+            f"{checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{subgraph_node_name}"
+            if checkpoint_ns
+            else subgraph_node_name
+        )
+
+        # in the case of subgraphs triggered by a Send, if we are updating values for a specific
+        # subgraph triggered by Send, we will write a new checkpoint for that "instance" of the subgraph
+        # and empty checkpoints for the other "instances" of subgraph, i.e. for all other Sends that
+        # are not manually specified in the as_node
+        if send_id:
+            subgraph_checkpoint_ns_to_values = {
+                f"{subgraph_checkpoint_ns}:{s.id}": values if s.id == send_id else None
+                for s in checkpoint["pending_sends"]
+                if s.node == subgraph_node_name
+            }
+        else:
+            subgraph_checkpoint_ns_to_values = {subgraph_checkpoint_ns: values}
+
+        for (
+            subgraph_checkpoint_ns,
+            values,
+        ) in subgraph_checkpoint_ns_to_values.items():
             subgraph_config = {
                 **config,
                 "configurable": {
@@ -825,17 +874,12 @@ class Pregel(
                     "update_checkpoint_id": checkpoint_id,
                 },
             }
-            subgraph_as_node = (
-                subgraph_as_node[1:]
-                if isinstance(subgraph_as_node, list)
-                else subgraph_as_node
-            )
             if isinstance(node.bound, Pregel):
                 node.bound.update_state(
                     subgraph_config,
                     # pass original values
                     values,
-                    as_node=subgraph_as_node,
+                    as_node=as_node_for_subgraphs,
                 )
             elif isinstance(node.bound, RunnableSequence):
                 for runnable in node.bound.steps:
@@ -844,7 +888,7 @@ class Pregel(
                             # pass original values
                             subgraph_config,
                             values,
-                            as_node=subgraph_as_node,
+                            as_node=as_node_for_subgraphs,
                         )
 
         return write_config
@@ -1752,11 +1796,3 @@ def _panic_or_proceed(
             inflight.pop().cancel()
         # raise timeout error
         raise timeout_exc_cls(f"Timed out at step {step}")
-
-
-def _with_mode(mode: StreamMode, on: bool, iter: Iterator[Any]) -> Iterator[Any]:
-    if on:
-        for chunk in iter:
-            yield (mode, chunk)
-    else:
-        yield from iter
