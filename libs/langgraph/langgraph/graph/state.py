@@ -29,7 +29,6 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
-from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import CHECKPOINT_NAMESPACE_SEPARATOR, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
@@ -357,15 +356,6 @@ class StateGraph(Graph):
             None
         """
         if isinstance(start_key, str):
-            if start_key in set(start for start, _ in self.edges) and not any(
-                isinstance(c, (BinaryOperatorAggregate, Topic))
-                for c in self.channels.values()
-            ):
-                raise ValueError(
-                    f"Already found path for node '{start_key}'.\n"
-                    "For multiple edges, use an Annotated state key."
-                )
-
             return super().add_edge(start_key, end_key)
 
         if self.compiled:
@@ -725,10 +715,15 @@ def _get_channel(
         else:
             raise ValueError(f"This {annotation} not allowed in this position")
     elif channel := _is_field_channel(annotation):
+        channel.key = name
         return channel
     elif channel := _is_field_binop(annotation):
+        channel.key = name
         return channel
-    return LastValue(annotation)
+
+    fallback = LastValue(annotation)
+    fallback.key = name
+    return fallback
 
 
 def _is_field_channel(typ: Type[Any]) -> Optional[BaseChannel]:

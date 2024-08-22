@@ -112,7 +112,9 @@ class Context(Generic[Value], BaseChannel[Value, None, None]):
 
     def update(self, values: Sequence[None]) -> bool:
         if values:
-            raise InvalidUpdateError("Context channel does not accept writes.")
+            raise InvalidUpdateError(
+                f"At key '{self.key}': Context channel does not accept writes."
+            )
         return False
 
     def get(self) -> Value:

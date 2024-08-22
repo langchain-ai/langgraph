@@ -49,7 +49,7 @@ class UntrackedValue(Generic[Value], BaseChannel[Value, Value, Value]):
             return False
         if len(values) != 1 and self.guard:
             raise InvalidUpdateError(
-                "UntrackedValue can only receive one value per step."
+                f"At key '{self.key}': UntrackedValue(guard=True) can receive only one value per step. Use guard=False if you want to store any one of multiple values."
             )
 
         self.value = values[-1]

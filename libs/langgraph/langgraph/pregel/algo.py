@@ -198,12 +198,7 @@ def apply_writes(
     updated_channels: set[str] = set()
     for chan, vals in pending_writes_by_channel.items():
         if chan in channels:
-            try:
-                updated = channels[chan].update(vals)
-            except InvalidUpdateError as e:
-                raise InvalidUpdateError(
-                    f"Invalid update for channel {chan} with values {vals}"
-                ) from e
+            updated = channels[chan].update(vals)
             if updated and get_next_version is not None:
                 checkpoint["channel_versions"][chan] = get_next_version(
                     max_version, channels[chan]
