@@ -29,6 +29,7 @@ from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitFo
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
+from langgraph.channels.topic import Topic
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import CHECKPOINT_NAMESPACE_SEPARATOR, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
@@ -193,7 +194,8 @@ class StateGraph(Graph):
                 else:
                     self.managed[key] = managed
             if any(
-                isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()
+                isinstance(c, (BinaryOperatorAggregate, Topic))
+                for c in self.channels.values()
             ):
                 self.support_multiple_edges = True
 
