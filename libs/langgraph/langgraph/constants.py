@@ -1,20 +1,27 @@
-from typing import Any, Optional
+from dataclasses import dataclass
+from typing import Any, Literal, Optional
 from uuid import uuid4
 
 INPUT = "__input__"
 CONFIG_KEY_SEND = "__pregel_send"
 CONFIG_KEY_READ = "__pregel_read"
 CONFIG_KEY_CHECKPOINTER = "__pregel_checkpointer"
+CONFIG_KEY_STORE = "__pregel_store"
 CONFIG_KEY_RESUMING = "__pregel_resuming"
+CONFIG_KEY_TASK_ID = "__pregel_task_id"
 INTERRUPT = "__interrupt__"
+ERROR = "__error__"
 TASKS = "__pregel_tasks"
 RESERVED = {
     INTERRUPT,
+    ERROR,
     TASKS,
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_STORE,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_TASK_ID,
     INPUT,
 }
 TAG_HIDDEN = "langsmith:hidden"
@@ -97,3 +104,9 @@ class Send:
             and self.node == value.node
             and self.arg == value.arg
         )
+
+
+@dataclass
+class Interrupt:
+    when: Literal["before", "during", "after"]
+    value: Any = None

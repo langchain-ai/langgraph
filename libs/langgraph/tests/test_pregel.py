@@ -5,6 +5,7 @@ import warnings
 from collections import Counter
 from concurrent.futures import ThreadPoolExecutor
 from contextlib import contextmanager
+from random import randrange
 from typing import (
     Annotated,
     Any,
@@ -42,6 +43,7 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import (
+    BaseCheckpointSaver,
     Checkpoint,
     CheckpointMetadata,
     CheckpointTuple,
@@ -50,12 +52,13 @@ from langgraph.checkpoint.memory import MemorySaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite import SqliteSaver
-from langgraph.constants import Send
-from langgraph.errors import InvalidUpdateError
+from langgraph.constants import ERROR, Interrupt, Send
+from langgraph.errors import InvalidUpdateError, NodeInterrupt
 from langgraph.graph import END, Graph
 from langgraph.graph.graph import START
 from langgraph.graph.message import MessageGraph, add_messages
 from langgraph.graph.state import StateGraph
+from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
 )
@@ -67,7 +70,10 @@ from langgraph.pregel import (
     StateSnapshot,
 )
 from langgraph.pregel.retry import RetryPolicy
-from tests.any_str import AnyStr
+from langgraph.pregel.types import PregelTask
+from langgraph.store.memory import MemoryStore
+from tests.any_str import AnyStr, AnyVersion, ExceptionLike, UnsortedSequence
+from tests.fake_tracer import FakeTracer
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverAssertImmutable,
@@ -196,6 +202,21 @@ def test_graph_validation() -> None:
 
     with pytest.raises(ValueError, match="Invalid reducer"):
         StateGraph(BadReducerState)
+
+    def node_b(state: State) -> State:
+        return {"hello": "world"}
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_b)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_b)
+    builder.set_entry_point("a")
+    builder.add_edge("a", "b")
+    builder.add_edge("a", "c")
+    graph = builder.compile()
+
+    with pytest.raises(InvalidUpdateError, match="At key 'hello'"):
+        graph.invoke({"hello": "there"})
 
 
 def test_checkpoint_errors() -> None:
@@ -648,6 +669,7 @@ def test_invoke_two_processes_in_out_interrupt(
     assert history == [
         StateSnapshot(
             values={"inbox": 4, "output": 5, "input": 3},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -656,12 +678,13 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 6, "writes": 5},
+            metadata={"source": "loop", "step": 6, "writes": {"two": 5}},
             created_at=AnyStr(),
             parent_config=history[1].config,
         ),
         StateSnapshot(
             values={"inbox": 4, "output": 4, "input": 3},
+            tasks=(PregelTask(AnyStr(), "two"),),
             next=("two",),
             config={
                 "configurable": {
@@ -670,12 +693,13 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 5, "writes": None},
+            metadata={"source": "loop", "step": 5, "writes": {"one": None}},
             created_at=AnyStr(),
             parent_config=history[2].config,
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 3},
+            tasks=(PregelTask(AnyStr(), "one"),),
             next=("one",),
             config={
                 "configurable": {
@@ -690,6 +714,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 21, "output": 4, "input": 20},
+            tasks=(PregelTask(AnyStr(), "two"),),
             next=("two",),
             config={
                 "configurable": {
@@ -698,12 +723,13 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 3, "writes": None},
+            metadata={"source": "loop", "step": 3, "writes": {"one": None}},
             created_at=AnyStr(),
             parent_config=history[4].config,
         ),
         StateSnapshot(
             values={"inbox": 3, "output": 4, "input": 20},
+            tasks=(PregelTask(AnyStr(), "one"),),
             next=("one",),
             config={
                 "configurable": {
@@ -718,6 +744,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
         StateSnapshot(
             values={"inbox": 3, "output": 4, "input": 2},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -726,12 +753,13 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 1, "writes": 4},
+            metadata={"source": "loop", "step": 1, "writes": {"two": 4}},
             created_at=AnyStr(),
             parent_config=history[6].config,
         ),
         StateSnapshot(
             values={"inbox": 3, "input": 2},
+            tasks=(PregelTask(AnyStr(), "two"),),
             next=("two",),
             config={
                 "configurable": {
@@ -740,12 +768,13 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"source": "loop", "step": 0, "writes": None},
+            metadata={"source": "loop", "step": 0, "writes": {"one": None}},
             created_at=AnyStr(),
             parent_config=history[7].config,
         ),
         StateSnapshot(
             values={"input": 2},
+            tasks=(PregelTask(AnyStr(), "one"),),
             next=("one",),
             config={
                 "configurable": {
@@ -760,7 +789,7 @@ def test_invoke_two_processes_in_out_interrupt(
         ),
     ]
 
-    # forking from any previous checkpoint w/out forking should do nothing
+    # re-running from any previous checkpoint w/out forking should do nothing
     assert [c for c in app.stream(None, history[0].config, stream_mode="updates")] == []
     assert [c for c in app.stream(None, history[1].config, stream_mode="updates")] == []
     assert [c for c in app.stream(None, history[2].config, stream_mode="updates")] == []
@@ -818,6 +847,7 @@ def test_fork_always_re_runs_nodes(
     assert history == [
         StateSnapshot(
             values=6,
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -832,6 +862,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=5,
+            tasks=(PregelTask(AnyStr(), "add_one"),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -846,6 +877,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=4,
+            tasks=(PregelTask(AnyStr(), "add_one"),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -860,6 +892,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=3,
+            tasks=(PregelTask(AnyStr(), "add_one"),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -874,6 +907,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=2,
+            tasks=(PregelTask(AnyStr(), "add_one"),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -888,6 +922,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=1,
+            tasks=(PregelTask(AnyStr(), "add_one"),),
             next=("add_one",),
             config={
                 "configurable": {
@@ -902,6 +937,7 @@ def test_fork_always_re_runs_nodes(
         ),
         StateSnapshot(
             values=0,
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -1017,6 +1053,8 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
                 "name": "one",
                 "result": [("inbox", 3)],
+                "error": None,
+                "interrupts": [],
             },
         },
         {
@@ -1027,6 +1065,8 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
                 "name": "two",
                 "result": [("output", 13)],
+                "error": None,
+                "interrupts": [],
             },
         },
         {
@@ -1048,6 +1088,8 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
                 "name": "two",
                 "result": [("output", 4)],
+                "error": None,
+                "interrupts": [],
             },
         },
     ]
@@ -1175,6 +1217,21 @@ def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> N
         # LastValue channels can only be updated once per iteration
         app.invoke(2)
 
+    class State(TypedDict):
+        hello: str
+
+    def my_node(input: State) -> State:
+        return {"hello": "world"}
+
+    builder = StateGraph(State)
+    builder.add_node("one", my_node)
+    builder.add_node("two", my_node)
+    builder.set_conditional_entry_point(lambda _: ["one", "two"])
+
+    graph = builder.compile()
+    with pytest.raises(InvalidUpdateError, match="At key 'hello'"):
+        graph.invoke({"hello": "there"}, debug=True)
+
 
 def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
@@ -1242,16 +1299,19 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     # total is now 2, so output is 2+3=5
     assert app.invoke(3, {"configurable": {"thread_id": "1"}}) == 5
     assert errored_once, "errored and retried"
-    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
-    assert checkpoint is not None
-    assert checkpoint["channel_values"].get("total") == 7
+    checkpoint_tup = memory.get_tuple({"configurable": {"thread_id": "1"}})
+    assert checkpoint_tup is not None
+    assert checkpoint_tup.checkpoint["channel_values"].get("total") == 7
     # total is now 2+5=7, so output would be 7+4=11, but raises ValueError
     with pytest.raises(ValueError):
         app.invoke(4, {"configurable": {"thread_id": "1"}})
-    # checkpoint is not updated
-    checkpoint = memory.get({"configurable": {"thread_id": "1"}})
-    assert checkpoint is not None
-    assert checkpoint["channel_values"].get("total") == 7
+    # checkpoint is not updated, error is recorded
+    checkpoint_tup = memory.get_tuple({"configurable": {"thread_id": "1"}})
+    assert checkpoint_tup is not None
+    assert checkpoint_tup.checkpoint["channel_values"].get("total") == 7
+    assert checkpoint_tup.pending_writes == [
+        (AnyStr(), ERROR, ExceptionLike(ValueError("Input is too large")))
+    ]
     # on a new thread, total starts out as 0, so output is 0+5=5
     assert app.invoke(5, {"configurable": {"thread_id": "2"}}) == 5
     checkpoint = memory.get({"configurable": {"thread_id": "1"}})
@@ -1269,7 +1329,9 @@ def test_invoke_checkpoint(mocker: MockerFixture) -> None:
 def test_pending_writes_resume(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
+        f"checkpointer_{checkpointer_name}"
+    )
 
     class State(TypedDict):
         value: Annotated[int, operator.add]
@@ -1313,16 +1375,28 @@ def test_pending_writes_resume(
     assert state is not None
     assert state.values == {"value": 1}
     assert state.next == ("one", "two")
+    assert state.tasks == (
+        PregelTask(AnyStr(), "one"),
+        PregelTask(AnyStr(), "two", ExceptionLike(ConnectionError("I'm not good"))),
+    )
     assert state.metadata == {"source": "loop", "step": 0, "writes": None}
     # should contain pending write of "one"
     checkpoint = checkpointer.get_tuple(thread1)
     assert checkpoint is not None
-    assert checkpoint.pending_writes == [
+    # should contain error from "two"
+    expected_writes = [
         (AnyStr(), "one", "one"),
         (AnyStr(), "value", 2),
+        (AnyStr(), ERROR, ExceptionLike(ConnectionError("I'm not good"))),
     ]
-    # both pending writes come from same task
-    assert checkpoint.pending_writes[0][0] == checkpoint.pending_writes[1][0]
+    assert len(checkpoint.pending_writes) == 3
+    assert all(w in expected_writes for w in checkpoint.pending_writes)
+    # both non-error pending writes come from same task
+    non_error_writes = [w for w in checkpoint.pending_writes if w[1] != ERROR]
+    assert non_error_writes[0][0] == non_error_writes[1][0]
+    # error write is from the other task
+    error_write = next(w for w in checkpoint.pending_writes if w[1] == ERROR)
+    assert error_write[0] != non_error_writes[0][0]
 
     # resume execution
     with pytest.raises(ConnectionError, match="I'm not good"):
@@ -1335,12 +1409,153 @@ def test_pending_writes_resume(
 
     # confirm no new checkpoints saved
     state_two = graph.get_state(thread1)
-    assert state_two == state
+    assert state_two.metadata == state.metadata
 
     # resume execution, without exception
     two.rtn = {"value": 3}
     # both the pending write and the new write were applied, 1 + 2 + 3 = 6
     assert graph.invoke(None, thread1) == {"value": 6}
+
+    # check all final checkpoints
+    checkpoints = [c for c in checkpointer.list(thread1)]
+    # we should have 3
+    assert len(checkpoints) == 3
+    # the last one not too interesting for this test
+    assert checkpoints[0] == CheckpointTuple(
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        checkpoint={
+            "v": 1,
+            "id": AnyStr(),
+            "ts": AnyStr(),
+            "current_tasks": {},
+            "pending_sends": [],
+            "versions_seen": {
+                "one": {
+                    "start:one": AnyVersion(),
+                },
+                "two": {
+                    "start:two": AnyVersion(),
+                },
+                "__input__": {},
+                "__start__": {
+                    "__start__": AnyVersion(),
+                },
+                "__interrupt__": {
+                    "value": AnyVersion(),
+                    "__start__": AnyVersion(),
+                    "start:one": AnyVersion(),
+                    "start:two": AnyVersion(),
+                },
+            },
+            "channel_versions": {
+                "one": AnyVersion(),
+                "two": AnyVersion(),
+                "value": AnyVersion(),
+                "__start__": AnyVersion(),
+                "start:one": AnyVersion(),
+                "start:two": AnyVersion(),
+            },
+            "channel_values": {"one": "one", "two": "two", "value": 6},
+        },
+        metadata={
+            "step": 1,
+            "source": "loop",
+            "writes": {"one": {"value": 2}, "two": {"value": 3}},
+        },
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": checkpoints[1].config["configurable"]["checkpoint_id"],
+            }
+        },
+        pending_writes=[],
+    )
+    # the previous one we assert that pending writes contains both
+    # - original error
+    # - successful writes from resuming after preventing error
+    assert checkpoints[1] == CheckpointTuple(
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        checkpoint={
+            "v": 1,
+            "id": AnyStr(),
+            "ts": AnyStr(),
+            "current_tasks": {},
+            "pending_sends": [],
+            "versions_seen": {
+                "__input__": {},
+                "__start__": {
+                    "__start__": AnyVersion(),
+                },
+            },
+            "channel_versions": {
+                "value": AnyVersion(),
+                "__start__": AnyVersion(),
+                "start:one": AnyVersion(),
+                "start:two": AnyVersion(),
+            },
+            "channel_values": {
+                "value": 1,
+                "start:one": "__start__",
+                "start:two": "__start__",
+            },
+        },
+        metadata={"step": 0, "source": "loop", "writes": None},
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": checkpoints[2].config["configurable"]["checkpoint_id"],
+            }
+        },
+        pending_writes=UnsortedSequence(
+            (AnyStr(), "one", "one"),
+            (AnyStr(), "value", 2),
+            (AnyStr(), "__error__", ExceptionLike(ConnectionError("I'm not good"))),
+            (AnyStr(), "two", "two"),
+            (AnyStr(), "value", 3),
+        ),
+    )
+    assert checkpoints[2] == CheckpointTuple(
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        checkpoint={
+            "v": 1,
+            "id": AnyStr(),
+            "ts": AnyStr(),
+            "current_tasks": {},
+            "pending_sends": [],
+            "versions_seen": {"__input__": {}},
+            "channel_versions": {
+                "__start__": AnyVersion(),
+            },
+            "channel_values": {"__start__": {"value": 1}},
+        },
+        metadata={"step": -1, "source": "input", "writes": {"value": 1}},
+        parent_config=None,
+        pending_writes=UnsortedSequence(
+            (AnyStr(), "value", 1),
+            (AnyStr(), "start:one", "__start__"),
+            (AnyStr(), "start:two", "__start__"),
+        ),
+    )
 
 
 def test_cond_edge_after_send() -> None:
@@ -1711,7 +1926,6 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     assert cleanup.call_count == 0
     for i, chunk in enumerate(app.stream(2)):
         assert setup.call_count == 1, "Expected setup to be called once"
-        assert cleanup.call_count == 0, "Expected cleanup to not be called yet"
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
@@ -1954,6 +2168,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             },
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
@@ -1962,12 +2177,14 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
             "step": 0,
             "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 },
             },
         },
@@ -2003,6 +2220,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 "input": "what is weather in sf",
             },
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2102,6 +2320,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             },
         },
+        tasks=(),
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2162,6 +2381,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             },
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2170,12 +2390,14 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
             "step": 0,
             "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 }
             },
         },
@@ -2205,6 +2427,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 "input": "what is weather in sf",
             },
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2304,6 +2527,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             },
         },
+        tasks=(),
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2364,6 +2588,7 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
                 ),
             },
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2372,12 +2597,14 @@ def test_conditional_graph(snapshot: SnapshotAssertion) -> None:
             "step": 0,
             "writes": {
                 "agent": {
-                    "input": "what is weather in sf",
-                    "agent_outcome": AgentAction(
-                        tool="search_api",
-                        tool_input="query",
-                        log="tool:search_api:query",
-                    ),
+                    "agent": {
+                        "input": "what is weather in sf",
+                        "agent_outcome": AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                    }
                 }
             },
         },
@@ -2798,6 +3025,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2838,6 +3066,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2912,6 +3141,7 @@ def test_conditional_state_graph(
                 )
             ],
         },
+        tasks=(),
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2959,6 +3189,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -2998,6 +3229,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3070,6 +3302,7 @@ def test_conditional_state_graph(
                 )
             ],
         },
+        tasks=(),
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3105,6 +3338,7 @@ def test_conditional_state_graph(
         values={
             "intermediate_steps": [],
         },
+        tasks=(PregelTask(AnyStr(), "agent"),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3129,6 +3363,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3181,6 +3416,7 @@ def test_conditional_state_graph(
                 )
             ],
         },
+        tasks=(PregelTask(AnyStr(), "agent"),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3244,6 +3480,7 @@ def test_conditional_state_graph(
             ),
             "intermediate_steps": [],
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -3296,6 +3533,7 @@ def test_conditional_state_graph(
                 )
             ],
         },
+        tasks=(PregelTask(AnyStr(), "agent"),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4059,6 +4297,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
                 ),
             ]
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=(app_w_interrupt.checkpointer.get_tuple(config)).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -4109,6 +4348,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
                 ),
             ]
         },
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -4207,6 +4447,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
                 ),
             ]
         },
+        tasks=(PregelTask(AnyStr(), "tools"), PregelTask(AnyStr(), "tools")),
         next=("tools", "tools"),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -4270,6 +4511,7 @@ def test_state_graph_packets(serde: SerializerProtocol) -> None:
                 AIMessage(content="answer", id="ai2"),
             ]
         },
+        tasks=(),
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint["ts"],
@@ -4547,6 +4789,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4591,6 +4834,7 @@ def test_message_graph(
                 ],
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=next_config,
         created_at=AnyStr(),
@@ -4672,6 +4916,7 @@ def test_message_graph(
                 id="ai2",
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4723,6 +4968,7 @@ def test_message_graph(
             ),
             AIMessage(content="answer", id="ai2"),
         ],
+        tasks=(),
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4772,6 +5018,7 @@ def test_message_graph(
                 id="ai1",
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4816,6 +5063,7 @@ def test_message_graph(
                 ],
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4897,6 +5145,7 @@ def test_message_graph(
                 id="ai2",
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4948,6 +5197,7 @@ def test_message_graph(
             ),
             AIMessage(content="answer", id="ai2"),
         ],
+        tasks=(),
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -4987,6 +5237,7 @@ def test_message_graph(
             AIMessage(content="answer", id="ai2"),
             _AnyIdAIMessage(content="an extra message"),
         ],
+        tasks=(PregelTask(AnyStr(), "agent"),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5257,6 +5508,7 @@ def test_root_graph(
                 id="ai1",
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5301,6 +5553,7 @@ def test_root_graph(
                 ],
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=next_config,
         created_at=AnyStr(),
@@ -5382,6 +5635,7 @@ def test_root_graph(
                 id="ai2",
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5433,6 +5687,7 @@ def test_root_graph(
             ),
             AIMessage(content="answer", id="ai2"),
         ],
+        tasks=(),
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5482,6 +5737,7 @@ def test_root_graph(
                 id="ai1",
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5526,6 +5782,7 @@ def test_root_graph(
                 ],
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5607,6 +5864,7 @@ def test_root_graph(
                 id="ai2",
             ),
         ],
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5658,6 +5916,7 @@ def test_root_graph(
             ),
             AIMessage(content="answer", id="ai2"),
         ],
+        tasks=(),
         next=(),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5697,6 +5956,7 @@ def test_root_graph(
             AIMessage(content="answer", id="ai2"),
             _AnyIdAIMessage(content="an extra message"),
         ],
+        tasks=(PregelTask(AnyStr(), "agent"),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5768,6 +6028,7 @@ def test_root_graph(
                 _AnyIdAIMessage(content="an extra message"),
             ]
         },
+        tasks=(PregelTask(AnyStr(), "agent"),),
         next=("agent",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -5925,6 +6186,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
                     "name": "rewrite_query",
                     "result": [("query", "query: what is weather in sf")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -5979,6 +6242,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
                     "name": "retriever_two",
                     "result": [("docs", ["doc3", "doc4"])],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -5996,6 +6261,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
                     "name": "retriever_one",
                     "result": [("docs", ["doc1", "doc2"])],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -6035,6 +6302,8 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
                     "name": "qa",
                     "result": [("answer", "doc1,doc2,doc3,doc4")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -6049,33 +6318,46 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
 
-def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
+def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
 
-    tool_two_graph = StateGraph(State)
-    tool_two_graph.add_node("tool_two_slow", lambda s: {"my_key": " slow"})
-    tool_two_graph.add_node("tool_two_fast", lambda s: {"my_key": " fast"})
-    tool_two_graph.set_conditional_entry_point(
-        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
-    )
-    tool_two = tool_two_graph.compile()
-    assert tool_two.get_graph().draw_mermaid() == snapshot
+    tool_two_node_count = 0
 
-    assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
-        "my_key": "value slow",
+    def tool_two_node(s: State) -> State:
+        nonlocal tool_two_node_count
+        tool_two_node_count += 1
+        if s["market"] == "DE":
+            raise NodeInterrupt("Just because...")
+        return {"my_key": " all good"}
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two", tool_two_node, retry=RetryPolicy())
+    tool_two_graph.add_edge(START, "tool_two")
+    tool_two = tool_two_graph.compile()
+
+    tracer = FakeTracer()
+    assert tool_two.invoke(
+        {"my_key": "value", "market": "DE"}, {"callbacks": [tracer]}
+    ) == {
+        "my_key": "value",
         "market": "DE",
     }
+    assert tool_two_node_count == 1, "interrupts aren't retried"
+    assert len(tracer.runs) == 1
+    run = tracer.runs[0]
+    assert run.end_time is not None
+    assert run.error is None
+    assert run.outputs == {"market": "DE", "my_key": "value"}
+
     assert tool_two.invoke({"my_key": "value", "market": "US"}) == {
-        "my_key": "value fast",
+        "my_key": "value all good",
         "market": "US",
     }
 
     with SqliteSaver.from_conn_string(":memory:") as saver:
-        tool_two = tool_two_graph.compile(
-            checkpointer=saver, interrupt_before=["tool_two_fast", "tool_two_slow"]
-        )
+        tool_two = tool_two_graph.compile(checkpointer=saver)
 
         # missing thread_id
         with pytest.raises(ValueError, match="thread_id"):
@@ -6101,6 +6383,98 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         ]
         assert tool_two.get_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️", "market": "DE"},
+            next=("tool_two",),
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "tool_two",
+                    interrupts=(Interrupt("during", "Just because..."),),
+                ),
+            ),
+            config=tool_two.checkpointer.get_tuple(thread1).config,
+            created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
+            metadata={"source": "loop", "step": 0, "writes": None},
+            parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
+        )
+
+
+def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        my_key: Annotated[str, operator.add]
+        market: str
+        shared: Annotated[dict[str, dict[str, Any]], SharedValue.on("assistant_id")]
+
+    def assert_shared_value(data: State, config: RunnableConfig) -> State:
+        assert "shared" in data
+        if thread_id := config["configurable"].get("thread_id"):
+            if thread_id == "1":
+                # this is the first thread, so should not see a value
+                assert data["shared"] == {}
+                return {"shared": {"1": {"hello": "world"}}}
+            elif thread_id == "2":
+                # this should get value saved by thread 1
+                assert data["shared"] == {"1": {"hello": "world"}}
+            elif thread_id == "3":
+                # this is a different assistant, so should not see previous value
+                assert data["shared"] == {}
+        return {}
+
+    def tool_two_slow(data: State, config: RunnableConfig) -> State:
+        return {"my_key": " slow", **assert_shared_value(data, config)}
+
+    def tool_two_fast(data: State, config: RunnableConfig) -> State:
+        return {"my_key": " fast", **assert_shared_value(data, config)}
+
+    tool_two_graph = StateGraph(State)
+    tool_two_graph.add_node("tool_two_slow", tool_two_slow)
+    tool_two_graph.add_node("tool_two_fast", tool_two_fast)
+    tool_two_graph.set_conditional_entry_point(
+        lambda s: "tool_two_slow" if s["market"] == "DE" else "tool_two_fast", then=END
+    )
+    tool_two = tool_two_graph.compile()
+    assert tool_two.get_graph().draw_mermaid() == snapshot
+
+    assert tool_two.invoke({"my_key": "value", "market": "DE"}) == {
+        "my_key": "value slow",
+        "market": "DE",
+    }
+    assert tool_two.invoke({"my_key": "value", "market": "US"}) == {
+        "my_key": "value fast",
+        "market": "US",
+    }
+
+    with SqliteSaver.from_conn_string(":memory:") as saver:
+        tool_two = tool_two_graph.compile(
+            store=MemoryStore(),
+            checkpointer=saver,
+            interrupt_before=["tool_two_fast", "tool_two_slow"],
+        )
+
+        # missing thread_id
+        with pytest.raises(ValueError, match="thread_id"):
+            tool_two.invoke({"my_key": "value", "market": "DE"})
+
+        thread1 = {"configurable": {"thread_id": "1", "assistant_id": "a"}}
+        # stop when about to enter node
+        assert tool_two.invoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
+            "my_key": "value ⛰️",
+            "market": "DE",
+        }
+        assert [c.metadata for c in tool_two.checkpointer.list(thread1)] == [
+            {
+                "source": "loop",
+                "step": 0,
+                "writes": None,
+            },
+            {
+                "source": "input",
+                "step": -1,
+                "writes": {"my_key": "value ⛰️", "market": "DE"},
+            },
+        ]
+        assert tool_two.get_state(thread1) == StateSnapshot(
+            values={"my_key": "value ⛰️", "market": "DE"},
+            tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6114,6 +6488,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread1) == StateSnapshot(
             values={"my_key": "value ⛰️ slow", "market": "DE"},
+            tasks=(),
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6125,7 +6500,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             parent_config=[*tool_two.checkpointer.list(thread1, limit=2)][-1].config,
         )
 
-        thread2 = {"configurable": {"thread_id": "2"}}
+        thread2 = {"configurable": {"thread_id": "2", "assistant_id": "a"}}
         # stop when about to enter node
         assert tool_two.invoke({"my_key": "value", "market": "US"}, thread2) == {
             "my_key": "value",
@@ -6133,6 +6508,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread2) == StateSnapshot(
             values={"my_key": "value", "market": "US"},
+            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
@@ -6146,6 +6522,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread2) == StateSnapshot(
             values={"my_key": "value fast", "market": "US"},
+            tasks=(),
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
@@ -6157,7 +6534,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
             parent_config=[*tool_two.checkpointer.list(thread2, limit=2)][-1].config,
         )
 
-        thread3 = {"configurable": {"thread_id": "3"}}
+        thread3 = {"configurable": {"thread_id": "3", "assistant_id": "b"}}
         # stop when about to enter node
         assert tool_two.invoke({"my_key": "value", "market": "US"}, thread3) == {
             "my_key": "value",
@@ -6165,6 +6542,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread3) == StateSnapshot(
             values={"my_key": "value", "market": "US"},
+            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread3).config,
             created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
@@ -6175,6 +6553,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         tool_two.update_state(thread3, {"my_key": "key"})  # appends to my_key
         assert tool_two.get_state(thread3) == StateSnapshot(
             values={"my_key": "valuekey", "market": "US"},
+            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread3).config,
             created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
@@ -6192,6 +6571,7 @@ def test_start_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread3) == StateSnapshot(
             values={"my_key": "valuekey fast", "market": "US"},
+            tasks=(),
             next=(),
             config=tool_two.checkpointer.get_tuple(thread3).config,
             created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
@@ -6265,6 +6645,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": -1,
                         "writes": {"my_key": "value", "market": "DE"},
                     },
+                    "next": ["__start__"],
+                    "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
                 },
             },
             {
@@ -6292,6 +6674,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 0,
                         "writes": None,
                     },
+                    "next": ["prepare"],
+                    "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
                 },
             },
             {
@@ -6313,6 +6697,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                     "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
                     "name": "prepare",
                     "result": [("my_key", " prepared")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
             {
@@ -6340,6 +6726,10 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 1,
                         "writes": {"prepare": {"my_key": " prepared"}},
                     },
+                    "next": ["tool_two_slow"],
+                    "tasks": [
+                        {"id": AnyStr(), "name": "tool_two_slow", "interrupts": ()}
+                    ],
                 },
             },
             {
@@ -6361,6 +6751,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                     "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
                     "name": "tool_two_slow",
                     "result": [("my_key", " slow")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
             {
@@ -6388,6 +6780,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 2,
                         "writes": {"tool_two_slow": {"my_key": " slow"}},
                     },
+                    "next": ["finish"],
+                    "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": ()}],
                 },
             },
             {
@@ -6409,6 +6803,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                     "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
                     "name": "finish",
                     "result": [("my_key", " finished")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
             {
@@ -6436,6 +6832,8 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                         "step": 3,
                         "writes": {"finish": {"my_key": " finished"}},
                     },
+                    "next": [],
+                    "tasks": [],
                 },
             },
         ]
@@ -6456,6 +6854,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread1) == StateSnapshot(
             values={"my_key": "value prepared", "market": "DE"},
+            tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6473,6 +6872,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread1) == StateSnapshot(
             values={"my_key": "value prepared slow finished", "market": "DE"},
+            tasks=(),
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6492,6 +6892,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread2) == StateSnapshot(
             values={"my_key": "value prepared", "market": "US"},
+            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
@@ -6509,6 +6910,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread2) == StateSnapshot(
             values={"my_key": "value prepared fast finished", "market": "US"},
+            tasks=(),
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
@@ -6537,6 +6939,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "my_key": "value prepared slow",
                 "market": "DE",
             },
+            tasks=(PregelTask(AnyStr(), "finish"),),
             next=("finish",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6555,6 +6958,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "my_key": "value prepared slower",
                 "market": "DE",
             },
+            tasks=(PregelTask(AnyStr(), "finish"),),
             next=("finish",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6583,6 +6987,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread1) == StateSnapshot(
             values={"my_key": "value prepared", "market": "DE"},
+            tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6600,6 +7005,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread1) == StateSnapshot(
             values={"my_key": "value prepared slow finished", "market": "DE"},
+            tasks=(),
             next=(),
             config=tool_two.checkpointer.get_tuple(thread1).config,
             created_at=tool_two.checkpointer.get_tuple(thread1).checkpoint["ts"],
@@ -6619,6 +7025,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread2) == StateSnapshot(
             values={"my_key": "value prepared", "market": "US"},
+            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
@@ -6636,6 +7043,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread2) == StateSnapshot(
             values={"my_key": "value prepared fast finished", "market": "US"},
+            tasks=(),
             next=(),
             config=tool_two.checkpointer.get_tuple(thread2).config,
             created_at=tool_two.checkpointer.get_tuple(thread2).checkpoint["ts"],
@@ -6653,6 +7061,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         # check current state
         assert tool_two.get_state(thread3) == StateSnapshot(
             values={"my_key": "key", "market": "DE"},
+            tasks=(PregelTask(AnyStr(), "prepare"),),
             next=("prepare",),
             config=uconfig,
             created_at=AnyStr(),
@@ -6661,6 +7070,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
                 "step": 0,
                 "writes": {START: {"my_key": "key", "market": "DE"}},
             },
+            parent_config=None,
         )
         # run from this point
         assert tool_two.invoke(None, thread3) == {
@@ -6670,6 +7080,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         # get state after first node
         assert tool_two.get_state(thread3) == StateSnapshot(
             values={"my_key": "key prepared", "market": "DE"},
+            tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
             config=tool_two.checkpointer.get_tuple(thread3).config,
             created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
@@ -6687,6 +7098,7 @@ def test_branch_then(snapshot: SnapshotAssertion) -> None:
         }
         assert tool_two.get_state(thread3) == StateSnapshot(
             values={"my_key": "key prepared slow finished", "market": "DE"},
+            tasks=(),
             next=(),
             config=tool_two.checkpointer.get_tuple(thread3).config,
             created_at=tool_two.checkpointer.get_tuple(thread3).checkpoint["ts"],
@@ -6803,6 +7215,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(snapshot: SnapshotAssertion) ->
             "query": "analyzed: query: what is weather in sf",
             "docs": ["doc1", "doc2", "doc3", "doc4", "doc5"],
         },
+        tasks=(PregelTask(AnyStr(), "qa"),),
         next=("qa",),
         config=app_w_interrupt.checkpointer.get_tuple(config).config,
         created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
@@ -7756,12 +8169,18 @@ def test_nested_graph_interrupts(
 
     # test invoke w/ nested interrupt
     config = {"configurable": {"thread_id": "1"}}
-    assert app.invoke({"my_key": "my value"}, config, debug=True) == {
+    assert app.invoke({"my_key": "my value"}, config) == {
         "my_key": "hi my value",
     }
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -7789,6 +8208,12 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            "inner_2",
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -7821,6 +8246,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -7841,6 +8267,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -7864,6 +8291,7 @@ def test_nested_graph_interrupts(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -7890,6 +8318,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -7914,6 +8343,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -7942,6 +8372,7 @@ def test_nested_graph_interrupts(
                         "my_other_key": "hi my value here",
                     },
                     next=(),
+                    tasks=(),
                     config={
                         "configurable": {
                             "thread_id": "1",
@@ -7973,6 +8404,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -7993,6 +8425,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8054,6 +8487,12 @@ def test_nested_graph_interrupts(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -8078,6 +8517,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8098,6 +8538,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8120,6 +8561,12 @@ def test_nested_graph_interrupts(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -8147,6 +8594,12 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            "inner_2",
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -8179,6 +8632,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8199,6 +8653,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8227,6 +8682,7 @@ def test_nested_graph_interrupts(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -8253,6 +8709,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -8277,6 +8734,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -8304,6 +8762,7 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -8336,6 +8795,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8356,6 +8816,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8388,6 +8849,12 @@ def test_nested_graph_interrupts(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -8415,6 +8882,12 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            name="inner_2",
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -8447,6 +8920,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8467,6 +8941,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8493,6 +8968,7 @@ def test_nested_graph_interrupts(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -8517,6 +8993,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -8544,6 +9021,7 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -8576,6 +9054,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8596,6 +9075,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8621,6 +9101,7 @@ def test_nested_graph_interrupts(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -8647,6 +9128,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -8671,6 +9153,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -8698,6 +9181,7 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -8730,6 +9214,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8750,6 +9235,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8778,6 +9264,7 @@ def test_nested_graph_interrupts(
     assert state_history == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -8805,6 +9292,7 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -8837,6 +9325,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -8857,6 +9346,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -8882,7 +9372,11 @@ def test_nested_graph_interrupts(
     ]
     assert child_state_history == [
         StateSnapshot(
-            values={"my_key": "hi my value here", "my_other_key": "hi my value"},
+            values={
+                "my_key": "hi my value here",
+                "my_other_key": "hi my value",
+            },
+            tasks=(PregelTask(AnyStr(), "inner_2"),),
             next=("inner_2",),
             config={
                 "configurable": {
@@ -8931,6 +9425,7 @@ def test_nested_graph_interrupts(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -8958,6 +9453,7 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -8989,6 +9485,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -9016,6 +9513,7 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -9047,6 +9545,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -9067,6 +9566,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -9092,6 +9592,7 @@ def test_nested_graph_interrupts(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -9118,6 +9619,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -9142,6 +9644,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -9169,6 +9672,7 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -9201,6 +9705,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -9228,6 +9733,7 @@ def test_nested_graph_interrupts(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -9260,6 +9766,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -9280,6 +9787,7 @@ def test_nested_graph_interrupts(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -9585,6 +10093,7 @@ def test_nested_graph_state(
     # test state w/ nested subgraph state (right after interrupt)
     assert app.get_state(config) == StateSnapshot(
         values={"my_key": "hi my value"},
+        tasks=(PregelTask(AnyStr(), "inner"),),
         next=("inner",),
         config={
             "configurable": {
@@ -9609,6 +10118,13 @@ def test_nested_graph_state(
         subgraph_state_snapshots={
             "inner": StateSnapshot(
                 values={"my_key": "hi my value here", "my_other_key": "hi my value"},
+                tasks=(
+                    PregelTask(
+                        AnyStr(),
+                        name="inner_2",
+                        error=None,
+                    ),
+                ),
                 next=("inner_2",),
                 config={
                     "configurable": {
@@ -9642,6 +10158,12 @@ def test_nested_graph_state(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "inner",
+                ),
+            ),
             next=("inner",),
             config={
                 "configurable": {
@@ -9669,6 +10191,13 @@ def test_nested_graph_state(
                         "my_key": "hi my value here",
                         "my_other_key": "hi my value",
                     },
+                    tasks=(
+                        PregelTask(
+                            AnyStr(),
+                            name="inner_2",
+                            error=None,
+                        ),
+                    ),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -9701,6 +10230,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -9722,6 +10252,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -9744,6 +10275,7 @@ def test_nested_graph_state(
     # test state w/ nested subgraph state (after resuming from interrupt)
     assert app.get_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -9777,6 +10309,7 @@ def test_nested_graph_state(
             "my_key": "hi my value here and there",
             "my_other_key": "hi my value here",
         },
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -9816,6 +10349,7 @@ def test_nested_graph_state(
         },
     ) == StateSnapshot(
         values={"my_key": "hi my value"},
+        tasks=(PregelTask(AnyStr(), "inner"),),
         next=("inner",),
         config={
             "configurable": {
@@ -9843,6 +10377,7 @@ def test_nested_graph_state(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -9870,6 +10405,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -9895,6 +10431,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -9922,6 +10459,7 @@ def test_nested_graph_state(
                         "my_key": "hi my value here and there",
                         "my_other_key": "hi my value here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -9954,6 +10492,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -9975,6 +10514,7 @@ def test_nested_graph_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -10058,6 +10598,7 @@ def test_doubly_nested_graph_state(
     app.invoke({"my_key": "my value"}, config, debug=True)
     assert app.get_state(config) == StateSnapshot(
         values={"my_key": "hi my value"},
+        tasks=(PregelTask(AnyStr(), "child"),),
         next=("child",),
         config={
             "configurable": {
@@ -10082,6 +10623,7 @@ def test_doubly_nested_graph_state(
         subgraph_state_snapshots={
             "child": StateSnapshot(
                 values={"my_key": "hi my value"},
+                tasks=(PregelTask(AnyStr(), "child_1"),),
                 next=("child_1",),
                 config={
                     "configurable": {
@@ -10102,6 +10644,12 @@ def test_doubly_nested_graph_state(
                 subgraph_state_snapshots={
                     "child_1": StateSnapshot(
                         values={"my_key": "hi my value here"},
+                        tasks=(
+                            PregelTask(
+                                AnyStr(),
+                                "grandchild_2",
+                            ),
+                        ),
                         next=("grandchild_2",),
                         config={
                             "configurable": {
@@ -10132,6 +10680,7 @@ def test_doubly_nested_graph_state(
     app.invoke(None, config, debug=True)
     assert app.get_state(config) == StateSnapshot(
         values={"my_key": "hi my value here and there and back again"},
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -10162,6 +10711,7 @@ def test_doubly_nested_graph_state(
     )
     assert grandchild_snapshot == StateSnapshot(
         values={"my_key": "hi my value here and there"},
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -10191,6 +10741,7 @@ def test_doubly_nested_graph_state(
     )
     assert child_snapshot == StateSnapshot(
         values={"my_key": "hi my value here and there"},
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -10224,6 +10775,7 @@ def test_doubly_nested_graph_state(
         },
     ) == StateSnapshot(
         values={"my_key": "hi my value"},
+        tasks=(PregelTask(AnyStr(), "child"),),
         next=("child",),
         config={
             "configurable": {
@@ -12561,6 +13113,10 @@ def test_send_to_nested_graphs(
 
     expected_snapshot = StateSnapshot(
         values={"subjects": ["cats", "dogs"], "jokes": []},
+        tasks=(
+            PregelTask(AnyStr(), "generate_joke"),
+            PregelTask(AnyStr(), "generate_joke"),
+        ),
         next=("generate_joke", "generate_joke"),
         config={
             "configurable": {
@@ -12594,6 +13150,7 @@ def test_send_to_nested_graphs(
             "subjects": ["cats", "dogs"],
             "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
         },
+        tasks=(),
         next=(),
         config={
             "configurable": {
@@ -12639,6 +13196,7 @@ def test_send_to_nested_graphs(
                 "subjects": ["cats", "dogs"],
                 "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
             },
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -12669,6 +13227,10 @@ def test_send_to_nested_graphs(
         ),
         StateSnapshot(
             values={"subjects": ["cats", "dogs"], "jokes": []},
+            tasks=(
+                PregelTask(AnyStr(), "generate_joke"),
+                PregelTask(AnyStr(), "generate_joke"),
+            ),
             next=("generate_joke", "generate_joke"),
             config={
                 "configurable": {
@@ -12690,6 +13252,7 @@ def test_send_to_nested_graphs(
         ),
         StateSnapshot(
             values={"jokes": []},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -13148,3 +13711,41 @@ def test_channel_values(request: pytest.FixtureRequest, checkpointer_name: str) 
     )
     app.invoke({"input": 1, "ephemeral": "meow"}, config)
     assert checkpointer.get(config)["channel_values"] == {"input": 1, "output": 1}
+
+
+def test_xray_issue(snapshot: SnapshotAssertion) -> None:
+    class State(TypedDict):
+        messages: Annotated[list, add_messages]
+
+    def node(name):
+        def _node(state: State):
+            return {"messages": [("human", f"entered {name} node")]}
+
+        return _node
+
+    parent = StateGraph(State)
+    child = StateGraph(State)
+
+    child.add_node("c_one", node("c_one"))
+    child.add_node("c_two", node("c_two"))
+
+    child.add_edge("__start__", "c_one")
+    child.add_edge("c_two", "c_one")
+
+    child.add_conditional_edges(
+        "c_one", lambda x: str(randrange(0, 2)), {"0": "c_two", "1": "__end__"}
+    )
+
+    parent.add_node("p_one", node("p_one"))
+    parent.add_node("p_two", child.compile())
+
+    parent.add_edge("__start__", "p_one")
+    parent.add_edge("p_two", "p_one")
+
+    parent.add_conditional_edges(
+        "p_one", lambda x: str(randrange(0, 2)), {"0": "p_two", "1": "__end__"}
+    )
+
+    app = parent.compile()
+
+    assert app.get_graph(xray=True).draw_mermaid() == snapshot

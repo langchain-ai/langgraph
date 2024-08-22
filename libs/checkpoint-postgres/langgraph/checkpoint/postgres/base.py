@@ -6,6 +6,7 @@ from langchain_core.runnables import RunnableConfig
 from psycopg.types.json import Jsonb
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     BaseCheckpointSaver,
     Checkpoint,
     EmptyChannelError,
@@ -112,6 +113,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
     UPSERT_CHECKPOINT_BLOBS_SQL = UPSERT_CHECKPOINT_BLOBS_SQL
     UPSERT_CHECKPOINTS_SQL = UPSERT_CHECKPOINTS_SQL
     UPSERT_CHECKPOINT_WRITES_SQL = UPSERT_CHECKPOINT_WRITES_SQL
+
     jsonplus_serde = JsonPlusSerializer()
 
     def _load_checkpoint(self, checkpoint: dict[str, Any]) -> Checkpoint:
@@ -199,7 +201,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
                 checkpoint_ns,
                 checkpoint_id,
                 task_id,
-                idx,
+                WRITES_IDX_MAP.get(channel, idx),
                 channel,
                 *self.serde.dumps_typed(value),
             )

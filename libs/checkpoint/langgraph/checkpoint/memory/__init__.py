@@ -8,6 +8,7 @@ from typing import Any, AsyncIterator, Dict, Iterator, List, Optional, Tuple
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
@@ -52,6 +53,9 @@ class MemorySaver(
 
     # thread ID ->  checkpoint NS -> checkpoint ID -> checkpoint mapping
     storage: defaultdict[str, dict[str, dict[str, tuple[bytes, bytes, Optional[str]]]]]
+    writes: defaultdict[
+        tuple[str, str, str], dict[tuple[str, int], tuple[str, str, bytes]]
+    ]
 
     def __init__(
         self,
@@ -60,7 +64,7 @@ class MemorySaver(
     ) -> None:
         super().__init__(serde=serde)
         self.storage = defaultdict(lambda: defaultdict(dict))
-        self.writes = defaultdict(list)
+        self.writes = defaultdict(dict)
 
     def __enter__(self) -> "MemorySaver":
         return self
@@ -103,7 +107,7 @@ class MemorySaver(
         if checkpoint_id := get_checkpoint_id(config):
             if saved := self.storage[thread_id][checkpoint_ns].get(checkpoint_id):
                 checkpoint, metadata, parent_checkpoint_id = saved
-                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)]
+                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 return CheckpointTuple(
                     config=config,
                     checkpoint=self.serde.loads_typed(checkpoint),
@@ -125,7 +129,7 @@ class MemorySaver(
             if checkpoints := self.storage[thread_id][checkpoint_ns]:
                 checkpoint_id = max(checkpoints.keys())
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
-                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)]
+                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 return CheckpointTuple(
                     config={
                         "configurable": {
@@ -206,6 +210,8 @@ class MemorySaver(
                     elif limit is not None:
                         limit -= 1
 
+                    writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
+
                     yield CheckpointTuple(
                         config={
                             "configurable": {
@@ -225,6 +231,9 @@ class MemorySaver(
                         }
                         if parent_checkpoint_id
                         else None,
+                        pending_writes=[
+                            (id, c, self.serde.loads_typed(v)) for id, c, v in writes
+                        ],
                     )
 
     def put(
@@ -289,10 +298,10 @@ class MemorySaver(
         thread_id = config["configurable"]["thread_id"]
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         checkpoint_id = config["configurable"]["checkpoint_id"]
-        key = (thread_id, checkpoint_ns, checkpoint_id)
-        self.writes[key].extend(
-            [(task_id, c, self.serde.dumps_typed(v)) for c, v in writes]
-        )
+        outer_key = (thread_id, checkpoint_ns, checkpoint_id)
+        for idx, (c, v) in enumerate(writes):
+            inner_key = (task_id, WRITES_IDX_MAP.get(c, idx))
+            self.writes[outer_key][inner_key] = (task_id, c, self.serde.dumps_typed(v))
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Asynchronous version of get_tuple.

@@ -16,7 +16,7 @@ First let's set up our client and thread:
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url=<DEPLOYMENT_URL>)
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -27,19 +27,28 @@ First let's set up our client and thread:
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
     // create thread
     const thread = await client.threads.create();
     console.log(thread)
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json'
+    ```
 
 Output:
 
     {'thread_id': '979e3c89-a702-4882-87c2-7a59a250ce16',
      'created_at': '2024-06-21T15:22:07.453100+00:00',
      'updated_at': '2024-06-21T15:22:07.453100+00:00',
-     'metadata': {}}
+     'metadata': {},
+     'status': 'idle',
+     'config': {}}
 
 Now we can stream by updates, which outputs updates made to the state by each node after it has executed:
 
@@ -91,6 +100,41 @@ Now we can stream by updates, which outputs updates made to the state by each no
       console.log(chunk.data)
       console.log("\n\n")
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"What's the weather in la\"}]},
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:

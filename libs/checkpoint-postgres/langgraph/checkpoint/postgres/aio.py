@@ -135,6 +135,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
                 }
                 if value["parent_checkpoint_id"]
                 else None,
+                await asyncio.to_thread(self._load_writes, value["pending_writes"]),
             )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
@@ -272,7 +273,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
         """
-        async with self._cursor() as cur:
+        async with self._cursor(pipeline=True) as cur:
             await cur.executemany(
                 self.UPSERT_CHECKPOINT_WRITES_SQL,
                 await asyncio.to_thread(
