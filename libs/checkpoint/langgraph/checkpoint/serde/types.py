@@ -12,6 +12,8 @@ from typing import (
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
+ERROR = "__error__"
+
 Value = TypeVar("Value")
 Update = TypeVar("Update")
 C = TypeVar("C")
