@@ -40,7 +40,7 @@ class NodeInterrupt(GraphInterrupt):
     """Raised by a node to interrupt execution."""
 
     def __init__(self, value: Any) -> None:
-        super().__init__([Interrupt("during", value)])
+        super().__init__([Interrupt(value)])
 
 
 class EmptyInputError(Exception):

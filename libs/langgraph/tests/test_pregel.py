@@ -6383,7 +6383,7 @@ def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
                 PregelTask(
                     AnyStr(),
                     "tool_two",
-                    interrupts=(Interrupt("during", "Just because..."),),
+                    interrupts=(Interrupt("Just because..."),),
                 ),
             ),
             config=tool_two.checkpointer.get_tuple(thread1).config,
