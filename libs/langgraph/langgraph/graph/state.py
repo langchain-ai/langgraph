@@ -1,3 +1,4 @@
+import inspect
 import logging
 import typing
 import warnings
@@ -330,10 +331,13 @@ class StateGraph(Graph):
                 hints := get_type_hints(action.__call__) or get_type_hints(action)
             ):
                 if input is None:
-                    input_hint = hints[list(hints.keys())[0]]
-                    if isinstance(input_hint, type) and get_type_hints(input_hint):
-                        input = input_hint
-        except TypeError:
+                    first_parameter_name = next(
+                        iter(inspect.signature(action).parameters.keys())
+                    )
+                    if input_hint := hints.get(first_parameter_name):
+                        if isinstance(input_hint, type) and get_type_hints(input_hint):
+                            input = input_hint
+        except (TypeError, StopIteration):
             pass
         if input is not None:
             self._add_schema(input)
