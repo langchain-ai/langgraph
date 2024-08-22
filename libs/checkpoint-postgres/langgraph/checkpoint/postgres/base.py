@@ -156,8 +156,6 @@ class BasePostgresSaver(BaseCheckpointSaver):
         if not versions:
             return []
 
-        print("_dump_blobs", versions, values)
-
         return [
             (
                 thread_id,
