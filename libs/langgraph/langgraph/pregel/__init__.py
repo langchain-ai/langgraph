@@ -67,7 +67,6 @@ from langgraph.constants import (
     ERROR,
     INTERRUPT,
     SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
-    Interrupt,
 )
 from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueSpec
