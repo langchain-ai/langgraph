@@ -210,7 +210,9 @@ class MemorySaver(
                     elif limit is not None:
                         limit -= 1
 
-                    writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
+                    writes = self.writes[
+                        (thread_id, checkpoint_ns, checkpoint_id)
+                    ].values()
 
                     yield CheckpointTuple(
                         config={
