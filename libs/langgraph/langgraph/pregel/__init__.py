@@ -371,7 +371,7 @@ class Pregel(
                 saved.metadata if saved else None,
                 saved.checkpoint["ts"] if saved else None,
                 saved.parent_config if saved else None,
-                tasks_w_writes(next_tasks, saved.pending_writes),
+                tasks_w_writes(next_tasks, saved.pending_writes if saved else None),
             )
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
@@ -402,7 +402,7 @@ class Pregel(
                 saved.metadata if saved else None,
                 saved.checkpoint["ts"] if saved else None,
                 saved.parent_config if saved else None,
-                tasks_w_writes(next_tasks, saved.pending_writes),
+                tasks_w_writes(next_tasks, saved.pending_writes if saved else None),
             )
 
     def get_state_history(
