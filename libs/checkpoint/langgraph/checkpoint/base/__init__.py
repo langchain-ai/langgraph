@@ -445,3 +445,4 @@ saving regular writes.
 Each Checkpointer implementation should use this mapping in put_writes.
 """
 WRITES_IDX_MAP = {ERROR: -1}
+# TODO To store scheduled status of tasks, add a special channel here
