@@ -161,7 +161,6 @@ class PregelLoop:
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         """Put writes for a task, to be read by the next tick."""
-        print("put_writes", task_id, writes)
         if not writes:
             return
         self.checkpoint_pending_writes.extend((task_id, k, v) for k, v in writes)
