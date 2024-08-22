@@ -16,6 +16,7 @@ import aiosqlite
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
@@ -329,14 +330,14 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
             AsyncIterator[CheckpointTuple]: An asynchronous iterator of matching checkpoint tuples.
         """
         await self.setup()
-        where, param_values = search_where(config, filter, before)
+        where, params = search_where(config, filter, before)
         query = f"""SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata
         FROM checkpoints
         {where}
         ORDER BY checkpoint_id DESC"""
         if limit:
             query += f" LIMIT {limit}"
-        async with self.conn.execute(query, param_values) as cursor:
+        async with self.conn.execute(query, params) as cur, self.conn.cursor() as wcur:
             async for (
                 thread_id,
                 checkpoint_ns,
@@ -345,14 +346,10 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
                 type,
                 checkpoint,
                 metadata,
-            ) in cursor:
-                writes_cur = await self.conn.execute(
+            ) in cur:
+                await wcur.execute(
                     "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
-                    (
-                        thread_id,
-                        checkpoint_ns,
-                        checkpoint_id,
-                    ),
+                    (thread_id, checkpoint_ns, checkpoint_id),
                 )
                 yield CheckpointTuple(
                     {
@@ -377,7 +374,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
                     ),
                     [
                         (task_id, channel, self.serde.loads_typed((type, value)))
-                        async for task_id, channel, type, value in writes_cur
+                        async for task_id, channel, type, value in wcur
                     ],
                 )
 
@@ -445,25 +442,15 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         """
         await self.setup()
         async with self.conn.cursor() as cur:
-            await cur.execute(
-                "DELETE FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? AND task_id = ? AND idx >= ?",
-                (
-                    str(config["configurable"]["thread_id"]),
-                    str(config["configurable"]["checkpoint_ns"]),
-                    str(config["configurable"]["checkpoint_id"]),
-                    task_id,
-                    len(writes),
-                ),
-            )
             await cur.executemany(
-                "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         str(config["configurable"]["thread_id"]),
                         str(config["configurable"]["checkpoint_ns"]),
                         str(config["configurable"]["checkpoint_id"]),
                         task_id,
-                        idx,
+                        WRITES_IDX_MAP.get(channel, idx),
                         channel,
                         *self.serde.dumps_typed(value),
                     )

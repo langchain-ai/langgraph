@@ -198,12 +198,14 @@ class Graph:
             raise ValueError("END cannot be a start node")
         if end_key == START:
             raise ValueError("START cannot be an end node")
-        if not self.support_multiple_edges and start_key in set(
+
+        # run this validation only for non-StateGraph graphs
+        if not hasattr(self, "channels") and start_key in set(
             start for start, _ in self.edges
         ):
             raise ValueError(
                 f"Already found path for node '{start_key}'.\n"
-                "For multiple edges, use StateGraph with an annotated state key."
+                "For multiple edges, use StateGraph with an Annotated state key."
             )
 
         self.edges.add((start_key, end_key))

@@ -1,3 +1,4 @@
+import inspect
 import logging
 import typing
 import warnings
@@ -196,10 +197,6 @@ class StateGraph(Graph):
                         )
                 else:
                     self.managed[key] = managed
-            if any(
-                isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()
-            ):
-                self.support_multiple_edges = True
 
     @overload
     def add_node(
@@ -338,10 +335,13 @@ class StateGraph(Graph):
                 hints := get_type_hints(action.__call__) or get_type_hints(action)
             ):
                 if input is None:
-                    input_hint = hints[list(hints.keys())[0]]
-                    if isinstance(input_hint, type) and get_type_hints(input_hint):
-                        input = input_hint
-        except TypeError:
+                    first_parameter_name = next(
+                        iter(inspect.signature(action).parameters.keys())
+                    )
+                    if input_hint := hints.get(first_parameter_name):
+                        if isinstance(input_hint, type) and get_type_hints(input_hint):
+                            input = input_hint
+        except (TypeError, StopIteration):
             pass
         if input is not None:
             self._add_schema(input)
@@ -727,10 +727,15 @@ def _get_channel(
         else:
             raise ValueError(f"This {annotation} not allowed in this position")
     elif channel := _is_field_channel(annotation):
+        channel.key = name
         return channel
     elif channel := _is_field_binop(annotation):
+        channel.key = name
         return channel
-    return LastValue(annotation)
+
+    fallback = LastValue(annotation)
+    fallback.key = name
+    return fallback
 
 
 def _is_field_channel(typ: Type[Any]) -> Optional[BaseChannel]:

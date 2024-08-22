@@ -1,5 +1,6 @@
 import json
 from collections import defaultdict
+from dataclasses import asdict
 from datetime import datetime, timezone
 from pprint import pformat
 from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypedDict, Union
@@ -25,6 +26,8 @@ class TaskPayload(TypedDict):
 class TaskResultPayload(TypedDict):
     id: str
     name: str
+    error: Optional[str]
+    interrupts: list[dict]
     result: list[tuple[str, Any]]
 
 
@@ -97,11 +100,14 @@ def map_debug_tasks(
 
 def map_debug_task_results(
     step: int,
-    tasks: list[PregelExecutableTask],
-    stream_channels_list: Sequence[str],
+    tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
+    stream_keys: Union[str, Sequence[str]],
 ) -> Iterator[DebugOutputTaskResult]:
+    stream_channels_list = (
+        [stream_keys] if isinstance(stream_keys, str) else stream_keys
+    )
     ts = datetime.now(timezone.utc).isoformat()
-    for name, _, _, writes, config, _, _, _ in tasks:
+    for (name, _, _, _, config, _, _, _), writes in tasks:
         if config is not None and TAG_HIDDEN in config.get("tags", []):
             continue
 
@@ -116,7 +122,9 @@ def map_debug_task_results(
             "payload": {
                 "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, metadata)))),
                 "name": name,
+                "error": next((w[1] for w in writes if w[0] == ERROR), None),
                 "result": [w for w in writes if w[0] in stream_channels_list],
+                "interrupts": [asdict(w[1]) for w in writes if w[0] == INTERRUPT],
             },
         }
 
@@ -150,7 +158,7 @@ def map_debug_checkpoint(
                 else {
                     "id": t.id,
                     "name": t.name,
-                    "interrupts": t.interrupts,
+                    "interrupts": tuple(asdict(i) for i in t.interrupts),
                 }
                 for t in tasks_w_writes(tasks, pending_writes)
             ],

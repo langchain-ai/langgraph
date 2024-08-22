@@ -41,7 +41,6 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
-    Interrupt,
 )
 from langgraph.errors import EmptyInputError, GraphInterrupt
 from langgraph.managed.base import (
@@ -56,7 +55,11 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
     should_interrupt,
 )
-from langgraph.pregel.debug import map_debug_checkpoint, map_debug_tasks
+from langgraph.pregel.debug import (
+    map_debug_checkpoint,
+    map_debug_task_results,
+    map_debug_tasks,
+)
 from langgraph.pregel.executor import (
     AsyncBackgroundExecutor,
     BackgroundExecutor,
@@ -90,6 +93,7 @@ class PregelLoop:
     nodes: Mapping[str, PregelNode]
     specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
     output_keys: Union[str, Sequence[str]]
+    stream_keys: Union[str, Sequence[str]]
     is_nested: bool
 
     checkpointer_get_next_version: Callable[[Optional[V]], V]
@@ -138,6 +142,7 @@ class PregelLoop:
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         output_keys: Union[str, Sequence[str]],
+        stream_keys: Union[str, Sequence[str]],
     ) -> None:
         self.stream = deque()
         self.input = input
@@ -147,6 +152,7 @@ class PregelLoop:
         self.nodes = nodes
         self.specs = specs
         self.output_keys = output_keys
+        self.stream_keys = stream_keys
         self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
 
     def mark_tasks_scheduled(self, tasks: Sequence[PregelExecutableTask]) -> None:
@@ -155,6 +161,8 @@ class PregelLoop:
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         """Put writes for a task, to be read by the next tick."""
+        if not writes:
+            return
         self.checkpoint_pending_writes.extend((task_id, k, v) for k, v in writes)
         if self.checkpointer_put_writes is not None:
             self.submit(
@@ -172,12 +180,22 @@ class PregelLoop:
                 writes,
                 task_id,
             )
+        if task := next((t for t in self.tasks if t.id == task_id), None):
+            self.stream.extend(
+                ("updates", v)
+                for v in map_output_updates(self.output_keys, [(task, writes)])
+            )
+            self.stream.extend(
+                ("debug", v)
+                for v in map_debug_task_results(
+                    self.step, [(task, writes)], self.stream_keys
+                )
+            )
 
     def tick(
         self,
         *,
         input_keys: Union[str, Sequence[str]],
-        stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
         interrupt_after: Sequence[str] = EMPTY_SEQ,
         interrupt_before: Sequence[str] = EMPTY_SEQ,
         manager: Union[None, AsyncParentRunManager, ParentRunManager] = None,
@@ -213,17 +231,18 @@ class PregelLoop:
             self._put_checkpoint(
                 {
                     "source": "loop",
-                    "writes": single(map_output_updates(self.output_keys, self.tasks)),
+                    "writes": single(
+                        map_output_updates(
+                            self.output_keys, [(t, t.writes) for t in self.tasks]
+                        )
+                    ),
                 }
             )
             # after execution, check if we should interrupt
-            if tasks := should_interrupt(self.checkpoint, interrupt_after, self.tasks):
+            if should_interrupt(self.checkpoint, interrupt_after, self.tasks):
                 self.status = "interrupt_after"
-                interrupts = [(t.id, Interrupt("after")) for t in tasks]
-                for tid, interrupt in interrupts:
-                    self.put_writes(tid, [(INTERRUPT, interrupt)])
                 if self.is_nested:
-                    raise GraphInterrupt([i[1] for i in interrupts])
+                    raise GraphInterrupt()
                 else:
                     return False
         else:
@@ -256,7 +275,7 @@ class PregelLoop:
                     self.step - 1,  # printing checkpoint for previous step
                     self.checkpoint_config,
                     self.channels,
-                    stream_keys,
+                    self.stream_keys,
                     self.checkpoint_metadata,
                     self.checkpoint,
                     self.tasks,
@@ -281,20 +300,16 @@ class PregelLoop:
         if all(task.writes for task in self.tasks):
             return self.tick(
                 input_keys=input_keys,
-                stream_keys=stream_keys,
                 interrupt_after=interrupt_after,
                 interrupt_before=interrupt_before,
                 manager=manager,
             )
 
         # before execution, check if we should interrupt
-        if tasks := should_interrupt(self.checkpoint, interrupt_before, self.tasks):
+        if should_interrupt(self.checkpoint, interrupt_before, self.tasks):
             self.status = "interrupt_before"
-            interrupts = [(t.id, Interrupt("before")) for t in tasks]
-            for tid, interrupt in interrupts:
-                self.put_writes(tid, [(INTERRUPT, interrupt)])
             if self.is_nested:
-                raise GraphInterrupt([i[1] for i in interrupts])
+                raise GraphInterrupt()
             else:
                 return False
 
@@ -435,6 +450,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
+        stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
     ) -> None:
         super().__init__(
             input,
@@ -444,6 +460,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             nodes=nodes,
             specs=specs,
             output_keys=output_keys,
+            stream_keys=stream_keys,
         )
         self.stack = ExitStack()
         if checkpointer:
@@ -522,6 +539,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         nodes: Mapping[str, PregelNode],
         specs: Mapping[str, Union[BaseChannel, ManagedValueSpec]],
         output_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
+        stream_keys: Union[str, Sequence[str]] = EMPTY_SEQ,
     ) -> None:
         super().__init__(
             input,
@@ -531,6 +549,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             nodes=nodes,
             specs=specs,
             output_keys=output_keys,
+            stream_keys=stream_keys,
         )
         self.store = AsyncBatchedStore(self.store) if self.store else None
         self.stack = AsyncExitStack()
