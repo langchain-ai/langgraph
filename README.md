@@ -12,7 +12,7 @@
 
 ## Overview
 
-[LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building stateful, multi-actor applications with LLMs, used to create agent and multi-agent workflows. Compared to other LLM frameworks, it offers these core benefits: cycles, controllability, and persistence. LangGraph allows you to define flows that involve cycles, essential for most agentic architectures, differentiating it from DAG-based solutions. As a very low-level framework, it provides fine-grained control over both the flow and state of your application, crucial for creating reliable agents. Additionally, LangGraph includes built-in persistence, enabling advanced human-in-the-loop and memory features.
+[LangGraph](https://langchain-ai.github.io/langgraph/) is a library for building smart, interactive applications with large language models (LLMs). Unlike other frameworks, it supports cycles in workflows, giving you more flexibility for complex tasks. It offers detailed control over your app's flow and state, which is key for creating reliable agents. Plus, it has built-in features for saving and managing data, making it easier to build applications that remember past interactions and involve humans effectively.
 
 LangGraph is inspired by [Pregel](https://research.google/pubs/pub37252/) and [Apache Beam](https://beam.apache.org/). The public interface draws inspiration from [NetworkX](https://networkx.org/documentation/latest/). LangGraph is built by LangChain Inc, the creators of LangChain, but can be used without LangChain.
 
