@@ -10864,6 +10864,7 @@ def test_nested_graph_update_state(
         # last snapshot is the update for the subgraph
         StateSnapshot(
             values={"my_key": "hi bark here"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -10888,6 +10889,7 @@ def test_nested_graph_update_state(
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
                     values={"my_key": "hi bark here", "my_other_key": "hi meow"},
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -10915,6 +10917,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -10939,6 +10942,7 @@ def test_nested_graph_update_state(
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
                     values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -10971,6 +10975,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "meow"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -10992,6 +10997,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -11010,6 +11016,7 @@ def test_nested_graph_update_state(
         # last snapshot is the update for the subgraph
         StateSnapshot(
             values={"my_key": "hi bark here", "my_other_key": "hi meow"},
+            tasks=(PregelTask(AnyStr(), "inner_2"),),
             next=("inner_2",),
             config={
                 "configurable": {
@@ -11035,6 +11042,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+            tasks=(PregelTask(AnyStr(), "inner_2"),),
             next=("inner_2",),
             config={
                 "configurable": {
@@ -11066,6 +11074,7 @@ def test_nested_graph_update_state(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi bark here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -11093,6 +11102,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi bark here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -11118,6 +11128,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi bark here"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -11145,6 +11156,7 @@ def test_nested_graph_update_state(
                         "my_key": "hi bark here and there",
                         "my_other_key": "hi bark here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -11177,6 +11189,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -11201,6 +11214,7 @@ def test_nested_graph_update_state(
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
                     values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -11233,6 +11247,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "meow"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -11254,6 +11269,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -11271,6 +11287,7 @@ def test_nested_graph_update_state(
     assert list(app.get_state_history(child_config)) == [
         StateSnapshot(
             values={"my_key": "hi bark here and there", "my_other_key": "hi bark here"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -11301,6 +11318,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+            tasks=(PregelTask(AnyStr(), "inner_2"),),
             next=("inner_2",),
             config={
                 "configurable": {
@@ -11342,6 +11360,7 @@ def test_nested_graph_update_state(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi bark here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -11369,6 +11388,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi bark here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -11390,6 +11410,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi bark here and there"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -11417,6 +11438,7 @@ def test_nested_graph_update_state(
                         "my_key": "hi bark here and there",
                         "my_other_key": "hi meow",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -11444,6 +11466,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -11471,6 +11494,7 @@ def test_nested_graph_update_state(
                         "my_key": "hi meow here",
                         "my_other_key": "hi meow",
                     },
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -11503,6 +11527,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "meow"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -11524,6 +11549,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -11541,6 +11567,7 @@ def test_nested_graph_update_state(
     assert list(app.get_state_history(child_config)) == [
         StateSnapshot(
             values={"my_key": "hi bark here and there", "my_other_key": "hi meow"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -11566,6 +11593,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+            tasks=(PregelTask(AnyStr(), "inner_2"),),
             next=("inner_2",),
             config={
                 "configurable": {
@@ -11605,6 +11633,7 @@ def test_nested_graph_update_state(
         # last snapshot is the update for the subgraph
         StateSnapshot(
             values={"my_key": "hi bark here"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -11629,6 +11658,7 @@ def test_nested_graph_update_state(
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
                     values={"my_key": "hi bark here", "my_other_key": "hi meow"},
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -11656,6 +11686,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -11680,6 +11711,7 @@ def test_nested_graph_update_state(
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
                     values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -11712,6 +11744,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "meow"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -11733,6 +11766,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -11752,6 +11786,7 @@ def test_nested_graph_update_state(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi bark here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -11779,6 +11814,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi bark here and there"},
+            tasks=(PregelTask(AnyStr(), "outer_2"),),
             next=("outer_2",),
             config={
                 "configurable": {
@@ -11804,6 +11840,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi bark here"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -11831,6 +11868,7 @@ def test_nested_graph_update_state(
                         "my_key": "hi bark here and there",
                         "my_other_key": "hi bark here",
                     },
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -11863,6 +11901,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow"},
+            tasks=(PregelTask(AnyStr(), "inner"),),
             next=("inner",),
             config={
                 "configurable": {
@@ -11887,6 +11926,7 @@ def test_nested_graph_update_state(
             subgraph_state_snapshots={
                 "inner": StateSnapshot(
                     values={"my_key": "hi meow here", "my_other_key": "hi meow"},
+                    tasks=(PregelTask(AnyStr(), "inner_2"),),
                     next=("inner_2",),
                     config={
                         "configurable": {
@@ -11919,6 +11959,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "meow"},
+            tasks=(PregelTask(AnyStr(), "outer_1"),),
             next=("outer_1",),
             config={
                 "configurable": {
@@ -11940,6 +11981,7 @@ def test_nested_graph_update_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -12026,6 +12068,7 @@ def test_doubly_nested_graph_update_state(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "child"),),
             next=("child",),
             config={
                 "configurable": {
@@ -12050,6 +12093,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child": StateSnapshot(
                     values={"my_key": "hi my value"},
+                    tasks=(PregelTask(AnyStr(), "child_1"),),
                     next=("child_1",),
                     config={
                         "configurable": {
@@ -12070,6 +12114,7 @@ def test_doubly_nested_graph_update_state(
                     subgraph_state_snapshots={
                         "child_1": StateSnapshot(
                             values={"my_key": "hi my value here"},
+                            tasks=(PregelTask(AnyStr(), "grandchild_2"),),
                             next=("grandchild_2",),
                             config={
                                 "configurable": {
@@ -12101,6 +12146,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "parent_1"),),
             next=("parent_1",),
             config={
                 "configurable": {
@@ -12122,6 +12168,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -12139,6 +12186,7 @@ def test_doubly_nested_graph_update_state(
     assert list(app.get_state_history(child_config)) == [
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "child_1"),),
             next=("child_1",),
             config={
                 "configurable": {
@@ -12159,6 +12207,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child_1": StateSnapshot(
                     values={"my_key": "hi my value here"},
+                    tasks=(PregelTask(AnyStr(), "grandchild_2"),),
                     next=("grandchild_2",),
                     config={
                         "configurable": {
@@ -12188,6 +12237,7 @@ def test_doubly_nested_graph_update_state(
     assert list(app.get_state_history(grandchild_config)) == [
         StateSnapshot(
             values={"my_key": "hi my value here"},
+            tasks=(PregelTask(AnyStr(), "grandchild_2"),),
             next=("grandchild_2",),
             config={
                 "configurable": {
@@ -12225,6 +12275,7 @@ def test_doubly_nested_graph_update_state(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi meow value here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -12254,6 +12305,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow value here and there"},
+            tasks=(PregelTask(AnyStr(), "parent_2"),),
             next=("parent_2",),
             config={
                 "configurable": {
@@ -12279,6 +12331,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow value here"},
+            tasks=(PregelTask(AnyStr(), "child"),),
             next=("child",),
             config={
                 "configurable": {
@@ -12303,6 +12356,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child": StateSnapshot(
                     values={"my_key": "hi meow value here and there"},
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -12329,6 +12383,7 @@ def test_doubly_nested_graph_update_state(
                     subgraph_state_snapshots={
                         "child_1": StateSnapshot(
                             values={"my_key": "hi meow value here and there"},
+                            tasks=(),
                             next=(),
                             config={
                                 "configurable": {
@@ -12362,6 +12417,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "child"),),
             next=("child",),
             config={
                 "configurable": {
@@ -12386,6 +12442,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child": StateSnapshot(
                     values={"my_key": "hi my value"},
+                    tasks=(PregelTask(AnyStr(), "child_1"),),
                     next=("child_1",),
                     config={
                         "configurable": {
@@ -12406,6 +12463,7 @@ def test_doubly_nested_graph_update_state(
                     subgraph_state_snapshots={
                         "child_1": StateSnapshot(
                             values={"my_key": "hi my value here"},
+                            tasks=(PregelTask(AnyStr(), "grandchild_2"),),
                             next=("grandchild_2",),
                             config={
                                 "configurable": {
@@ -12437,6 +12495,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "parent_1"),),
             next=("parent_1",),
             config={
                 "configurable": {
@@ -12458,6 +12517,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -12475,6 +12535,7 @@ def test_doubly_nested_graph_update_state(
     assert list(app.get_state_history(child_config)) == [
         StateSnapshot(
             values={"my_key": "hi meow value here and there"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -12499,6 +12560,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child_1": StateSnapshot(
                     values={"my_key": "hi meow value here and there"},
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -12528,6 +12590,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "child_1"),),
             next=("child_1",),
             config={
                 "configurable": {
@@ -12548,6 +12611,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child_1": StateSnapshot(
                     values={"my_key": "hi my value here"},
+                    tasks=(PregelTask(AnyStr(), "grandchild_2"),),
                     next=("grandchild_2",),
                     config={
                         "configurable": {
@@ -12577,6 +12641,7 @@ def test_doubly_nested_graph_update_state(
     assert list(app.get_state_history(grandchild_config)) == [
         StateSnapshot(
             values={"my_key": "hi meow value here and there"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -12602,6 +12667,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here"},
+            tasks=(PregelTask(AnyStr(), "grandchild_2"),),
             next=("grandchild_2",),
             config={
                 "configurable": {
@@ -12644,6 +12710,7 @@ def test_doubly_nested_graph_update_state(
     assert list(app.get_state_history(config)) == [
         StateSnapshot(
             values={"my_key": "hi meow value here and there and back again"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -12673,6 +12740,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow value here and there"},
+            tasks=(PregelTask(AnyStr(), "parent_2"),),
             next=("parent_2",),
             config={
                 "configurable": {
@@ -12698,6 +12766,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi meow value here"},
+            tasks=(PregelTask(AnyStr(), "child"),),
             next=("child",),
             config={
                 "configurable": {
@@ -12722,6 +12791,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child": StateSnapshot(
                     values={"my_key": "hi meow value here and there"},
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -12748,6 +12818,7 @@ def test_doubly_nested_graph_update_state(
                     subgraph_state_snapshots={
                         "child_1": StateSnapshot(
                             values={"my_key": "hi meow value here and there"},
+                            tasks=(),
                             next=(),
                             config={
                                 "configurable": {
@@ -12781,6 +12852,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "child"),),
             next=("child",),
             config={
                 "configurable": {
@@ -12805,6 +12877,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child": StateSnapshot(
                     values={"my_key": "hi my value"},
+                    tasks=(PregelTask(AnyStr(), "child_1"),),
                     next=("child_1",),
                     config={
                         "configurable": {
@@ -12825,6 +12898,7 @@ def test_doubly_nested_graph_update_state(
                     subgraph_state_snapshots={
                         "child_1": StateSnapshot(
                             values={"my_key": "hi my value here"},
+                            tasks=(PregelTask(AnyStr(), "grandchild_2"),),
                             next=("grandchild_2",),
                             config={
                                 "configurable": {
@@ -12856,6 +12930,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "my value"},
+            tasks=(PregelTask(AnyStr(), "parent_1"),),
             next=("parent_1",),
             config={
                 "configurable": {
@@ -12877,6 +12952,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={},
+            tasks=(PregelTask(AnyStr(), "__start__"),),
             next=("__start__",),
             config={
                 "configurable": {
@@ -12894,6 +12970,7 @@ def test_doubly_nested_graph_update_state(
     assert list(app.get_state_history(child_config)) == [
         StateSnapshot(
             values={"my_key": "hi meow value here and there"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -12918,6 +12995,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child_1": StateSnapshot(
                     values={"my_key": "hi meow value here and there"},
+                    tasks=(),
                     next=(),
                     config={
                         "configurable": {
@@ -12947,6 +13025,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value"},
+            tasks=(PregelTask(AnyStr(), "child_1"),),
             next=("child_1",),
             config={
                 "configurable": {
@@ -12967,6 +13046,7 @@ def test_doubly_nested_graph_update_state(
             subgraph_state_snapshots={
                 "child_1": StateSnapshot(
                     values={"my_key": "hi my value here"},
+                    tasks=(PregelTask(AnyStr(), "grandchild_2"),),
                     next=("grandchild_2",),
                     config={
                         "configurable": {
@@ -12996,6 +13076,7 @@ def test_doubly_nested_graph_update_state(
     assert list(app.get_state_history(grandchild_config)) == [
         StateSnapshot(
             values={"my_key": "hi meow value here and there"},
+            tasks=(),
             next=(),
             config={
                 "configurable": {
@@ -13021,6 +13102,7 @@ def test_doubly_nested_graph_update_state(
         ),
         StateSnapshot(
             values={"my_key": "hi my value here"},
+            tasks=(PregelTask(AnyStr(), "grandchild_2"),),
             next=("grandchild_2",),
             config={
                 "configurable": {
