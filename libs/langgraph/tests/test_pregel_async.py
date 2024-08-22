@@ -1654,7 +1654,6 @@ async def test_pending_writes_resume(
             "v": 1,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "current_tasks": {},
             "pending_sends": [],
             "versions_seen": {
                 "one": {
@@ -1713,7 +1712,6 @@ async def test_pending_writes_resume(
             "v": 1,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "current_tasks": {},
             "pending_sends": [],
             "versions_seen": {
                 "__input__": {},
@@ -1761,7 +1759,6 @@ async def test_pending_writes_resume(
             "v": 1,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "current_tasks": {},
             "pending_sends": [],
             "versions_seen": {"__input__": {}},
             "channel_versions": {

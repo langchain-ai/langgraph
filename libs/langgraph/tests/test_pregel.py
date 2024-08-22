@@ -1428,7 +1428,6 @@ def test_pending_writes_resume(
             "v": 1,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "current_tasks": {},
             "pending_sends": [],
             "versions_seen": {
                 "one": {
@@ -1487,7 +1486,6 @@ def test_pending_writes_resume(
             "v": 1,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "current_tasks": {},
             "pending_sends": [],
             "versions_seen": {
                 "__input__": {},
@@ -1535,7 +1533,6 @@ def test_pending_writes_resume(
             "v": 1,
             "id": AnyStr(),
             "ts": AnyStr(),
-            "current_tasks": {},
             "pending_sends": [],
             "versions_seen": {"__input__": {}},
             "channel_versions": {

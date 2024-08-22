@@ -155,10 +155,6 @@ class PregelLoop:
         self.stream_keys = stream_keys
         self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
 
-    def mark_tasks_scheduled(self, tasks: Sequence[PregelExecutableTask]) -> None:
-        """Mark tasks as scheduled, to be used by queue-based executors."""
-        raise NotImplementedError
-
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
