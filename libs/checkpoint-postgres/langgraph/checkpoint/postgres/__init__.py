@@ -150,6 +150,7 @@ class PostgresSaver(BasePostgresSaver):
                 }
                 if value["parent_checkpoint_id"]
                 else None,
+                self._load_writes(value["pending_writes"]),
             )
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
@@ -317,16 +318,6 @@ class PostgresSaver(BasePostgresSaver):
             task_id (str): Identifier for the task creating the writes.
         """
         with self._cursor(pipeline=True) as cur:
-            cur.execute(
-                self.DELETE_WRITES_SQL,
-                (
-                    config["configurable"]["thread_id"],
-                    config["configurable"]["checkpoint_ns"],
-                    config["configurable"]["checkpoint_id"],
-                    task_id,
-                    len(writes),
-                ),
-            )
             cur.executemany(
                 self.UPSERT_CHECKPOINT_WRITES_SQL,
                 self._dump_writes(

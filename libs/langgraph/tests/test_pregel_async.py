@@ -62,7 +62,7 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
-from tests.any_str import AnyStr, ExceptionLike
+from tests.any_str import AnyStr, AnyVersion, ExceptionLike, UnsortedSequence
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
@@ -207,7 +207,15 @@ async def test_node_cancellation_on_other_node_exception() -> None:
     assert inner_task_cancelled
 
 
-async def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
+@pytest.mark.parametrize(
+    "checkpointer_name",
+    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe"],
+)
+async def test_dynamic_interrupt(
+    checkpointer_name: str, snapshot: SnapshotAssertion, request: pytest.FixtureRequest
+) -> None:
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+
     class State(TypedDict):
         my_key: Annotated[str, operator.add]
         market: str
@@ -245,51 +253,49 @@ async def test_dynamic_interrupt(snapshot: SnapshotAssertion) -> None:
         "market": "US",
     }
 
-    async with AsyncSqliteSaver.from_conn_string(":memory:") as saver:
-        tool_two = tool_two_graph.compile(checkpointer=saver)
+    tool_two = tool_two_graph.compile(checkpointer=checkpointer)
 
-        # missing thread_id
-        with pytest.raises(ValueError, match="thread_id"):
-            await tool_two.ainvoke({"my_key": "value", "market": "DE"})
+    # missing thread_id
+    with pytest.raises(ValueError, match="thread_id"):
+        await tool_two.ainvoke({"my_key": "value", "market": "DE"})
 
-        thread1 = {"configurable": {"thread_id": "1"}}
-        # stop when about to enter node
-        assert await tool_two.ainvoke(
-            {"my_key": "value ⛰️", "market": "DE"}, thread1
-        ) == {
-            "my_key": "value ⛰️",
-            "market": "DE",
-        }
-        assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
-            {
-                "source": "loop",
-                "step": 0,
-                "writes": None,
-            },
-            {
-                "source": "input",
-                "step": -1,
-                "writes": {"my_key": "value ⛰️", "market": "DE"},
-            },
-        ]
-        tup = await tool_two.checkpointer.aget_tuple(thread1)
-        assert await tool_two.aget_state(thread1) == StateSnapshot(
-            values={"my_key": "value ⛰️", "market": "DE"},
-            next=("tool_two",),
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "tool_two",
-                    interrupts=(Interrupt("during", "Just because..."),),
-                ),
+    thread1 = {"configurable": {"thread_id": "1"}}
+    # stop when about to enter node
+    assert await tool_two.ainvoke({"my_key": "value ⛰️", "market": "DE"}, thread1) == {
+        "my_key": "value ⛰️",
+        "market": "DE",
+    }
+    assert [c.metadata async for c in tool_two.checkpointer.alist(thread1)] == [
+        {
+            "source": "loop",
+            "step": 0,
+            "writes": None,
+        },
+        {
+            "source": "input",
+            "step": -1,
+            "writes": {"my_key": "value ⛰️", "market": "DE"},
+        },
+    ]
+    tup = await tool_two.checkpointer.aget_tuple(thread1)
+    assert await tool_two.aget_state(thread1) == StateSnapshot(
+        values={"my_key": "value ⛰️", "market": "DE"},
+        next=("tool_two",),
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "tool_two",
+                interrupts=(Interrupt("during", "Just because..."),),
             ),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
-            metadata={"source": "loop", "step": 0, "writes": None},
-            parent_config=[
-                c async for c in tool_two.checkpointer.alist(thread1, limit=2)
-            ][-1].config,
-        )
+        ),
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
+        metadata={"source": "loop", "step": 0, "writes": None},
+        parent_config=[c async for c in tool_two.checkpointer.alist(thread1, limit=2)][
+            -1
+        ].config,
+    )
+    # TODO use aget_state_history
 
 
 @pytest.mark.parametrize(
@@ -1609,6 +1615,10 @@ async def test_pending_writes_resume(
     error_write = next(w for w in checkpoint.pending_writes if w[1] == ERROR)
     assert error_write[0] != non_error_writes[0][0]
 
+    # TODO arguably this shouldn't even run the failed task again,
+    # and should require empty update_state (ie new checkpoint_id)
+    # in order to try again
+
     # resume execution
     with pytest.raises(ValueError, match="I'm not good"):
         await graph.ainvoke(None, thread1)
@@ -1626,6 +1636,147 @@ async def test_pending_writes_resume(
     two.rtn = {"value": 3}
     # both the pending write and the new write were applied, 1 + 2 + 3 = 6
     assert await graph.ainvoke(None, thread1) == {"value": 6}
+
+    # check all final checkpoints
+    checkpoints = [c async for c in checkpointer.alist(thread1)]
+    # we should have 3
+    assert len(checkpoints) == 3
+    # the last one not too interesting for this test
+    assert checkpoints[0] == CheckpointTuple(
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        checkpoint={
+            "v": 1,
+            "id": AnyStr(),
+            "ts": AnyStr(),
+            "current_tasks": {},
+            "pending_sends": [],
+            "versions_seen": {
+                "one": {
+                    "start:one": AnyVersion(),
+                },
+                "two": {
+                    "start:two": AnyVersion(),
+                },
+                "__input__": {},
+                "__start__": {
+                    "__start__": AnyVersion(),
+                },
+                "__interrupt__": {
+                    "value": AnyVersion(),
+                    "__start__": AnyVersion(),
+                    "start:one": AnyVersion(),
+                    "start:two": AnyVersion(),
+                },
+            },
+            "channel_versions": {
+                "one": AnyVersion(),
+                "two": AnyVersion(),
+                "value": AnyVersion(),
+                "__start__": AnyVersion(),
+                "start:one": AnyVersion(),
+                "start:two": AnyVersion(),
+            },
+            "channel_values": {"one": "one", "two": "two", "value": 6},
+        },
+        metadata={
+            "step": 1,
+            "source": "loop",
+            "writes": {"one": {"value": 2}, "two": {"value": 3}},
+        },
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": checkpoints[1].config["configurable"]["checkpoint_id"],
+            }
+        },
+        pending_writes=[],
+    )
+    # the previous one we assert that pending writes contains both
+    # - original error
+    # - succesful writes from resuming after preventing error
+    assert checkpoints[1] == CheckpointTuple(
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        checkpoint={
+            "v": 1,
+            "id": AnyStr(),
+            "ts": AnyStr(),
+            "current_tasks": {},
+            "pending_sends": [],
+            "versions_seen": {
+                "__input__": {},
+                "__start__": {
+                    "__start__": AnyVersion(),
+                },
+            },
+            "channel_versions": {
+                "value": AnyVersion(),
+                "__start__": AnyVersion(),
+                "start:one": AnyVersion(),
+                "start:two": AnyVersion(),
+            },
+            "channel_values": {
+                "value": 1,
+                "start:one": "__start__",
+                "start:two": "__start__",
+            },
+        },
+        metadata={"step": 0, "source": "loop", "writes": None},
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": checkpoints[2].config["configurable"]["checkpoint_id"],
+            }
+        },
+        pending_writes=UnsortedSequence(
+            (AnyStr(), "one", "one"),
+            (AnyStr(), "value", 2),
+            (AnyStr(), "__error__", ExceptionLike(ValueError("I'm not good"))),
+            (AnyStr(), "two", "two"),
+            (AnyStr(), "value", 3),
+        ),
+    )
+    assert checkpoints[2] == CheckpointTuple(
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        checkpoint={
+            "v": 1,
+            "id": AnyStr(),
+            "ts": AnyStr(),
+            "current_tasks": {},
+            "pending_sends": [],
+            "versions_seen": {"__input__": {}},
+            "channel_versions": {
+                "__start__": AnyVersion(),
+            },
+            "channel_values": {"__start__": {"value": 1}},
+        },
+        metadata={"step": -1, "source": "input", "writes": {"value": 1}},
+        parent_config=None,
+        pending_writes=UnsortedSequence(
+            (AnyStr(), "value", 1),
+            (AnyStr(), "start:one", "__start__"),
+            (AnyStr(), "start:two", "__start__"),
+        ),
+    )
 
 
 async def test_cond_edge_after_send() -> None:
@@ -2516,13 +2667,7 @@ async def test_conditional_graph() -> None:
                 ),
             },
         },
-        tasks=(
-            PregelTask(
-                AnyStr(),
-                "tools",
-                interrupts=(Interrupt("before"),),
-            ),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -2572,13 +2717,7 @@ async def test_conditional_graph() -> None:
                 "input": "what is weather in sf",
             },
         },
-        tasks=(
-            PregelTask(
-                AnyStr(),
-                "tools",
-                interrupts=(Interrupt("before"),),
-            ),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -2750,13 +2889,7 @@ async def test_conditional_graph() -> None:
                 ),
             },
         },
-        tasks=(
-            PregelTask(
-                AnyStr(),
-                "tools",
-                interrupts=(Interrupt("before"),),
-            ),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -3324,13 +3457,7 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
             ),
             "intermediate_steps": [],
         },
-        tasks=(
-            PregelTask(
-                AnyStr(),
-                "tools",
-                interrupts=(Interrupt("before"),),
-            ),
-        ),
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -3374,7 +3501,7 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
             ),
             "intermediate_steps": [],
         },
-        tasks=(PregelTask(AnyStr(), "tools", interrupts=(Interrupt("before"),)),),
+        tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
         config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
         created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
@@ -4957,13 +5084,7 @@ async def test_start_branch_then() -> None:
         ]
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value", "market": "DE"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "tool_two_slow",
-                    interrupts=(Interrupt("before"),),
-                ),
-            ),
+            tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
@@ -5005,13 +5126,7 @@ async def test_start_branch_then() -> None:
         }
         assert await tool_two.aget_state(thread2) == StateSnapshot(
             values={"my_key": "value", "market": "US"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "tool_two_fast",
-                    interrupts=(Interrupt("before"),),
-                ),
-            ),
+            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[
@@ -5053,13 +5168,7 @@ async def test_start_branch_then() -> None:
         }
         assert await tool_two.aget_state(thread3) == StateSnapshot(
             values={"my_key": "value", "market": "US"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "tool_two_fast",
-                    interrupts=(Interrupt("before"),),
-                ),
-            ),
+            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
@@ -5074,13 +5183,7 @@ async def test_start_branch_then() -> None:
         await tool_two.aupdate_state(thread3, {"my_key": "key"})  # appends to my_key
         assert await tool_two.aget_state(thread3) == StateSnapshot(
             values={"my_key": "valuekey", "market": "US"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "tool_two_fast",
-                    interrupts=(Interrupt("before"),),
-                ),
-            ),
+            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread3)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread3)).checkpoint[
@@ -5497,28 +5600,10 @@ async def test_branch_then() -> None:
                     ],
                 },
             },
-            {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 2,
-                "payload": {
-                    "id": "054b0ced-4546-58f4-bee5-548f029e1a8e",
-                    "name": "tool_two_slow",
-                    "result": [],
-                    "error": None,
-                    "interrupts": [{"when": "before", "value": None}],
-                },
-            },
         ]
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value prepared", "market": "DE"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "tool_two_slow",
-                    interrupts=(Interrupt("before"),),
-                ),
-            ),
+            tasks=(PregelTask(AnyStr(), "tool_two_slow"),),
             next=("tool_two_slow",),
             config=(await tool_two.checkpointer.aget_tuple(thread1)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread1)).checkpoint[
@@ -5564,13 +5649,7 @@ async def test_branch_then() -> None:
         }
         assert await tool_two.aget_state(thread2) == StateSnapshot(
             values={"my_key": "value prepared", "market": "US"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "tool_two_fast",
-                    interrupts=(Interrupt("before"),),
-                ),
-            ),
+            tasks=(PregelTask(AnyStr(), "tool_two_fast"),),
             next=("tool_two_fast",),
             config=(await tool_two.checkpointer.aget_tuple(thread2)).config,
             created_at=(await tool_two.checkpointer.aget_tuple(thread2)).checkpoint[

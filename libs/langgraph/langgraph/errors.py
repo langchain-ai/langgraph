@@ -1,4 +1,4 @@
-from typing import Any
+from typing import Any, Sequence
 
 from langgraph.checkpoint.base import EmptyChannelError
 from langgraph.constants import Interrupt
@@ -32,7 +32,7 @@ class InvalidUpdateError(Exception):
 class GraphInterrupt(Exception):
     """Raised when a subgraph is interrupted."""
 
-    def __init__(self, interrupts: list[Interrupt]) -> None:
+    def __init__(self, interrupts: Sequence[Interrupt] = ()) -> None:
         super().__init__(interrupts)
 
 
