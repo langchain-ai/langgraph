@@ -76,16 +76,12 @@ from langgraph.pregel.algo import (
     should_interrupt,
 )
 from langgraph.pregel.debug import (
-    map_debug_task_results,
     print_step_checkpoint,
     print_step_tasks,
     print_step_writes,
     tasks_w_writes,
 )
-from langgraph.pregel.io import (
-    map_output_updates,
-    read_channels,
-)
+from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
@@ -962,6 +958,7 @@ class Pregel(
                 nodes=self.nodes,
                 specs=self.channels,
                 output_keys=output_keys,
+                stream_keys=self.stream_channels_asis,
             ) as loop:
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -970,7 +967,6 @@ class Pregel(
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
                     input_keys=self.input_channels,
-                    stream_keys=self.stream_channels_asis,
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,
                     manager=run_manager,
@@ -1039,26 +1035,17 @@ class Pregel(
                             else:
                                 # save task writes to checkpointer
                                 loop.put_writes(task.id, task.writes)
-                                # yield updates output for the finished task
-                                if "updates" in stream_modes:
-                                    yield from _with_mode(
-                                        "updates",
-                                        isinstance(stream_mode, list),
-                                        map_output_updates(output_keys, [task]),
-                                    )
-                                if "debug" in stream_modes:
-                                    yield from _with_mode(
-                                        "debug",
-                                        isinstance(stream_mode, list),
-                                        map_debug_task_results(
-                                            loop.step,
-                                            [task],
-                                            self.stream_channels_list,
-                                        ),
-                                    )
                         else:
                             # remove references to loop vars
                             del fut, task
+                        # emit output
+                        while loop.stream:
+                            mode, payload = loop.stream.popleft()
+                            if mode in stream_modes:
+                                if isinstance(stream_mode, list):
+                                    yield (mode, payload)
+                                else:
+                                    yield payload
                         if _should_stop_others(done):
                             break
 
@@ -1073,21 +1060,21 @@ class Pregel(
                             [w for t in loop.tasks for w in t.writes],
                             self.stream_channels_list,
                         )
-                # emit output
-                while loop.stream:
-                    mode, payload = loop.stream.popleft()
-                    if mode in stream_modes:
-                        if isinstance(stream_mode, list):
-                            yield (mode, payload)
-                        else:
-                            yield payload
-                # handle exit
-                if loop.status == "out_of_steps":
-                    raise GraphRecursionError(
-                        f"Recursion limit of {config['recursion_limit']} reached "
-                        "without hitting a stop condition. You can increase the "
-                        "limit by setting the `recursion_limit` config key."
-                    )
+            # emit output
+            while loop.stream:
+                mode, payload = loop.stream.popleft()
+                if mode in stream_modes:
+                    if isinstance(stream_mode, list):
+                        yield (mode, payload)
+                    else:
+                        yield payload
+            # handle exit
+            if loop.status == "out_of_steps":
+                raise GraphRecursionError(
+                    f"Recursion limit of {config['recursion_limit']} reached "
+                    "without hitting a stop condition. You can increase the "
+                    "limit by setting the `recursion_limit` config key."
+                )
             # set final channel values as run output
             run_manager.on_chain_end(loop.output)
         except BaseException as e:
@@ -1219,6 +1206,7 @@ class Pregel(
                 nodes=self.nodes,
                 specs=self.channels,
                 output_keys=output_keys,
+                stream_keys=self.stream_channels_asis,
             ) as loop:
                 aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model
@@ -1228,7 +1216,6 @@ class Pregel(
                 # with channel updates applied only at the transition between steps
                 while loop.tick(
                     input_keys=self.input_channels,
-                    stream_keys=self.stream_channels_asis,
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,
                     manager=run_manager,
@@ -1298,28 +1285,17 @@ class Pregel(
                             else:
                                 # save task writes to checkpointer
                                 loop.put_writes(task.id, task.writes)
-                                # yield updates output for the finished task
-                                if "updates" in stream_modes:
-                                    for chunk in _with_mode(
-                                        "updates",
-                                        isinstance(stream_mode, list),
-                                        map_output_updates(output_keys, [task]),
-                                    ):
-                                        yield chunk
-                                if "debug" in stream_modes:
-                                    for chunk in _with_mode(
-                                        "debug",
-                                        isinstance(stream_mode, list),
-                                        map_debug_task_results(
-                                            loop.step,
-                                            [task],
-                                            self.stream_channels_list,
-                                        ),
-                                    ):
-                                        yield chunk
                         else:
                             # remove references to loop vars
                             del fut, task
+                        # emit output
+                        while loop.stream:
+                            mode, payload = loop.stream.popleft()
+                            if mode in stream_modes:
+                                if isinstance(stream_mode, list):
+                                    yield (mode, payload)
+                                else:
+                                    yield payload
                         if _should_stop_others(done):
                             break
 
@@ -1334,21 +1310,21 @@ class Pregel(
                             [w for t in loop.tasks for w in t.writes],
                             self.stream_channels_list,
                         )
-                # emit output
-                while loop.stream:
-                    mode, payload = loop.stream.popleft()
-                    if mode in stream_modes:
-                        if isinstance(stream_mode, list):
-                            yield (mode, payload)
-                        else:
-                            yield payload
-                # handle exit
-                if loop.status == "out_of_steps":
-                    raise GraphRecursionError(
-                        f"Recursion limit of {config['recursion_limit']} reached "
-                        "without hitting a stop condition. You can increase the "
-                        "limit by setting the `recursion_limit` config key."
-                    )
+            # emit output
+            while loop.stream:
+                mode, payload = loop.stream.popleft()
+                if mode in stream_modes:
+                    if isinstance(stream_mode, list):
+                        yield (mode, payload)
+                    else:
+                        yield payload
+            # handle exit
+            if loop.status == "out_of_steps":
+                raise GraphRecursionError(
+                    f"Recursion limit of {config['recursion_limit']} reached "
+                    "without hitting a stop condition. You can increase the "
+                    "limit by setting the `recursion_limit` config key."
+                )
             # set final channel values as run output
             await run_manager.on_chain_end(loop.output)
         except BaseException as e:

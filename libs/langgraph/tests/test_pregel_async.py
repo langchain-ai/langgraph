@@ -1278,6 +1278,8 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
                 "name": "one",
                 "result": [("inbox", 3)],
+                "error": None,
+                "interrupts": [],
             },
         },
         {
@@ -1288,6 +1290,8 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
                 "name": "two",
                 "result": [("output", 13)],
+                "error": None,
+                "interrupts": [],
             },
         },
         {
@@ -1309,6 +1313,8 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
                 "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
                 "name": "two",
                 "result": [("output", 4)],
+                "error": None,
+                "interrupts": [],
             },
         },
     ]
@@ -1978,7 +1984,6 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
         assert setup_sync.call_count == 0, "Sync context manager should not be used"
         assert cleanup_sync.call_count == 0, "Sync context manager should not be used"
         assert setup_async.call_count == 1, "Expected setup to be called once"
-        assert cleanup_async.call_count == 0, "Expected cleanup to not be called yet"
         if i == 0:
             assert chunk == {"inbox": [3]}
         elif i == 1:
@@ -4744,6 +4749,8 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
                     "name": "rewrite_query",
                     "result": [("query", "query: what is weather in sf")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -4798,6 +4805,8 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
                     "name": "retriever_two",
                     "result": [("docs", ["doc3", "doc4"])],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -4815,6 +4824,8 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
                     "name": "retriever_one",
                     "result": [("docs", ["doc1", "doc2"])],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -4854,6 +4865,8 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                     "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
                     "name": "qa",
                     "result": [("answer", "doc1,doc2,doc3,doc4")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
         ),
@@ -5218,6 +5231,8 @@ async def test_branch_then() -> None:
                     "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
                     "name": "prepare",
                     "result": [("my_key", " prepared")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
             {
@@ -5270,6 +5285,8 @@ async def test_branch_then() -> None:
                     "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
                     "name": "tool_two_slow",
                     "result": [("my_key", " slow")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
             {
@@ -5320,6 +5337,8 @@ async def test_branch_then() -> None:
                     "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
                     "name": "finish",
                     "result": [("my_key", " finished")],
+                    "error": None,
+                    "interrupts": [],
                 },
             },
             {
@@ -5363,10 +5382,134 @@ async def test_branch_then() -> None:
 
         thread1 = {"configurable": {"thread_id": "1"}}
         # stop when about to enter node
-        assert await tool_two.ainvoke({"my_key": "value", "market": "DE"}, thread1) == {
-            "my_key": "value prepared",
-            "market": "DE",
-        }
+        assert [
+            c
+            async for c in tool_two.astream(
+                {"my_key": "value", "market": "DE"}, thread1, stream_mode="debug"
+            )
+        ] == [
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": -1,
+                "payload": {
+                    "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "1"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
+                    },
+                    "values": {"my_key": ""},
+                    "metadata": {
+                        "source": "input",
+                        "step": -1,
+                        "writes": {"my_key": "value", "market": "DE"},
+                    },
+                    "next": ["__start__"],
+                    "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 0,
+                "payload": {
+                    "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "1"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
+                    },
+                    "values": {
+                        "my_key": "value",
+                        "market": "DE",
+                    },
+                    "metadata": {
+                        "source": "loop",
+                        "step": 0,
+                        "writes": None,
+                    },
+                    "next": ["prepare"],
+                    "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
+                },
+            },
+            {
+                "type": "task",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": "ca572c3b-b805-5fc6-a19e-3d79f52dde70",
+                    "name": "prepare",
+                    "input": {"my_key": "value", "market": "DE"},
+                    "triggers": ["start:prepare"],
+                },
+            },
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": "ca572c3b-b805-5fc6-a19e-3d79f52dde70",
+                    "name": "prepare",
+                    "result": [("my_key", " prepared")],
+                    "error": None,
+                    "interrupts": [],
+                },
+            },
+            {
+                "type": "checkpoint",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "config": {
+                        "tags": [],
+                        "metadata": {"thread_id": "1"},
+                        "callbacks": None,
+                        "recursion_limit": 25,
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": "",
+                            "checkpoint_id": AnyStr(),
+                        },
+                    },
+                    "values": {
+                        "my_key": "value prepared",
+                        "market": "DE",
+                    },
+                    "metadata": {
+                        "source": "loop",
+                        "step": 1,
+                        "writes": {"prepare": {"my_key": " prepared"}},
+                    },
+                    "next": ["tool_two_slow"],
+                    "tasks": [
+                        {"id": AnyStr(), "name": "tool_two_slow", "interrupts": ()}
+                    ],
+                },
+            },
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": "054b0ced-4546-58f4-bee5-548f029e1a8e",
+                    "name": "tool_two_slow",
+                    "result": [],
+                    "error": None,
+                    "interrupts": [{"when": "before", "value": None}],
+                },
+            },
+        ]
         assert await tool_two.aget_state(thread1) == StateSnapshot(
             values={"my_key": "value prepared", "market": "DE"},
             tasks=(
