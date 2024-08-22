@@ -193,10 +193,6 @@ class StateGraph(Graph):
                         )
                 else:
                     self.managed[key] = managed
-            if any(
-                isinstance(c, BinaryOperatorAggregate) for c in self.channels.values()
-            ):
-                self.support_multiple_edges = True
 
     @overload
     def add_node(
@@ -723,10 +719,15 @@ def _get_channel(
         else:
             raise ValueError(f"This {annotation} not allowed in this position")
     elif channel := _is_field_channel(annotation):
+        channel.key = name
         return channel
     elif channel := _is_field_binop(annotation):
+        channel.key = name
         return channel
-    return LastValue(annotation)
+
+    fallback = LastValue(annotation)
+    fallback.key = name
+    return fallback
 
 
 def _is_field_channel(typ: Type[Any]) -> Optional[BaseChannel]:

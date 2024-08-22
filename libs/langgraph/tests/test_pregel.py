@@ -198,6 +198,21 @@ def test_graph_validation() -> None:
     with pytest.raises(ValueError, match="Invalid reducer"):
         StateGraph(BadReducerState)
 
+    def node_b(state: State) -> State:
+        return {"hello": "world"}
+
+    builder = StateGraph(State)
+    builder.add_node("a", node_b)
+    builder.add_node("b", node_b)
+    builder.add_node("c", node_b)
+    builder.set_entry_point("a")
+    builder.add_edge("a", "b")
+    builder.add_edge("a", "c")
+    graph = builder.compile()
+
+    with pytest.raises(InvalidUpdateError, match="At key 'hello'"):
+        graph.invoke({"hello": "there"})
+
 
 def test_checkpoint_errors() -> None:
     class FaultyGetCheckpointer(MemorySaver):
@@ -1196,6 +1211,21 @@ def test_invoke_two_processes_two_in_two_out_invalid(mocker: MockerFixture) -> N
     with pytest.raises(InvalidUpdateError):
         # LastValue channels can only be updated once per iteration
         app.invoke(2)
+
+    class State(TypedDict):
+        hello: str
+
+    def my_node(input: State) -> State:
+        return {"hello": "world"}
+
+    builder = StateGraph(State)
+    builder.add_node("one", my_node)
+    builder.add_node("two", my_node)
+    builder.set_conditional_entry_point(lambda _: ["one", "two"])
+
+    graph = builder.compile()
+    with pytest.raises(InvalidUpdateError, match="At key 'hello'"):
+        graph.invoke({"hello": "there"}, debug=True)
 
 
 def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> None:
