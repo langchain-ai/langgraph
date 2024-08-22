@@ -1700,7 +1700,7 @@ async def test_pending_writes_resume(
     )
     # the previous one we assert that pending writes contains both
     # - original error
-    # - succesful writes from resuming after preventing error
+    # - successful writes from resuming after preventing error
     assert checkpoints[1] == CheckpointTuple(
         config={
             "configurable": {
