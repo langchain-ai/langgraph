@@ -318,7 +318,9 @@ class SqliteSaver(BaseCheckpointSaver):
         ORDER BY checkpoint_id DESC"""
         if limit:
             query += f" LIMIT {limit}"
-        with self.cursor(transaction=False) as cur:
+        with self.cursor(transaction=False) as cur, self.cursor(
+            transaction=False
+        ) as writes_cur:
             cur.execute(query, param_values)
             for (
                 thread_id,
@@ -329,6 +331,14 @@ class SqliteSaver(BaseCheckpointSaver):
                 checkpoint,
                 metadata,
             ) in cur:
+                writes_cur.execute(
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    (
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint_id,
+                    ),
+                )
                 yield CheckpointTuple(
                     {
                         "configurable": {
@@ -350,6 +360,10 @@ class SqliteSaver(BaseCheckpointSaver):
                         if parent_checkpoint_id
                         else None
                     ),
+                    [
+                        (task_id, channel, self.serde.loads_typed((type, value)))
+                        for task_id, channel, type, value in writes_cur
+                    ],
                 )
 
     def put(

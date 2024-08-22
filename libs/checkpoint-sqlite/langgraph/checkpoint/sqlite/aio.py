@@ -346,6 +346,14 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
                 checkpoint,
                 metadata,
             ) in cursor:
+                writes_cur = await self.conn.execute(
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    (
+                        thread_id,
+                        checkpoint_ns,
+                        checkpoint_id,
+                    ),
+                )
                 yield CheckpointTuple(
                     {
                         "configurable": {
@@ -367,6 +375,10 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
                         if parent_checkpoint_id
                         else None
                     ),
+                    [
+                        (task_id, channel, self.serde.loads_typed((type, value)))
+                        async for task_id, channel, type, value in writes_cur
+                    ],
                 )
 
     async def aput(

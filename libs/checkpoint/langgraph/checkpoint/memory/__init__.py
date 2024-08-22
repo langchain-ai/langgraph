@@ -204,6 +204,7 @@ class MemorySaver(
                 elif limit is not None:
                     limit -= 1
 
+                writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)]
                 yield CheckpointTuple(
                     config={
                         "configurable": {
@@ -223,6 +224,9 @@ class MemorySaver(
                     }
                     if parent_checkpoint_id
                     else None,
+                    pending_writes=[
+                        (id, c, self.serde.loads_typed(v)) for id, c, v in writes
+                    ],
                 )
 
     def put(
