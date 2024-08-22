@@ -74,15 +74,6 @@ class MemorySaverAssertCheckpointMetadata(MemorySaver):
     should produce a side effect that can be asserted.
     """
 
-    serde = NoopSerializer()
-
-    def __init__(
-        self,
-        *,
-        serde: Optional[SerializerProtocol] = None,
-    ) -> None:
-        super().__init__(serde=serde)
-
     def put(
         self,
         config: RunnableConfig,
