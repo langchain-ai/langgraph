@@ -61,7 +61,7 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
-from tests.any_str import AnyStr, AnyVersion, ExceptionLike, UnsortedSequence
+from tests.any_str import AnyStr, AnyVersion, UnsortedSequence
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
@@ -1593,7 +1593,7 @@ async def test_pending_writes_resume(
     assert state.next == ("one", "two")
     assert state.tasks == (
         PregelTask(AnyStr(), "one"),
-        PregelTask(AnyStr(), "two", ExceptionLike(ValueError("I'm not good"))),
+        PregelTask(AnyStr(), "two", 'ValueError("I\'m not good")'),
     )
     assert state.metadata == {"source": "loop", "step": 0, "writes": None}
     # should contain pending write of "one"
@@ -1603,7 +1603,7 @@ async def test_pending_writes_resume(
     expected_writes = [
         (AnyStr(), "one", "one"),
         (AnyStr(), "value", 2),
-        (AnyStr(), ERROR, ExceptionLike(ValueError("I'm not good"))),
+        (AnyStr(), ERROR, 'ValueError("I\'m not good")'),
     ]
     assert len(checkpoint.pending_writes) == 3
     assert all(w in expected_writes for w in checkpoint.pending_writes)
@@ -1741,7 +1741,7 @@ async def test_pending_writes_resume(
         pending_writes=UnsortedSequence(
             (AnyStr(), "one", "one"),
             (AnyStr(), "value", 2),
-            (AnyStr(), "__error__", ExceptionLike(ValueError("I'm not good"))),
+            (AnyStr(), "__error__", 'ValueError("I\'m not good")'),
             (AnyStr(), "two", "two"),
             (AnyStr(), "value", 3),
         ),
@@ -3108,7 +3108,7 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
         observation = {t.name: t for t in tools}[agent_action.tool].invoke(
             agent_action.tool_input
         )
-        return {"intermediate_steps": [(agent_action, observation)]}
+        return {"intermediate_steps": [[agent_action, observation]]}
 
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
@@ -3140,22 +3140,22 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
         assert await app.ainvoke({"input": "what is weather in sf"}) == {
             "input": "what is weather in sf",
             "intermediate_steps": [
-                (
+                [
                     AgentAction(
                         tool="search_api",
                         tool_input="query",
                         log="tool:search_api:query",
                     ),
                     "result for query",
-                ),
-                (
+                ],
+                [
                     AgentAction(
                         tool="search_api",
                         tool_input="another",
                         log="tool:search_api:another",
                     ),
                     "result for another",
-                ),
+                ],
             ],
             "agent_outcome": AgentFinish(
                 return_values={"answer": "answer"}, log="finish:answer"
@@ -3176,14 +3176,14 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
             {
                 "tools": {
                     "intermediate_steps": [
-                        (
+                        [
                             AgentAction(
                                 tool="search_api",
                                 tool_input="query",
                                 log="tool:search_api:query",
                             ),
                             "result for query",
-                        )
+                        ]
                     ],
                 }
             },
@@ -3199,14 +3199,14 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
             {
                 "tools": {
                     "intermediate_steps": [
-                        (
+                        [
                             AgentAction(
                                 tool="search_api",
                                 tool_input="another",
                                 log="tool:search_api:another",
                             ),
                             "result for another",
-                        ),
+                        ],
                     ],
                 }
             },
@@ -3361,14 +3361,14 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
             {
                 "tools": {
                     "intermediate_steps": [
-                        (
+                        [
                             AgentAction(
                                 tool="search_api",
                                 tool_input="query",
                                 log="tool:search_api:a different query",
                             ),
                             "result for query",
-                        )
+                        ]
                     ],
                 }
             },
@@ -3401,14 +3401,14 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
                 log="finish:a really nice answer",
             ),
             "intermediate_steps": [
-                (
+                [
                     AgentAction(
                         tool="search_api",
                         tool_input="query",
                         log="tool:search_api:a different query",
                     ),
                     "result for query",
-                )
+                ]
             ],
         },
         tasks=(),
@@ -3537,14 +3537,14 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
         {
             "tools": {
                 "intermediate_steps": [
-                    (
+                    [
                         AgentAction(
                             tool="search_api",
                             tool_input="query",
                             log="tool:search_api:a different query",
                         ),
                         "result for query",
-                    )
+                    ]
                 ],
             }
         },
@@ -3576,14 +3576,14 @@ async def test_conditional_graph_state(mocker: MockerFixture) -> None:
                 log="finish:a really nice answer",
             ),
             "intermediate_steps": [
-                (
+                [
                     AgentAction(
                         tool="search_api",
                         tool_input="query",
                         log="tool:search_api:a different query",
                     ),
                     "result for query",
-                )
+                ]
             ],
         },
         tasks=(),
