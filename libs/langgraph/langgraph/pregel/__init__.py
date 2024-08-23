@@ -182,9 +182,15 @@ def _get_checkpoint_ns_to_graph(
     graph: Pregel,
     checkpoint_ns_to_graph: Optional[dict[str, Pregel]] = None,
     checkpoint_ns: str = "",
+    max_depth: int = 10,
 ) -> Pregel:
     if checkpoint_ns_to_graph is None:
         checkpoint_ns_to_graph = {}
+
+    if max_depth <= 0:
+        raise RecursionError(
+            f"Reached maximum recursion depth while building checkpoint NS -> graph mapping."
+        )
 
     for node_name, node in graph.nodes.items():
         new_checkpoint_ns = (
@@ -194,13 +200,16 @@ def _get_checkpoint_ns_to_graph(
         )
         if isinstance(node.bound, Pregel):
             _get_checkpoint_ns_to_graph(
-                node.bound, checkpoint_ns_to_graph, new_checkpoint_ns
+                node.bound, checkpoint_ns_to_graph, new_checkpoint_ns, max_depth - 1
             )
         elif isinstance(node.bound, RunnableSequence):
             for runnable in node.bound.steps:
                 if isinstance(runnable, Pregel):
                     _get_checkpoint_ns_to_graph(
-                        runnable, checkpoint_ns_to_graph, new_checkpoint_ns
+                        runnable,
+                        checkpoint_ns_to_graph,
+                        new_checkpoint_ns,
+                        max_depth - 1,
                     )
 
     checkpoint_ns_to_graph[checkpoint_ns] = graph
