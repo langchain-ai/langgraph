@@ -189,7 +189,7 @@ def _get_checkpoint_ns_to_graph(
 
     if max_depth <= 0:
         raise RecursionError(
-            f"Reached maximum recursion depth while building checkpoint NS -> graph mapping."
+            "Reached maximum recursion depth while building checkpoint NS -> graph mapping."
         )
 
     for node_name, node in graph.nodes.items():
