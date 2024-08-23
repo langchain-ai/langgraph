@@ -4106,6 +4106,7 @@ def test_state_graph_packets(
     )
 
     def agent(data: AgentState) -> AgentState:
+        assert isinstance(data["session"], httpx.Client)
         return {
             "messages": model.invoke(data["messages"]),
             "something_extra": "hi there",
@@ -4113,6 +4114,7 @@ def test_state_graph_packets(
 
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
+        assert isinstance(data["session"], httpx.Client)
         assert (
             data["something_extra"] == "hi there"
         ), "nodes can pass extra data to their cond edges, which isn't saved in state"
@@ -4130,6 +4132,7 @@ def test_state_graph_packets(
         my_session: httpx.Client
 
     def tools_node(input: ToolInput, config: RunnableConfig) -> AgentState:
+        assert isinstance(input["my_session"], httpx.Client)
         tool_call = input["call"]
         time.sleep(tool_call["args"].get("idx", 0) / 10)
         output = tools_by_name[tool_call["name"]].invoke(tool_call["args"], config)

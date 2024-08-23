@@ -110,12 +110,9 @@ ChannelTypePlaceholder = object()
 
 class ManagedValueMapping(dict[str, ManagedValue]):
     def replace_runtime_values(self, step: int, values: Union[dict[str, Any], Any]):
-        print("replace_runtime_values", values)
         if isinstance(values, dict):
             for key, value in values.items():
                 for chan, mv in self.items():
-                    print("chan", chan, "mv", mv, "v", mv(step), "value", value)
-                    print(mv, mv.runtime, mv(step) is value)
                     if mv.runtime and mv(step) is value:
                         values[key] = {RUNTIME_PLACEHOLDER: chan}
         elif hasattr(values, "__dir__") and callable(values.__dir__):
