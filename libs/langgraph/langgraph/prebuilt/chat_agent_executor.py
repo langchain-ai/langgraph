@@ -139,7 +139,7 @@ def create_react_agent(
     interrupt_before: Optional[Sequence[str]] = None,
     interrupt_after: Optional[Sequence[str]] = None,
     debug: bool = False,
-    handle_tool_errors: Optional[bool] = True
+    handle_tool_errors: Optional[bool] = True,
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -476,7 +476,9 @@ def create_react_agent(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("tools", ToolNode(tool_classes, handle_tool_errors=handle_tool_errors))
+    workflow.add_node(
+        "tools", ToolNode(tool_classes, handle_tool_errors=handle_tool_errors)
+    )
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
