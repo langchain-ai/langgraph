@@ -56,6 +56,7 @@ _MANUAL = {
         "create-react-agent-memory.ipynb",
         "create-react-agent-hitl.ipynb",
         "human_in_the_loop/breakpoints.ipynb",
+        "human_in_the_loop/dynamic_breakpoints.ipynb",
         "human_in_the_loop/time-travel.ipynb",
         "human_in_the_loop/edit-graph-state.ipynb",
         "human_in_the_loop/wait-user-input.ipynb",
