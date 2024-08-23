@@ -51,7 +51,6 @@ from typing_extensions import Self
 from langgraph.channels.base import (
     BaseChannel,
 )
-from langgraph.channels.context import Context
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     copy_checkpoint,
@@ -68,7 +67,12 @@ from langgraph.constants import (
 )
 from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueSpec
-from langgraph.pregel.algo import apply_writes, local_read, prepare_next_tasks
+from langgraph.pregel.algo import (
+    apply_writes,
+    local_read,
+    local_write,
+    prepare_next_tasks,
+)
 from langgraph.pregel.debug import (
     print_step_checkpoint,
     print_step_tasks,
@@ -330,10 +334,7 @@ class Pregel(
     @property
     def stream_channels_asis(self) -> Union[str, Sequence[str]]:
         return self.stream_channels or [
-            k
-            for k in self.channels
-            if isinstance(self.channels[k], BaseChannel)
-            and not isinstance(self.channels[k], Context)
+            k for k in self.channels if isinstance(self.channels[k], BaseChannel)
         ]
 
     def get_state(self, config: RunnableConfig) -> StateSnapshot:
@@ -564,7 +565,7 @@ class Pregel(
         # update channels
         with ChannelsManager(self.channels, checkpoint, config) as (
             channels,
-            _,
+            managed,
         ):
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
@@ -588,9 +589,22 @@ class Pregel(
                     run_name=self.name + "UpdateState",
                     configurable={
                         # deque.extend is thread-safe
-                        CONFIG_KEY_SEND: task.writes.extend,
+                        CONFIG_KEY_SEND: partial(
+                            local_write,
+                            step + 1,
+                            task.writes.extend,
+                            self.nodes,
+                            channels,
+                            managed,
+                        ),
                         CONFIG_KEY_READ: partial(
-                            local_read, checkpoint, channels, task, config
+                            local_read,
+                            step + 1,
+                            checkpoint,
+                            channels,
+                            managed,
+                            task,
+                            config,
                         ),
                     },
                 ),
@@ -682,7 +696,7 @@ class Pregel(
         # update channels, acting as the chosen node
         async with AsyncChannelsManager(self.channels, checkpoint, config) as (
             channels,
-            _,
+            managed,
         ):
             # create task to run all writers of the chosen node
             writers = self.nodes[as_node].get_writers()
@@ -706,9 +720,22 @@ class Pregel(
                     run_name=self.name + "UpdateState",
                     configurable={
                         # deque.extend is thread-safe
-                        CONFIG_KEY_SEND: task.writes.extend,
+                        CONFIG_KEY_SEND: partial(
+                            local_write,
+                            step + 1,
+                            task.writes.extend,
+                            self.nodes,
+                            channels,
+                            managed,
+                        ),
                         CONFIG_KEY_READ: partial(
-                            local_read, checkpoint, channels, task, config
+                            local_read,
+                            step + 1,
+                            checkpoint,
+                            channels,
+                            managed,
+                            task,
+                            config,
                         ),
                     },
                 ),

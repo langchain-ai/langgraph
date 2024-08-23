@@ -67,19 +67,19 @@ class ChannelRead(RunnableCallable):
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
         return self.do_read(
-            config, channel=self.channel, fresh=self.fresh, mapper=self.mapper
+            config, select=self.channel, fresh=self.fresh, mapper=self.mapper
         )
 
     async def _aread(self, _: Any, config: RunnableConfig) -> Any:
         return self.do_read(
-            config, channel=self.channel, fresh=self.fresh, mapper=self.mapper
+            config, select=self.channel, fresh=self.fresh, mapper=self.mapper
         )
 
     @staticmethod
     def do_read(
         config: RunnableConfig,
         *,
-        channel: Union[str, list[str]],
+        select: Union[str, list[str]],
         fresh: bool = False,
         mapper: Optional[Callable[[Any], Any]] = None,
     ) -> Any:
@@ -91,9 +91,9 @@ class ChannelRead(RunnableCallable):
                 "Make sure to call in the context of a Pregel process"
             )
         if mapper:
-            return mapper(read(channel, fresh))
+            return mapper(read(select, fresh))
         else:
-            return read(channel, fresh)
+            return read(select, fresh)
 
 
 DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
