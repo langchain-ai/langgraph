@@ -590,7 +590,7 @@ def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_invoke_two_processes_in_out_interrupt(
     request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
@@ -801,7 +801,7 @@ def test_invoke_two_processes_in_out_interrupt(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_fork_always_re_runs_nodes(
     request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
@@ -1245,7 +1245,7 @@ def test_invoke_two_processes_two_in_two_out_valid(mocker: MockerFixture) -> Non
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_invoke_checkpoint_two(
     mocker: MockerFixture, request: pytest.FixtureRequest, checkpointer_name: str
@@ -1321,7 +1321,7 @@ def test_invoke_checkpoint_two(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_pending_writes_resume(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -1603,7 +1603,7 @@ async def test_checkpointer_null_pending_writes() -> None:
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_invoke_checkpoint_three(
     mocker: MockerFixture, request: pytest.FixtureRequest, checkpointer_name: str
@@ -1936,7 +1936,7 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_conditional_graph(
     snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
@@ -2799,7 +2799,7 @@ def test_conditional_entrypoint_to_multiple_state_graph(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_conditional_state_graph(
     snapshot: SnapshotAssertion,
@@ -4039,7 +4039,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_state_graph_packets(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -4559,7 +4559,7 @@ def test_state_graph_packets(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_message_graph(
     snapshot: SnapshotAssertion,
@@ -5290,7 +5290,7 @@ def test_message_graph(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_root_graph(
     deterministic_uuids: MockerFixture,
@@ -6367,7 +6367,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_dynamic_interrupt(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -6454,7 +6454,7 @@ def test_dynamic_interrupt(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_start_branch_then(
     snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
@@ -6647,7 +6647,7 @@ def test_start_branch_then(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_branch_then(
     snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
@@ -7177,7 +7177,7 @@ def test_branch_then(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_in_one_fan_out_state_graph_waiting_edge(
     snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
@@ -7308,7 +7308,7 @@ def test_in_one_fan_out_state_graph_waiting_edge(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
@@ -7405,7 +7405,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     snapshot: SnapshotAssertion,
@@ -7577,7 +7577,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     snapshot: SnapshotAssertion,
@@ -7747,7 +7747,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_in_one_fan_out_state_graph_waiting_edge_plus_regular(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -8222,7 +8222,7 @@ def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 @pytest.mark.repeat(10)
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_nested_graph_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -9446,7 +9446,7 @@ def test_nested_graph_interrupts(
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_nested_graph_interrupts_parallel(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -9571,7 +9571,7 @@ def test_nested_graph_interrupts_parallel(
 @pytest.mark.skip
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_doubly_nested_graph_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -9892,7 +9892,7 @@ def test_checkpoint_metadata() -> None:
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_remove_message_via_state_update(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -10079,7 +10079,7 @@ def test_xray_lance(snapshot: SnapshotAssertion):
 
 @pytest.mark.parametrize(
     "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
+    ["memory", "sqlite", "postgres", "postgres_pipe", "postgres_pool"],
 )
 def test_channel_values(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")

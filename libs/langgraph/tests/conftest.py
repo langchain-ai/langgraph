@@ -7,6 +7,7 @@ from uuid import UUID, uuid4
 
 import pytest
 from psycopg import AsyncConnection, Connection
+from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pytest_mock import MockerFixture
 
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -123,6 +124,26 @@ def checkpointer_postgres_pipe():
 
 
 @pytest.fixture(scope="function")
+def checkpointer_postgres_pool():
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+        conn.execute(f"CREATE DATABASE {database}")
+    try:
+        # yield checkpointer
+        with ConnectionPool(
+            DEFAULT_POSTGRES_URI + database, max_size=10, kwargs={"autocommit": True}
+        ) as pool:
+            checkpointer = PostgresSaver(pool)
+            checkpointer.setup()
+            yield checkpointer
+    finally:
+        # drop unique db
+        with Connection.connect(DEFAULT_POSTGRES_URI, autocommit=True) as conn:
+            conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.fixture(scope="function")
 def checkpointer_postgres_aio():
     if sys.version_info < (3, 10):
         pytest.skip("Async Postgres tests require Python 3.10+")
@@ -179,6 +200,38 @@ async def _checkpointer_postgres_aio_pipe():
             async with checkpointer.conn.pipeline() as pipe:
                 checkpointer.pipe = pipe
                 yield checkpointer
+    finally:
+        # drop unique db
+        async with await AsyncConnection.connect(
+            DEFAULT_POSTGRES_URI, autocommit=True
+        ) as conn:
+            await conn.execute(f"DROP DATABASE {database}")
+
+
+@pytest.fixture(scope="function")
+def checkpointer_postgres_aio_pool():
+    if sys.version_info < (3, 10):
+        pytest.skip("Async Postgres tests require Python 3.10+")
+    with agen_to_gen(_checkpointer_postgres_aio_pool()) as checkpointer:
+        yield checkpointer
+
+
+@asynccontextmanager
+async def _checkpointer_postgres_aio_pool():
+    database = f"test_{uuid4().hex[:16]}"
+    # create unique db
+    async with await AsyncConnection.connect(
+        DEFAULT_POSTGRES_URI, autocommit=True
+    ) as conn:
+        await conn.execute(f"CREATE DATABASE {database}")
+    try:
+        # yield checkpointer
+        async with AsyncConnectionPool(
+            DEFAULT_POSTGRES_URI + database, max_size=10, kwargs={"autocommit": True}
+        ) as pool:
+            checkpointer = AsyncPostgresSaver(pool)
+            await checkpointer.setup()
+            yield checkpointer
     finally:
         # drop unique db
         async with await AsyncConnection.connect(
