@@ -5,8 +5,6 @@ from typing import AsyncIterator, Iterator, Mapping, Optional, Union
 from langchain_core.runnables import RunnableConfig, patch_config
 
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.context import Context
-from langgraph.channels.last_value import LastValue
 from langgraph.checkpoint.base import Checkpoint
 from langgraph.constants import CONFIG_KEY_STORE
 from langgraph.managed.base import (
@@ -14,6 +12,7 @@ from langgraph.managed.base import (
     ManagedValueMapping,
     ManagedValueSpec,
 )
+from langgraph.managed.context import Context
 from langgraph.store.base import BaseStore
 
 
@@ -31,10 +30,12 @@ def ChannelsManager(
     channel_specs: Mapping[str, BaseChannel] = {}
     managed_specs: Mapping[str, ManagedValueSpec] = {}
     for k, v in specs.items():
-        if skip_context and isinstance(v, Context):
-            channel_specs[k] = LastValue(None)
-        elif isinstance(v, BaseChannel):
+        if isinstance(v, BaseChannel):
             channel_specs[k] = v
+        elif (
+            skip_context and isinstance(v, ConfiguredManagedValue) and v.cls is Context
+        ):
+            managed_specs[k] = Context.of(noop_context)
         else:
             managed_specs[k] = v
     with ExitStack() as stack:
@@ -45,14 +46,16 @@ def ChannelsManager(
                 )
                 for k, v in channel_specs.items()
             },
-            {
-                key: stack.enter_context(
-                    value.cls.enter(config_for_managed, **value.kwargs)
-                    if isinstance(value, ConfiguredManagedValue)
-                    else value.enter(config_for_managed)
-                )
-                for key, value in managed_specs.items()
-            },
+            ManagedValueMapping(
+                {
+                    key: stack.enter_context(
+                        value.cls.enter(config_for_managed, **value.kwargs)
+                        if isinstance(value, ConfiguredManagedValue)
+                        else value.enter(config_for_managed)
+                    )
+                    for key, value in managed_specs.items()
+                }
+            ),
         )
 
 
@@ -70,10 +73,12 @@ async def AsyncChannelsManager(
     channel_specs: Mapping[str, BaseChannel] = {}
     managed_specs: Mapping[str, ManagedValueSpec] = {}
     for k, v in specs.items():
-        if skip_context and isinstance(v, Context):
-            channel_specs[k] = LastValue(None)
-        elif isinstance(v, BaseChannel):
+        if isinstance(v, BaseChannel):
             channel_specs[k] = v
+        elif (
+            skip_context and isinstance(v, ConfiguredManagedValue) and v.cls is Context
+        ):
+            managed_specs[k] = Context.of(noop_context)
         else:
             managed_specs[k] = v
     async with AsyncExitStack() as stack:
@@ -102,5 +107,10 @@ async def AsyncChannelsManager(
                 for k, v in channel_specs.items()
             },
             # managed: build mapping from spec to result
-            {tasks[task]: task.result() for task in done},
+            ManagedValueMapping({tasks[task]: task.result() for task in done}),
         )
+
+
+@contextmanager
+def noop_context() -> Iterator[None]:
+    yield None

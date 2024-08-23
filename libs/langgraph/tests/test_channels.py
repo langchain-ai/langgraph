@@ -1,14 +1,9 @@
 import operator
-from contextlib import asynccontextmanager, contextmanager
-from typing import AsyncGenerator, Generator, Sequence, Union
+from typing import Sequence, Union
 
-import httpx
 import pytest
-from langchain_core.runnables import RunnableConfig
-from pytest_mock import MockerFixture
 
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.context import Context
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
@@ -257,80 +252,3 @@ async def test_binop_async() -> None:
         checkpoint, {}
     ) as channel:
         assert channel.get() == 10
-
-
-def test_ctx_manager(mocker: MockerFixture) -> None:
-    setup = mocker.Mock()
-    cleanup = mocker.Mock()
-
-    @contextmanager
-    def an_int() -> Generator[int, None, None]:
-        setup()
-        try:
-            yield 5
-        finally:
-            cleanup()
-
-    with Context(an_int, None).from_checkpoint(None, {}) as channel:
-        assert setup.call_count == 1
-        assert cleanup.call_count == 0
-
-        assert channel.ValueType is None
-        assert channel.UpdateType is None
-
-        assert channel.get() == 5
-
-        with pytest.raises(InvalidUpdateError):
-            channel.update([5])  # type: ignore
-
-    assert setup.call_count == 1
-    assert cleanup.call_count == 1
-
-
-def test_ctx_manager_ctx(mocker: MockerFixture) -> None:
-    with Context(httpx.Client).from_checkpoint(None, {}) as channel:
-        assert channel.ValueType is None
-        assert channel.UpdateType is None
-
-        assert isinstance(channel.get(), httpx.Client)
-
-        with pytest.raises(InvalidUpdateError):
-            channel.update([5])  # type: ignore
-
-        with pytest.raises(EmptyChannelError):
-            channel.checkpoint()
-
-
-async def test_ctx_manager_async(mocker: MockerFixture) -> None:
-    setup = mocker.Mock()
-    cleanup = mocker.Mock()
-
-    @contextmanager
-    def an_int_sync(config: RunnableConfig) -> Generator[int, None, None]:
-        try:
-            yield 5
-        finally:
-            pass
-
-    @asynccontextmanager
-    async def an_int() -> AsyncGenerator[int, None]:
-        setup()
-        try:
-            yield 5
-        finally:
-            cleanup()
-
-    async with Context(an_int_sync, an_int).afrom_checkpoint(None, {}) as channel:
-        assert setup.call_count == 1
-        assert cleanup.call_count == 0
-
-        assert channel.ValueType is None
-        assert channel.UpdateType is None
-
-        assert channel.get() == 5
-
-        with pytest.raises(InvalidUpdateError):
-            channel.update([5])  # type: ignore
-
-    assert setup.call_count == 1
-    assert cleanup.call_count == 1
