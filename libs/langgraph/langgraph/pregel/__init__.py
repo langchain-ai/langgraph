@@ -223,11 +223,12 @@ def _prepare_state_snapshot(
     checkpoint_tuples: Iterator[CheckpointTuple],
 ) -> StateSnapshot:
     checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+    checkpoint_id = config["configurable"].get("checkpoint_id")
     checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
     for saved in checkpoint_tuples:
         saved_checkpoint_ns = saved.config["configurable"]["checkpoint_ns"]
         saved_checkpoint_id = saved.config["configurable"]["checkpoint_id"]
-        if saved_checkpoint_id != config["configurable"]["checkpoint_id"]:
+        if checkpoint_id and saved_checkpoint_id != checkpoint_id:
             continue
 
         graph_checkpoint_ns = saved_checkpoint_ns.split(
@@ -287,11 +288,12 @@ async def _prepare_state_snapshot_async(
     checkpoint_tuples: AsyncIterator[CheckpointTuple],
 ) -> StateSnapshot:
     checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
+    checkpoint_id = config["configurable"].get("checkpoint_id")
     checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
     async for saved in checkpoint_tuples:
         saved_checkpoint_ns = saved.config["configurable"]["checkpoint_ns"]
         saved_checkpoint_id = saved.config["configurable"]["checkpoint_id"]
-        if saved_checkpoint_id != config["configurable"]["checkpoint_id"]:
+        if checkpoint_id and saved_checkpoint_id != checkpoint_id:
             continue
 
         graph_checkpoint_ns = saved_checkpoint_ns.split(
