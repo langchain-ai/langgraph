@@ -25,6 +25,7 @@ from langgraph_sdk.schema import (
     Assistant,
     Config,
     Cron,
+    DisconnectMode,
     GraphSchema,
     Metadata,
     MultitaskStrategy,
@@ -963,6 +964,8 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> AsyncIterator[StreamPart]:
         ...
@@ -980,6 +983,8 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        webhook: Optional[str] = None,
     ) -> AsyncIterator[StreamPart]:
         ...
 
@@ -996,6 +1001,7 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> AsyncIterator[StreamPart]:
@@ -1019,6 +1025,8 @@ class RunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            disconnect_mode: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
 
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
@@ -1061,6 +1069,7 @@ class RunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_disconnect": on_disconnect,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1129,9 +1138,7 @@ class RunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
@@ -1242,6 +1249,8 @@ class RunsClient:
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         ...
@@ -1257,6 +1266,8 @@ class RunsClient:
         config: Optional[Config] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         ...
 
@@ -1272,6 +1283,7 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
@@ -1286,12 +1298,12 @@ class RunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            on_disconnect: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -1351,6 +1363,7 @@ class RunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_disconnect": on_disconnect,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
