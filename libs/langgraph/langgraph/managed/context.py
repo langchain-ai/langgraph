@@ -36,7 +36,7 @@ class Context(ManagedValue):
     def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
         with super().enter(config, **kwargs) as self:
             if self.ctx is None:
-                raise ValueError("Cannot enter sync context manager.")
+                raise ValueError("Synchronous context manager not found. Please initialize Context value with a sync context manager, or invoke your graph asynchronously.")
             ctx = (
                 self.ctx(config)
                 if signature(self.ctx).parameters.get("config")
