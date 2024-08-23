@@ -534,8 +534,6 @@ class Pregel(
 
         saved = self.checkpointer.get_tuple(config)
         checkpoint_config = saved.config if saved else config
-        checkpoint_ns = checkpoint_config["configurable"].get("checkpoint_ns", "")
-        checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
         checkpoint_ns_to_graph: dict[str, Pregel] = _get_checkpoint_ns_to_graph(self)
 
         # we only lookup subgraph checkpoints if we actually have subgraphs
@@ -544,58 +542,9 @@ class Pregel(
         else:
             checkpoint_tuples = self.checkpointer.list(saved.config)
 
-        for saved in checkpoint_tuples:
-            saved_checkpoint_ns = saved.config["configurable"]["checkpoint_ns"]
-
-            graph_checkpoint_ns = saved_checkpoint_ns.split(
-                SEND_CHECKPOINT_NAMESPACE_SEPARATOR
-            )[0]
-            graph = checkpoint_ns_to_graph.get(graph_checkpoint_ns)
-            if graph is None:
-                continue
-
-            with ChannelsManager(
-                graph.channels, saved.checkpoint, saved.config, skip_context=True
-            ) as (
-                channels,
-                managed,
-            ):
-                next_tasks = prepare_next_tasks(
-                    saved.checkpoint,
-                    graph.nodes,
-                    channels,
-                    managed,
-                    saved.config,
-                    saved.metadata.get("step", -1) + 1,
-                    for_execution=False,
-                )
-                state_snapshot = StateSnapshot(
-                    read_channels(channels, graph.stream_channels_asis),
-                    tuple(t.name for t in next_tasks),
-                    saved.config,
-                    saved.metadata,
-                    saved.checkpoint["ts"],
-                    saved.parent_config,
-                    tasks_w_writes(next_tasks, saved.pending_writes),
-                )
-
-            checkpoint_ns_to_state_snapshots[saved_checkpoint_ns] = state_snapshot
-
-        if not checkpoint_ns_to_state_snapshots:
-            return StateSnapshot(
-                values={},
-                next=(),
-                config=config,
-                metadata=None,
-                created_at=None,
-                parent_config=None,
-                tasks=(),
-            )
-
-        state_snapshot = assemble_state_snapshot_hierarchy(
-            checkpoint_ns, checkpoint_ns_to_state_snapshots
+        return _prepare_state_snapshot(
+            checkpoint_config, checkpoint_ns_to_graph, checkpoint_tuples
         )
-        return state_snapshot
 
     async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
         """Get the current state of the graph."""
