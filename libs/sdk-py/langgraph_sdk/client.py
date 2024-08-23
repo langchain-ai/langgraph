@@ -1025,7 +1025,7 @@ class RunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
-            disconnect_mode: The disconnect mode to use.
+            on_disconnect: The disconnect mode to use.
                 Must be one of 'cancel' or 'continue'.
 
         Returns:
