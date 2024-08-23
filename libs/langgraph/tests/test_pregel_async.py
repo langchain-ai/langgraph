@@ -62,6 +62,7 @@ from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyStr, AnyVersion, UnsortedSequence
+from tests.conftest import ALL_CHECKPOINTERS_ASYNC
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
@@ -206,10 +207,7 @@ async def test_node_cancellation_on_other_node_exception() -> None:
     assert inner_task_cancelled
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_dynamic_interrupt(
     checkpointer_name: str, snapshot: SnapshotAssertion, request: pytest.FixtureRequest
 ) -> None:
@@ -297,10 +295,7 @@ async def test_dynamic_interrupt(
     # TODO use aget_state_history
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_node_not_cancelled_on_other_node_interrupted(
     checkpointer_name: str, request: pytest.FixtureRequest
 ) -> None:
@@ -382,10 +377,7 @@ async def test_step_timeout_on_stream_hang() -> None:
     assert inner_task_cancelled
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_cancel_graph_astream(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
@@ -455,17 +447,7 @@ async def test_cancel_graph_astream(
         assert state.metadata == {"source": "loop", "step": 0, "writes": None}
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    [
-        "memory",
-        "sqlite_aio",
-        "postgres_aio",
-        "postgres_aio_pipe",
-        "postgres_aio_pool",
-        None,
-    ],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_cancel_graph_astream_events_v2(
     request: pytest.FixtureRequest, checkpointer_name: Optional[str]
 ) -> None:
@@ -819,10 +801,7 @@ async def test_invoke_two_processes_in_out(mocker: MockerFixture) -> None:
     assert step == 2
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_invoke_two_processes_in_out_interrupt(
     request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
 ) -> None:
@@ -1037,10 +1016,7 @@ async def test_invoke_two_processes_in_out_interrupt(
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_fork_always_re_runs_nodes(
     request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
 ) -> None:
@@ -1545,10 +1521,7 @@ async def test_invoke_checkpoint(mocker: MockerFixture) -> None:
     assert checkpoint["channel_values"].get("total") == 5
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_pending_writes_resume(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
@@ -1809,10 +1782,7 @@ async def test_cond_edge_after_send() -> None:
     assert await graph.ainvoke(["0"]) == ["0", "1", "2", "2", "3"]
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_invoke_checkpoint_three(
     mocker: MockerFixture, request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
@@ -2154,10 +2124,7 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
     assert cleanup_async.call_count == 1, "Expected cleanup to be called once"
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_conditional_graph(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
@@ -5023,10 +4990,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_start_branch_then(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
@@ -5230,10 +5194,7 @@ async def test_start_branch_then(
     )
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_branch_then(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
@@ -6717,10 +6678,7 @@ async def test_nested_graph(snapshot: SnapshotAssertion) -> None:
 
 
 @pytest.mark.repeat(10)
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_nested_graph_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
@@ -7948,10 +7906,7 @@ async def test_nested_graph_interrupts(
     ]
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_nested_graph_interrupts_parallel(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
@@ -8075,10 +8030,7 @@ async def test_nested_graph_interrupts_parallel(
 
 
 @pytest.mark.skip
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe", "postgres_aio_pool"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_doubly_nested_graph_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:

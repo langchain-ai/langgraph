@@ -238,3 +238,19 @@ async def _checkpointer_postgres_aio_pool():
             DEFAULT_POSTGRES_URI, autocommit=True
         ) as conn:
             await conn.execute(f"DROP DATABASE {database}")
+
+
+ALL_CHECKPOINTERS_SYNC = [
+    "memory",
+    "sqlite",
+    "postgres",
+    "postgres_pipe",
+    "postgres_pool",
+]
+ALL_CHECKPOINTERS_ASYNC = [
+    "memory",
+    "sqlite_aio",
+    "postgres_aio",
+    "postgres_aio_pipe",
+    "postgres_aio_pool",
+]

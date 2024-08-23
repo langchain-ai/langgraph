@@ -69,26 +69,22 @@ class AsyncPostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        async with self.lock:
-            async with self._connection() as conn:
-                async with conn.cursor(binary=True, row_factory=dict_row) as cur:
-                    try:
-                        results = await cur.execute(
-                            "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                        )
-                        version = (await results.fetchone())["v"]
-                    except UndefinedTable:
-                        version = -1
-                    for v, migration in zip(
-                        range(version + 1, len(self.MIGRATIONS)),
-                        self.MIGRATIONS[version + 1 :],
-                    ):
-                        await cur.execute(migration)
-                        await cur.execute(
-                            f"INSERT INTO checkpoint_migrations (v) VALUES ({v})"
-                        )
-                if self.pipe:
-                    await self.pipe.sync()
+        async with self._cursor() as cur:
+            try:
+                results = await cur.execute(
+                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                )
+                version = (await results.fetchone())["v"]
+            except UndefinedTable:
+                version = -1
+            for v, migration in zip(
+                range(version + 1, len(self.MIGRATIONS)),
+                self.MIGRATIONS[version + 1 :],
+            ):
+                await cur.execute(migration)
+                await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+        if self.pipe:
+            await self.pipe.sync()
 
     async def alist(
         self,

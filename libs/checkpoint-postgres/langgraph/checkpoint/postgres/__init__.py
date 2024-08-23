@@ -71,25 +71,21 @@ class PostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        with self.lock:
-            with self._connection() as conn:
-                with conn.cursor(binary=True, row_factory=dict_row) as cur:
-                    try:
-                        version = cur.execute(
-                            "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                        ).fetchone()["v"]
-                    except UndefinedTable:
-                        version = -1
-                    for v, migration in zip(
-                        range(version + 1, len(self.MIGRATIONS)),
-                        self.MIGRATIONS[version + 1 :],
-                    ):
-                        cur.execute(migration)
-                        cur.execute(
-                            f"INSERT INTO checkpoint_migrations (v) VALUES ({v})"
-                        )
-                if self.pipe:
-                    self.pipe.sync()
+        with self._cursor() as cur:
+            try:
+                version = cur.execute(
+                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                ).fetchone()["v"]
+            except UndefinedTable:
+                version = -1
+            for v, migration in zip(
+                range(version + 1, len(self.MIGRATIONS)),
+                self.MIGRATIONS[version + 1 :],
+            ):
+                cur.execute(migration)
+                cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+        if self.pipe:
+            self.pipe.sync()
 
     def list(
         self,
