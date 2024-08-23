@@ -139,6 +139,7 @@ def create_react_agent(
     interrupt_before: Optional[Sequence[str]] = None,
     interrupt_after: Optional[Sequence[str]] = None,
     debug: bool = False,
+    handle_tool_errors: Optional[bool] = True
 ) -> CompiledGraph:
     """Creates a graph that works with a chat model that utilizes tool calling.
 
@@ -177,6 +178,7 @@ def create_react_agent(
             Should be one of the following: "agent", "tools".
             This is useful if you want to return directly or run additional processing on an output.
         debug: A flag indicating whether to enable debug mode.
+        handle_tool_errors: A flag indicating whether to handle a ToolException thrown
 
     Returns:
         A compiled LangChain runnable that can be used for chat interactions.
@@ -474,7 +476,7 @@ def create_react_agent(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("tools", ToolNode(tool_classes))
+    workflow.add_node("tools", ToolNode(tool_classes, handle_tool_errors=handle_tool_errors))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
