@@ -179,26 +179,28 @@ class Channel:
 
 
 def _get_checkpoint_ns_to_graph(
-    graph: Pregel, checkpoint_ns_to_graph: dict[str, Pregel] = {}, checkpoint_ns=""
+    graph: Pregel,
+    checkpoint_ns_to_graph: Optional[dict[str, Pregel]] = None,
+    checkpoint_ns: str = "",
 ) -> Pregel:
+    if checkpoint_ns_to_graph is None:
+        checkpoint_ns_to_graph = {}
+
     for node_name, node in graph.nodes.items():
+        new_checkpoint_ns = (
+            f"{checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{node_name}"
+            if checkpoint_ns
+            else node_name
+        )
         if isinstance(node.bound, Pregel):
             _get_checkpoint_ns_to_graph(
-                node.bound,
-                checkpoint_ns_to_graph,
-                f"{checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{node_name}"
-                if checkpoint_ns
-                else node_name,
+                node.bound, checkpoint_ns_to_graph, new_checkpoint_ns
             )
         elif isinstance(node.bound, RunnableSequence):
             for runnable in node.bound.steps:
                 if isinstance(runnable, Pregel):
                     _get_checkpoint_ns_to_graph(
-                        runnable,
-                        checkpoint_ns_to_graph,
-                        f"{checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{node_name}"
-                        if checkpoint_ns
-                        else node_name,
+                        runnable, checkpoint_ns_to_graph, new_checkpoint_ns
                     )
 
     checkpoint_ns_to_graph[checkpoint_ns] = graph
