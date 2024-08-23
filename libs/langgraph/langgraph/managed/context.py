@@ -7,12 +7,12 @@ from typing import (
     ContextManager,
     Iterator,
     Optional,
-    Self,
     Type,
     Union,
 )
 
 from langchain_core.runnables import RunnableConfig
+from typing_extensions import Self
 
 from langgraph.managed.base import ConfiguredManagedValue, ManagedValue, V
 
