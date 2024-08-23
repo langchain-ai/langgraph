@@ -194,7 +194,7 @@ def _get_checkpoint_ns_to_graph(
             for runnable in node.bound.steps:
                 if isinstance(runnable, Pregel):
                     _get_checkpoint_ns_to_graph(
-                        node.bound,
+                        runnable,
                         checkpoint_ns_to_graph,
                         f"{checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{node_name}"
                         if checkpoint_ns
