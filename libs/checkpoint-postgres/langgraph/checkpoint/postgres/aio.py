@@ -64,7 +64,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
         the first time checkpointer is used.
         """
         async with self.lock:
-            async with self.conn.cursor(binary=True) as cur:
+            async with self.conn.cursor(binary=True, row_factory=dict_row) as cur:
                 try:
                     results = await cur.execute(
                         "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
@@ -110,33 +110,35 @@ class AsyncPostgresSaver(BasePostgresSaver):
         if limit:
             query += f" LIMIT {limit}"
         # if we change this to use .stream() we need to make sure to close the cursor
-        async for value in await self.conn.execute(query, args, binary=True):
-            yield CheckpointTuple(
-                {
-                    "configurable": {
-                        "thread_id": value["thread_id"],
-                        "checkpoint_ns": value["checkpoint_ns"],
-                        "checkpoint_id": value["checkpoint_id"],
+        async with self._cursor() as cur:
+            await cur.execute(query, args, binary=True)
+            async for value in cur:
+                yield CheckpointTuple(
+                    {
+                        "configurable": {
+                            "thread_id": value["thread_id"],
+                            "checkpoint_ns": value["checkpoint_ns"],
+                            "checkpoint_id": value["checkpoint_id"],
+                        }
+                    },
+                    {
+                        **self._load_checkpoint(value["checkpoint"]),
+                        "channel_values": await asyncio.to_thread(
+                            self._load_blobs, value["channel_values"]
+                        ),
+                    },
+                    self._load_metadata(value["metadata"]),
+                    {
+                        "configurable": {
+                            "thread_id": value["thread_id"],
+                            "checkpoint_ns": value["checkpoint_ns"],
+                            "checkpoint_id": value["parent_checkpoint_id"],
+                        }
                     }
-                },
-                {
-                    **self._load_checkpoint(value["checkpoint"]),
-                    "channel_values": await asyncio.to_thread(
-                        self._load_blobs, value["channel_values"]
-                    ),
-                },
-                self._load_metadata(value["metadata"]),
-                {
-                    "configurable": {
-                        "thread_id": value["thread_id"],
-                        "checkpoint_ns": value["checkpoint_ns"],
-                        "checkpoint_id": value["parent_checkpoint_id"],
-                    }
-                }
-                if value["parent_checkpoint_id"]
-                else None,
-                await asyncio.to_thread(self._load_writes, value["pending_writes"]),
-            )
+                    if value["parent_checkpoint_id"]
+                    else None,
+                    await asyncio.to_thread(self._load_writes, value["pending_writes"]),
+                )
 
     async def aget_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database asynchronously.
@@ -163,7 +165,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
 
         async with self._cursor() as cur:
-            cur = await self.conn.execute(
+            await cur.execute(
                 self.SELECT_SQL + where,
                 args,
                 binary=True,
@@ -293,7 +295,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             # in multiple threads/coroutines, but only one cursor can be
             # used at a time
             try:
-                async with self.conn.cursor(binary=True) as cur:
+                async with self.conn.cursor(binary=True, row_factory=dict_row) as cur:
                     yield cur
             finally:
                 if pipeline:
@@ -302,9 +304,11 @@ class AsyncPostgresSaver(BasePostgresSaver):
             # a connection not in pipeline mode can only be used by one
             # thread/coroutine at a time, so we acquire a lock
             async with self.lock, self.conn.pipeline(), self.conn.cursor(
-                binary=True
+                binary=True, row_factory=dict_row
             ) as cur:
                 yield cur
         else:
-            async with self.lock, self.conn.cursor(binary=True) as cur:
+            async with self.lock, self.conn.cursor(
+                binary=True, row_factory=dict_row
+            ) as cur:
                 yield cur

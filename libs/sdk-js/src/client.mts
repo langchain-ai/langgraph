@@ -571,6 +571,7 @@ export class RunsClient extends BaseClient {
     );
 
     let parser: EventSourceParser;
+    let onEndEvent: () => void;
     const textDecoder = new TextDecoder();
 
     const stream: ReadableStream<{ event: string; data: any }> = (
@@ -594,9 +595,17 @@ export class RunsClient extends BaseClient {
               });
             }
           });
+          onEndEvent = () => {
+            ctrl.enqueue({ event: "end", data: undefined });
+          };
         },
         async transform(chunk) {
-          parser.feed(textDecoder.decode(chunk));
+          const payload = textDecoder.decode(chunk);
+          parser.feed(payload);
+
+          // eventsource-parser will ignore events
+          // that are not terminated by a newline
+          if (payload.trim() === "event: end") onEndEvent();
         },
       }),
     );

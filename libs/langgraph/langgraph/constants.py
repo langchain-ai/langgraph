@@ -108,5 +108,5 @@ class Send:
 
 @dataclass
 class Interrupt:
-    when: Literal["before", "during", "after"]
-    value: Any = None
+    value: Any
+    when: Literal["during"] = "during"

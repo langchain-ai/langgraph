@@ -97,9 +97,6 @@ class Checkpoint(TypedDict):
     pending_sends: List[SendProtocol]
     """List of packets sent to nodes but not yet processed.
     Cleared by the next checkpoint."""
-    current_tasks: Dict[str, TaskInfo]
-    """Map from task ID to task info."""
-    # TODO remove this
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -111,7 +108,6 @@ def empty_checkpoint() -> Checkpoint:
         channel_versions={},
         versions_seen={},
         pending_sends=[],
-        current_tasks={},
     )
 
 
@@ -124,7 +120,6 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         pending_sends=checkpoint.get("pending_sends", []).copy(),
-        current_tasks=checkpoint.get("current_tasks", {}).copy(),
     )
 
 
@@ -156,7 +151,6 @@ def create_checkpoint(
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
         pending_sends=checkpoint.get("pending_sends", []),
-        current_tasks={},
     )
 
 
@@ -451,3 +445,4 @@ saving regular writes.
 Each Checkpointer implementation should use this mapping in put_writes.
 """
 WRITES_IDX_MAP = {ERROR: -1}
+# TODO To store scheduled status of tasks, add a special channel here

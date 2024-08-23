@@ -23,24 +23,6 @@ class AnyVersion:
         return hash(str(self))
 
 
-class ExceptionLike:
-    def __init__(self, exc: Exception) -> None:
-        self.exc = exc
-
-    def __eq__(self, value: object) -> bool:
-        return (
-            isinstance(value, Exception)
-            and self.exc.__class__ == value.__class__
-            and str(self.exc) == str(value)
-        )
-
-    def __hash__(self) -> int:
-        return hash((self.exc.__class__, str(self.exc)))
-
-    def __repr__(self) -> str:
-        return str(self.exc)
-
-
 class UnsortedSequence:
     def __init__(self, *values: Any) -> None:
         self.seq = values
