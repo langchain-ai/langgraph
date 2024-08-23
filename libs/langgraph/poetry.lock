@@ -1832,7 +1832,7 @@ types-requests = ">=2.31.0.2,<3.0.0.0"
 
 [[package]]
 name = "langgraph-checkpoint"
-version = "1.0.2"
+version = "1.0.4"
 description = "Library with base interfaces for LangGraph checkpoint savers."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1848,7 +1848,7 @@ url = "../checkpoint"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "1.0.0"
+version = "1.0.3"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1859,6 +1859,7 @@ develop = true
 langgraph-checkpoint = "^1.0.1"
 orjson = ">=3.10.1"
 psycopg = {version = ">=3.1.19", extras = ["binary"]}
+psycopg-pool = "^3.2.2"
 
 [package.source]
 type = "directory"
@@ -2637,6 +2638,20 @@ files = [
     {file = "psycopg_binary-3.2.1-cp39-cp39-musllinux_1_2_x86_64.whl", hash = "sha256:21927f41c4d722ae8eb30d62a6ce732c398eac230509af5ba1749a337f8a63e2"},
     {file = "psycopg_binary-3.2.1-cp39-cp39-win_amd64.whl", hash = "sha256:921f0c7f39590763d64a619de84d1b142587acc70fd11cbb5ba8fa39786f3073"},
 ]
+
+[[package]]
+name = "psycopg-pool"
+version = "3.2.2"
+description = "Connection Pool for Psycopg"
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "psycopg_pool-3.2.2-py3-none-any.whl", hash = "sha256:273081d0fbfaced4f35e69200c89cb8fbddfe277c38cc86c235b90a2ec2c8153"},
+    {file = "psycopg_pool-3.2.2.tar.gz", hash = "sha256:9e22c370045f6d7f2666a5ad1b0caf345f9f1912195b0b25d0d3bcc4f3a7389c"},
+]
+
+[package.dependencies]
+typing-extensions = ">=4.4"
 
 [[package]]
 name = "ptyprocess"
