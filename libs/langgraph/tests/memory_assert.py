@@ -24,8 +24,6 @@ class NoopSerializer(SerializerProtocol):
 
 
 class MemorySaverAssertImmutable(MemorySaver):
-    serde = NoopSerializer()
-
     storage_for_copies: defaultdict[str, dict[str, dict[str, Checkpoint]]]
 
     def __init__(

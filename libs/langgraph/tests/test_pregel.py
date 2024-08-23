@@ -64,7 +64,7 @@ from langgraph.pregel import Channel, GraphRecursionError, Pregel, StateSnapshot
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
-from tests.any_str import AnyStr, AnyVersion, ExceptionLike, UnsortedSequence
+from tests.any_str import AnyStr, AnyVersion, UnsortedSequence
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
@@ -1307,7 +1307,7 @@ def test_invoke_checkpoint_two(
     assert checkpoint_tup is not None
     assert checkpoint_tup.checkpoint["channel_values"].get("total") == 7
     assert checkpoint_tup.pending_writes == [
-        (AnyStr(), ERROR, ExceptionLike(ValueError("Input is too large")))
+        (AnyStr(), ERROR, "ValueError('Input is too large')")
     ]
     # on a new thread, total starts out as 0, so output is 0+5=5
     assert app.invoke(5, {"configurable": {"thread_id": "2"}}) == 5
@@ -1374,7 +1374,7 @@ def test_pending_writes_resume(
     assert state.next == ("one", "two")
     assert state.tasks == (
         PregelTask(AnyStr(), "one"),
-        PregelTask(AnyStr(), "two", ExceptionLike(ConnectionError("I'm not good"))),
+        PregelTask(AnyStr(), "two", 'ConnectionError("I\'m not good")'),
     )
     assert state.metadata == {"source": "loop", "step": 0, "writes": None}
     # should contain pending write of "one"
@@ -1384,7 +1384,7 @@ def test_pending_writes_resume(
     expected_writes = [
         (AnyStr(), "one", "one"),
         (AnyStr(), "value", 2),
-        (AnyStr(), ERROR, ExceptionLike(ConnectionError("I'm not good"))),
+        (AnyStr(), ERROR, 'ConnectionError("I\'m not good")'),
     ]
     assert len(checkpoint.pending_writes) == 3
     assert all(w in expected_writes for w in checkpoint.pending_writes)
@@ -1518,7 +1518,7 @@ def test_pending_writes_resume(
         pending_writes=UnsortedSequence(
             (AnyStr(), "one", "one"),
             (AnyStr(), "value", 2),
-            (AnyStr(), "__error__", ExceptionLike(ConnectionError("I'm not good"))),
+            (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
             (AnyStr(), "two", "two"),
             (AnyStr(), "value", 3),
         ),

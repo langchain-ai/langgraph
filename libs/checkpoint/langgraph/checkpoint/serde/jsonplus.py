@@ -7,6 +7,7 @@ import re
 from collections import deque
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
+from inspect import isclass
 from ipaddress import (
     IPv4Address,
     IPv4Interface,
@@ -111,7 +112,7 @@ class JsonPlusSerializer(SerializerProtocol):
                 obj.__class__, method="fromhex", args=[obj.hex()]
             )
         elif isinstance(obj, BaseException):
-            return self._encode_constructor_args(obj.__class__, args=obj.args)
+            return repr(obj)
         else:
             raise TypeError(
                 f"Object of type {obj.__class__.__name__} is not JSON serializable"
@@ -135,6 +136,8 @@ class JsonPlusSerializer(SerializerProtocol):
                     method = getattr(cls, value["method"])
                 else:
                     method = cls
+                if isclass(method) and issubclass(method, BaseException):
+                    return None
                 if value["args"] and value["kwargs"]:
                     return method(*value["args"], **value["kwargs"])
                 elif value["args"]:
