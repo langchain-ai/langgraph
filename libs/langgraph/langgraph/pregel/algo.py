@@ -141,7 +141,6 @@ def local_write(
                 raise InvalidUpdateError(f"Invalid node name {value.node} in packet")
             # replace any runtime values with placeholders
             managed.replace_runtime_values(step, value.arg)
-            print("after replace", value)
         elif chan not in channels and chan not in managed:
             logger.warning(f"Skipping write for channel '{chan}' which has no readers")
     commit(writes)
