@@ -117,10 +117,13 @@ class ManagedValueMapping(dict[str, ManagedValue]):
                         values[key] = {RUNTIME_PLACEHOLDER: chan}
         elif hasattr(values, "__dir__") and callable(values.__dir__):
             for key in dir(values):
-                value = getattr(values, key)
-                for chan, mv in self.items():
-                    if mv.runtime and mv(step) is value:
-                        setattr(values, key, {RUNTIME_PLACEHOLDER: chan})
+                try:
+                    value = getattr(values, key)
+                    for chan, mv in self.items():
+                        if mv.runtime and mv(step) is value:
+                            setattr(values, key, {RUNTIME_PLACEHOLDER: chan})
+                except AttributeError:
+                    pass
 
     def replace_runtime_placeholders(
         self, step: int, values: Union[dict[str, Any], Any]
@@ -131,6 +134,9 @@ class ManagedValueMapping(dict[str, ManagedValue]):
                     values[key] = self[value[RUNTIME_PLACEHOLDER]](step)
         elif hasattr(values, "__dir__") and callable(values.__dir__):
             for key in dir(values):
-                value = getattr(values, key)
-                if isinstance(value, dict) and RUNTIME_PLACEHOLDER in value:
-                    setattr(values, key, self[value[RUNTIME_PLACEHOLDER]](step))
+                try:
+                    value = getattr(values, key)
+                    if isinstance(value, dict) and RUNTIME_PLACEHOLDER in value:
+                        setattr(values, key, self[value[RUNTIME_PLACEHOLDER]](step))
+                except AttributeError:
+                    pass
