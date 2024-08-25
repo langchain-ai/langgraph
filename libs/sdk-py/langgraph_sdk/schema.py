@@ -15,6 +15,8 @@ MultitaskStrategy = Literal["reject", "interrupt", "rollback", "enqueue"]
 
 OnConflictBehavior = Literal["raise", "do_nothing"]
 
+OnCompletionBehavior = Literal["delete", "keep"]
+
 All = Literal["*"]
 
 
