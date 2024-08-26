@@ -79,6 +79,7 @@ These guides show how to use different streaming modes.
 - [How to use a Pydantic model as your state](state-model.ipynb)
 - [How to use a context object in state](state-context-key.ipynb)
 - [How to add node retries](node-retries.ipynb)
+- [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 
 ## Prebuilt ReAct Agent
 

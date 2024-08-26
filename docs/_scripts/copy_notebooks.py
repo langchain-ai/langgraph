@@ -62,6 +62,7 @@ _MANUAL = {
         "human_in_the_loop/wait-user-input.ipynb",
         "human_in_the_loop/review-tool-calls.ipynb",
         "node-retries.ipynb",
+        "react-agent-structured-output.ipynb",
     ],
     "tutorials": [
         "introduction.ipynb",
