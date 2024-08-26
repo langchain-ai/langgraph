@@ -433,7 +433,11 @@ LangGraph is built with first class support for streaming. There are several dif
 - [`"updates`](../how-tos/stream-updates.ipynb): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
 - `"debug"`: This streams as much information as possible throughout the execution of the graph.
 
-In addition, you can use the [`astream_events`](../how-tos/streaming-events-from-within-tools.ipynb) method to stream back events that happen _inside_ nodes. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.ipynb).
+In addition, you can use the [`astream_events`](../how-tos/streaming-events-from-within-tools.ipynb) method to stream back events that happen _inside_ nodes, as well as a few meta events for the entire graph. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.ipynb) among other things.
+
+Under the hood, your compiled graph and each of its nodes are turned into [runnables](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface). This means that apart from the events that are created inside your nodes (LLM events, tool events, etc.) you will also see an `on_chain_start` and `on_chain_end` event for each node ran, as well as overarching `on_chain_start` and `on_chain_end` events for the entire graph. In between the `on_chain_start` and `on_chain_end` events for each node, you will also see an `on_chain_stream` event for the node. In addition, you will see on `on_chain_stream` event correspodning to the entire graph everytime one of its nodes finishes running.
+ 
+You can find a detailed table of all callback events and triggers [here](https://python.langchain.com/v0.2/docs/concepts/#callback-events).
 
 !!! warning "ASYNC IN PYTHON<=3.10"
     You may fail to see events being emitted from inside a node when using `.astream_events` in Python <= 3.10. If you're using a Langchain RunnableLambda, a RunnableGenerator, or Tool asynchronously inside your node, you will have to propagate callbacks to these objects manually. This is because LangChain cannot automatically propagate callbacks to child objects in this case. Please see examples [here](../how-tos/streaming-content.ipynb) and [here](../how-tos/streaming-events-from-within-tools.ipynb).
