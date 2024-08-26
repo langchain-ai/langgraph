@@ -35,19 +35,21 @@ Dependencies can optionally be specified in one of the following files: `pyproje
 
 The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
 ```
-langgraph>=0.2.0,<0.3.0
+langgraph>=0.2.7,<0.3.0
+langgraph-checkpoint>=1.0.4
 langchain-core>=0.2.27,<0.3.0
 langsmith>=0.1.63
-orjson>=3.10.1
-httpx>=0.27.0
-tenacity>=8.3.0
-uvicorn>=0.29.0
+orjson>=3.9.7
+httpx>=0.25.0
+tenacity>=8.0.0
+uvicorn>=0.26.0
 sse-starlette>=2.1.0
-uvloop>=0.19.0
-httptools>=0.6.1
-jsonschema-rs>=0.18.0
+uvloop>=0.18.0
+httptools>=0.5.0
+jsonschema-rs>=0.16.3
 croniter>=1.0.1
 structlog>=24.4.0
+redis>=5.0.8,<6.0.0
 ```
 
 Example `pyproject.toml` file:
