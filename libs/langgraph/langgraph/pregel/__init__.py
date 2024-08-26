@@ -38,6 +38,7 @@ from langchain_core.runnables.config import (
     ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
+    merge_configs,
     patch_config,
 )
 from langchain_core.runnables.utils import (
@@ -219,10 +220,19 @@ class Pregel(
 
     config_type: Optional[Type[Any]] = None
 
+    config: Optional[RunnableConfig] = None
+
     name: str = "LangGraph"
 
     class Config:
         arbitrary_types_allowed = True
+
+    def with_config(
+        self, config: RunnableConfig | None = None, **kwargs: Any
+    ) -> Runnable[Dict[All, Any] | Any, Dict[All, Any] | Any]:
+        return self.copy(
+            update={"config": cast(RunnableConfig, {**(config or {}), **kwargs})}
+        )
 
     @classmethod
     def is_lc_serializable(cls) -> bool:
@@ -297,6 +307,7 @@ class Pregel(
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> Type[BaseModel]:
+        config = merge_configs(self.config, config)
         if isinstance(self.input_channels, str):
             return super().get_input_schema(config)
         else:
@@ -316,6 +327,7 @@ class Pregel(
     def get_output_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> Type[BaseModel]:
+        config = merge_configs(self.config, config)
         if isinstance(self.output_channels, str):
             return super().get_output_schema(config)
         else:
@@ -342,6 +354,7 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
+        config = merge_configs(self.config, config) if self.config else config
         saved = self.checkpointer.get_tuple(config)
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
         config = saved.config if saved else config
@@ -374,6 +387,7 @@ class Pregel(
         if not self.checkpointer:
             raise ValueError("No checkpointer set")
 
+        config = merge_configs(self.config, config) if self.config else config
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = saved.checkpoint if saved else empty_checkpoint()
 
@@ -422,7 +436,12 @@ class Pregel(
             metadata,
             parent_config,
             pending_writes,
-        ) in self.checkpointer.list(config, before=before, limit=limit, filter=filter):
+        ) in self.checkpointer.list(
+            merge_configs(self.config, config) if self.config else config,
+            before=before,
+            limit=limit,
+            filter=filter,
+        ):
             with ChannelsManager(
                 self.channels, checkpoint, config, skip_context=True
             ) as (channels, managed):
@@ -467,7 +486,12 @@ class Pregel(
             metadata,
             parent_config,
             pending_writes,
-        ) in self.checkpointer.alist(config, before=before, limit=limit, filter=filter):
+        ) in self.checkpointer.alist(
+            merge_configs(self.config, config) if self.config else config,
+            before=before,
+            limit=limit,
+            filter=filter,
+        ):
             async with AsyncChannelsManager(
                 self.channels, checkpoint, config, skip_context=True
             ) as (channels, managed):
@@ -504,6 +528,7 @@ class Pregel(
             raise ValueError("No checkpointer set")
 
         # get last checkpoint
+        config = merge_configs(self.config, config) if self.config else config
         saved = self.checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
@@ -637,6 +662,7 @@ class Pregel(
             raise ValueError("No checkpointer set")
 
         # get last checkpoint
+        config = merge_configs(self.config, config) if self.config else config
         saved = await self.checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
@@ -885,7 +911,7 @@ class Pregel(
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
             ```
         """
-        config = ensure_config(config)
+        config = ensure_config(merge_configs(self.config, config))
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
             dumpd(self),
@@ -1125,7 +1151,7 @@ class Pregel(
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
             ```
         """
-        config = ensure_config(config)
+        config = ensure_config(merge_configs(self.config, config))
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
             dumpd(self),
