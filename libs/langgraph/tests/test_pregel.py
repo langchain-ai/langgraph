@@ -3590,6 +3590,24 @@ def test_conditional_state_graph(
     ]
 
 
+def test_conditional_state_graph_with_list_edge_inputs(snapshot: SnapshotAssertion):
+    class State(TypedDict):
+        foo: Annotated[list[str], operator.add]
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("A", lambda x: {"foo": ["A"]})
+    graph_builder.add_node("B", lambda x: {"foo": ["B"]})
+    graph_builder.add_edge(START, "A")
+    graph_builder.add_edge(START, "B")
+    graph_builder.add_edge(["A", "B"], END)
+
+    app = graph_builder.compile()
+    assert app.invoke({"foo": []}) == {"foo": ["A", "B"]}
+
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+
 def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
