@@ -47,7 +47,7 @@ class BaseClient {
     });
 
     this.timeoutMs = config?.timeoutMs || 12_000;
-    this.apiUrl = config?.apiUrl || "http://localhost:8123";
+    this.apiUrl = config?.apiUrl?.replace(/\/+$/, "") || "http://localhost:8123";
     this.defaultHeaders = config?.defaultHeaders || {};
     if (config?.apiKey != null) {
       this.defaultHeaders["X-Api-Key"] = config.apiKey;
