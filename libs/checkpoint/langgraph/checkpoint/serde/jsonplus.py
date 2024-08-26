@@ -150,7 +150,7 @@ class JsonPlusSerializer(SerializerProtocol):
                     return method(**value["kwargs"])
                 else:
                     return method()
-            except (ImportError, AttributeError):
+            except (ImportError, AttributeError, TypeError):
                 return None
 
         return LC_REVIVER(value)
