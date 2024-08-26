@@ -103,7 +103,7 @@ Example `agent.py` file, which shows how to import from other modules you define
 # my_agent/agent.py
 from typing import TypedDict, Literal
 
-from langgraph.graph import StateGraph, END
+from langgraph.graph import StateGraph, END, START
 from my_agent.utils.nodes import call_model, should_continue, tool_node # import nodes
 from my_agent.utils.state import AgentState # import state
 
@@ -114,7 +114,7 @@ class GraphConfig(TypedDict):
 workflow = StateGraph(AgentState, config_schema=GraphConfig)
 workflow.add_node("agent", call_model)
 workflow.add_node("action", tool_node)
-workflow.set_entry_point("agent")
+workflow.add_edge(START, "agent")
 workflow.add_conditional_edges(
     "agent",
     should_continue,

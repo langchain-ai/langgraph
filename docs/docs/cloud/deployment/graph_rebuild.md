@@ -28,7 +28,7 @@ In the standard LangGraph API configuration, the server uses the compiled graph 
 
 ```python
 from langchain_openai import ChatOpenAI
-from langgraph.graph import END, MessageGraph
+from langgraph.graph import END, START, MessageGraph
 
 model = ChatOpenAI(temperature=0)
 
@@ -36,7 +36,7 @@ graph_workflow = MessageGraph()
 
 graph_workflow.add_node("agent", model)
 graph_workflow.add_edge("agent", END)
-graph_workflow.set_entry_point("agent")
+graph_workflow.add_edge(START, "agent")
 
 agent = graph_workflow.compile()
 ```
@@ -60,7 +60,7 @@ To make your graph rebuild on each new run with custom configuration, you need t
 ```python
 from typing import Annotated, TypedDict
 from langchain_openai import ChatOpenAI
-from langgraph.graph import END, MessageGraph
+from langgraph.graph import END, START, MessageGraph
 from langgraph.graph.state import StateGraph
 from langgraph.graph.message import add_messages
 from langgraph.prebuilt import ToolNode
@@ -83,7 +83,7 @@ def make_default_graph():
 
     graph_workflow.add_node("agent", call_model)
     graph_workflow.add_edge("agent", END)
-    graph_workflow.set_entry_point("agent")
+    graph_workflow.add_edge(START, "agent")
 
     agent = graph_workflow.compile()
     return agent
@@ -113,7 +113,7 @@ def make_alternative_graph():
     graph_workflow.add_node("agent", call_model)
     graph_workflow.add_node("tools", tool_node)
     graph_workflow.add_edge("tools", "agent")
-    graph_workflow.set_entry_point("agent")
+    graph_workflow.add_edge(START, "agent")
     graph_workflow.add_conditional_edges("agent", should_continue)
 
     agent = graph_workflow.compile()
