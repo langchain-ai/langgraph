@@ -31,7 +31,7 @@ interface RunsInvokePayload {
   config?: Config;
 
   /**
-   * Checkpoint ID to pass when creating a run.
+   * Checkpoint ID for when creating a new run.
    */
   checkpointId?: string;
 
