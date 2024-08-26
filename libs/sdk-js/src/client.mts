@@ -559,6 +559,7 @@ export class RunsClient extends BaseClient {
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
+      checkpoint_id: payload?.checkpointId,
     };
     if (payload?.multitaskStrategy != null) {
       json["multitask_strategy"] = payload?.multitaskStrategy;
@@ -638,6 +639,7 @@ export class RunsClient extends BaseClient {
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
+      checkpoint_id: payload?.checkpointId,
     };
     if (payload?.multitaskStrategy != null) {
       json["multitask_strategy"] = payload?.multitaskStrategy;
@@ -681,6 +683,7 @@ export class RunsClient extends BaseClient {
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
+      checkpoint_id: payload?.checkpointId,
     };
     if (payload?.multitaskStrategy != null) {
       json["multitask_strategy"] = payload?.multitaskStrategy;

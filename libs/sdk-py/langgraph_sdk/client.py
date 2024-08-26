@@ -853,15 +853,14 @@ class ThreadsClient:
             thread_id: The ID of the thread to update.
             values: The values to update to the state.
             as_node: Update the state as if this node had just executed.
-
-            checkpoint_id: The ID of the checkpoint to get the state of.
+            checkpoint_id: The ID of the checkpoint to update the state of.
 
         Returns:
             None
 
         Example Usage:
 
-            await client.threads.get_state(
+            await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
