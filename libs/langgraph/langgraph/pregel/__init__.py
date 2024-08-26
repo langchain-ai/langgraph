@@ -227,9 +227,7 @@ class Pregel(
     class Config:
         arbitrary_types_allowed = True
 
-    def with_config(
-        self, config: RunnableConfig | None = None, **kwargs: Any
-    ) -> Runnable[Dict[All, Any] | Any, Dict[All, Any] | Any]:
+    def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
         return self.copy(
             update={"config": cast(RunnableConfig, {**(config or {}), **kwargs})}
         )
