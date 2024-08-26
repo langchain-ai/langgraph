@@ -177,9 +177,13 @@ class MemorySaver(
             Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
         """
         thread_ids = (config["configurable"]["thread_id"],) if config else self.storage
+        config_checkpoint_ns = config["configurable"].get("checkpoint_ns") if config else None
         config_checkpoint_id = get_checkpoint_id(config) if config else None
         for thread_id in thread_ids:
             for checkpoint_ns in self.storage[thread_id].keys():
+                if config_checkpoint_ns and checkpoint_ns != config_checkpoint_ns:
+                    continue
+
                 for checkpoint_id, (
                     checkpoint,
                     metadata_b,

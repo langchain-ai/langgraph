@@ -10442,81 +10442,9 @@ def test_nested_graph_state(
             }
         },
     )
-    # test loading inner snapshot
-    child_snapshot = app.get_state(
-        {"configurable": {"thread_id": "1", "checkpoint_ns": "inner"}}
-    )
-    assert child_snapshot == StateSnapshot(
-        values={
-            "my_key": "hi my value here and there",
-            "my_other_key": "hi my value here",
-        },
-        tasks=(),
-        next=(),
-        config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "inner",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        metadata={
-            "source": "loop",
-            "writes": {
-                "inner_2": {
-                    "my_key": "hi my value here and there",
-                    "my_other_key": "hi my value here",
-                }
-            },
-            "step": 2,
-        },
-        created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "inner",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        subgraph_state_snapshots=None,
-    )
-    # test looking up parent state by checkpoint ID
-    assert app.get_state(
-        {
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": child_snapshot.config["configurable"]["checkpoint_id"],
-            }
-        },
-    ) == StateSnapshot(
-        values={"my_key": "hi my value"},
-        tasks=(PregelTask(AnyStr(), "inner"),),
-        next=("inner",),
-        config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        metadata={
-            "source": "loop",
-            "writes": {"outer_1": {"my_key": "hi my value"}},
-            "step": 1,
-        },
-        created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        subgraph_state_snapshots={"inner": child_snapshot},
-    )
     # test full history at the end
-    assert list(app.get_state_history(config)) == [
+    actual_history = list(app.get_state_history(config))
+    expected_history = [
         StateSnapshot(
             values={"my_key": "hi my value here and there and back again"},
             tasks=(),
@@ -10675,6 +10603,10 @@ def test_nested_graph_state(
             subgraph_state_snapshots=None,
         ),
     ]
+    assert actual_history == expected_history
+    # test looking up parent state by checkpoint ID
+    for actual_snapshot, expected_snapshot in zip(actual_history, expected_history):
+        assert app.get_state(actual_snapshot.config) == expected_snapshot
 
 
 @pytest.mark.parametrize(
@@ -10847,75 +10779,11 @@ def test_doubly_nested_graph_state(
             }
         },
     )
+
+    # test getting snapshot by ID
+    config = list(app.get_state_history(config))[2].config
     # test getting grandchild snapshot
-    grandchild_snapshot = app.get_state(
-        {"configurable": {"thread_id": "1", "checkpoint_ns": "child|child_1"}}
-    )
-    assert grandchild_snapshot == StateSnapshot(
-        values={"my_key": "hi my value here and there"},
-        tasks=(),
-        next=(),
-        config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "child|child_1",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        metadata={
-            "source": "loop",
-            "writes": {"grandchild_2": {"my_key": "hi my value here and there"}},
-            "step": 2,
-        },
-        created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "child|child_1",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        subgraph_state_snapshots=None,
-    )
-    # test getting child snapshot
-    child_snapshot = app.get_state(
-        {"configurable": {"thread_id": "1", "checkpoint_ns": "child"}},
-    )
-    assert child_snapshot == StateSnapshot(
-        values={"my_key": "hi my value here and there"},
-        tasks=(),
-        next=(),
-        config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "child",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        metadata={
-            "source": "loop",
-            "writes": {"child_1": {"my_key": "hi my value here and there"}},
-            "step": 1,
-        },
-        created_at=AnyStr(),
-        parent_config={
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_ns": "child",
-                "checkpoint_id": AnyStr(),
-            }
-        },
-        subgraph_state_snapshots={"child_1": grandchild_snapshot},
-    )
-    # test getting parent snapshot for a checkpoint ID
-    assert app.get_state(
-        {
-            "configurable": {
-                "thread_id": "1",
-                "checkpoint_id": child_snapshot.config["configurable"]["checkpoint_id"],
-            }
-        },
-    ) == StateSnapshot(
+    assert app.get_state(config) == StateSnapshot(
         values={"my_key": "hi my value"},
         tasks=(PregelTask(AnyStr(), "child"),),
         next=("child",),
@@ -10939,7 +10807,63 @@ def test_doubly_nested_graph_state(
                 "checkpoint_id": AnyStr(),
             }
         },
-        subgraph_state_snapshots={"child": child_snapshot},
+        subgraph_state_snapshots={
+            "child": StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                tasks=(),
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "child",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "source": "loop",
+                    "writes": {"child_1": {"my_key": "hi my value here and there"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "child",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                subgraph_state_snapshots={
+                    "child_1": StateSnapshot(
+                        values={"my_key": "hi my value here and there"},
+                        tasks=(),
+                        next=(),
+                        config={
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": "child|child_1",
+                                "checkpoint_id": AnyStr(),
+                            }
+                        },
+                        metadata={
+                            "source": "loop",
+                            "writes": {
+                                "grandchild_2": {"my_key": "hi my value here and there"}
+                            },
+                            "step": 2,
+                        },
+                        created_at=AnyStr(),
+                        parent_config={
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": "child|child_1",
+                                "checkpoint_id": AnyStr(),
+                            }
+                        },
+                        subgraph_state_snapshots=None,
+                    )
+                },
+            )
+        },
     )
 
 
