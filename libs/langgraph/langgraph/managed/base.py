@@ -16,11 +16,16 @@ from typing import (
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self, TypeGuard
 
+from langgraph.constants import RUNTIME_PLACEHOLDER
+
 V = TypeVar("V")
 U = TypeVar("U")
 
 
 class ManagedValue(ABC, Generic[V]):
+    runtime: bool = False
+    """Whether the managed value is always created at runtime, ie. never stored."""
+
     def __init__(self, config: RunnableConfig) -> None:
         self.config = config
 
@@ -74,8 +79,6 @@ class ConfiguredManagedValue(NamedTuple):
 
 ManagedValueSpec = Union[Type[ManagedValue], ConfiguredManagedValue]
 
-ManagedValueMapping = dict[str, ManagedValue]
-
 
 def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
     return (isclass(value) and issubclass(value, ManagedValue)) or isinstance(
@@ -103,3 +106,45 @@ def is_writable_managed_value(value: Any) -> TypeGuard[Type[WritableManagedValue
 
 ChannelKeyPlaceholder = object()
 ChannelTypePlaceholder = object()
+
+
+class ManagedValueMapping(dict[str, ManagedValue]):
+    def replace_runtime_values(self, step: int, values: Union[dict[str, Any], Any]):
+        if not self or not values:
+            return
+        if all(not mv.runtime for mv in self.values()):
+            return
+        if isinstance(values, dict):
+            for key, value in values.items():
+                for chan, mv in self.items():
+                    if mv.runtime and mv(step) is value:
+                        values[key] = {RUNTIME_PLACEHOLDER: chan}
+        elif hasattr(values, "__dir__") and callable(values.__dir__):
+            for key in dir(values):
+                try:
+                    value = getattr(values, key)
+                    for chan, mv in self.items():
+                        if mv.runtime and mv(step) is value:
+                            setattr(values, key, {RUNTIME_PLACEHOLDER: chan})
+                except AttributeError:
+                    pass
+
+    def replace_runtime_placeholders(
+        self, step: int, values: Union[dict[str, Any], Any]
+    ):
+        if not self or not values:
+            return
+        if all(not mv.runtime for mv in self.values()):
+            return
+        if isinstance(values, dict):
+            for key, value in values.items():
+                if isinstance(value, dict) and RUNTIME_PLACEHOLDER in value:
+                    values[key] = self[value[RUNTIME_PLACEHOLDER]](step)
+        elif hasattr(values, "__dir__") and callable(values.__dir__):
+            for key in dir(values):
+                try:
+                    value = getattr(values, key)
+                    if isinstance(value, dict) and RUNTIME_PLACEHOLDER in value:
+                        setattr(values, key, self[value[RUNTIME_PLACEHOLDER]](step))
+                except AttributeError:
+                    pass

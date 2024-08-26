@@ -24,7 +24,6 @@ from langchain_core.runnables.config import (
 )
 
 from langgraph.channels.base import BaseChannel
-from langgraph.channels.context import Context
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -95,28 +94,37 @@ def should_interrupt(
 
 
 def local_read(
+    step: int,
     checkpoint: Checkpoint,
     channels: Mapping[str, BaseChannel],
+    managed: ManagedValueMapping,
     task: WritesProtocol,
     config: RunnableConfig,
     select: Union[list[str], str],
     fresh: bool = False,
 ) -> Union[dict[str, Any], Any]:
+    if isinstance(select, str):
+        managed_keys = []
+    else:
+        managed_keys = [k for k in select if k in managed]
+        select = [k for k in select if k not in managed]
     if fresh:
         new_checkpoint = create_checkpoint(copy_checkpoint(checkpoint), channels, -1)
-        context_channels = {k: v for k, v in channels.items() if isinstance(v, Context)}
         with ChannelsManager(channels, new_checkpoint, config, skip_context=True) as (
             channels,
             _,
         ):
-            all_channels = {**channels, **context_channels}
-            apply_writes(new_checkpoint, all_channels, [task], None)
-            return read_channels(all_channels, select)
+            apply_writes(new_checkpoint, channels, [task], None)
+            values = read_channels(channels, select)
     else:
-        return read_channels(channels, select)
+        values = read_channels(channels, select)
+    if managed_keys:
+        values.update({k: managed[k](step) for k in managed_keys})
+    return values
 
 
 def local_write(
+    step: int,
     commit: Callable[[Sequence[tuple[str, Any]]], None],
     processes: Mapping[str, PregelNode],
     channels: Mapping[str, BaseChannel],
@@ -131,6 +139,8 @@ def local_write(
                 )
             if value.node not in processes:
                 raise InvalidUpdateError(f"Invalid node name {value.node} in packet")
+            # replace any runtime values with placeholders
+            managed.replace_runtime_values(step, value.arg)
         elif chan not in channels and chan not in managed:
             logger.warning(f"Skipping write for channel '{chan}' which has no readers")
     commit(writes)
@@ -293,6 +303,7 @@ def prepare_next_tasks(
         if for_execution:
             proc = processes[packet.node]
             if node := proc.get_node():
+                managed.replace_runtime_placeholders(step, packet.arg)
                 writes = deque()
                 tasks.append(
                     PregelExecutableTask(
@@ -317,6 +328,7 @@ def prepare_next_tasks(
                                 # deque.extend is thread-safe
                                 CONFIG_KEY_SEND: partial(
                                     local_write,
+                                    step,
                                     writes.extend,
                                     processes,
                                     channels,
@@ -324,8 +336,10 @@ def prepare_next_tasks(
                                 ),
                                 CONFIG_KEY_READ: partial(
                                     local_read,
+                                    step,
                                     checkpoint,
                                     channels,
+                                    managed,
                                     PregelTaskWrites(packet.node, writes, triggers),
                                     config,
                                 ),
@@ -414,6 +428,7 @@ def prepare_next_tasks(
                                     # deque.extend is thread-safe
                                     CONFIG_KEY_SEND: partial(
                                         local_write,
+                                        step,
                                         writes.extend,
                                         processes,
                                         channels,
@@ -421,8 +436,10 @@ def prepare_next_tasks(
                                     ),
                                     CONFIG_KEY_READ: partial(
                                         local_read,
+                                        step,
                                         checkpoint,
                                         channels,
+                                        managed,
                                         PregelTaskWrites(name, writes, triggers),
                                         config,
                                     ),

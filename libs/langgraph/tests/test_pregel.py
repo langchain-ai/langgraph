@@ -3595,6 +3595,24 @@ def test_conditional_state_graph(
     ]
 
 
+def test_conditional_state_graph_with_list_edge_inputs(snapshot: SnapshotAssertion):
+    class State(TypedDict):
+        foo: Annotated[list[str], operator.add]
+
+    graph_builder = StateGraph(State)
+    graph_builder.add_node("A", lambda x: {"foo": ["A"]})
+    graph_builder.add_node("B", lambda x: {"foo": ["B"]})
+    graph_builder.add_edge(START, "A")
+    graph_builder.add_edge(START, "B")
+    graph_builder.add_edge(["A", "B"], END)
+
+    app = graph_builder.compile()
+    assert app.invoke({"foo": []}) == {"foo": ["A", "B"]}
+
+    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+
+
 def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) -> None:
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
@@ -4047,7 +4065,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     ["memory", "sqlite", "postgres", "postgres_pipe"],
 )
 def test_state_graph_packets(
-    request: pytest.FixtureRequest, checkpointer_name: str
+    request: pytest.FixtureRequest, checkpointer_name: str, mocker: MockerFixture
 ) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
@@ -4067,6 +4085,7 @@ def test_state_graph_packets(
 
     class AgentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]
+        session: Annotated[httpx.Client, Context(httpx.Client)]
 
     @tool()
     def search_api(query: str) -> str:
@@ -4110,6 +4129,7 @@ def test_state_graph_packets(
     )
 
     def agent(data: AgentState) -> AgentState:
+        assert isinstance(data["session"], httpx.Client)
         return {
             "messages": model.invoke(data["messages"]),
             "something_extra": "hi there",
@@ -4117,16 +4137,26 @@ def test_state_graph_packets(
 
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
+        assert isinstance(data["session"], httpx.Client)
         assert (
             data["something_extra"] == "hi there"
         ), "nodes can pass extra data to their cond edges, which isn't saved in state"
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [Send("tools", tool_call) for tool_call in tool_calls]
+            return [
+                Send("tools", {"call": tool_call, "my_session": data["session"]})
+                for tool_call in tool_calls
+            ]
         else:
             return END
 
-    def tools_node(tool_call: ToolCall, config: RunnableConfig) -> AgentState:
+    class ToolInput(TypedDict):
+        call: ToolCall
+        my_session: httpx.Client
+
+    def tools_node(input: ToolInput, config: RunnableConfig) -> AgentState:
+        assert isinstance(input["my_session"], httpx.Client)
+        tool_call = input["call"]
         time.sleep(tool_call["args"].get("idx", 0) / 10)
         output = tools_by_name[tool_call["name"]].invoke(tool_call["args"], config)
         return {
@@ -7497,7 +7527,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
         return {"answer": ",".join(data.docs)}
 
     def decider(data: State) -> str:
-        print("decider", data)
         assert isinstance(data, State)
         return "retriever_two"
 

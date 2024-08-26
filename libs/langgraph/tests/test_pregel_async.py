@@ -21,6 +21,9 @@ from uuid import UUID
 
 import httpx
 import pytest
+from langchain_core.messages import (
+    ToolCall,
+)
 from langchain_core.runnables import (
     RunnableConfig,
     RunnableLambda,
@@ -3882,6 +3885,12 @@ async def test_prebuilt_tool_chat() -> None:
     ]
 
 
+# defined outside to allow deserializer to see it
+class ToolInput(BaseModel, arbitrary_types_allowed=True):
+    call: ToolCall
+    my_session: httpx.AsyncClient
+
+
 async def test_state_graph_packets() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
@@ -3890,13 +3899,13 @@ async def test_state_graph_packets() -> None:
         AIMessage,
         BaseMessage,
         HumanMessage,
-        ToolCall,
         ToolMessage,
     )
     from langchain_core.tools import tool
 
     class AgentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]
+        session: Annotated[httpx.AsyncClient, Context(httpx.AsyncClient)]
 
     @tool()
     def search_api(query: str) -> str:
@@ -3941,13 +3950,19 @@ async def test_state_graph_packets() -> None:
 
     # Define decision-making logic
     def should_continue(data: AgentState) -> str:
+        assert isinstance(data["session"], httpx.AsyncClient)
         # Logic to decide whether to continue in the loop or exit
         if tool_calls := data["messages"][-1].tool_calls:
-            return [Send("tools", tool_call) for tool_call in tool_calls]
+            return [
+                Send("tools", ToolInput(call=tool_call, my_session=data["session"]))
+                for tool_call in tool_calls
+            ]
         else:
             return END
 
-    async def tools_node(tool_call: ToolCall, config: RunnableConfig) -> AgentState:
+    async def tools_node(input: ToolInput, config: RunnableConfig) -> AgentState:
+        assert isinstance(input.my_session, httpx.AsyncClient)
+        tool_call = input.call
         await asyncio.sleep(tool_call["args"].get("idx", 0) / 10)
         output = await tools_by_name[tool_call["name"]].ainvoke(
             tool_call["args"], config

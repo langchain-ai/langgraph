@@ -51,9 +51,13 @@ class JsonPlusSerializer(SerializerProtocol):
         if isinstance(obj, Serializable):
             return obj.to_json()
         elif hasattr(obj, "model_dump") and callable(obj.model_dump):
-            return self._encode_constructor_args(obj.__class__, kwargs=obj.model_dump())
+            return self._encode_constructor_args(
+                obj.__class__, method="model_construct", kwargs=obj.model_dump()
+            )
         elif hasattr(obj, "dict") and callable(obj.dict):
-            return self._encode_constructor_args(obj.__class__, kwargs=obj.dict())
+            return self._encode_constructor_args(
+                obj.__class__, method="construct", kwargs=obj.dict()
+            )
         elif isinstance(obj, pathlib.Path):
             return self._encode_constructor_args(pathlib.Path, args=obj.parts)
         elif isinstance(obj, re.Pattern):
@@ -146,7 +150,7 @@ class JsonPlusSerializer(SerializerProtocol):
                     return method(**value["kwargs"])
                 else:
                     return method()
-            except (ImportError, AttributeError):
+            except (ImportError, AttributeError, TypeError):
                 return None
 
         return LC_REVIVER(value)

@@ -24,6 +24,7 @@ import {
 
 interface ClientConfig {
   apiUrl?: string;
+  apiKey?: string;
   callerOptions?: AsyncCallerParams;
   timeoutMs?: number;
   defaultHeaders?: Record<string, string | null | undefined>;
@@ -48,6 +49,9 @@ class BaseClient {
     this.timeoutMs = config?.timeoutMs || 12_000;
     this.apiUrl = config?.apiUrl || "http://localhost:8123";
     this.defaultHeaders = config?.defaultHeaders || {};
+    if (config?.apiKey != null) {
+      this.defaultHeaders["X-Api-Key"] = config.apiKey;
+    }
   }
 
   protected prepareFetchOptions(
