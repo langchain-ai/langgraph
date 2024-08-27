@@ -12,6 +12,7 @@ CONFIG_KEY_TASK_ID = "__pregel_task_id"
 INTERRUPT = "__interrupt__"
 ERROR = "__error__"
 TASKS = "__pregel_tasks"
+RUNTIME_PLACEHOLDER = "__pregel_runtime_placeholder__"
 RESERVED = {
     INTERRUPT,
     ERROR,
@@ -23,6 +24,7 @@ RESERVED = {
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_TASK_ID,
     INPUT,
+    RUNTIME_PLACEHOLDER,
 }
 TAG_HIDDEN = "langsmith:hidden"
 
@@ -108,5 +110,5 @@ class Send:
 
 @dataclass
 class Interrupt:
-    when: Literal["before", "during", "after"]
-    value: Any = None
+    value: Any
+    when: Literal["during"] = "during"

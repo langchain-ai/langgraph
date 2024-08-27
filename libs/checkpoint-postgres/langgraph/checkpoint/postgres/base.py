@@ -255,6 +255,13 @@ class BasePostgresSaver(BaseCheckpointSaver):
         if config:
             wheres.append("thread_id = %s ")
             param_values.append(config["configurable"]["thread_id"])
+            if checkpoint_ns := config["configurable"].get("checkpoint_ns"):
+                wheres.append("checkpoint_ns = %s")
+                param_values.append(checkpoint_ns)
+
+            if checkpoint_id := get_checkpoint_id(config):
+                wheres.append("checkpoint_id = %s ")
+                param_values.append(checkpoint_id)
 
         # construct predicate for metadata filter
         if filter:

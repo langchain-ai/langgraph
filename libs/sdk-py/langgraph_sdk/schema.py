@@ -9,9 +9,13 @@ ThreadStatus = Literal["idle", "busy", "interrupted"]
 
 StreamMode = Literal["values", "messages", "updates", "events", "debug"]
 
+DisconnectMode = Literal["cancel", "continue"]
+
 MultitaskStrategy = Literal["reject", "interrupt", "rollback", "enqueue"]
 
 OnConflictBehavior = Literal["raise", "do_nothing"]
+
+OnCompletionBehavior = Literal["delete", "keep"]
 
 All = Literal["*"]
 

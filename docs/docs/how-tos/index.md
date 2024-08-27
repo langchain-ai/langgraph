@@ -42,6 +42,7 @@ One of LangGraph's main benefits is that it makes human-in-the-loop workflows ea
 These guides cover common examples of that.
 
 - [How to add breakpoints](human_in_the_loop/breakpoints.ipynb)
+- [How to add dynamic breakpoints](human_in_the_loop/dynamic_breakpoints.ipynb)
 - [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb)
 - [How to wait for user input](human_in_the_loop/wait-user-input.ipynb)
 - [How to view and update past graph state](human_in_the_loop/time-travel.ipynb)

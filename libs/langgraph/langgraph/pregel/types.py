@@ -93,7 +93,7 @@ class StateSnapshot(NamedTuple):
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
     subgraph_state_snapshots: Optional[dict[str, "StateSnapshot"]] = None
-    """State snapshots of subgraphs represented as a mapping from thread ID suffix to snapshot."""
+    """State snapshots of subgraphs represented as a mapping from checkpoint namespace (`checkpoint_ns`) to snapshot."""
 
 
 All = Literal["*"]
