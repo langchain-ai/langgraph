@@ -205,6 +205,9 @@ class PregelLoop:
                 writes,
                 task_id,
             )
+        self._output_writes(task_id, writes)
+
+    def _output_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         if task := next((t for t in self.tasks if t.id == task_id), None):
             self.stream.extend(
                 (self.config["configurable"].get("checkpoint_ns", ""), "updates", v)
@@ -320,6 +323,10 @@ class PregelLoop:
                     continue
                 if task := next((t for t in self.tasks if t.id == tid), None):
                     task.writes.append((k, v))
+            # print output for any tasks we applied previous writes to
+            for task in self.tasks:
+                if task.writes:
+                    self._output_writes(task.id, task.writes)
 
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks):
