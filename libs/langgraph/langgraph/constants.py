@@ -50,7 +50,6 @@ class Send:
     Attributes:
         node (str): The name of the target node to send the message to.
         arg (Any): The state or message to send to the target node.
-        id (str): ID associated with the Send.
 
     Examples:
         >>> from typing import Annotated
