@@ -145,13 +145,6 @@ class MemorySaver(
                 checkpoint, metadata, parent_checkpoint_id = checkpoints[checkpoint_id]
                 writes = self.writes[(thread_id, checkpoint_ns, checkpoint_id)].values()
                 if parent_checkpoint_id:
-                    print(
-                        [
-                            *self.writes[
-                                (thread_id, checkpoint_ns, parent_checkpoint_id)
-                            ].values()
-                        ]
-                    )
                     sends = [
                         w[2]
                         for w in self.writes[
