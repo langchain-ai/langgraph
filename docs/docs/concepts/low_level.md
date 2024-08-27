@@ -433,7 +433,7 @@ LangGraph is built with first class support for streaming. There are several dif
 - [`"updates`](../how-tos/stream-updates.ipynb): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
 - `"debug"`: This streams as much information as possible throughout the execution of the graph.
 
-In addition, you can use the [`astream_events`](../how-tos/streaming-events-from-within-tools.ipynb) method to stream back events that happen _inside_ nodes, as well as a few meta events for the entire graph. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.ipynb) among other things.
+In addition, you can use the [`astream_events`](../how-tos/streaming-events-from-within-tools.ipynb) method to stream back events that happen _inside_ nodes. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.ipynb) among other things.
 
 Under the hood, the compiled graph and each of its nodes are turned into [runnables](https://python.langchain.com/v0.2/docs/concepts/#runnable-interface). This means that as the graph is executed, certain events are emitted along the way and can be seen if you run the graph using `.astream_events`:
 
