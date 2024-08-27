@@ -1,4 +1,3 @@
-from abc import ABC
 from datetime import datetime, timezone
 from typing import (
     Any,
@@ -192,7 +191,7 @@ CheckpointId = ConfigurableFieldSpec(
 )
 
 
-class BaseCheckpointSaver(ABC):
+class BaseCheckpointSaver:
     """Base class for creating a graph checkpointer.
 
     Checkpointers allow LangGraph agents to persist their state
