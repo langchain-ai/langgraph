@@ -38,6 +38,7 @@ _MANUAL = {
         "visualization.ipynb",
         "state-model.ipynb",
         "subgraph.ipynb",
+        "recursion-limit.ipynb",
         "force-calling-a-tool-first.ipynb",
         "pass-run-time-values-to-tools.ipynb",
         "tool-calling.ipynb",

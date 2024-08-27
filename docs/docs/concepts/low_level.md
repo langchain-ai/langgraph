@@ -401,7 +401,17 @@ def node_a(state, config):
     ...
 ```
 
-See [this guide](../how-tos/configuration.ipynb) for a full breakdown on configuration
+See [this guide](../how-tos/configuration.ipynb) for a full breakdown on configuration.
+
+### Recursion Limit Configuration
+
+The recursion limit sets the amount of super-steps (read more about what a super-step is [here](#graphs)) your graph can execute before failing. By default this value is set to 25. The recursion limit can be set on any graph, and is passed in the outer `config` dictionary, not inside of the `configurable` key like user defined configurations as in the example below:
+
+```python
+graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthropic"}})
+```
+
+Read [this how-to] to learn more about how the recursion limit works.
 
 ## Breakpoints
 
