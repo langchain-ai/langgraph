@@ -172,7 +172,7 @@ To rerun from a state, we need first issue an empty update to the thread state. 
         assistant_id, # graph_id
         input=None,
         stream_mode="updates",
-        checkpoint_id=updated_config["configurable"]["checkpoint_id"]
+        checkpoint_id=updated_config["checkpoint_id"]
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -189,7 +189,7 @@ To rerun from a state, we need first issue an empty update to the thread state. 
       {
         input: null,
         streamMode: "updates",
-        checkpointId: config["configurable"]["checkpoint_id"]
+        checkpointId: config["checkpoint_id"]
       }
     );
     for await (const chunk of streamResponse) {
@@ -311,7 +311,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
         assistant["assistant_id"], # graph_id
         input=None,
         stream_mode="updates",
-        checkpoint_id=config['configurable']['checkpoint_id']
+        checkpoint_id=config['checkpoint_id']
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -326,7 +326,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
       {
         input: null,
         streamMode: "updates",
-        checkpointId: config['configurable']['checkpoint_id'],
+        checkpointId: config['checkpoint_id'],
       }
     );
     for await (const chunk of streamResponse) {
