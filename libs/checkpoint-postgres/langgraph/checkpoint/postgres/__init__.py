@@ -154,10 +154,11 @@ class PostgresSaver(BasePostgresSaver):
                             "checkpoint_id": value["checkpoint_id"],
                         }
                     },
-                    {
-                        **self._load_checkpoint(value["checkpoint"]),
-                        "channel_values": self._load_blobs(value["channel_values"]),
-                    },
+                    self._load_checkpoint(
+                        value["checkpoint"],
+                        value["channel_values"],
+                        value["pending_sends"],
+                    ),
                     self._load_metadata(value["metadata"]),
                     {
                         "configurable": {
@@ -232,10 +233,11 @@ class PostgresSaver(BasePostgresSaver):
                             "checkpoint_id": value["checkpoint_id"],
                         }
                     },
-                    {
-                        **self._load_checkpoint(value["checkpoint"]),
-                        "channel_values": self._load_blobs(value["channel_values"]),
-                    },
+                    self._load_checkpoint(
+                        value["checkpoint"],
+                        value["channel_values"],
+                        value["pending_sends"],
+                    ),
                     self._load_metadata(value["metadata"]),
                     {
                         "configurable": {

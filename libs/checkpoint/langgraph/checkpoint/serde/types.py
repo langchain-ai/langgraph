@@ -13,6 +13,7 @@ from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 ERROR = "__error__"
+TASKS = "__pregel_tasks"
 
 Value = TypeVar("Value")
 Update = TypeVar("Update")

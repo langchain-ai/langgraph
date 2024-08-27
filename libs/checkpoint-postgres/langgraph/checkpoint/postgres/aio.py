@@ -64,7 +64,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             pipeline (bool): whether to use AsyncPipeline
 
         Returns:
-            PostgresSaver: A new PostgresSaver instance.
+            AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
         async with await AsyncConnection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
@@ -137,12 +137,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             "checkpoint_id": value["checkpoint_id"],
                         }
                     },
-                    {
-                        **self._load_checkpoint(value["checkpoint"]),
-                        "channel_values": await asyncio.to_thread(
-                            self._load_blobs, value["channel_values"]
-                        ),
-                    },
+                    await asyncio.to_thread(
+                        self._load_checkpoint,
+                        value["checkpoint"],
+                        value["channel_values"],
+                        value["pending_sends"],
+                    ),
                     self._load_metadata(value["metadata"]),
                     {
                         "configurable": {
@@ -196,12 +196,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             "checkpoint_id": value["checkpoint_id"],
                         }
                     },
-                    {
-                        **self._load_checkpoint(value["checkpoint"]),
-                        "channel_values": await asyncio.to_thread(
-                            self._load_blobs, value["channel_values"]
-                        ),
-                    },
+                    await asyncio.to_thread(
+                        self._load_checkpoint,
+                        value["checkpoint"],
+                        value["channel_values"],
+                        value["pending_sends"],
+                    ),
                     self._load_metadata(value["metadata"]),
                     {
                         "configurable": {
