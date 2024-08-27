@@ -211,7 +211,7 @@ To rerun from a state, we need first issue an empty update to the thread state. 
     curl --request POST \
         --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
         --header 'Content-Type: application/json' \
-        --data @- | jq .configurable.checkpoint_id | \
+        --data @- | jq .checkpoint_id | \
     curl --request POST \
      --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
@@ -340,7 +340,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
 
     ```bash
     curl -s --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | \
-    jq -c '.config.configurable.checkpoint_id' | \
+    jq -c '.config.checkpoint_id' | \
     curl --request POST \
      --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
