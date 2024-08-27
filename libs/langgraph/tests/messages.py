@@ -6,6 +6,7 @@ Please note that the `id` field is assigned AFTER the model is created
 to workaround an issue with pydantic ignoring the __eq__ method on
 subclassed strings.
 """
+
 from typing import Any
 
 from langchain_core.documents import Document

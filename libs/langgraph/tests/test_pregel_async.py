@@ -3865,7 +3865,10 @@ class ToolInput(BaseModel, arbitrary_types_allowed=True):
     my_session: httpx.AsyncClient
 
 
-async def test_state_graph_packets() -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_state_graph_packets(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
@@ -3876,6 +3879,8 @@ async def test_state_graph_packets() -> None:
         ToolMessage,
     )
     from langchain_core.tools import tool
+
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
 
     class AgentState(TypedDict):
         messages: Annotated[list[BaseMessage], add_messages]
@@ -4099,7 +4104,7 @@ async def test_state_graph_packets() -> None:
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(),
+        checkpointer=checkpointer,
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -4180,6 +4185,7 @@ async def test_state_graph_packets() -> None:
     await app_w_interrupt.aupdate_state(config, {"messages": last_message})
 
     # message was replaced instead of appended
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
             "messages": [
@@ -4199,10 +4205,8 @@ async def test_state_graph_packets() -> None:
         },
         tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
-            "ts"
-        ],
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 2,
@@ -4260,6 +4264,7 @@ async def test_state_graph_packets() -> None:
         },
     ]
 
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
             "messages": [
@@ -4301,10 +4306,8 @@ async def test_state_graph_packets() -> None:
         },
         tasks=(PregelTask(AnyStr(), "tools"), PregelTask(AnyStr(), "tools")),
         next=("tools", "tools"),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
-            "ts"
-        ],
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 4,
@@ -4340,6 +4343,7 @@ async def test_state_graph_packets() -> None:
     )
 
     # replaces message even if object identity is different, as long as id is the same
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values={
             "messages": [
@@ -4366,10 +4370,8 @@ async def test_state_graph_packets() -> None:
         },
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
-            "ts"
-        ],
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 5,
@@ -4381,13 +4383,18 @@ async def test_state_graph_packets() -> None:
     )
 
 
-async def test_message_graph() -> None:
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_message_graph(
+    request: pytest.FixtureRequest, checkpointer_name: str
+) -> None:
     from langchain_core.agents import AgentAction
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
     from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
     from langchain_core.tools import tool
+
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
         def bind_functions(self, functions: list):
@@ -4552,7 +4559,7 @@ async def test_message_graph() -> None:
     ]
 
     app_w_interrupt = workflow.compile(
-        checkpointer=MemorySaverAssertImmutable(),
+        checkpointer=checkpointer,
         interrupt_after=["agent"],
     )
     config = {"configurable": {"thread_id": "1"}}
@@ -4574,6 +4581,7 @@ async def test_message_graph() -> None:
         },
     ]
 
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values=[
             _AnyIdHumanMessage(content="what is weather in sf"),
@@ -4587,10 +4595,8 @@ async def test_message_graph() -> None:
         ],
         tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
-        config=(await app_w_interrupt.checkpointer.aget_tuple(config)).config,
-        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
-            "ts"
-        ],
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 1,
@@ -4615,6 +4621,7 @@ async def test_message_graph() -> None:
     await app_w_interrupt.aupdate_state(config, last_message)
 
     # message was replaced instead of appended
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values=[
             _AnyIdHumanMessage(content="what is weather in sf"),
@@ -4631,10 +4638,8 @@ async def test_message_graph() -> None:
         ],
         tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
-            "ts"
-        ],
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 2,
@@ -4675,6 +4680,7 @@ async def test_message_graph() -> None:
         },
     ]
 
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values=[
             _AnyIdHumanMessage(content="what is weather in sf"),
@@ -4703,10 +4709,8 @@ async def test_message_graph() -> None:
         ],
         tasks=(PregelTask(AnyStr(), "tools"),),
         next=("tools",),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
-            "ts"
-        ],
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
         metadata={
             "source": "loop",
             "step": 4,
@@ -4734,6 +4738,7 @@ async def test_message_graph() -> None:
     )
 
     # replaces message even if object identity is different, as long as id is the same
+    tup = await app_w_interrupt.checkpointer.aget_tuple(config)
     assert await app_w_interrupt.aget_state(config) == StateSnapshot(
         values=[
             _AnyIdHumanMessage(content="what is weather in sf"),
@@ -4756,10 +4761,8 @@ async def test_message_graph() -> None:
         ],
         tasks=(),
         next=(),
-        config=app_w_interrupt.checkpointer.get_tuple(config).config,
-        created_at=(await app_w_interrupt.checkpointer.aget_tuple(config)).checkpoint[
-            "ts"
-        ],
+        config=tup.config,
+        created_at=tup.checkpoint["ts"],
         metadata={
             "source": "update",
             "step": 5,

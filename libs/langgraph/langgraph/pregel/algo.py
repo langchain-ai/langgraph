@@ -240,8 +240,7 @@ def prepare_next_tasks(
     is_resuming: bool = False,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
-) -> list[PregelTask]:
-    ...
+) -> list[PregelTask]: ...
 
 
 @overload
@@ -257,8 +256,7 @@ def prepare_next_tasks(
     is_resuming: bool,
     checkpointer: Optional[BaseCheckpointSaver],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
-) -> list[PregelExecutableTask]:
-    ...
+) -> list[PregelExecutableTask]: ...
 
 
 def prepare_next_tasks(
