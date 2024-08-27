@@ -291,9 +291,9 @@ def prepare_next_tasks(
             "langgraph_task_idx": len(tasks),
         }
         checkpoint_ns = (
-            f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}:{packet.id}"
+            f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}"
             if parent_ns
-            else f"{packet.node}:{packet.id}"
+            else packet.node
         )
         task_id = str(
             uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
@@ -344,7 +344,7 @@ def prepare_next_tasks(
                                 CONFIG_KEY_CHECKPOINTER: checkpointer,
                                 CONFIG_KEY_RESUMING: is_resuming,
                                 "checkpoint_id": checkpoint["id"],
-                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_ns": f"{checkpoint_ns}:{task_id}",
                             },
                         ),
                         triggers,

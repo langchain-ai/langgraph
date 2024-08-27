@@ -1,6 +1,5 @@
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
-from uuid import uuid4
+from typing import Any, Literal
 
 INPUT = "__input__"
 CONFIG_KEY_SEND = "__pregel_send"
@@ -79,9 +78,8 @@ class Send:
 
     node: str
     arg: Any
-    id: Optional[str]
 
-    def __init__(self, /, node: str, arg: Any, id: Optional[str] = None) -> None:
+    def __init__(self, /, node: str, arg: Any) -> None:
         """
         Initialize a new instance of the Send class.
 
@@ -92,13 +90,12 @@ class Send:
         """
         self.node = node
         self.arg = arg
-        self.id = id or str(uuid4())
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg, self.id))
+        return hash((self.node, self.arg))
 
     def __repr__(self) -> str:
-        return f"Send(node={self.node!r}, arg={self.arg!r}, id={self.id!r})"
+        return f"Send(node={self.node!r}, arg={self.arg!r})"
 
     def __eq__(self, value: object) -> bool:
         return (

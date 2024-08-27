@@ -118,7 +118,6 @@ class PregelLoop:
     checkpoint_config: RunnableConfig
     checkpoint_metadata: CheckpointMetadata
     checkpoint_pending_writes: List[PendingWrite]
-    # (thread_id, checkpoint_ns -> channel_versions)
     checkpoint_previous_versions: dict[str, Union[str, float, int]]
 
     step: int
