@@ -1,12 +1,13 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Optional, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
 from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.base import (
     ChannelVersions,
@@ -19,16 +20,34 @@ from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
+@asynccontextmanager
+async def _get_connection(
+    conn: Union[AsyncConnection, AsyncConnectionPool],
+) -> AsyncIterator[AsyncConnection]:
+    if isinstance(conn, AsyncConnection):
+        yield conn
+    elif isinstance(conn, AsyncConnectionPool):
+        async with conn.connection() as conn:
+            yield conn
+    else:
+        raise TypeError(f"Invalid connection type: {type(conn)}")
+
+
 class AsyncPostgresSaver(BasePostgresSaver):
     lock: asyncio.Lock
 
     def __init__(
         self,
-        conn: AsyncConnection,
+        conn: Union[AsyncConnection, AsyncConnectionPool],
         pipe: Optional[AsyncPipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
+        if isinstance(conn, AsyncConnectionPool) and pipe is not None:
+            raise ValueError(
+                "Pipeline should be used only with a single AsyncConnection, not AsyncConnectionPool."
+            )
+
         self.conn = conn
         self.pipe = pipe
         self.lock = asyncio.Lock()
@@ -63,25 +82,22 @@ class AsyncPostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        async with self.lock:
-            async with self.conn.cursor(binary=True, row_factory=dict_row) as cur:
-                try:
-                    results = await cur.execute(
-                        "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                    )
-                    version = (await results.fetchone())["v"]
-                except UndefinedTable:
-                    version = -1
-                for v, migration in zip(
-                    range(version + 1, len(self.MIGRATIONS)),
-                    self.MIGRATIONS[version + 1 :],
-                ):
-                    await cur.execute(migration)
-                    await cur.execute(
-                        f"INSERT INTO checkpoint_migrations (v) VALUES ({v})"
-                    )
-            if self.pipe:
-                await self.pipe.sync()
+        async with self._cursor() as cur:
+            try:
+                results = await cur.execute(
+                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                )
+                version = (await results.fetchone())["v"]
+            except UndefinedTable:
+                version = -1
+            for v, migration in zip(
+                range(version + 1, len(self.MIGRATIONS)),
+                self.MIGRATIONS[version + 1 :],
+            ):
+                await cur.execute(migration)
+                await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+        if self.pipe:
+            await self.pipe.sync()
 
     async def alist(
         self,
@@ -290,25 +306,26 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
     @asynccontextmanager
     async def _cursor(self, *, pipeline: bool = False) -> AsyncIterator[AsyncCursor]:
-        if self.pipe:
-            # a connection in pipeline mode can be used concurrently
-            # in multiple threads/coroutines, but only one cursor can be
-            # used at a time
-            try:
-                async with self.conn.cursor(binary=True, row_factory=dict_row) as cur:
+        async with _get_connection(self.conn) as conn:
+            if self.pipe:
+                # a connection in pipeline mode can be used concurrently
+                # in multiple threads/coroutines, but only one cursor can be
+                # used at a time
+                try:
+                    async with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                        yield cur
+                finally:
+                    if pipeline:
+                        await self.pipe.sync()
+            elif pipeline:
+                # a connection not in pipeline mode can only be used by one
+                # thread/coroutine at a time, so we acquire a lock
+                async with self.lock, conn.pipeline(), conn.cursor(
+                    binary=True, row_factory=dict_row
+                ) as cur:
                     yield cur
-            finally:
-                if pipeline:
-                    await self.pipe.sync()
-        elif pipeline:
-            # a connection not in pipeline mode can only be used by one
-            # thread/coroutine at a time, so we acquire a lock
-            async with self.lock, self.conn.pipeline(), self.conn.cursor(
-                binary=True, row_factory=dict_row
-            ) as cur:
-                yield cur
-        else:
-            async with self.lock, self.conn.cursor(
-                binary=True, row_factory=dict_row
-            ) as cur:
-                yield cur
+            else:
+                async with self.lock, conn.cursor(
+                    binary=True, row_factory=dict_row
+                ) as cur:
+                    yield cur
