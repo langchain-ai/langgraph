@@ -170,7 +170,7 @@ nav:
           - Visualize your graph: how-tos/visualization.ipynb
           - Add runtime configuration: how-tos/configuration.ipynb
           - Add node retries: how-tos/node-retries.ipynb
-          - Force function calling agent to structure output: how-tos/react-agent-structured-output.ipynb
+          - How to force function calling agent to structure output: how-tos/react-agent-structured-output.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
