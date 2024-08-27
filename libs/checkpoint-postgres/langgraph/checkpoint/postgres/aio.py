@@ -20,6 +20,19 @@ from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
+@asynccontextmanager
+async def _get_connection(
+    conn: Union[AsyncConnection, AsyncConnectionPool],
+) -> AsyncIterator[AsyncConnection]:
+    if isinstance(conn, AsyncConnection):
+        yield conn
+    elif isinstance(conn, AsyncConnectionPool):
+        async with conn.connection() as conn:
+            yield conn
+    else:
+        raise TypeError(f"Invalid connection type: {type(conn)}")
+
+
 class AsyncPostgresSaver(BasePostgresSaver):
     lock: asyncio.Lock
 
@@ -292,18 +305,8 @@ class AsyncPostgresSaver(BasePostgresSaver):
             )
 
     @asynccontextmanager
-    async def _connection(self) -> AsyncIterator[AsyncConnection]:
-        if isinstance(self.conn, AsyncConnection):
-            yield self.conn
-        elif isinstance(self.conn, AsyncConnectionPool):
-            async with self.conn.connection() as conn:
-                yield conn
-        else:
-            raise TypeError(f"Invalid connection type: {type(self.conn)}")
-
-    @asynccontextmanager
     async def _cursor(self, *, pipeline: bool = False) -> AsyncIterator[AsyncCursor]:
-        async with self._connection() as conn:
+        async with _get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be

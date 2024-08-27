@@ -22,6 +22,17 @@ from langgraph.checkpoint.postgres.base import (
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
+@contextmanager
+def _get_connection(conn: Union[Connection, ConnectionPool]) -> Iterator[Connection]:
+    if isinstance(conn, Connection):
+        yield conn
+    elif isinstance(conn, ConnectionPool):
+        with conn.connection() as conn:
+            yield conn
+    else:
+        raise TypeError(f"Invalid connection type: {type(conn)}")
+
+
 class PostgresSaver(BasePostgresSaver):
     lock: threading.Lock
 
@@ -337,18 +348,8 @@ class PostgresSaver(BasePostgresSaver):
             )
 
     @contextmanager
-    def _connection(self) -> Iterator[Connection]:
-        if isinstance(self.conn, Connection):
-            yield self.conn
-        elif isinstance(self.conn, ConnectionPool):
-            with self.conn.connection() as conn:
-                yield conn
-        else:
-            raise TypeError(f"Invalid connection type: {type(self.conn)}")
-
-    @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor]:
-        with self._connection() as conn:
+        with _get_connection(self.conn) as conn:
             if self.pipe:
                 # a connection in pipeline mode can be used concurrently
                 # in multiple threads/coroutines, but only one cursor can be
