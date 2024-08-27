@@ -119,8 +119,7 @@ class Channel:
         *,
         key: Optional[str] = None,
         tags: Optional[list[str]] = None,
-    ) -> PregelNode:
-        ...
+    ) -> PregelNode: ...
 
     @overload
     @classmethod
@@ -130,8 +129,7 @@ class Channel:
         *,
         key: None = None,
         tags: Optional[list[str]] = None,
-    ) -> PregelNode:
-        ...
+    ) -> PregelNode: ...
 
     @classmethod
     def subscribe_to(
@@ -792,6 +790,9 @@ class Pregel(
                     },
                 ),
             )
+            # save task writes
+            if saved:
+                self.checkpointer.put_writes(checkpoint_config, task.writes, task.id)
             # apply to checkpoint and save
             assert not apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version
@@ -924,6 +925,11 @@ class Pregel(
                     },
                 ),
             )
+            # save task writes
+            if saved:
+                await self.checkpointer.aput_writes(
+                    checkpoint_config, task.writes, task.id
+                )
             # apply to checkpoint and save
             assert not apply_writes(
                 checkpoint, channels, [task], self.checkpointer.get_next_version

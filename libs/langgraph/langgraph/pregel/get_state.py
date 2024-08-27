@@ -24,10 +24,10 @@ def assemble_state_snapshot_hierarchy(
                 **(parent_state_snapshot.subgraph_state_snapshots or {}),
                 subgraph_node: state_snapshot,
             }
-            checkpoint_ns_to_state_snapshots[
-                parent_checkpoint_ns
-            ] = checkpoint_ns_to_state_snapshots[parent_checkpoint_ns]._replace(
-                subgraph_state_snapshots=parent_subgraph_snapshots
+            checkpoint_ns_to_state_snapshots[parent_checkpoint_ns] = (
+                checkpoint_ns_to_state_snapshots[
+                    parent_checkpoint_ns
+                ]._replace(subgraph_state_snapshots=parent_subgraph_snapshots)
             )
 
     state_snapshot = checkpoint_ns_to_state_snapshots.pop(root_checkpoint_ns, None)

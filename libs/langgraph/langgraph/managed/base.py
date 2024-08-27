@@ -58,18 +58,15 @@ class ManagedValue(ABC, Generic[V]):
                 pass
 
     @abstractmethod
-    def __call__(self, step: int) -> V:
-        ...
+    def __call__(self, step: int) -> V: ...
 
 
 class WritableManagedValue(Generic[V, U], ManagedValue[V], ABC):
     @abstractmethod
-    def update(self, writes: Sequence[U]) -> None:
-        ...
+    def update(self, writes: Sequence[U]) -> None: ...
 
     @abstractmethod
-    async def aupdate(self, writes: Sequence[U]) -> None:
-        ...
+    async def aupdate(self, writes: Sequence[U]) -> None: ...
 
 
 class ConfiguredManagedValue(NamedTuple):

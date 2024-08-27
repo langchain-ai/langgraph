@@ -32,8 +32,7 @@ class Submit(Protocol[P, T]):
         __name__: Optional[str] = None,
         __cancel_on_exit__: bool = False,
         **kwargs: P.kwargs,
-    ) -> concurrent.futures.Future[T]:
-        ...
+    ) -> concurrent.futures.Future[T]: ...
 
 
 class BackgroundExecutor(ContextManager):

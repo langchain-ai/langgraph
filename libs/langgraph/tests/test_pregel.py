@@ -190,8 +190,7 @@ def test_graph_validation() -> None:
     with pytest.raises(ValueError, match="Found edge starting at unknown node "):
         graph.compile()
 
-    def bad_reducer(a):
-        ...
+    def bad_reducer(a): ...
 
     class BadReducerState(TypedDict):
         hello: Annotated[str, bad_reducer]
