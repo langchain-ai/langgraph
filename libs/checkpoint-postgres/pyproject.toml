@@ -24,6 +24,7 @@ pytest-asyncio = "^0.21.1"
 pytest-mock = "^3.11.1"
 pytest-watch = "^4.2.0"
 mypy = "^1.10.0"
+psycopg = {extras = ["binary"], version = ">=3.0.0"}
 langgraph-checkpoint = {path = "../checkpoint", develop = true}
 
 [tool.pytest.ini_options]
