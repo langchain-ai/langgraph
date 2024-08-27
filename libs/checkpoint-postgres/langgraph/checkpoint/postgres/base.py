@@ -260,7 +260,8 @@ class BasePostgresSaver(BaseCheckpointSaver):
         if config:
             wheres.append("thread_id = %s ")
             param_values.append(config["configurable"]["thread_id"])
-            if checkpoint_ns := config["configurable"].get("checkpoint_ns"):
+            checkpoint_ns = config["configurable"].get("checkpoint_ns")
+            if checkpoint_ns is not None:
                 wheres.append("checkpoint_ns = %s")
                 param_values.append(checkpoint_ns)
 
