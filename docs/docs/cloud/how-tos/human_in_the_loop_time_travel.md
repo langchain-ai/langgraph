@@ -62,7 +62,7 @@ Before replaying a state - we need to create states to replay from! In order to 
 === "Javascript"
 
     ```js
-    const input = {"messages": [{ "role": "human", "content": "Please search the weather in SF"}] }
+    const input = { "messages": [{ "role": "human", "content": "Please search the weather in SF" }] }
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -279,7 +279,7 @@ Let's show how to do this to edit the state at a particular point in time. Let's
     let lastMessage = stateToReplay['values']['messages'][-1];
 
     // Let's now update the args for that tool call
-    lastMessage['tool_calls'][0]['args'] = {'query': 'current weather in SF'};
+    lastMessage['tool_calls'][0]['args'] = { 'query': 'current weather in SF' };
 
     const config = await client.threads.updateState(thread['thread_id'], { values: { "messages": [lastMessage] }, checkpointId: stateToReplay['checkpoint_id'] });
     ```
@@ -340,7 +340,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
 
     ```bash
     curl -s --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | \
-    jq -c '.config.checkpoint_id' | \
+    jq -c '.checkpoint_id' | \
     curl --request POST \
      --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
      --header 'Content-Type: application/json' \
