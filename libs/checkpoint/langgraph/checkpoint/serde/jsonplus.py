@@ -109,7 +109,7 @@ class JsonPlusSerializer(SerializerProtocol):
             return self._encode_constructor_args(obj.__class__, args=[obj.value])
         elif isinstance(obj, SendProtocol):
             return self._encode_constructor_args(
-                obj.__class__, kwargs={"node": obj.node, "arg": obj.arg}
+                obj.__class__, kwargs={"node": obj.node, "arg": obj.arg, "id": obj.id}
             )
         elif isinstance(obj, (bytes, bytearray)):
             return self._encode_constructor_args(
@@ -150,7 +150,7 @@ class JsonPlusSerializer(SerializerProtocol):
                     return method(**value["kwargs"])
                 else:
                     return method()
-            except (ImportError, AttributeError):
+            except (ImportError, AttributeError, TypeError):
                 return None
 
         return LC_REVIVER(value)

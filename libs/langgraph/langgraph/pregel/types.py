@@ -92,6 +92,8 @@ class StateSnapshot(NamedTuple):
     """Config used to fetch the parent snapshot, if any"""
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
+    subgraph_state_snapshots: Optional[dict[str, "StateSnapshot"]] = None
+    """State snapshots of subgraphs represented as a mapping from checkpoint namespace (`checkpoint_ns`) to snapshot."""
 
 
 All = Literal["*"]

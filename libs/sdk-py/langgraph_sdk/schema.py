@@ -85,6 +85,8 @@ class Thread(TypedDict):
     """The thread metadata."""
     status: ThreadStatus
     """The status of the thread, one of 'idle', 'busy', 'interrupted'."""
+    values: dict
+    """The current state of the thread."""
 
 
 class ThreadState(TypedDict):

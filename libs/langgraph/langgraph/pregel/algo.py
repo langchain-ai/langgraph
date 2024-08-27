@@ -293,9 +293,9 @@ def prepare_next_tasks(
             "langgraph_task_idx": len(tasks),
         }
         checkpoint_ns = (
-            f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}"
+            f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}:{packet.id}"
             if parent_ns
-            else packet.node
+            else f"{packet.node}:{packet.id}"
         )
         task_id = str(
             uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
@@ -343,8 +343,10 @@ def prepare_next_tasks(
                                     PregelTaskWrites(packet.node, writes, triggers),
                                     config,
                                 ),
-                                # in Send we can't checkpoint nested graphs
-                                # as they could be running in parallel
+                                CONFIG_KEY_CHECKPOINTER: checkpointer,
+                                CONFIG_KEY_RESUMING: is_resuming,
+                                "checkpoint_id": checkpoint["id"],
+                                "checkpoint_ns": checkpoint_ns,
                             },
                         ),
                         triggers,

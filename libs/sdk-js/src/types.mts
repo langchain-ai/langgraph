@@ -31,6 +31,11 @@ interface RunsInvokePayload {
   config?: Config;
 
   /**
+   * Checkpoint ID for when creating a new run.
+   */
+  checkpointId?: string;
+
+  /**
    * Interrupt execution before entering these nodes.
    */
   interruptBefore?: string[];
