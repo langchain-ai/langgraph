@@ -130,7 +130,7 @@ def _get_model_preprocessing_runnable(
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
 def create_react_agent(
     model: LanguageModelLike,
-    tools: Union[ToolExecutor, Sequence[BaseTool]],
+    tools: Union[ToolExecutor, Sequence[BaseTool], ToolNode],
     *,
     state_schema: Optional[StateSchemaType] = None,
     messages_modifier: Optional[MessagesModifier] = None,
@@ -144,7 +144,7 @@ def create_react_agent(
 
     Args:
         model: The `LangChain` chat model that supports tool calling.
-        tools: A list of tools or a ToolExecutor instance.
+        tools: A list of tools, a ToolExecutor, or a ToolNode instance.
         state_schema: An optional state schema that defines graph state.
             Must have `messages` and `is_last_step` keys.
             Defaults to `AgentState` that defines those two keys.
@@ -419,8 +419,13 @@ def create_react_agent(
 
     if isinstance(tools, ToolExecutor):
         tool_classes = tools.tools
+        tool_node = ToolNode(tool_classes)
+    elif isinstance(tools, ToolNode):
+        tool_classes = tools.tools_by_name.values()
+        tool_node = tools
     else:
         tool_classes = tools
+        tool_node = ToolNode(tool_classes)
     model = model.bind_tools(tool_classes)
 
     # Define the function that determines whether to continue or not
@@ -474,7 +479,7 @@ def create_react_agent(
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", RunnableLambda(call_model, acall_model))
-    workflow.add_node("tools", ToolNode(tool_classes))
+    workflow.add_node("tools", tool_node)
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
