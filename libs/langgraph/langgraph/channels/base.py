@@ -35,11 +35,11 @@ class BaseChannel(Generic[Value, Update, C], ABC):
 
     # serialize/deserialize methods
 
-    @abstractmethod
     def checkpoint(self) -> Optional[C]:
         """Return a serializable representation of the channel's current state.
         Raises EmptyChannelError if the channel is empty (never updated yet),
         or doesn't support checkpoints."""
+        return self.get()
 
     @contextmanager
     @abstractmethod
