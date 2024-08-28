@@ -427,11 +427,23 @@ It's often nice to be able to visualize graphs, especially as they get more comp
 
 ## Streaming
 
-LangGraph is built with first class support for streaming. There are several different streaming modes that LangGraph supports:
+LangGraph is built with first class support for streaming. There are several different ways to stream back results
+
+### `.stream` and `.astream`
+
+`.stream` and `.astream` are sync and async methods for streaming back results.
+There are several different modes you can specify when calling these methods (e.g. `graph.stream(..., mode="...")):
 
 - [`"values"`](../how-tos/stream-values.ipynb): This streams the full value of the state after each step of the graph.
 - [`"updates`](../how-tos/stream-updates.ipynb): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
 - `"debug"`: This streams as much information as possible throughout the execution of the graph.
+
+The below visualization shows the difference between the `values` and `updates` modes:
+
+![/static/values_vs_updates.png]
+
+
+### `.astream_events`
 
 In addition, you can use the [`astream_events`](../how-tos/streaming-events-from-within-tools.ipynb) method to stream back events that happen _inside_ nodes. This is useful for [streaming tokens of LLM calls](../how-tos/streaming-tokens.ipynb).
 
