@@ -66,7 +66,6 @@ omit = ["tests/*"]
 [tool.pytest-watcher]
 now = true
 delay = 0.1
-runner_args = ["--ff", "-v", "-x", "-n", "auto", "--dist", "worksteal", "--snapshot-update", "--tb", "short"]
 patterns = ["*.py"]
 
 [build-system]
