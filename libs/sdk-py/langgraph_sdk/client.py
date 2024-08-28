@@ -1447,8 +1447,8 @@ class RunsClient:
             json=None,
         )
 
-    async def join(self, thread_id: str, run_id: str) -> None:
-        """Block until a run is done.
+    async def join(self, thread_id: str, run_id: str) -> dict:
+        """Block until a run is done. Returns the final state of the thread.
 
         Args:
             thread_id: The thread ID to join.
@@ -1459,7 +1459,7 @@ class RunsClient:
 
         Example Usage:
 
-            await client.runs.join(
+            result =await client.runs.join(
                 thread_id="thread_id_to_join",
                 run_id="run_id_to_join"
             )
