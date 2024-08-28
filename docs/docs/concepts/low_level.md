@@ -532,26 +532,7 @@ This should hopefully give you a good sense of what events are emitted in a simp
 Each type of event contains data in a different format. Let's look at `on_chat_model_stream` events look like (these are an important type of event)
 since they are needed for streaming tokens from an LLM response.
 
-In order to capture these events, we can change our code to:
-
-```python
-# Graph the same as before
-app = ...
-
-inputs = [{"role": "user", "content": "hi!"}]
-stream_events = []
-async for event in app.astream_events({"messages": inputs}, version="v1"):
-    kind = event["event"]
-    print(f"{kind}: {event['name']}")
-    if kind=="on_chat_model_stream":
-        stream_events.append(event)
-```
-
-Let's then look at the first event we capture:
-
-```python
-stream_events[1]
-```
+These events look like:
 
 ```shell
 {'event': 'on_chat_model_stream',
