@@ -411,7 +411,7 @@ The recursion limit sets the maximum number of [super-steps](#graphs) the graph 
 graph.invoke(inputs, config={"recursion_limit": 5, "configurable":{"llm": "anthropic"}})
 ```
 
-Read [this how-to] to learn more about how the recursion limit works.
+Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-limit/) to learn more about how the recursion limit works.
 
 ## Breakpoints
 
@@ -450,7 +450,7 @@ There are several different modes you can specify when calling these methods (e.
 
 The below visualization shows the difference between the `values` and `updates` modes:
 
-![/static/values_vs_updates.png]
+![values vs updates](../static/values_vs_updates.png)
 
 
 ### `.astream_events` (for streaming tokens of LLM calls)
@@ -468,8 +468,8 @@ All events have (among other things) `event`, `name`, and `data` fields. What do
 What types of things cause events to be emitted?
 
 * each node (runnable) emits `on_chain_start` when it starts execution, `on_chain_stream` during the node execution and `on_chain_end` when the node finishes. Node events will have the node name in the event's `name` field
-* the graph will emit `on_chain_start` in the beginning of the graph execution, `on_chain_stream` during each node execution and `on_chain_end` when the graph finishes. Graph events will have the `LangGraph` in the event's `name` field
-* LangGraph writes to state channels emit `on_chain_start` and `on_chain_end` events
+* the graph will emit `on_chain_start` in the beginning of the graph execution, `on_chain_stream` after each node execution and `on_chain_end` when the graph finishes. Graph events will have the `LangGraph` in the event's `name` field
+* Any writes to state channels (i.e. anytime you update the value of one of your state keys) will emit `on_chain_start` and `on_chain_end` events
 
 Additionally, any events that are created inside your nodes (LLM events, tool events, manually emitted events, etc.) will also be visible in the output of `.astream_events`.
 
@@ -529,7 +529,7 @@ stream back token by token (`on_chat_model_stream: ChatOpenAI`) and then finish 
 we write the results back to the channel (`ChannelWrite<call_model,messages>`) and then finish the `call_model` node and then the graph as a whole.
 
 This should hopefully give you a good sense of what events are emitted in a simple graph. But what data do these events contain?
-Each type of event contains data in a different format. Let's look at `on_chat_model_stream` events look like (these are an important type of event)
+Each type of event contains data in a different format. Let's look at what `on_chat_model_stream` events look like. These are an important type of event
 since they are needed for streaming tokens from an LLM response.
 
 These events look like:

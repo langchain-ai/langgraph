@@ -1,13 +1,6 @@
 # How to stream state updates of your graph
 
-LangGraph Cloud supports multiple streaming modes. The main ones are:
-
-- `values`: This streaming mode streams back values of the graph. This is the **full state of the graph** after each node is called.
-- `updates`: This streaming mode streams back updates to the graph. This is the **update to the state of the graph** after each node is called.
-- `messages`: This streaming mode streams back messages - both complete messages (at the end of a node) as well as **tokens** for any messages generated inside a node. This mode is primarily meant for powering chat applications.
-
-
-This guide covers `stream_mode="updates"`.
+This guide covers how to use `stream_mode="updates"` for your graph, which will stream the updates to the graph state that are made after each node is executed. This differs from using `stream_mode="values"` because instead of streaming the entire value of the state after every node is run, it only streams the updates that node made to the state. Click [here](https://langchain-ai.github.io/langgraph/concepts/low_level/#stream-and-astream) to see a nice diagram that intuitively explains the difference.
 
 First let's set up our client and thread:
 

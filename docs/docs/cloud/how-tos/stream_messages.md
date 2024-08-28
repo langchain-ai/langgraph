@@ -1,15 +1,7 @@
 # How to stream messages from your graph
 
-LangGraph Cloud supports multiple streaming modes. The main ones are:
+This guide covers how to stream messages from your graph. In order to use this mode, the state of the graph you are interacting with MUST have a `messages` key that is a list of messages.
 
-- `values`: This streaming mode streams back values of the graph. This is the **full state of the graph** after each node is called.
-- `updates`: This streaming mode streams back updates to the graph. This is the **update to the state of the graph** after each node is called.
-- `messages`: This streaming mode streams back messages - both complete messages (at the end of a node) as well as **tokens** for any messages generated inside a node. This mode is primarily meant for powering chat applications.
-
-
-This guide covers `stream_mode="messages"`.
-
-In order to use this mode, the state of the graph you are interacting with MUST have a `messages` key that is a list of messages.
 E.g., the state should look something like:
 
 === "Python"
@@ -23,16 +15,28 @@ E.g., the state should look something like:
         messages: Annotated[list[AnyMessage], add_messages]
     ```
 
+=== "Javascript"
 
-Alternatively, you can use an instance or subclass of `from langgraph.graph import MessagesState` (`MessagesState` is equivalent to the implementation above).
+    ```js
+    import { type BaseMessage } from "@langchain/core/messages";
+    import { Annotation, messagesStateReducer } from "@langchain/langgraph";
 
-> [!NOTE]
-> LangGraph Cloud only supports hosting graphs written in Python at the moment.
+    export const StateAnnotation = Annotation.Root({
+    messages: Annotation<BaseMessage[]>({
+        reducer: messagesStateReducer,
+        default: () => [],
+    }),
+    });
+    ```
+
+Alternatively, you can use an instance or subclass of `from langgraph.graph import MessagesState` (`MessagesState` is equivalent to the implementation above). Or in Javascript: `import { MessagesAnnotation } from "@langchain/langgraph";`.
 
 With `stream_mode="messages"` two things will be streamed back:
 
 - It outputs messages produced by any chat model called inside (unless tagged in a special way)
-- It outputs messages returned from nodes (to allow for nodes to return `ToolMessages` and the like
+- It outputs messages returned from nodes (to allow for nodes to return `ToolMessages` and the like)
+
+Read more about how the `messages` streaming mode works [here](https://langchain-ai.github.io/langgraph/cloud/concepts/api/#modemessages)
 
 First let's set up our client and thread:
 

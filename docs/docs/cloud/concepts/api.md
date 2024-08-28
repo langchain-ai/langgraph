@@ -51,22 +51,22 @@ The LangGraph Cloud API offers several features to support complex agent archite
 
 Streaming is critical for making LLM applications feel responsive to end users. When creating a streaming run, the streaming mode determines what data is streamed back to the API client. The LangGraph Cloud API supports five streaming modes.
 
-- `values`: Stream the full state of the graph after each node is executed. See the [how-to guide](../how-tos/stream_values.md) for streaming values.
+- `values`: Stream the full state of the graph after each [super-step](https://langchain-ai.github.io/langgraph/concepts/low_level/#graphs) is executed. See the [how-to guide](../how-tos/stream_values.md) for streaming values.
 - `messages`: Stream complete messages (at the end of node execution) as well as tokens for any messages generated inside a node. This mode is primarily meant for powering chat applications. This is only an option if your graph contains a `messages` key. See the [how-to guide](../how-tos/stream_messages.md) for streaming messages.
 - `updates`: Streams updates to the state of the graph after each node is executed. See the [how-to guide](../how-tos/stream_updates.md) for streaming updates.
-- `events`: Stream all events (including the state of the graph) after each node is executed. See the [how-to guide](../how-tos/stream_events.md) for streaming events. This can be used to do token-by-token streaming for LLMs.
-- `debug`: Stream debug events after each node is executed. See the [how-to guide](../how-tos/stream_debug.md) for streaming debug events.
+- `events`: Stream all events (including the state of the graph) that occur during graph execution. See the [how-to guide](../how-tos/stream_events.md) for streaming events. This can be used to do token-by-token streaming for LLMs.
+- `debug`: Stream debug events throughout graph execution. See the [how-to guide](../how-tos/stream_debug.md) for streaming debug events.
 
 You can also specify multiple streaming modes at the same time. See the [how-to guide](../how-tos/stream_multiple.md) for configuring multiple streaming modes at the same time.
 
 See the [API reference](../reference/api/api_ref.html#tag/runscreate/POST/threads/{thread_id}/runs/stream) for how to create streaming runs.
 
-Streaming modes `values`, `updates`, and `debug` are very similar to mode available in the LangGraph library - for a deeper conceptual explanation of those, you can see the LangGraph library documentation [here](../../concepts/low_level.md#streaming).
+Streaming modes `values`, `updates`, and `debug` are very similar to modes available in the LangGraph library - for a deeper conceptual explanation of those, you can see the LangGraph library documentation [here](../../concepts/low_level.md#streaming).
 
 Streaming mode `events` is the same as using `.astream_events` in the LangGraph library - for a deeper conceptual explanation of this, you can see the LangGraph library documentation [here](../../concepts/low_level.md#streaming).
 
 #### `mode="messages"`
-Streaming mode `messages` is new streaming mode, currently only available in the API. What does this mode enable?
+Streaming mode `messages` is a new streaming mode, currently only available in the API. What does this mode enable?
 
 This mode is focused on streaming back messages. It currently assumes that you have a `messages` key in your graph that is a list of messages. Assuming we have a simple react agent deployed, what does this stream look like?
 
