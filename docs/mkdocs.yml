@@ -129,6 +129,7 @@ nav:
           - Create subgraphs: how-tos/subgraph.ipynb
           - Create branches for parallel execution: how-tos/branching.ipynb
           - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
+          - Control graph recursion limit: how-tos/recursion-limit.ipynb
       - Persistence:
           - Add persistence ("memory"): how-tos/persistence.ipynb
           - Manage conversation history: how-tos/memory/manage-conversation-history.ipynb
@@ -139,6 +140,7 @@ nav:
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
+          - Add dynamic breakpoints: how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
           - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
           - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
           - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
@@ -169,6 +171,7 @@ nav:
           - Visualize your graph: how-tos/visualization.ipynb
           - Add runtime configuration: how-tos/configuration.ipynb
           - Add node retries: how-tos/node-retries.ipynb
+          - How to force function calling agent to structure output: how-tos/react-agent-structured-output.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb

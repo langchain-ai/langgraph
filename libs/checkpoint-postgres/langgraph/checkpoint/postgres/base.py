@@ -1,4 +1,3 @@
-from base64 import b64decode, b64encode
 from hashlib import md5
 from typing import Any, List, Optional, Tuple
 
@@ -13,7 +12,7 @@ from langgraph.checkpoint.base import (
     get_checkpoint_id,
 )
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
-from langgraph.checkpoint.serde.types import ChannelProtocol
+from langgraph.checkpoint.serde.types import TASKS, ChannelProtocol
 
 MetadataInput = Optional[dict[str, Any]]
 
@@ -58,7 +57,7 @@ MIGRATIONS = [
     "ALTER TABLE checkpoint_blobs ALTER COLUMN blob DROP not null;",
 ]
 
-SELECT_SQL = """
+SELECT_SQL = f"""
 select
     thread_id,
     checkpoint,
@@ -82,7 +81,15 @@ select
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
             and cw.checkpoint_id = checkpoints.checkpoint_id
-    ) as pending_writes
+    ) as pending_writes,
+    (
+        select array_agg(array[cw.type::bytea, cw.blob])
+        from checkpoint_writes cw
+        where cw.thread_id = checkpoints.thread_id
+            and cw.checkpoint_ns = checkpoints.checkpoint_ns
+            and cw.checkpoint_id = checkpoints.parent_checkpoint_id
+            and cw.channel = '{TASKS}'
+    ) as pending_sends
 from checkpoints """
 
 UPSERT_CHECKPOINT_BLOBS_SQL = """
@@ -116,24 +123,22 @@ class BasePostgresSaver(BaseCheckpointSaver):
 
     jsonplus_serde = JsonPlusSerializer()
 
-    def _load_checkpoint(self, checkpoint: dict[str, Any]) -> Checkpoint:
-        if len(checkpoint["pending_sends"]) == 2 and all(
-            isinstance(a, str) for a in checkpoint["pending_sends"]
-        ):
-            type, bs = checkpoint["pending_sends"]
-            return {
-                **checkpoint,
-                "pending_sends": self.serde.loads_typed((type, b64decode(bs))),
-            }
-
-        return checkpoint
-
-    def _dump_checkpoint(self, checkpoint: Checkpoint) -> dict[str, Any]:
-        type, bs = self.serde.dumps_typed(checkpoint["pending_sends"])
+    def _load_checkpoint(
+        self,
+        checkpoint: dict[str, Any],
+        channel_values: list[tuple[bytes, bytes, bytes]],
+        pending_sends: list[tuple[bytes, bytes]],
+    ) -> Checkpoint:
         return {
             **checkpoint,
-            "pending_sends": (type, b64encode(bs).decode()),
+            "pending_sends": [
+                self.serde.loads_typed((c.decode(), b)) for c, b in pending_sends or []
+            ],
+            "channel_values": self._load_blobs(channel_values),
         }
+
+    def _dump_checkpoint(self, checkpoint: Checkpoint) -> dict[str, Any]:
+        return {**checkpoint, "pending_sends": []}
 
     def _load_blobs(
         self, blob_values: list[tuple[bytes, bytes, bytes]]
@@ -255,9 +260,13 @@ class BasePostgresSaver(BaseCheckpointSaver):
         if config:
             wheres.append("thread_id = %s ")
             param_values.append(config["configurable"]["thread_id"])
-            checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-            wheres.append("checkpoint_ns = %s")
-            param_values.append(checkpoint_ns)
+            if checkpoint_ns := config["configurable"].get("checkpoint_ns"):
+                wheres.append("checkpoint_ns = %s")
+                param_values.append(checkpoint_ns)
+
+            if checkpoint_id := get_checkpoint_id(config):
+                wheres.append("checkpoint_id = %s ")
+                param_values.append(checkpoint_id)
 
         # construct predicate for metadata filter
         if filter:

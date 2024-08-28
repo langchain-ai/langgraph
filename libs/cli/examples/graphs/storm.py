@@ -339,7 +339,7 @@ async def gen_answer(
     # We could be more precise about handling max token length if we wanted to here
     dumped = json.dumps(all_query_results)[:max_str_len]
     ai_message: AIMessage = queries["raw"]
-    tool_call = queries["raw"].additional_kwargs["tool_calls"][0]
+    tool_call = queries["raw"].tool_calls[0]
     tool_id = tool_call["id"]
     tool_message = ToolMessage(tool_call_id=tool_id, content=dumped)
     swapped_state["messages"].extend([ai_message, tool_message])
