@@ -79,7 +79,7 @@ Let's run it on a question that should trigger a tool call:
 
 ```python
 thread = await client.threads.create()
-input = {"messages": [{"role": "user", "content": "whats the weather in sf?"}]}
+input = {"messages": [{"role": "user", "content": "what's the weather in sf?"}]}
 
 events = []
 async for event in client.runs.stream(
