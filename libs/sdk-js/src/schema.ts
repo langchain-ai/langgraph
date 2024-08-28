@@ -2,6 +2,16 @@ import type { JSONSchema7 } from "json-schema";
 
 type Optional<T> = T | null | undefined;
 
+type RunStatus =
+  | "pending"
+  | "running"
+  | "error"
+  | "success"
+  | "timeout"
+  | "interrupted";
+
+type ThreadStatus = "idle" | "busy" | "interrupted";
+
 export interface Config {
   /**
    * Tags for this call and any sub-calls (eg. a Chain calling an LLM).
@@ -80,6 +90,7 @@ export interface Thread {
   created_at: string;
   updated_at: string;
   metadata: Metadata;
+  status: ThreadStatus;
 }
 
 export interface Cron {
@@ -101,6 +112,9 @@ export interface ThreadState<ValuesType = DefaultValues> {
   metadata: Metadata;
   created_at: Optional<string>;
   parent_checkpoint_id: Optional<string>;
+
+  config: Config;
+  parent_config?: Config;
 }
 
 export interface Run {
@@ -109,12 +123,6 @@ export interface Run {
   assistant_id: string;
   created_at: string;
   updated_at: string;
-  status:
-    | "pending"
-    | "running"
-    | "error"
-    | "success"
-    | "timeout"
-    | "interrupted";
+  status: RunStatus;
   metadata: Metadata;
 }

@@ -4,6 +4,7 @@ from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.constants import Interrupt
 
 
 def default_retry_on(exc: Exception) -> bool:
@@ -56,9 +57,11 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
-class PregelTaskDescription(NamedTuple):
+class PregelTask(NamedTuple):
+    id: str
     name: str
-    input: Any
+    error: Optional[Exception] = None
+    interrupts: tuple[Interrupt, ...] = ()
 
 
 class PregelExecutableTask(NamedTuple):
@@ -73,18 +76,24 @@ class PregelExecutableTask(NamedTuple):
 
 
 class StateSnapshot(NamedTuple):
+    """Snapshot of the state of the graph at the beginning of a step."""
+
     values: Union[dict[str, Any], Any]
     """Current values of channels"""
-    next: tuple[str]
-    """Nodes to execute in the next step, if any"""
+    next: tuple[str, ...]
+    """The name of the node to execute in each task for this step."""
     config: RunnableConfig
     """Config used to fetch this snapshot"""
     metadata: Optional[CheckpointMetadata]
     """Metadata associated with this snapshot"""
     created_at: Optional[str]
     """Timestamp of snapshot creation"""
-    parent_config: Optional[RunnableConfig] = None
+    parent_config: Optional[RunnableConfig]
     """Config used to fetch the parent snapshot, if any"""
+    tasks: tuple[PregelTask, ...]
+    """Tasks to execute in this step. If already attempted, may contain an error."""
+    subgraph_state_snapshots: Optional[dict[str, "StateSnapshot"]] = None
+    """State snapshots of subgraphs represented as a mapping from checkpoint namespace (`checkpoint_ns`) to snapshot."""
 
 
 All = Literal["*"]

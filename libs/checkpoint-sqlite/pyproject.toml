@@ -14,7 +14,7 @@ gigagraph-checkpoint = "^1.0.1"
 aiosqlite = "^0.20.0"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.1.4"
+ruff = "^0.6.2"
 codespell = "^2.2.0"
 pytest = "^7.2.1"
 pytest-asyncio = "^0.21.1"

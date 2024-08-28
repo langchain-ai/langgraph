@@ -15,7 +15,6 @@ from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
-from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils import RunnableCallable
@@ -68,19 +67,19 @@ class ChannelRead(RunnableCallable):
 
     def _read(self, _: Any, config: RunnableConfig) -> Any:
         return self.do_read(
-            config, channel=self.channel, fresh=self.fresh, mapper=self.mapper
+            config, select=self.channel, fresh=self.fresh, mapper=self.mapper
         )
 
     async def _aread(self, _: Any, config: RunnableConfig) -> Any:
         return self.do_read(
-            config, channel=self.channel, fresh=self.fresh, mapper=self.mapper
+            config, select=self.channel, fresh=self.fresh, mapper=self.mapper
         )
 
     @staticmethod
     def do_read(
         config: RunnableConfig,
         *,
-        channel: Union[str, list[str]],
+        select: Union[str, list[str]],
         fresh: bool = False,
         mapper: Optional[Callable[[Any], Any]] = None,
     ) -> Any:
@@ -92,16 +91,16 @@ class ChannelRead(RunnableCallable):
                 "Make sure to call in the context of a Pregel process"
             )
         if mapper:
-            return mapper(read(channel, fresh))
+            return mapper(read(select, fresh))
         else:
-            return read(channel, fresh)
+            return read(select, fresh)
 
 
 DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
 
 
 class PregelNode(RunnableBindingBase):
-    channels: Union[list[str], Mapping[str, Union[str, ManagedValueSpec]]]
+    channels: Union[list[str], Mapping[str, str]]
 
     triggers: list[str] = Field(default_factory=list)
 

@@ -3,7 +3,7 @@ from typing import Any, Iterator, Mapping, Optional, Sequence, TypeVar, Union
 from langchain_core.runnables.utils import AddableDict
 
 from langgraph.channels.base import BaseChannel, EmptyChannelError
-from langgraph.constants import TAG_HIDDEN
+from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.log import logger
 from langgraph.pregel.types import PregelExecutableTask
 
@@ -95,19 +95,22 @@ class AddableUpdatesDict(AddableDict):
 
 def map_output_updates(
     output_channels: Union[str, Sequence[str]],
-    tasks: list[PregelExecutableTask],
+    tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
 ) -> Iterator[dict[str, Union[Any, dict[str, Any]]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
-        t for t in tasks if not t.config or TAG_HIDDEN not in t.config.get("tags")
+        (t, ww)
+        for t, ww in tasks
+        if (not t.config or TAG_HIDDEN not in t.config.get("tags"))
+        and all(k not in (ERROR, INTERRUPT) for k, _ in ww)
     ]
     if not output_tasks:
         return
     if isinstance(output_channels, str):
         updated = [
             (task.name, value)
-            for task in output_tasks
-            for chan, value in task.writes
+            for task, writes in output_tasks
+            for chan, value in writes
             if chan == output_channels
         ]
     else:
@@ -116,10 +119,10 @@ def map_output_updates(
                 task.name,
                 {chan: value for chan, value in task.writes if chan in output_channels},
             )
-            for task in output_tasks
-            if any(chan in output_channels for chan, _ in task.writes)
+            for task, writes in output_tasks
+            if any(chan in output_channels for chan, _ in writes)
         ]
-    grouped = {t.name: [] for t in output_tasks}
+    grouped = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)
     for node, value in grouped.items():

@@ -387,9 +387,9 @@ workflow = StateGraph(AgentState)
 workflow.add_node("agent", call_model)
 workflow.add_node("tools", tool_node)
 
-# Задайте точку входа `agent`
-# Точка входа указывает вершину, котора будет вызвана в первую очередь
-workflow.set_entry_point("agent")
+# Set the entrypoint as `agent`
+# This means that this node is the first one called
+workflow.add_edge(START, "agent")
 
 # Создайте условное ребро
 workflow.add_conditional_edges(

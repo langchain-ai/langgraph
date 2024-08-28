@@ -26,3 +26,9 @@ clean-docs:
 
 codespell:
 	./docs/codespell_notebooks.sh .
+
+lock_no_update:
+	@echo "Locking dependencies..."
+	@for d in $$(find . -name pyproject.toml -exec dirname {} \;); do \
+		(cd $$d && poetry lock --no-update); \
+	done

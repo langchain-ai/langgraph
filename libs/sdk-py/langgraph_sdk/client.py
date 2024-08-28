@@ -25,9 +25,11 @@ from langgraph_sdk.schema import (
     Assistant,
     Config,
     Cron,
+    DisconnectMode,
     GraphSchema,
     Metadata,
     MultitaskStrategy,
+    OnCompletionBehavior,
     OnConflictBehavior,
     Run,
     RunCreate,
@@ -40,8 +42,14 @@ from langgraph_sdk.schema import (
 logger = logging.getLogger(__name__)
 
 
+RESERVED_HEADERS = ("x-api-key",)
+
+
 def get_client(
-    *, url: Optional[str] = None, api_key: Optional[str] = None
+    *,
+    url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    headers: Optional[dict[str, str]] = None,
 ) -> LangGraphClient:
     """Get a LangGraphClient instance.
 
@@ -53,6 +61,7 @@ def get_client(
                 2. LANGGRAPH_API_KEY
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
+        headers: Optional custom headers
     """
     transport: Optional[httpx.AsyncBaseTransport] = None
     if url is None:
@@ -65,17 +74,12 @@ def get_client(
             url = "http://localhost:8123"
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
-    headers = {
-        "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
-    }
-    api_key = _get_api_key(api_key)
-    if api_key:
-        headers["x-api-key"] = api_key
+
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
         timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
-        headers=headers,
+        headers=_get_headers(api_key, headers),
     )
     return LangGraphClient(client)
 
@@ -849,15 +853,14 @@ class ThreadsClient:
             thread_id: The ID of the thread to update.
             values: The values to update to the state.
             as_node: Update the state as if this node had just executed.
-
-            checkpoint_id: The ID of the checkpoint to get the state of.
+            checkpoint_id: The ID of the checkpoint to update the state of.
 
         Returns:
             None
 
         Example Usage:
 
-            await client.threads.get_state(
+            await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
@@ -961,9 +964,10 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-    ) -> AsyncIterator[StreamPart]:
-        ...
+    ) -> AsyncIterator[StreamPart]: ...
 
     @overload
     def stream(
@@ -978,8 +982,10 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
-    ) -> AsyncIterator[StreamPart]:
-        ...
+        on_disconnect: Optional[DisconnectMode] = None,
+        webhook: Optional[str] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
+    ) -> AsyncIterator[StreamPart]: ...
 
     def stream(
         self,
@@ -994,8 +1000,10 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1017,6 +1025,8 @@ class RunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            on_disconnect: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
 
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
@@ -1059,6 +1069,8 @@ class RunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_disconnect": on_disconnect,
+            "on_completion": on_completion,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1081,8 +1093,8 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
-    ) -> Run:
-        ...
+        on_completion: Optional[OnCompletionBehavior] = None,
+    ) -> Run: ...
 
     @overload
     async def create(
@@ -1098,8 +1110,7 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-    ) -> Run:
-        ...
+    ) -> Run: ...
 
     async def create(
         self,
@@ -1114,6 +1125,7 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Run:
         """Create a background run.
 
@@ -1127,9 +1139,7 @@ class RunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
@@ -1212,6 +1222,7 @@ class RunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_completion": on_completion,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         if thread_id:
@@ -1240,9 +1251,10 @@ class RunsClient:
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
     async def wait(
@@ -1255,8 +1267,10 @@ class RunsClient:
         config: Optional[Config] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+        webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     async def wait(
         self,
@@ -1270,7 +1284,9 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1284,12 +1300,12 @@ class RunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            on_disconnect: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -1349,6 +1365,8 @@ class RunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_disconnect": on_disconnect,
+            "on_completion": on_completion,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
@@ -1448,6 +1466,28 @@ class RunsClient:
 
         """  # noqa: E501
         return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
+
+    def join_stream(self, thread_id: str, run_id: str) -> AsyncIterator[StreamPart]:
+        """Stream output from a run in real-time, until the run is done.
+        Output is not buffered, so any output produced before this call will
+        not be received here.
+
+        Args:
+            thread_id: The thread ID to join.
+            run_id: The run ID to join.
+
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.runs.join(
+                thread_id="thread_id_to_join",
+                run_id="run_id_to_join"
+            )
+
+        """  # noqa: E501
+        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
 
     async def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.
@@ -1695,3 +1735,23 @@ def _get_api_key(api_key: Optional[str] = None) -> Optional[str]:
         if env := os.getenv(f"{prefix}_API_KEY"):
             return env.strip().strip('"').strip("'")
     return None  # type: ignore
+
+
+def _get_headers(
+    api_key: Optional[str], custom_headers: Optional[dict[str, str]]
+) -> dict[str, str]:
+    """Combine api_key and custom user-provided headers."""
+    custom_headers = custom_headers or {}
+    for header in RESERVED_HEADERS:
+        if header in custom_headers:
+            raise ValueError(f"Cannot set reserved header '{header}'")
+
+    headers = {
+        "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
+        **custom_headers,
+    }
+    api_key = _get_api_key(api_key)
+    if api_key:
+        headers["x-api-key"] = api_key
+
+    return headers

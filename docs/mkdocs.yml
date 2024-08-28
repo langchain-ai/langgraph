@@ -129,19 +129,22 @@ nav:
           - Create subgraphs: how-tos/subgraph.ipynb
           - Create branches for parallel execution: how-tos/branching.ipynb
           - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
+          - Control graph recursion limit: how-tos/recursion-limit.ipynb
       - Persistence:
           - Add persistence ("memory"): how-tos/persistence.ipynb
           - Manage conversation history: how-tos/memory/manage-conversation-history.ipynb
           - Delete messages: how-tos/memory/delete-messages.ipynb
           - Add summary of the conversation history: how-tos/memory/add-summary-conversation-history.ipynb
-          - Create custom checkpointer using Postgres: how-tos/persistence_postgres.ipynb
+          - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
+          - Add dynamic breakpoints: how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
           - Wait for user input: how-tos/human_in_the_loop/wait-user-input.ipynb
           - View and update past graph state: how-tos/human_in_the_loop/time-travel.ipynb
           - Edit graph state: how-tos/human_in_the_loop/edit-graph-state.ipynb
+          - Review tool calls: how-tos/human_in_the_loop/review-tool-calls.ipynb
       - Streaming:
           - Stream full state: how-tos/stream-values.ipynb
           - Stream state updates: how-tos/stream-updates.ipynb
@@ -168,6 +171,7 @@ nav:
           - Visualize your graph: how-tos/visualization.ipynb
           - Add runtime configuration: how-tos/configuration.ipynb
           - Add node retries: how-tos/node-retries.ipynb
+          - How to force function calling agent to structure output: how-tos/react-agent-structured-output.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
@@ -215,6 +219,7 @@ nav:
               - Wait for User Input: "cloud/how-tos/human_in_the_loop_user_input.md"
               - Edit Graph State: "cloud/how-tos/human_in_the_loop_edit_state.md"
               - Replay and Branch from Prior States: "cloud/how-tos/human_in_the_loop_time_travel.md"
+              - Review Tool Calls: "cloud/how-tos/human_in_the_loop_review_tool_calls.md"
           - LangGraph Studio:
               - Test Cloud Deployment: "cloud/how-tos/test_deployment.md"
               - Test Local Deployment: "cloud/how-tos/test_local_deployment.md"
@@ -229,6 +234,8 @@ nav:
               - Configure Agents: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
               - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
               - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
+              - Copy Threads: 'cloud/how-tos/copy_threads.md'
+              - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
       - Conceptual Guides:
           - API Concepts: "cloud/concepts/api.md"
           - Cloud Concepts: "cloud/concepts/cloud.md"
@@ -239,6 +246,8 @@ nav:
               - JS/TS: "cloud/reference/sdk/js_ts_sdk_ref.md"
           - CLI: "cloud/reference/cli.md"
           - Environment Variables: "cloud/reference/env_var.md"
+      - FAQ:
+          - Studio: "cloud/faq/studio.md"
 
 markdown_extensions:
   - abbr

@@ -2,7 +2,17 @@
 
 Implementation of LangGraph CheckpointSaver that uses Postgres.
 
+## Dependencies
+
+By default `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) without any extras. However, you can choose a specific installation that best suits your needs [here](https://www.psycopg.org/psycopg3/docs/basic/install.html) (for example, `psycopg[binary]`).
+
 ## Usage
+
+> [!IMPORTANT]
+> When using Postgres checkpointers for the first time, make sure to call `.setup()` method on them to create required tables. See example below.
+
+> [!IMPORTANT]
+> When manually creating Postgres connections and passing them to `PostgresSaver` or `AsyncPostgresSaver`, make sure to include `autocommit=True` and `row_factory=dict_row` (`from psycopg.rows import dict_row`). See a full example in this [how-to guide](https://langchain-ai.github.io/langgraph/how-tos/persistence_postgres/).
 
 ```python
 from langgraph.checkpoint.postgres import PostgresSaver
@@ -12,6 +22,8 @@ read_config = {"configurable": {"thread_id": "1"}}
 
 DB_URI = "postgres://postgres:postgres@localhost:5432/postgres?sslmode=disable"
 with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
+    # call .setup() the first time you're using the checkpointer
+    checkpointer.setup()
     checkpoint = {
         "v": 1,
         "ts": "2024-07-31T20:14:19.804150+00:00",
@@ -36,7 +48,6 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
             }
         },
         "pending_sends": [],
-        "current_tasks": {}
     }
 
     # store checkpoint
@@ -79,7 +90,6 @@ async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
             }
         },
         "pending_sends": [],
-        "current_tasks": {}
     }
 
     # store checkpoint

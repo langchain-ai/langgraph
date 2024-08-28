@@ -28,6 +28,7 @@ from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import (
     CHECKPOINT_NAMESPACE_SEPARATOR,
     END,
+    SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
     START,
     TAG_HIDDEN,
     Send,
@@ -140,8 +141,7 @@ class Graph:
         node: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def add_node(
@@ -150,8 +150,7 @@ class Graph:
         action: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def add_node(
         self,
@@ -160,10 +159,15 @@ class Graph:
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
-        if isinstance(node, str) and CHECKPOINT_NAMESPACE_SEPARATOR in node:
-            raise ValueError(
-                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
-            )
+        if isinstance(node, str):
+            for character in (
+                CHECKPOINT_NAMESPACE_SEPARATOR,
+                SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
+            ):
+                if character in node:
+                    raise ValueError(
+                        f"'{character}' is a reserved character and is not allowed in the node names."
+                    )
 
         if self.compiled:
             logger.warning(
@@ -192,12 +196,14 @@ class Graph:
             raise ValueError("END cannot be a start node")
         if end_key == START:
             raise ValueError("START cannot be an end node")
-        if not self.support_multiple_edges and start_key in set(
+
+        # run this validation only for non-StateGraph graphs
+        if not hasattr(self, "channels") and start_key in set(
             start for start, _ in self.edges
         ):
             raise ValueError(
                 f"Already found path for node '{start_key}'.\n"
-                "For multiple edges, use StateGraph with an annotated state key."
+                "For multiple edges, use StateGraph with an Annotated state key."
             )
 
         self.edges.add((start_key, end_key))

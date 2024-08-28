@@ -1,12 +1,13 @@
 import sqlite3
 import threading
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from hashlib import md5
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
@@ -176,7 +177,7 @@ class SqliteSaver(BaseCheckpointSaver):
 
         This method retrieves a checkpoint tuple from the SQLite database based on the
         provided config. If the config contains a "checkpoint_id" key, the checkpoint with
-        the matching thread ID and timestamp is retrieved. Otherwise, the latest checkpoint
+        the matching thread ID and checkpoint ID is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
         Args:
@@ -193,12 +194,12 @@ class SqliteSaver(BaseCheckpointSaver):
             >>> print(checkpoint_tuple)
             CheckpointTuple(...)
 
-            With timestamp:
+            With checkpoint ID:
 
             >>> config = {
             ...    "configurable": {
             ...        "thread_id": "1",
-           ...         "checkpoint_ns": "",
+            ...        "checkpoint_ns": "",
             ...        "checkpoint_id": "1ef4f797-8335-6428-8001-8a1503f9b875",
             ...    }
             ... }
@@ -283,12 +284,12 @@ class SqliteSaver(BaseCheckpointSaver):
         """List checkpoints from the database.
 
         This method retrieves a list of checkpoint tuples from the SQLite database based
-        on the provided config. The checkpoints are ordered by timestamp in descending order.
+        on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
         Args:
             config (RunnableConfig): The config to use for listing the checkpoints.
             filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata. Defaults to None.
-            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified timestamp are returned. Defaults to None.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
             limit (Optional[int]): The maximum number of checkpoints to return. Defaults to None.
 
         Yields:
@@ -318,7 +319,7 @@ class SqliteSaver(BaseCheckpointSaver):
         ORDER BY checkpoint_id DESC"""
         if limit:
             query += f" LIMIT {limit}"
-        with self.cursor(transaction=False) as cur:
+        with self.cursor(transaction=False) as cur, closing(self.conn.cursor()) as wcur:
             cur.execute(query, param_values)
             for (
                 thread_id,
@@ -329,6 +330,10 @@ class SqliteSaver(BaseCheckpointSaver):
                 checkpoint,
                 metadata,
             ) in cur:
+                wcur.execute(
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    (thread_id, checkpoint_ns, checkpoint_id),
+                )
                 yield CheckpointTuple(
                     {
                         "configurable": {
@@ -350,6 +355,10 @@ class SqliteSaver(BaseCheckpointSaver):
                         if parent_checkpoint_id
                         else None
                     ),
+                    [
+                        (task_id, channel, self.serde.loads_typed((type, value)))
+                        for task_id, channel, type, value in wcur
+                    ],
                 )
 
     def put(
@@ -367,10 +376,11 @@ class SqliteSaver(BaseCheckpointSaver):
         Args:
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
-            metadata (Optional[dict[str, Any]]): Additional metadata to save with the checkpoint. Defaults to None.
+            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (ChannelVersions): New channel versions as of this write.
 
         Returns:
-            RunnableConfig: The updated config containing the saved checkpoint's timestamp.
+            RunnableConfig: Updated configuration after storing the checkpoint.
 
         Examples:
 
@@ -424,14 +434,14 @@ class SqliteSaver(BaseCheckpointSaver):
         """
         with self.lock, self.cursor() as cur:
             cur.executemany(
-                "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         str(config["configurable"]["thread_id"]),
                         str(config["configurable"]["checkpoint_ns"]),
                         str(config["configurable"]["checkpoint_id"]),
                         task_id,
-                        idx,
+                        WRITES_IDX_MAP.get(channel, idx),
                         channel,
                         *self.serde.dumps_typed(value),
                     )

@@ -16,6 +16,7 @@ import aiosqlite
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
@@ -230,7 +231,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
 
         This method retrieves a checkpoint tuple from the SQLite database based on the
         provided config. If the config contains a "checkpoint_id" key, the checkpoint with
-        the matching thread ID and timestamp is retrieved. Otherwise, the latest checkpoint
+        the matching thread ID and checkpoint ID is retrieved. Otherwise, the latest checkpoint
         for the given thread ID is retrieved.
 
         Args:
@@ -317,26 +318,26 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         """List checkpoints from the database asynchronously.
 
         This method retrieves a list of checkpoint tuples from the SQLite database based
-        on the provided config. The checkpoints are ordered by timestamp in descending order.
+        on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
 
         Args:
             config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
             filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
-            before (Optional[RunnableConfig]): List checkpoints created before this configuration.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
             limit (Optional[int]): Maximum number of checkpoints to return.
 
         Yields:
             AsyncIterator[CheckpointTuple]: An asynchronous iterator of matching checkpoint tuples.
         """
         await self.setup()
-        where, param_values = search_where(config, filter, before)
+        where, params = search_where(config, filter, before)
         query = f"""SELECT thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata
         FROM checkpoints
         {where}
         ORDER BY checkpoint_id DESC"""
         if limit:
             query += f" LIMIT {limit}"
-        async with self.conn.execute(query, param_values) as cursor:
+        async with self.conn.execute(query, params) as cur, self.conn.cursor() as wcur:
             async for (
                 thread_id,
                 checkpoint_ns,
@@ -345,7 +346,11 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
                 type,
                 checkpoint,
                 metadata,
-            ) in cursor:
+            ) in cur:
+                await wcur.execute(
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    (thread_id, checkpoint_ns, checkpoint_id),
+                )
                 yield CheckpointTuple(
                     {
                         "configurable": {
@@ -367,6 +372,10 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
                         if parent_checkpoint_id
                         else None
                     ),
+                    [
+                        (task_id, channel, self.serde.loads_typed((type, value)))
+                        async for task_id, channel, type, value in wcur
+                    ],
                 )
 
     async def aput(
@@ -385,10 +394,10 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
             config (RunnableConfig): The config to associate with the checkpoint.
             checkpoint (Checkpoint): The checkpoint to save.
             metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
-            new_versions (dict): New versions as of this write
+            new_versions (ChannelVersions): New channel versions as of this write.
 
         Returns:
-            RunnableConfig: The updated config containing the saved checkpoint's timestamp.
+            RunnableConfig: Updated configuration after storing the checkpoint.
         """
         await self.setup()
         thread_id = config["configurable"]["thread_id"]
@@ -432,19 +441,19 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
             task_id (str): Identifier for the task creating the writes.
         """
         await self.setup()
-        async with self.conn.executemany(
-            "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
-            [
-                (
-                    str(config["configurable"]["thread_id"]),
-                    str(config["configurable"]["checkpoint_ns"]),
-                    str(config["configurable"]["checkpoint_id"]),
-                    task_id,
-                    idx,
-                    channel,
-                    *self.serde.dumps_typed(value),
-                )
-                for idx, (channel, value) in enumerate(writes)
-            ],
-        ):
-            await self.conn.commit()
+        async with self.conn.cursor() as cur:
+            await cur.executemany(
+                "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                [
+                    (
+                        str(config["configurable"]["thread_id"]),
+                        str(config["configurable"]["checkpoint_ns"]),
+                        str(config["configurable"]["checkpoint_id"]),
+                        task_id,
+                        WRITES_IDX_MAP.get(channel, idx),
+                        channel,
+                        *self.serde.dumps_typed(value),
+                    )
+                    for idx, (channel, value) in enumerate(writes)
+                ],
+            )

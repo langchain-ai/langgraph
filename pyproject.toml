@@ -7,12 +7,13 @@ license = "MIT"
 readme = "README.md"
 
 [tool.poetry.dependencies]
-python = "^3.10"
+python = "^3.9"
 
 [tool.poetry.group.docs.dependencies]
 gigagraph = { path = "libs/langgraph/", develop = true }
 gigagraph-checkpoint = { path = "libs/checkpoint/", develop = true }
 gigagraph-checkpoint-sqlite = { path = "libs/checkpoint-sqlite", develop = true }
+gigagraph-checkpoint-postgres = { path = "libs/checkpoint-postgres", develop = true }
 gigagraph-sdk = {path = "libs/sdk-py", develop = true}
 mkdocs = "^1.6.0"
 mkdocstrings = "^0.25.1"

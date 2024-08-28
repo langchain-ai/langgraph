@@ -28,12 +28,6 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
-    def checkpoint(self) -> Value:
-        try:
-            return self.value
-        except AttributeError:
-            raise EmptyChannelError()
-
     @contextmanager
     def from_checkpoint(
         self, checkpoint: Optional[Value], config: RunnableConfig
@@ -58,7 +52,7 @@ class EphemeralValue(Generic[Value], BaseChannel[Value, Value, Value]):
                 return False
         if len(values) != 1 and self.guard:
             raise InvalidUpdateError(
-                "EphemeralValue can only receive one value per step."
+                f"At key '{self.key}': EphemeralValue(guard=True) can receive only one value per step. Use guard=False if you want to store any one of multiple values."
             )
 
         self.value = values[-1]

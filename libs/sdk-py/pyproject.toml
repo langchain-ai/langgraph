@@ -1,7 +1,7 @@
 [tool.poetry]
 name = "gigagraph-sdk"
-version = "0.1.27"
-description = "SDK for interacting with GigaGraph API"
+version = "0.1.29"
+description = "SDK for interacting with LangGraph API"
 authors = []
 license = "MIT"
 readme = "README.md"
@@ -15,7 +15,7 @@ httpx-sse = ">=0.4.0"
 orjson = ">=3.10.1"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.1.4"
+ruff = "^0.6.2"
 codespell = "^2.2.0"
 pytest = "^7.2.1"
 pytest-asyncio = "^0.21.1"

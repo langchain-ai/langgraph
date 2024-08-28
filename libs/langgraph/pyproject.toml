@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "gigagraph"
-version = "0.2.2"
+version = "0.2.14"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
@@ -28,7 +28,7 @@ pytest-watcher = "^0.4.1"
 gigachain = ">=0.1.0"
 grandalf = "^0.8"
 mypy = "^1.6.0"
-ruff = "^0.1.4"
+ruff = "^0.6.2"
 jupyter = "^1.0.0"
 langchainhub = "^0.1.14"
 gigachain-openai = ">=0.1.2"
@@ -38,6 +38,7 @@ pytest-repeat = "^0.9.3"
 gigagraph-checkpoint = {path = "../checkpoint", develop = true}
 gigagraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 gigagraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
+psycopg = {extras = ["binary"], version = ">=3.0.0"}
 
 [tool.poetry.group.dev]
 optional = true
@@ -68,7 +69,7 @@ omit = ["tests/*"]
 [tool.pytest-watcher]
 now = true
 delay = 0.1
-runner_args = ["--ff", "-v", "-n", "auto", "--dist", "worksteal", "--snapshot-update", "--tb", "short"]
+runner_args = ["--ff", "-v", "-x", "-n", "auto", "--dist", "worksteal", "--snapshot-update", "--tb", "short"]
 patterns = ["*.py"]
 
 [build-system]
