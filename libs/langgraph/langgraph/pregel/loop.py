@@ -25,6 +25,7 @@ from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self
 
 from langgraph.channels.base import BaseChannel
+from langgraph.channels.untracked_value import UntrackedValue
 from langgraph.checkpoint.base import (
     BaseCheckpointSaver,
     Checkpoint,
@@ -158,23 +159,33 @@ class PregelLoop:
         """Put writes for a task, to be read by the next tick."""
         if not writes:
             return
-        self.checkpoint_pending_writes.extend((task_id, k, v) for k, v in writes)
-        if self.checkpointer_put_writes is not None:
-            self.submit(
-                self.checkpointer_put_writes,
-                {
-                    **self.checkpoint_config,
-                    "configurable": {
-                        **self.checkpoint_config["configurable"],
-                        "checkpoint_ns": self.config["configurable"].get(
-                            "checkpoint_ns", ""
-                        ),
-                        "checkpoint_id": self.checkpoint["id"],
-                    },
-                },
-                writes,
-                task_id,
+        # TODO in distributed execution, these UntrackedValue writes would
+        # effectively be dropped, so need rethink how to handle them then
+        if saveable_writes := [
+            w
+            for w in writes
+            if w[0] not in self.channels
+            or not isinstance(self.channels[w[0]], UntrackedValue)
+        ]:
+            self.checkpoint_pending_writes.extend(
+                (task_id, k, v) for k, v in saveable_writes
             )
+            if self.checkpointer_put_writes is not None:
+                self.submit(
+                    self.checkpointer_put_writes,
+                    {
+                        **self.checkpoint_config,
+                        "configurable": {
+                            **self.checkpoint_config["configurable"],
+                            "checkpoint_ns": self.config["configurable"].get(
+                                "checkpoint_ns", ""
+                            ),
+                            "checkpoint_id": self.checkpoint["id"],
+                        },
+                    },
+                    saveable_writes,
+                    task_id,
+                )
         if task := next((t for t in self.tasks if t.id == task_id), None):
             self.stream.extend(
                 ("updates", v)
