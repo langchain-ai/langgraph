@@ -37,7 +37,7 @@ def validate_config(config: Config) -> Config:
     )
 
     if config.get("node_version"):
-        if config["node_version"] not in ("20"):
+        if config["node_version"] not in ("20",):
             raise click.UsageError(
                 f"Unsupported Node.js version: {config['node_version']}. "
                 "Currently only `node_version: \"20\"` is supported."
