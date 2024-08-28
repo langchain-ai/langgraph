@@ -9,6 +9,7 @@ import click
 
 class Config(TypedDict):
     python_version: str
+    node_version: Optional[str]
     pip_config_file: Optional[str]
     dockerfile_lines: list[str]
     dependencies: list[str]
@@ -17,27 +18,46 @@ class Config(TypedDict):
 
 
 def validate_config(config: Config) -> Config:
-    config = {
-        "python_version": config.get("python_version", "3.11"),
-        "pip_config_file": config.get("pip_config_file"),
-        "dockerfile_lines": config.get("dockerfile_lines", []),
-        "dependencies": config.get("dependencies", []),
-        "graphs": config.get("graphs", {}),
-        "env": config.get("env", {}),
-    }
-    if config["python_version"] not in (
-        "3.11",
-        "3.12",
-    ):
-        raise click.UsageError(
-            f"Unsupported Python version: {config['python_version']}. "
-            "Supported versions are 3.11 and 3.12."
-        )
-    if not config["dependencies"]:
-        raise click.UsageError(
-            "No dependencies found in config. "
-            "Add at least one dependency to 'dependencies' list."
-        )
+    config = (
+        {
+            "node_version": config.get("node_version"),
+            "dockerfile_lines": config.get("dockerfile_lines", []),
+            "graphs": config.get("graphs", {}),
+            "env": config.get("env", {}),
+        }
+        if config.get("node_version")
+        else {
+            "python_version": config.get("python_version", "3.11"),
+            "pip_config_file": config.get("pip_config_file"),
+            "dockerfile_lines": config.get("dockerfile_lines", []),
+            "dependencies": config.get("dependencies", []),
+            "graphs": config.get("graphs", {}),
+            "env": config.get("env", {}),
+        }
+    )
+
+    if config.get("node_version"):
+        if config["node_version"] not in ("20"):
+            raise click.UsageError(
+                f"Unsupported Node.js version: {config['node_version']}. "
+                "Currently only `node_version: \"20\"` is supported."
+            )
+
+    if config.get("python_version"):
+        if config["python_version"] not in (
+            "3.11",
+            "3.12",
+        ):
+            raise click.UsageError(
+                f"Unsupported Python version: {config['python_version']}. "
+                "Supported versions are 3.11 and 3.12."
+            )
+        if not config["dependencies"]:
+            raise click.UsageError(
+                "No dependencies found in config. "
+                "Add at least one dependency to 'dependencies' list."
+            )
+
     if not config["graphs"]:
         raise click.UsageError(
             "No graphs found in config. "
@@ -191,7 +211,7 @@ def _update_graph_paths(
             config["graphs"][graph_id] = f"{module_str}:{attr_str}"
 
 
-def config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
+def python_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
     # configure pip
     pip_install = (
         "PYTHONDONTWRITEBYTECODE=1 pip install --no-cache-dir -c /api/constraints.txt"
@@ -264,6 +284,29 @@ RUN {pip_install} -e /deps/*
 ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
 
 {f"WORKDIR {local_deps.working_dir}" if local_deps.working_dir else ""}"""
+
+
+def node_config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
+    faux_path = f"/deps/{config_path.parent.name}"
+
+    return f"""FROM {base_image}:{config['node_version']}
+
+{os.linesep.join(config["dockerfile_lines"])}
+
+ADD . {faux_path}
+
+RUN cd {faux_path} && yarn install --frozen-lockfile
+
+ENV LANGSERVE_GRAPHS='{json.dumps(config["graphs"])}'
+
+WORKDIR {faux_path}"""
+
+
+def config_to_docker(config_path: pathlib.Path, config: Config, base_image: str):
+    if config.get("node_version"):
+        return node_config_to_docker(config_path, config, base_image)
+
+    return python_config_to_docker(config_path, config, base_image)
 
 
 def config_to_compose(

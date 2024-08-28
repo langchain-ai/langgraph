@@ -372,7 +372,11 @@ def _build(
     pull: bool,
     tag: str,
 ):
-    base_image = base_image or "langchain/langgraph-api"
+    base_image = base_image or (
+        "langchain/langgraphjs-api"
+        if config_json.get("node_version")
+        else "langchain/langgraph-api"
+    )
 
     # pull latest images
     if pull:
@@ -380,7 +384,9 @@ def _build(
             subp_exec(
                 "docker",
                 "pull",
-                f"{base_image}:{config_json['python_version']}",
+                f"{base_image}:{config_json['node_version']}"
+                if config_json.get("node_version")
+                else f"{base_image}:{config_json['python_version']}",
                 verbose=True,
             )
         )
@@ -462,7 +468,11 @@ def dockerfile(save_path: pathlib.Path, config: pathlib.Path):
     with open(save_path, "w") as f:
         f.write(
             langgraph_cli.config.config_to_docker(
-                config, config_json, "langchain/langgraph-api"
+                config,
+                config_json,
+                "langchain/langgraphjs-api"
+                if config_json.get("node_version")
+                else "langchain/langgraph-api",
             )
         )
 
@@ -500,7 +510,9 @@ def prepare_args_and_stdin(
         config_path,
         config,
         watch=watch,
-        base_image="langchain/langgraph-api",
+        base_image="langchain/langgraphjs-api"
+        if config.get("node_version")
+        else "langchain/langgraph-api",
     )
     return args, stdin
 
@@ -527,7 +539,9 @@ def prepare(
             subp_exec(
                 "docker",
                 "pull",
-                f"langchain/langgraph-api:{config['python_version']}",
+                f"langchain/langgraphjs-api:{config['node_version']}"
+                if config.get("node_version")
+                else f"langchain/langgraph-api:{config['python_version']}",
                 verbose=verbose,
             )
         )
