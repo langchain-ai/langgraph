@@ -9341,8 +9341,11 @@ async def test_doubly_nested_graph_state(
     assert [
         c async for c in app.astream({"my_key": "my value"}, config, subgraphs=True)
     ] == [
-        ("", {"parent_1": {"my_key": "hi my value"}}),
-        ("child|child_1", {"grandchild_1": {"my_key": "hi my value here"}}),
+        ((), {"parent_1": {"my_key": "hi my value"}}),
+        (
+            (AnyStr("child:"), AnyStr("child_1:")),
+            {"grandchild_1": {"my_key": "hi my value here"}},
+        ),
     ]
     # get state without subgraphs
     outer_state = await app.aget_state(config)
@@ -9564,10 +9567,13 @@ async def test_doubly_nested_graph_state(
     )
     # resume
     assert [c async for c in app.astream(None, config, subgraphs=True)] == [
-        ("child|child_1", {"grandchild_2": {"my_key": "hi my value here and there"}}),
-        ("child", {"child_1": {"my_key": "hi my value here and there"}}),
-        ("", {"child": {"my_key": "hi my value here and there"}}),
-        ("", {"parent_2": {"my_key": "hi my value here and there and back again"}}),
+        (
+            (AnyStr("child:"), AnyStr("child_1:")),
+            {"grandchild_2": {"my_key": "hi my value here and there"}},
+        ),
+        ((AnyStr("child:"),), {"child_1": {"my_key": "hi my value here and there"}}),
+        ((), {"child": {"my_key": "hi my value here and there"}}),
+        ((), {"parent_2": {"my_key": "hi my value here and there and back again"}}),
     ]
     # get state with and without subgraphs
     assert (

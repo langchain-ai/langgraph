@@ -1117,18 +1117,13 @@ class Pregel(
         def output() -> Iterator:
             while loop.stream:
                 ns, mode, payload = loop.stream.popleft()
-                ns = (
-                    NS_SEP.join(p.split(NS_END)[0] for p in ns.split(NS_SEP))
-                    if ns
-                    else ""
-                )
                 if mode in stream_modes:
                     if subgraphs and isinstance(stream_mode, list):
-                        yield (ns, mode, payload)
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
                     elif isinstance(stream_mode, list):
                         yield (mode, payload)
                     elif subgraphs:
-                        yield (ns, payload)
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
                     else:
                         yield payload
 
@@ -1364,18 +1359,13 @@ class Pregel(
         def output() -> Iterator:
             while loop.stream:
                 ns, mode, payload = loop.stream.popleft()
-                ns = (
-                    NS_SEP.join(p.split(NS_END)[0] for p in ns.split(NS_SEP))
-                    if ns
-                    else ""
-                )
                 if mode in stream_modes:
                     if subgraphs and isinstance(stream_mode, list):
-                        yield (ns, mode, payload)
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
                     elif isinstance(stream_mode, list):
                         yield (mode, payload)
                     elif subgraphs:
-                        yield (ns, payload)
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
                     else:
                         yield payload
 
