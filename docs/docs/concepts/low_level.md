@@ -572,7 +572,7 @@ guide for that [here](../how-tos/streaming-tokens.ipynb).
 #### Only stream tokens from specific nodes/LLMs
 
 
-There are certain cases where you have multiple nodes in your graph that make LLM calls, and you do not wish to stream the tokens from every single LLM call. For example, you may use one LLM as a planner for the next steps to take, and onther LLM somewhere else in the graph that actually responds to the user. In that case, you most likely WON'T want to stream tokens from the planner LLM but WILL want to stream them from the respond to user LLM. Below we show two different ways of doing this, one by streaming from specific nodes only and the second by streaming from specific LLMs only.
+There are certain cases where you have multiple nodes in your graph that make LLM calls, and you do not wish to stream the tokens from every single LLM call. For example, you may use one LLM as a planner for the next steps to take, and another LLM somewhere else in the graph that actually responds to the user. In that case, you most likely WON'T want to stream tokens from the planner LLM but WILL want to stream them from the respond to user LLM. Below we show two different ways of doing this, one by streaming from specific nodes only and the second by streaming from specific LLMs only.
 
 First, let's define our graph:
 
