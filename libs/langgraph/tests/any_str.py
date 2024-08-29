@@ -1,9 +1,9 @@
 import re
-from typing import Any, Sequence
+from typing import Any, Sequence, Union
 
 
 class AnyStr(str):
-    def __init__(self, prefix: str | re.Pattern = "") -> None:
+    def __init__(self, prefix: Union[str, re.Pattern] = "") -> None:
         super().__init__()
         self.prefix = prefix
 
