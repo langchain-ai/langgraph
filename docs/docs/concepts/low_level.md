@@ -445,7 +445,7 @@ LangGraph is built with first class support for streaming. There are several dif
 There are several different modes you can specify when calling these methods (e.g. `graph.stream(..., mode="...")):
 
 - [`"values"`](../how-tos/stream-values.ipynb): This streams the full value of the state after each step of the graph.
-- [`"updates`](../how-tos/stream-updates.ipynb): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
+- [`"updates"`](../how-tos/stream-updates.ipynb): This streams the updates to the state after each step of the graph. If multiple updates are made in the same step (e.g. multiple nodes are run) then those updates are streamed separately.
 - `"debug"`: This streams as much information as possible throughout the execution of the graph.
 
 The below visualization shows the difference between the `values` and `updates` modes:
