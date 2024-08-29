@@ -207,18 +207,21 @@ class PregelLoop:
             )
         self._output_writes(task_id, writes)
 
-    def _output_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
+    def _output_writes(
+        self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
+    ) -> None:
         if task := next((t for t in self.tasks if t.id == task_id), None):
             self.stream.extend(
                 (self.config["configurable"].get("checkpoint_ns", ""), "updates", v)
-                for v in map_output_updates(self.output_keys, [(task, writes)])
+                for v in map_output_updates(self.output_keys, [(task, writes)], cached)
             )
-            self.stream.extend(
-                (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
-                for v in map_debug_task_results(
-                    self.step, [(task, writes)], self.stream_keys
+            if not cached:
+                self.stream.extend(
+                    (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
+                    for v in map_debug_task_results(
+                        self.step, [(task, writes)], self.stream_keys
+                    )
                 )
-            )
 
     def tick(
         self,
@@ -326,7 +329,7 @@ class PregelLoop:
             # print output for any tasks we applied previous writes to
             for task in self.tasks:
                 if task.writes:
-                    self._output_writes(task.id, task.writes)
+                    self._output_writes(task.id, task.writes, cached=True)
 
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks):
