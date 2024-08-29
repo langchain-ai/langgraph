@@ -370,9 +370,9 @@ class Pregel(
                     )
 
     async def aget_subgraphs(
-        self, recursive: bool = False
+        self, recurse: bool = False
     ) -> AsyncIterator[tuple[str, Pregel]]:
-        for name, node in self.get_subgraphs(recurse=recursive):
+        for name, node in self.get_subgraphs(recurse=recurse):
             yield name, node
 
     def _prepare_state_snapshot(
@@ -482,7 +482,7 @@ class Pregel(
                 for_execution=False,
             )
             # get the subgraphs
-            subgraphs = dict(self.get_subgraphs())
+            subgraphs = {n: g async for n, g in self.aget_subgraphs()}
             parent_ns = saved.config["configurable"].get("checkpoint_ns", "")
             task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
             for task in next_tasks:
@@ -534,6 +534,28 @@ class Pregel(
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
+        if (
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            for name, pregel in self.get_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    return pregel.get_state(
+                        {
+                            "configurable": {
+                                **config["configurable"],
+                                CONFIG_KEY_CHECKPOINTER: checkpointer,
+                            }
+                        },
+                        subgraphs=subgraphs,
+                    )
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+
         config = merge_configs(self.config, config) if self.config else config
         saved = checkpointer.get_tuple(config)
         return self._prepare_state_snapshot(
@@ -549,6 +571,28 @@ class Pregel(
         )
         if not checkpointer:
             raise ValueError("No checkpointer set")
+
+        if (
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            async for name, pregel in self.aget_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    return await pregel.aget_state(
+                        {
+                            "configurable": {
+                                **config["configurable"],
+                                CONFIG_KEY_CHECKPOINTER: checkpointer,
+                            }
+                        },
+                        subgraphs=subgraphs,
+                    )
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         config = merge_configs(self.config, config) if self.config else config
         saved = await checkpointer.aget_tuple(config)
@@ -630,7 +674,7 @@ class Pregel(
                 part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
             )
             # find the subgraph with the matching name
-            for name, pregel in self.get_subgraphs(recurse=True):
+            async for name, pregel in self.aget_subgraphs(recurse=True):
                 if name == recast_checkpoint_ns:
                     async for state in pregel.aget_state_history(
                         {
