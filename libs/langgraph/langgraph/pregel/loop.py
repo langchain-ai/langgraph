@@ -36,6 +36,7 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     ERROR,
@@ -118,7 +119,6 @@ class PregelLoop:
     checkpoint_config: RunnableConfig
     checkpoint_metadata: CheckpointMetadata
     checkpoint_pending_writes: List[PendingWrite]
-    # (thread_id, checkpoint_ns -> channel_versions)
     checkpoint_previous_versions: dict[str, Union[str, float, int]]
 
     step: int
@@ -362,21 +362,15 @@ class PregelLoop:
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # assign step
         metadata["step"] = self.step
+        metadata["parents"] = self.config["configurable"].get(
+            CONFIG_KEY_CHECKPOINT_MAP, {}
+        )
         # bail if no checkpointer
         if self._checkpointer_put_after_previous is not None:
             # create new checkpoint
             self.checkpoint_metadata = metadata
             self.checkpoint = create_checkpoint(
-                self.checkpoint,
-                self.channels,
-                self.step,
-                # child graphs keep at most one checkpoint per parent checkpoint
-                # this is achieved by writing child checkpoints as progress is made
-                # (so that error recovery / resuming from interrupt don't lose work)
-                # but doing so always with an id equal to that of the parent checkpoint
-                id=self.config["configurable"]["checkpoint_id"]
-                if self.is_nested
-                else None,
+                self.checkpoint, self.channels, self.step
             )
 
             self.checkpoint_config = {

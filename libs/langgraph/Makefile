@@ -20,16 +20,18 @@ start-postgres:
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down
 
+TEST_PATH ?= .
+
 test:
 	make start-postgres; \
-	poetry run pytest; \
+	poetry run pytest $(TEST_PATH); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
 
 test_watch:
 	make start-postgres; \
-	poetry run ptw .; \
+	poetry run ptw . -- --ff -v -x -n auto --dist worksteal --snapshot-update --tb short $(TEST_PATH); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE

@@ -1,11 +1,11 @@
 from dataclasses import dataclass
-from typing import Any, Literal, Optional
-from uuid import uuid4
+from typing import Any, Literal
 
 INPUT = "__input__"
 CONFIG_KEY_SEND = "__pregel_send"
 CONFIG_KEY_READ = "__pregel_read"
 CONFIG_KEY_CHECKPOINTER = "__pregel_checkpointer"
+CONFIG_KEY_CHECKPOINT_MAP = "checkpoint_map"
 CONFIG_KEY_STORE = "__pregel_store"
 CONFIG_KEY_RESUMING = "__pregel_resuming"
 CONFIG_KEY_TASK_ID = "__pregel_task_id"
@@ -20,6 +20,7 @@ RESERVED = {
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,
     CONFIG_KEY_CHECKPOINTER,
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_STORE,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_TASK_ID,
@@ -31,8 +32,8 @@ TAG_HIDDEN = "langsmith:hidden"
 START = "__start__"
 END = "__end__"
 
-CHECKPOINT_NAMESPACE_SEPARATOR = "|"
-SEND_CHECKPOINT_NAMESPACE_SEPARATOR = ":"
+NS_SEP = "|"
+NS_END = ":"
 
 
 class Send:
@@ -51,7 +52,6 @@ class Send:
     Attributes:
         node (str): The name of the target node to send the message to.
         arg (Any): The state or message to send to the target node.
-        id (str): ID associated with the Send.
 
     Examples:
         >>> from typing import Annotated
@@ -79,26 +79,23 @@ class Send:
 
     node: str
     arg: Any
-    id: Optional[str]
 
-    def __init__(self, /, node: str, arg: Any, id: Optional[str] = None) -> None:
+    def __init__(self, /, node: str, arg: Any) -> None:
         """
         Initialize a new instance of the Send class.
 
         Args:
             node (str): The name of the target node to send the message to.
             arg (Any): The state or message to send to the target node.
-            id (str): ID associated with the Send.
         """
         self.node = node
         self.arg = arg
-        self.id = id or str(uuid4())
 
     def __hash__(self) -> int:
-        return hash((self.node, self.arg, self.id))
+        return hash((self.node, self.arg))
 
     def __repr__(self) -> str:
-        return f"Send(node={self.node!r}, arg={self.arg!r}, id={self.id!r})"
+        return f"Send(node={self.node!r}, arg={self.arg!r})"
 
     def __eq__(self, value: object) -> bool:
         return (

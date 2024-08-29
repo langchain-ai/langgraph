@@ -51,10 +51,10 @@ class CheckpointMetadata(TypedDict, total=False):
 
     Mapping from node name to writes emitted by that node.
     """
-    score: Optional[int]
-    """The score of the checkpoint.
+    parents: dict[str, str]
+    """The IDs of the parent checkpoints.
 
-    The score can be used to mark a checkpoint as "good".
+    Mapping from checkpoint namespace to checkpoint ID.
     """
 
 

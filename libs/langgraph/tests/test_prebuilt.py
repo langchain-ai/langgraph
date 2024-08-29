@@ -20,6 +20,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState
 from tests.messages import _AnyIdHumanMessage
@@ -57,7 +58,9 @@ class FakeToolCallingModel(BaseChatModel):
     ["memory", "sqlite", "postgres", "postgres_pipe"],
 )
 def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
-    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
+        "checkpointer_" + checkpointer_name
+    )
     model = FakeToolCallingModel()
 
     agent = create_react_agent(model, [], checkpointer=checkpointer)
@@ -78,6 +81,7 @@ def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> 
             "agent": "agent",
         }
         assert saved.metadata == {
+            "parents": {},
             "source": "loop",
             "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
             "step": 1,
@@ -92,7 +96,9 @@ def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> 
 async def test_no_modifier_async(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
+        f"checkpointer_{checkpointer_name}"
+    )
 
     model = FakeToolCallingModel()
 
@@ -114,6 +120,7 @@ async def test_no_modifier_async(
             "agent": "agent",
         }
         assert saved.metadata == {
+            "parents": {},
             "source": "loop",
             "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
             "step": 1,

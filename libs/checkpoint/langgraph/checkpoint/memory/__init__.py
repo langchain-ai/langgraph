@@ -210,7 +210,10 @@ class MemorySaver(
         config_checkpoint_id = get_checkpoint_id(config) if config else None
         for thread_id in thread_ids:
             for checkpoint_ns in self.storage[thread_id].keys():
-                if config_checkpoint_ns and checkpoint_ns != config_checkpoint_ns:
+                if (
+                    config_checkpoint_ns is not None
+                    and checkpoint_ns != config_checkpoint_ns
+                ):
                     continue
 
                 for checkpoint_id, (
