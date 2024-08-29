@@ -529,7 +529,7 @@ stream back token by token (`on_chat_model_stream: ChatOpenAI`) and then finish 
 we write the results back to the channel (`ChannelWrite<call_model,messages>`) and then finish the `call_model` node and then the graph as a whole.
 
 This should hopefully give you a good sense of what events are emitted in a simple graph. But what data do these events contain?
-Each type of event contains data in a different format. Let's look at what `on_chat_model_stream` events look like. These are an important type of event
+Each type of event contains data in a different format. Let's look at what `on_chat_model_stream` events look like. This is an important type of event
 since they are needed for streaming tokens from an LLM response.
 
 These events look like:
