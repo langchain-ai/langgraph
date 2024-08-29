@@ -63,6 +63,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_STREAM,
     ERROR,
     INTERRUPT,
     NS_END,
@@ -990,17 +991,16 @@ class Pregel(
 
     def _defaults(
         self,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        debug: Optional[bool] = None,
+        stream_mode: Optional[Union[StreamMode, list[StreamMode]]],
+        output_keys: Optional[Union[str, Sequence[str]]],
+        interrupt_before: Optional[Union[All, Sequence[str]]],
+        interrupt_after: Optional[Union[All, Sequence[str]]],
+        debug: Optional[bool],
     ) -> tuple[
         bool,
         Sequence[StreamMode],
-        Union[str, Sequence[str]],
         Union[str, Sequence[str]],
         Optional[Sequence[str]],
         Optional[Sequence[str]],
@@ -1016,12 +1016,10 @@ class Pregel(
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        if config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None:
+        if CONFIG_KEY_READ in config.get("configurable", {}):
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
-        if config is not None and config.get("configurable", {}).get(
-            CONFIG_KEY_CHECKPOINTER
-        ):
+        if CONFIG_KEY_CHECKPOINTER in config.get("configurable", {}):
             checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
                 CONFIG_KEY_CHECKPOINTER
             ]
@@ -1046,6 +1044,7 @@ class Pregel(
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
+        subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input.
 
@@ -1062,6 +1061,7 @@ class Pregel(
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             debug: Whether to print debug information during execution, defaults to False.
+            subgraphs: Whether to stream subgraphs, defaults to False.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
@@ -1155,6 +1155,8 @@ class Pregel(
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
             ) as loop:
+                if subgraphs:
+                    loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1287,6 +1289,7 @@ class Pregel(
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
+        subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input.
 
@@ -1303,6 +1306,7 @@ class Pregel(
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             debug: Whether to print debug information during execution, defaults to False.
+            subgraphs: Whether to stream subgraphs, defaults to False.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
@@ -1404,6 +1408,8 @@ class Pregel(
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
             ) as loop:
+                if subgraphs:
+                    loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates

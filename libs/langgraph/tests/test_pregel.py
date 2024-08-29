@@ -10897,7 +10897,10 @@ def test_doubly_nested_graph_state(
 
     # test invoke w/ nested interrupt
     config = {"configurable": {"thread_id": "1"}}
-    app.invoke({"my_key": "my value"}, config, debug=True)
+    assert [c for c in app.stream({"my_key": "my value"}, config, subgraphs=True)] == [
+        {"parent_1": {"my_key": "hi my value"}},
+        {"grandchild_1": {"my_key": "hi my value here"}},
+    ]
     # get state without subgraphs
     outer_state = app.get_state(config)
     assert outer_state == StateSnapshot(
@@ -11117,7 +11120,12 @@ def test_doubly_nested_graph_state(
         },
     )
     # resume
-    app.invoke(None, config, debug=True)
+    assert [c for c in app.stream(None, config, subgraphs=True)] == [
+        {"grandchild_2": {"my_key": "hi my value here and there"}},
+        {"child_1": {"my_key": "hi my value here and there"}},
+        {"child": {"my_key": "hi my value here and there"}},
+        {"parent_2": {"my_key": "hi my value here and there and back again"}},
+    ]
     # get state with and without subgraphs
     assert (
         app.get_state(config)
