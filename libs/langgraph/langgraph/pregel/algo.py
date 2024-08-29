@@ -31,13 +31,14 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
 )
 from langgraph.constants import (
-    CHECKPOINT_NAMESPACE_SEPARATOR,
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
+    NS_SEP,
     RESERVED,
     TAG_HIDDEN,
     TASKS,
@@ -272,7 +273,8 @@ def prepare_next_tasks(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[list[PregelTask], list[PregelExecutableTask]]:
-    parent_ns = config.get("configurable", {}).get("checkpoint_ns", "")
+    configurable = config.get("configurable", {})
+    parent_ns = configurable.get("checkpoint_ns", "")
     tasks: Union[list[PregelTask], list[PregelExecutableTask]] = []
     # Consume pending packets
     for packet in checkpoint["pending_sends"]:
@@ -291,9 +293,7 @@ def prepare_next_tasks(
             "langgraph_task_idx": len(tasks),
         }
         checkpoint_ns = (
-            f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}"
-            if parent_ns
-            else packet.node
+            f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
         task_id = str(
             uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
@@ -341,9 +341,16 @@ def prepare_next_tasks(
                                     PregelTaskWrites(packet.node, writes, triggers),
                                     config,
                                 ),
-                                CONFIG_KEY_CHECKPOINTER: checkpointer,
+                                CONFIG_KEY_CHECKPOINTER: (
+                                    checkpointer
+                                    or configurable.get(CONFIG_KEY_CHECKPOINTER)
+                                ),
+                                CONFIG_KEY_CHECKPOINT_MAP: {
+                                    **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
+                                    parent_ns: checkpoint["id"],
+                                },
                                 CONFIG_KEY_RESUMING: is_resuming,
-                                "checkpoint_id": checkpoint["id"],
+                                "checkpoint_id": None,
                                 "checkpoint_ns": f"{checkpoint_ns}:{task_id}",
                             },
                         ),
@@ -388,11 +395,7 @@ def prepare_next_tasks(
                 "langgraph_triggers": triggers,
                 "langgraph_task_idx": len(tasks),
             }
-            checkpoint_ns = (
-                f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
-                if parent_ns
-                else name
-            )
+            checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
             task_id = str(
                 uuid5(
                     UUID(checkpoint["id"]),
@@ -443,13 +446,16 @@ def prepare_next_tasks(
                                     ),
                                     CONFIG_KEY_CHECKPOINTER: (
                                         checkpointer
-                                        or config["configurable"].get(
-                                            CONFIG_KEY_CHECKPOINTER
-                                        )
+                                        or configurable.get(CONFIG_KEY_CHECKPOINTER)
                                     ),
+                                    CONFIG_KEY_CHECKPOINT_MAP: {
+                                        **configurable.get(
+                                            CONFIG_KEY_CHECKPOINT_MAP, {}
+                                        ),
+                                        parent_ns: checkpoint["id"],
+                                    },
                                     CONFIG_KEY_RESUMING: is_resuming,
-                                    "checkpoint_id": checkpoint["id"],
-                                    "checkpoint_ns": checkpoint_ns,
+                                    "checkpoint_ns": f"{checkpoint_ns}:{task_id}",
                                 },
                             ),
                             triggers,

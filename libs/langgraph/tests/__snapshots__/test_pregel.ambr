@@ -805,6 +805,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -856,7 +857,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -952,6 +954,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -1084,6 +1087,8 @@
         }),
         'id': 'tools',
         'metadata': dict({
+          'parents': dict({
+          }),
           'variant': 'b',
           'version': 2,
         }),
@@ -1103,7 +1108,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -1150,6 +1156,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -1201,7 +1208,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -1297,6 +1305,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -1429,6 +1438,8 @@
         }),
         'id': 'tools',
         'metadata': dict({
+          'parents': dict({
+          }),
           'variant': 'b',
           'version': 2,
         }),
@@ -1448,7 +1459,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -1495,6 +1507,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -1546,7 +1559,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -1642,6 +1656,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -1774,6 +1789,8 @@
         }),
         'id': 'tools',
         'metadata': dict({
+          'parents': dict({
+          }),
           'variant': 'b',
           'version': 2,
         }),
@@ -1793,7 +1810,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -1840,6 +1858,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -1891,7 +1910,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -1987,6 +2007,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -2119,6 +2140,8 @@
         }),
         'id': 'tools',
         'metadata': dict({
+          'parents': dict({
+          }),
           'variant': 'b',
           'version': 2,
         }),
@@ -2138,7 +2161,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -2185,6 +2209,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -2236,7 +2261,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -2332,6 +2358,7 @@
           "name": "tools"
         },
         "metadata": {
+          "parents": {},
           "version": 2,
           "variant": "b"
         }
@@ -2464,6 +2491,8 @@
         }),
         'id': 'tools',
         'metadata': dict({
+          'parents': dict({
+          }),
           'variant': 'b',
           'version': 2,
         }),
@@ -2483,7 +2512,8 @@
   graph TD;
   	__start__([__start__]):::first
   	agent(agent<hr/><small><em>__interrupt = after</em></small>)
-  	tools(tools<hr/><small><em>version = 2
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
   variant = b</em></small>)
   	__end__([__end__]):::last
   	__start__ --> agent;
@@ -2655,76 +2685,6 @@
   	tools --> agent;
   	agent -. &nbspcontinue&nbsp .-> tools;
   	agent -. &nbspexit&nbsp .-> __end__;
-  
-  '''
-# ---
-# name: test_conditional_state_graph_with_list_edge_inputs
-  '''
-  {
-    "nodes": [
-      {
-        "id": "__start__",
-        "type": "schema",
-        "data": "__start__"
-      },
-      {
-        "id": "A",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "A"
-        }
-      },
-      {
-        "id": "B",
-        "type": "runnable",
-        "data": {
-          "id": [
-            "langgraph",
-            "utils",
-            "RunnableCallable"
-          ],
-          "name": "B"
-        }
-      },
-      {
-        "id": "__end__",
-        "type": "schema",
-        "data": "__end__"
-      }
-    ],
-    "edges": [
-      {
-        "source": "A",
-        "target": "__end__"
-      },
-      {
-        "source": "B",
-        "target": "__end__"
-      },
-      {
-        "source": "__start__",
-        "target": "A"
-      },
-      {
-        "source": "__start__",
-        "target": "B"
-      }
-    ]
-  }
-  '''
-# ---
-# name: test_conditional_state_graph_with_list_edge_inputs.1
-  '''
-  graph TD;
-  	A --> __end__;
-  	B --> __end__;
-  	__start__ --> A;
-  	__start__ --> B;
   
   '''
 # ---
@@ -3049,6 +3009,76 @@
   	tools --> agent;
   	agent -. &nbspcontinue&nbsp .-> tools;
   	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_state_graph_with_list_edge_inputs
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "A",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "A"
+        }
+      },
+      {
+        "id": "B",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "B"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "A",
+        "target": "__end__"
+      },
+      {
+        "source": "B",
+        "target": "__end__"
+      },
+      {
+        "source": "__start__",
+        "target": "A"
+      },
+      {
+        "source": "__start__",
+        "target": "B"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_state_graph_with_list_edge_inputs.1
+  '''
+  graph TD;
+  	A --> __end__;
+  	B --> __end__;
+  	__start__ --> A;
+  	__start__ --> B;
   
   '''
 # ---

@@ -26,9 +26,9 @@ from langchain_core.runnables.graph import Node as DrawableNode
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import (
-    CHECKPOINT_NAMESPACE_SEPARATOR,
     END,
-    SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
+    NS_END,
+    NS_SEP,
     START,
     TAG_HIDDEN,
     Send,
@@ -160,10 +160,7 @@ class Graph:
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
         if isinstance(node, str):
-            for character in (
-                CHECKPOINT_NAMESPACE_SEPARATOR,
-                SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
-            ):
+            for character in (NS_SEP, NS_END):
                 if character in node:
                     raise ValueError(
                         f"'{character}' is a reserved character and is not allowed in the node names."

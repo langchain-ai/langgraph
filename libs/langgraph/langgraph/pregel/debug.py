@@ -13,7 +13,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
 from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.io import read_channels
-from langgraph.pregel.types import PregelExecutableTask, PregelTask
+from langgraph.pregel.types import PregelExecutableTask, PregelTask, StateSnapshot
 
 
 class TaskPayload(TypedDict):
@@ -160,7 +160,7 @@ def map_debug_checkpoint(
                     "name": t.name,
                     "interrupts": tuple(asdict(i) for i in t.interrupts),
                 }
-                for t in tasks_w_writes(tasks, pending_writes)
+                for t in tasks_w_writes(tasks, pending_writes, None)
             ],
         },
     }
@@ -215,6 +215,7 @@ def print_step_checkpoint(
 def tasks_w_writes(
     tasks: list[PregelExecutableTask],
     pending_writes: Optional[list[PendingWrite]],
+    states: Optional[dict[str, Union[RunnableConfig, StateSnapshot]]],
 ) -> tuple[PregelTask, ...]:
     pending_writes = pending_writes or []
     return tuple(
@@ -232,6 +233,7 @@ def tasks_w_writes(
             tuple(
                 v for tid, n, v in pending_writes if tid == task.id and n == INTERRUPT
             ),
+            states.get(task.id) if states else None,
         )
         for task in tasks
     )
