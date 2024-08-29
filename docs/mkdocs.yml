@@ -176,7 +176,7 @@ nav:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
           - Add a system prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
-          - Add human-in-the-Loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
+          - Add Human-in-the-loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
   - "Conceptual Guides":
       - "concepts/index.md"
       - LangGraph for Agentic Applications: concepts/high_level.md
