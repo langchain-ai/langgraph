@@ -10899,7 +10899,8 @@ def test_doubly_nested_graph_state(
     config = {"configurable": {"thread_id": "1"}}
     app.invoke({"my_key": "my value"}, config, debug=True)
     # get state without subgraphs
-    assert app.get_state(config) == StateSnapshot(
+    outer_state = app.get_state(config)
+    assert outer_state == StateSnapshot(
         values={"my_key": "hi my value"},
         tasks=(
             PregelTask(
@@ -10932,6 +10933,84 @@ def test_doubly_nested_graph_state(
             "configurable": {
                 "thread_id": "1",
                 "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+    )
+    child_state = app.get_state(outer_state.tasks[0].state)
+    assert (
+        child_state.tasks[0]
+        == StateSnapshot(
+            values={"my_key": "hi my value"},
+            tasks=(
+                PregelTask(
+                    AnyStr(),
+                    "child_1",
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr(),
+                        }
+                    },
+                ),
+            ),
+            next=("child_1",),
+            config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+            metadata={
+                "parents": {"": AnyStr()},
+                "source": "loop",
+                "writes": None,
+                "step": 0,
+            },
+            created_at=AnyStr(),
+            parent_config={
+                "configurable": {
+                    "thread_id": "1",
+                    "checkpoint_ns": AnyStr("child:"),
+                    "checkpoint_id": AnyStr(),
+                }
+            },
+        ).tasks[0]
+    )
+    grandchild_state = app.get_state(child_state.tasks[0].state)
+    assert grandchild_state == StateSnapshot(
+        values={"my_key": "hi my value here"},
+        tasks=(
+            PregelTask(
+                AnyStr(),
+                "grandchild_2",
+            ),
+        ),
+        next=("grandchild_2",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr(),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "parents": AnyDict(
+                {
+                    "": AnyStr(),
+                    AnyStr("child:"): AnyStr(),
+                }
+            ),
+            "source": "loop",
+            "writes": {"grandchild_1": {"my_key": "hi my value here"}},
+            "step": 1,
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr(),
                 "checkpoint_id": AnyStr(),
             }
         },
