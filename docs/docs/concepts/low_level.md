@@ -530,7 +530,7 @@ we write the results back to the channel (`ChannelWrite<call_model,messages>`) a
 
 This should hopefully give you a good sense of what events are emitted in a simple graph. But what data do these events contain?
 Each type of event contains data in a different format. Let's look at what `on_chat_model_stream` events look like. This is an important type of event
-since they are needed for streaming tokens from an LLM response.
+since it is needed for streaming tokens from an LLM response.
 
 These events look like:
 
