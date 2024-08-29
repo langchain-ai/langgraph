@@ -8442,7 +8442,6 @@ def test_nested_graph_interrupts_parallel(
     ]
 
 
-@pytest.mark.skip("TODO")
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_doubly_nested_graph_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str

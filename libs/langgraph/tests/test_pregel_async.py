@@ -6888,17 +6888,11 @@ async def test_nested_graph_interrupts_parallel(
     assert [
         c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
     ] == [
-        {
-            "my_key": "",
-        },
+        {"my_key": ""},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "got here and there and parallel",
-        },
-        {
-            "my_key": "got here and there and parallel and back again",
-        },
+        {"my_key": "got here and there and parallel"},
+        {"my_key": "got here and there and parallel and back again"},
     ]
 
     # # test interrupts BEFORE the parallel node
@@ -6906,16 +6900,14 @@ async def test_nested_graph_interrupts_parallel(
     config = {"configurable": {"thread_id": "4"}}
     assert [
         c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
-    ] == [{"my_key": ""}]
+    ] == [
+        {"my_key": ""},
+    ]
     # while we're waiting for the node w/ interrupt inside to finish
     assert [c async for c in app.astream(None, config, stream_mode="values")] == []
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "got here and there and parallel",
-        },
-        {
-            "my_key": "got here and there and parallel and back again",
-        },
+        {"my_key": "got here and there and parallel"},
+        {"my_key": "got here and there and parallel and back again"},
     ]
 
     # test interrupts AFTER the parallel node
@@ -6923,18 +6915,17 @@ async def test_nested_graph_interrupts_parallel(
     config = {"configurable": {"thread_id": "5"}}
     assert [
         c async for c in app.astream({"my_key": ""}, config, stream_mode="values")
-    ] == [{"my_key": ""}]
+    ] == [
+        {"my_key": ""},
+    ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
         {"my_key": "got here and there and parallel"},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "got here and there and parallel and back again",
-        },
+        {"my_key": "got here and there and parallel and back again"},
     ]
 
 
-@pytest.mark.skip("TODO")
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_doubly_nested_graph_interrupts(
     request: pytest.FixtureRequest, checkpointer_name: str
