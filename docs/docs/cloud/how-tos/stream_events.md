@@ -1,6 +1,6 @@
 # How to stream events
 
-This guide covers how to stream events from your graph (`stream_mode="events"`). Depending on the use case and user experience of your LangGraph application, your application may process event types differently. Read about the concept behind events [here](https://langchain-ai.github.io/langgraph/concepts/low_level/#astream_events-for-streaming-tokens-of-llm-calls).
+This guide covers how to stream events from your graph (`stream_mode="events"`). Depending on the use case and user experience of your LangGraph application, your application may process event types differently. Read more about events in this [conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#astream_events-for-streaming-tokens-of-llm-calls).
 
 === "Python"
 
