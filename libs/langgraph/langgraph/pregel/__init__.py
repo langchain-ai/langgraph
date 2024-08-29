@@ -1113,6 +1113,25 @@ class Pregel(
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
             ```
         """
+
+        def output() -> Iterator:
+            while loop.stream:
+                ns, mode, payload = loop.stream.popleft()
+                ns = (
+                    NS_SEP.join(p.split(NS_END)[0] for p in ns.split(NS_SEP))
+                    if ns
+                    else ""
+                )
+                if mode in stream_modes:
+                    if subgraphs and isinstance(stream_mode, list):
+                        yield (ns, mode, payload)
+                    elif isinstance(stream_mode, list):
+                        yield (mode, payload)
+                    elif subgraphs:
+                        yield (ns, payload)
+                    else:
+                        yield payload
+
         config = ensure_config(merge_configs(self.config, config))
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
@@ -1176,13 +1195,7 @@ class Pregel(
                             self.stream_channels_list,
                         )
                     # emit output
-                    while loop.stream:
-                        mode, payload = loop.stream.popleft()
-                        if mode in stream_modes:
-                            if isinstance(stream_mode, list):
-                                yield (mode, payload)
-                            else:
-                                yield payload
+                    yield from output()
                     # debug flag
                     if debug:
                         print_step_tasks(loop.step, loop.tasks)
@@ -1237,13 +1250,8 @@ class Pregel(
                             # remove references to loop vars
                             del fut, task
                         # emit output
-                        while loop.stream:
-                            mode, payload = loop.stream.popleft()
-                            if mode in stream_modes:
-                                if isinstance(stream_mode, list):
-                                    yield (mode, payload)
-                                else:
-                                    yield payload
+                        yield from output()
+                        # maybe stop other tasks
                         if _should_stop_others(done):
                             break
 
@@ -1259,13 +1267,7 @@ class Pregel(
                             self.stream_channels_list,
                         )
             # emit output
-            while loop.stream:
-                mode, payload = loop.stream.popleft()
-                if mode in stream_modes:
-                    if isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    else:
-                        yield payload
+            yield from output()
             # handle exit
             if loop.status == "out_of_steps":
                 raise GraphRecursionError(
@@ -1358,6 +1360,25 @@ class Pregel(
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
             ```
         """
+
+        def output() -> Iterator:
+            while loop.stream:
+                ns, mode, payload = loop.stream.popleft()
+                ns = (
+                    NS_SEP.join(p.split(NS_END)[0] for p in ns.split(NS_SEP))
+                    if ns
+                    else ""
+                )
+                if mode in stream_modes:
+                    if subgraphs and isinstance(stream_mode, list):
+                        yield (ns, mode, payload)
+                    elif isinstance(stream_mode, list):
+                        yield (mode, payload)
+                    elif subgraphs:
+                        yield (ns, payload)
+                    else:
+                        yield payload
+
         config = ensure_config(merge_configs(self.config, config))
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
@@ -1430,13 +1451,8 @@ class Pregel(
                             self.stream_channels_list,
                         )
                     # emit output
-                    while loop.stream:
-                        mode, payload = loop.stream.popleft()
-                        if mode in stream_modes:
-                            if isinstance(stream_mode, list):
-                                yield (mode, payload)
-                            else:
-                                yield payload
+                    for o in output():
+                        yield o
                     # debug flag
                     if debug:
                         print_step_tasks(loop.step, loop.tasks)
@@ -1493,13 +1509,9 @@ class Pregel(
                             # remove references to loop vars
                             del fut, task
                         # emit output
-                        while loop.stream:
-                            mode, payload = loop.stream.popleft()
-                            if mode in stream_modes:
-                                if isinstance(stream_mode, list):
-                                    yield (mode, payload)
-                                else:
-                                    yield payload
+                        for o in output():
+                            yield o
+                        # maybe stop other tasks
                         if _should_stop_others(done):
                             break
 
@@ -1515,13 +1527,8 @@ class Pregel(
                             self.stream_channels_list,
                         )
             # emit output
-            while loop.stream:
-                mode, payload = loop.stream.popleft()
-                if mode in stream_modes:
-                    if isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    else:
-                        yield payload
+            for o in output():
+                yield o
             # handle exit
             if loop.status == "out_of_steps":
                 raise GraphRecursionError(

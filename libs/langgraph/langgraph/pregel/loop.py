@@ -91,8 +91,8 @@ EMPTY_SEQ = ()
 
 
 class StreamProtocol(Protocol):
-    def extend(self, values: Iterable[Tuple[str, Any]]) -> None: ...
-    def popleft(self) -> Tuple[str, Any]: ...
+    def extend(self, values: Iterable[Tuple[str, str, Any]]) -> None: ...
+    def popleft(self) -> Tuple[str, str, Any]: ...
     def __bool__(self) -> bool: ...
 
 
@@ -100,11 +100,11 @@ class DuplexStream(StreamProtocol):
     def __init__(self, *streams: StreamProtocol) -> None:
         self.streams = streams
 
-    def extend(self, values: Iterable[Tuple[str, Any]]) -> None:
+    def extend(self, values: Iterable[Tuple[str, str, Any]]) -> None:
         for stream, vv in zip(self.streams, tee(values, len(self.streams))):
             stream.extend(vv)
 
-    def popleft(self) -> Tuple[str, Any]:
+    def popleft(self) -> Tuple[str, str, Any]:
         return self.streams[0].popleft()
 
     def __bool__(self) -> bool:
@@ -207,11 +207,11 @@ class PregelLoop:
             )
         if task := next((t for t in self.tasks if t.id == task_id), None):
             self.stream.extend(
-                ("updates", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "updates", v)
                 for v in map_output_updates(self.output_keys, [(task, writes)])
             )
             self.stream.extend(
-                ("debug", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
                 for v in map_debug_task_results(
                     self.step, [(task, writes)], self.stream_keys
                 )
@@ -247,7 +247,7 @@ class PregelLoop:
                 self._update_mv(key, values)
             # produce values output
             self.stream.extend(
-                ("values", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "values", v)
                 for v in map_output_values(self.output_keys, writes, self.channels)
             )
             # clear pending writes
@@ -295,7 +295,7 @@ class PregelLoop:
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
             self.stream.extend(
-                ("debug", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
                 for v in map_debug_checkpoint(
                     self.step - 1,  # printing checkpoint for previous step
                     self.checkpoint_config,
@@ -339,7 +339,10 @@ class PregelLoop:
                 return False
 
         # produce debug output
-        self.stream.extend(("debug", v) for v in map_debug_tasks(self.step, self.tasks))
+        self.stream.extend(
+            (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
+            for v in map_debug_tasks(self.step, self.tasks)
+        )
 
         return True
 
