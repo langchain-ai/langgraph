@@ -181,7 +181,7 @@ nav:
       - "concepts/index.md"
       - LangGraph for Agentic Applications: concepts/high_level.md
       - Low Level LangGraph Concepts: concepts/low_level.md
-      - Checkpointers: concepts/checkpointers.md
+      - Persistence: concepts/persistence.md
       - Common Agentic Patterns: concepts/agentic_concepts.md
       - FAQ: concepts/faq.md
   - Reference:

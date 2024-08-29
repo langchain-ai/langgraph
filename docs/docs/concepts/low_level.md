@@ -30,7 +30,7 @@ The `MessageGraph` class is a special type of graph. The `State` of a `MessageGr
 
 To build your graph, you first define the [state](#state), you then add [nodes](#nodes) and [edges](#edges), and then you compile it. What exactly is compiling your graph and why is it needed?
 
-Compiling is a pretty simple step. It provides a few basic checks on the structure of your graph (no orphaned nodes, etc). It is also where you can specify runtime args like [checkpointers](#checkpointer) and [breakpoints](#breakpoints). You compile your graph by just calling the `.compile` method:
+Compiling is a pretty simple step. It provides a few basic checks on the structure of your graph (no orphaned nodes, etc). It is also where you can specify runtime args like [checkpointers](./persistence.md) and [breakpoints](#breakpoints). You compile your graph by just calling the `.compile` method:
 
 ```python
 graph = graph_builder.compile(...)
@@ -266,101 +266,6 @@ def continue_to_jokes(state: OverallState):
 graph.add_conditional_edges("node_a", continue_to_jokes)
 ```
 
-## Checkpointer
-
-LangGraph has a built-in persistence layer, implemented through [checkpointers][basecheckpointsaver]. When you use a checkpointer with a graph, you can interact with the state of that graph. When you use a checkpointer with a graph, you can interact with and manage the graph's state. The checkpointer saves a _checkpoint_ of the graph state at every super-step, enabling several powerful capabilities:
-
-First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve steps.Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
-
-Second, it allows for ["memory"](agentic_concepts.md#memory) between interactions. You can use checkpointers to create threads and save the state of a thread after a graph executes. In the case of repeated human interactions (like conversations) any follow up messages can be sent to that checkpoint, which will retain its memory of previous ones.
-
-See [this guide](../how-tos/persistence.ipynb) for how to add a checkpointer to your graph.
-
-## Threads
-
-Threads enable the checkpointing of multiple different runs, making them essential for multi-tenant chat applications and other scenarios where maintaining separate states is necessary. A thread is a unique ID assigned to a series of checkpoints saved by a checkpointer. When using a checkpointer, you must specify a `thread_id` or `thread_ts` when running the graph.
-
-`thread_id` is simply the ID of a thread. This is always required
-
-`thread_ts` can optionally be passed. This identifier refers to a specific checkpoint within a thread. This can be used to kick of a run of a graph from some point halfway through a thread.
-
-You must pass these when invoking the graph as part of the configurable part of the config.
-
-```python
-config = {"configurable": {"thread_id": "a"}}
-graph.invoke(inputs, config=config)
-```
-
-See [this guide](../how-tos/persistence.ipynb) for how to use threads.
-
-## Checkpointer state
-
- When interacting with the checkpointer state, you must specify a [thread identifier](#threads).Each checkpoint saved by the checkpointer has two properties:
-
-- **values**: This is the value of the state at this point in time.
-- **next**: This is a tuple of the nodes to execute next in the graph.
-
-### Get state
-
-You can get the state of a checkpointer by calling `graph.get_state(config)`. The config should contain `thread_id`, and the state will be fetched for that thread.
-
-### Get state history
-
-You can also call `graph.get_state_history(config)` to get a list of the history of the graph. The config should contain `thread_id`, and the state history will be fetched for that thread.
-
-### Update state
-
-You can also interact with the state directly and update it. This takes three different components:
-
-- config
-- values
-- `as_node`
-
-**config**
-
-The config should contain `thread_id` specifying which thread to update.
-
-**values**
-
-These are the values that will be used to update the state. Note that this update is treated exactly as any update from a node is treated. This means that these values will be passed to the [reducer](#reducers) functions that are part of the state. So this does NOT automatically overwrite the state. Let's walk through an example.
-
-Let's assume you have defined the state of your graph as:
-
-```python
-from typing import TypedDict, Annotated
-from operator import add
-
-class State(TypedDict):
-    foo: int
-    bar: Annotated[list[str], add]
-```
-
-Let's now assume the current state of the graph is
-
-```
-{"foo": 1, "bar": ["a"]}
-```
-
-If you update the state as below:
-
-```
-graph.update_state(config, {"foo": 2, "bar": ["b"]})
-```
-
-Then the new state of the graph will be:
-
-```
-{"foo": 2, "bar": ["a", "b"]}
-```
-
-The `foo` key is completely changed (because there is no reducer specified for that key, so it overwrites it). However, there is a reducer specified for the `bar` key, and so it appends `"b"` to the state of `bar`.
-
-**`as_node`**
-
-The final thing you specify when calling `update_state` is `as_node`. This update will be applied as if it came from node `as_node`. If `as_node` is not provided, it will be set to the last node that updated the state, if not ambiguous.
-
-The reason this matters is that the next steps in the graph to execute depend on the last node to have given an update, so this can be used to control which node executes next.
-
 ## Graph Migrations
 
 LangGraph can easily handle migrations of graph definitions (nodes, edges, and state) even when using a checkpointer to track state.
@@ -417,7 +322,7 @@ Read [this how-to](https://langchain-ai.github.io/langgraph/how-tos/recursion-li
 
 It can often be useful to set breakpoints before or after certain nodes execute. This can be used to wait for human approval before continuing. These can be set when you ["compile" a graph](#compiling-your-graph). You can set breakpoints either _before_ a node executes (using `interrupt_before`) or after a node executes (using `interrupt_after`.)
 
-You **MUST** use a [checkpoiner](#checkpointer) when using breakpoints. This is because your graph needs to be able to resume execution.
+You **MUST** use a [checkpoiner](./persistence.md) when using breakpoints. This is because your graph needs to be able to resume execution.
 
 In order to resume execution, you can just invoke your graph with `None` as the input.
 
