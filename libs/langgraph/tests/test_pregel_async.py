@@ -8302,8 +8302,16 @@ async def test_doubly_nested_graph_state(
         )
     ]
 
+    # fork and replay
+    fork = app.update_state(grandchild_history[2].config, None)
+    assert [c for c in app.stream(None, fork, subgraphs=True)] == [
+        (
+            (AnyStr("child:"), AnyStr("child_1:")),
+            {"grandchild_1": {"my_key": "hi my value here"}},
+        )
+    ]
 
-@pytest.mark.skip("TODO")
+
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_send_to_nested_graphs(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -8351,23 +8359,32 @@ async def test_send_to_nested_graphs(
         "subjects": ["cats", "dogs"],
         "jokes": [],
     }
-    actual_snapshot = await graph.aget_state(config)
-    subgraph_nodes = list(actual_snapshot.subgraphs.keys())
-    assert len(subgraph_nodes) == 2
-    for subgraph_node in subgraph_nodes:
-        assert subgraph_node.split(":")[0] == "generate_joke"
+    # check state
+    outer_state = await graph.aget_state(config)
 
-    subgraphs = {
-        subgraph_node: await graph.aget_state(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": subgraph_node}}
-        )
-        for subgraph_node in subgraph_nodes
-    }
-    expected_snapshot = StateSnapshot(
+    assert outer_state == StateSnapshot(
         values={"subjects": ["cats", "dogs"], "jokes": []},
         tasks=(
-            PregelTask(AnyStr(), "generate_joke"),
-            PregelTask(AnyStr(), "generate_joke"),
+            PregelTask(
+                AnyStr(),
+                "generate_joke",
+                state={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("generate_joke:"),
+                    }
+                },
+            ),
+            PregelTask(
+                AnyStr(),
+                "generate_joke",
+                state={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("generate_joke:"),
+                    }
+                },
+            ),
         ),
         next=("generate_joke", "generate_joke"),
         config={
@@ -8386,21 +8403,24 @@ async def test_send_to_nested_graphs(
                 "checkpoint_id": AnyStr(),
             }
         },
-        subgraphs=subgraphs,
     )
-    assert actual_snapshot == expected_snapshot
+
+    # update state of dogs joke graph
+    await graph.aupdate_state(
+        outer_state.tasks[1].state, {"subject": "turtles - hohoho"}
+    )
 
     # continue past interrupt
     assert await graph.ainvoke(None, config=config) == {
         "subjects": ["cats", "dogs"],
-        "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+        "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
     }
 
     actual_snapshot = await graph.aget_state(config)
     expected_snapshot = StateSnapshot(
         values={
             "subjects": ["cats", "dogs"],
-            "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+            "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
         },
         tasks=(),
         next=(),
@@ -8417,7 +8437,7 @@ async def test_send_to_nested_graphs(
             "writes": {
                 "generate_joke": [
                     {"jokes": ["Joke about cats - hohoho"]},
-                    {"jokes": ["Joke about dogs - hohoho"]},
+                    {"jokes": ["Joke about turtles - hohoho"]},
                 ]
             },
             "step": 1,
@@ -8435,18 +8455,11 @@ async def test_send_to_nested_graphs(
 
     # test full history
     actual_history = [c async for c in graph.aget_state_history(config)]
-    # get subgraph node state for expected history
-    subgraphs = {
-        subgraph_node: await graph.aget_state(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": subgraph_node}}
-        )
-        for subgraph_node in subgraph_nodes
-    }
     expected_history = [
         StateSnapshot(
             values={
                 "subjects": ["cats", "dogs"],
-                "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+                "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
             },
             tasks=(),
             next=(),
@@ -8463,7 +8476,7 @@ async def test_send_to_nested_graphs(
                 "writes": {
                     "generate_joke": [
                         {"jokes": ["Joke about cats - hohoho"]},
-                        {"jokes": ["Joke about dogs - hohoho"]},
+                        {"jokes": ["Joke about turtles - hohoho"]},
                     ]
                 },
                 "step": 1,
@@ -8481,8 +8494,26 @@ async def test_send_to_nested_graphs(
             values={"subjects": ["cats", "dogs"], "jokes": []},
             next=("generate_joke", "generate_joke"),
             tasks=(
-                PregelTask(AnyStr(), "generate_joke"),
-                PregelTask(AnyStr(), "generate_joke"),
+                PregelTask(
+                    AnyStr(),
+                    "generate_joke",
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("generate_joke:"),
+                        }
+                    },
+                ),
+                PregelTask(
+                    AnyStr(),
+                    "generate_joke",
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("generate_joke:"),
+                        }
+                    },
+                ),
             ),
             config={
                 "configurable": {
@@ -8500,7 +8531,6 @@ async def test_send_to_nested_graphs(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            subgraphs=subgraphs,
         ),
         StateSnapshot(
             values={"jokes": []},

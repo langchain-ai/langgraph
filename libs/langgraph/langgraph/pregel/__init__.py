@@ -59,7 +59,6 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
-    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
@@ -79,7 +78,7 @@ from langgraph.pregel.algo import (
     local_write,
     prepare_next_tasks,
 )
-from langgraph.pregel.config import patch_configurable
+from langgraph.pregel.config import patch_checkpoint_map, patch_configurable
 from langgraph.pregel.debug import (
     print_step_checkpoint,
     print_step_tasks,
@@ -445,19 +444,7 @@ class Pregel(
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(t.name for t in next_tasks),
-                patch_configurable(
-                    saved.config,
-                    {
-                        CONFIG_KEY_CHECKPOINT_MAP: {
-                            **saved.metadata["parents"],
-                            saved.config["configurable"][
-                                "checkpoint_ns"
-                            ]: saved.checkpoint["id"],
-                        }
-                    },
-                )
-                if saved.metadata.get("parents")
-                else saved.config,
+                patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
                 saved.parent_config,
@@ -533,19 +520,7 @@ class Pregel(
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(t.name for t in next_tasks),
-                patch_configurable(
-                    saved.config,
-                    {
-                        CONFIG_KEY_CHECKPOINT_MAP: {
-                            **saved.metadata["parents"],
-                            saved.config["configurable"][
-                                "checkpoint_ns"
-                            ]: saved.checkpoint["id"],
-                        }
-                    },
-                )
-                if saved.metadata.get("parents")
-                else saved.config,
+                patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
                 saved.parent_config,
@@ -738,6 +713,7 @@ class Pregel(
         if not checkpointer:
             raise ValueError("No checkpointer set")
 
+        # delegate to subgraph
         if (
             checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
         ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
@@ -760,7 +736,7 @@ class Pregel(
 
         # get last checkpoint
         config = merge_configs(self.config, config) if self.config else config
-        saved = self.checkpointer.get_tuple(config)
+        saved = checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
             saved.checkpoint["channel_versions"].copy() if saved else {}
@@ -775,7 +751,7 @@ class Pregel(
             checkpoint_config = patch_configurable(config, saved.config["configurable"])
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
-            return self.checkpointer.put(
+            next_config = checkpointer.put(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step),
                 {
@@ -786,6 +762,7 @@ class Pregel(
                 },
                 {},
             )
+            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
         elif as_node is None and not any(
             v for vv in checkpoint["versions_seen"].values() for v in vv.values()
         ):
@@ -860,13 +837,13 @@ class Pregel(
             )
             # save task writes
             if saved:
-                self.checkpointer.put_writes(checkpoint_config, task.writes, task.id)
+                checkpointer.put_writes(checkpoint_config, task.writes, task.id)
             # apply to checkpoint and save
             assert not apply_writes(
-                checkpoint, channels, [task], self.checkpointer.get_next_version
+                checkpoint, channels, [task], checkpointer.get_next_version
             ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-            return self.checkpointer.put(
+            next_config = checkpointer.put(
                 checkpoint_config,
                 checkpoint,
                 {
@@ -879,6 +856,7 @@ class Pregel(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
+            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
     async def aupdate_state(
         self,
@@ -886,12 +864,36 @@ class Pregel(
         values: dict[str, Any] | Any,
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        if not self.checkpointer:
+        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not checkpointer:
             raise ValueError("No checkpointer set")
+
+        # delegate to subgraph
+        if (
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            async for name, pregel in self.aget_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    return await pregel.aupdate_state(
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
+                        values,
+                        as_node,
+                    )
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         # get last checkpoint
         config = merge_configs(self.config, config) if self.config else config
-        saved = await self.checkpointer.aget_tuple(config)
+        saved = await checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
             saved.checkpoint["channel_versions"].copy() if saved else {}
@@ -915,7 +917,7 @@ class Pregel(
             }
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
-            return await self.checkpointer.aput(
+            return await checkpointer.aput(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step),
                 {
@@ -998,15 +1000,13 @@ class Pregel(
             )
             # save task writes
             if saved:
-                await self.checkpointer.aput_writes(
-                    checkpoint_config, task.writes, task.id
-                )
+                await checkpointer.aput_writes(checkpoint_config, task.writes, task.id)
             # apply to checkpoint and save
             assert not apply_writes(
-                checkpoint, channels, [task], self.checkpointer.get_next_version
+                checkpoint, channels, [task], checkpointer.get_next_version
             ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-            return await self.checkpointer.aput(
+            next_config = await checkpointer.aput(
                 checkpoint_config,
                 checkpoint,
                 {
@@ -1019,6 +1019,7 @@ class Pregel(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
+            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
     def _defaults(
         self,
