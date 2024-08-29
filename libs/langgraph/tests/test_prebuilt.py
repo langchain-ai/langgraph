@@ -1,3 +1,4 @@
+import json
 from typing import Annotated, Any, Callable, Dict, List, Optional, Sequence, Type, Union
 
 import pytest
@@ -9,6 +10,7 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolCall,
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -499,3 +501,18 @@ def test_tool_node_inject_state() -> None:
     result = node.invoke([msg])
     tool_message = result[-1]
     assert tool_message.content == "hi?"
+
+
+def test_tool_node_ensure_utf8() -> None:
+    @dec_tool
+    def get_day_list(days: list[str]) -> list[str]:
+        """choose days"""
+        return days
+
+    data = ["星期一", "水曜日", "목요일", "Friday"]
+    tools = [get_day_list]
+    tool_calls = [ToolCall(name=get_day_list.name, args={"days": data}, id="test_id")]
+    outputs: list[ToolMessage] = ToolNode(tools).invoke(
+        [AIMessage(content="", tool_calls=tool_calls)]
+    )
+    assert outputs[0].content == json.dumps(data, ensure_ascii=False)

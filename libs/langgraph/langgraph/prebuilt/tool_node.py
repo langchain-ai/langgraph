@@ -34,7 +34,7 @@ def str_output(output: Any) -> str:
         return output
     else:
         try:
-            return json.dumps(output)
+            return json.dumps(output, ensure_ascii=False)
         except Exception:
             return str(output)
 
