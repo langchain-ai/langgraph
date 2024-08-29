@@ -493,7 +493,7 @@ workflow.add_edge("call_model", END)
 app = workflow.compile()
 
 inputs = [{"role": "user", "content": "hi!"}]
-async for event in app.astream_events({"messages": inputs}, version="v1"):
+async for event in app.astream_events({"messages": inputs}, version="v2"):
     kind = event["event"]
     print(f"{kind}: {event['name']}")
 ```
@@ -568,3 +568,80 @@ guide for that [here](../how-tos/streaming-tokens.ipynb).
 
 !!! warning "ASYNC IN PYTHON<=3.10"
     You may fail to see events being emitted from inside a node when using `.astream_events` in Python <= 3.10. If you're using a Langchain RunnableLambda, a RunnableGenerator, or Tool asynchronously inside your node, you will have to propagate callbacks to these objects manually. This is because LangChain cannot automatically propagate callbacks to child objects in this case. Please see examples [here](../how-tos/streaming-content.ipynb) and [here](../how-tos/streaming-events-from-within-tools.ipynb).
+
+#### Only stream tokens from specific nodes
+
+There are certain cases where you have multiple nodes in your graph that make LLM calls, and you do not wish to stream the tokens from every single node. For example, you may use one LLM as a planner for the next steps to take, and onther LLM somewhere else in the graph that actually responds to the user. In that case, you most likely WON'T want to stream tokens from the planner LLM but WILL want to stream them from the respond to user LLM.
+
+Let's see the most simple example of that where we will have a graph with just two nodes, each of which makes an LLM call. In this case we will only stream tokens from the second LLM:
+
+```python
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, MessagesState, START, END
+
+model = ChatOpenAI(model="gpt-3.5-turbo")
+
+def call_first_model(state: MessagesState):
+    response = model.invoke(state['messages'])
+    return {"messages": response}
+
+def call_second_model(state: MessagesState):
+    response = model.invoke(state['messages'])
+    return {"messages": response}
+
+workflow = StateGraph(MessagesState)
+workflow.add_node(call_first_model)
+workflow.add_node(call_second_model)
+workflow.add_edge(START, "call_first_model")
+workflow.add_edge("call_first_model", "call_second_model")
+workflow.add_edge("call_second_model", END)
+app = workflow.compile()
+
+inputs = [{"role": "user", "content": "hi!"}]
+
+async for event in app.astream_events({"messages": inputs}, version="v2"):
+    # Get chat model tokens from a particular node 
+    if event["event"] == "on_chat_model_stream" and event['metadata'].get('langgraph_node','') == "call_second_model":
+     print(event["data"]["chunk"].content, end="|", flush=True)
+```
+
+```shell
+|Hello|!| How| can| I| help| you| today|?||
+```
+
+As we can see only the response from the second LLM was streamed (you can tell because we only received a single response, if we had streamed both we would have received two "Hello! How can I help you today?" messages).
+
+#### Only stream tokens from specific LLMs
+
+Sometimes you might want to stream from specific LLMs instead of specific nodes. This could be the case if you have multiple LLM calls inside a single node, and only want to stream the output of a specific one or if you use the same LLM in different nodes and want to stream it's output anytime it is called. We can do this by using the `name` parameter for LLMs:
+
+```python
+from langchain_openai import ChatOpenAI
+from langgraph.graph import StateGraph, MessagesState, START, END
+
+model_1 = ChatOpenAI(model="gpt-3.5-turbo", name="model_1")
+model_2 = ChatOpenAI(model="gpt-3.5-turbo", name="model_2")
+
+def call_models(state: MessagesState):
+    response_1 = model_1.invoke(state['messages'])
+    response_2 = model_2.invoke(state['messages'])
+    return {"messages": [response_1, response_2]}
+
+workflow = StateGraph(MessagesState)
+workflow.add_node(call_models)
+workflow.add_edge(START, "call_models")
+workflow.add_edge("call_models", END)
+app = workflow.compile()
+
+inputs = [{"role": "user", "content": "hi!"}]
+async for event in app.astream_events({"messages": inputs}, version="v2"):
+    # Get chat model tokens from a particular LLM inside a particular node
+    if event["event"] == "on_chat_model_stream" and event['name'] == "model_2":
+        print(event["data"]["chunk"].content, end="|", flush=True)
+```
+
+```shell
+|Hello|!| How| can| I| assist| you| today|?||
+```
+
+As expected, we only see a single LLM response since the response from `model_1` was not streamed. 
