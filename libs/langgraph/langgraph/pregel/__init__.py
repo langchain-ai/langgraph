@@ -917,7 +917,7 @@ class Pregel(
             }
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
-            return await checkpointer.aput(
+            next_config = await checkpointer.aput(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step),
                 {
@@ -928,6 +928,7 @@ class Pregel(
                 },
                 {},
             )
+            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
         elif as_node is None and not saved:
             if (
                 isinstance(self.input_channels, str)

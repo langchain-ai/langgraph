@@ -8303,8 +8303,8 @@ async def test_doubly_nested_graph_state(
     ]
 
     # fork and replay
-    fork = app.update_state(grandchild_history[2].config, None)
-    assert [c for c in app.stream(None, fork, subgraphs=True)] == [
+    fork = await app.aupdate_state(grandchild_history[2].config, None)
+    assert [c async for c in app.astream(None, fork, subgraphs=True)] == [
         (
             (AnyStr("child:"), AnyStr("child_1:")),
             {"grandchild_1": {"my_key": "hi my value here"}},
