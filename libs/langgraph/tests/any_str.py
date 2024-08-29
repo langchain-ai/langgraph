@@ -18,7 +18,6 @@ class AnyDict(dict):
         super().__init__(*args, **kwargs)
 
     def __eq__(self, other: object) -> bool:
-        print("did we get here")
         if not isinstance(other, dict) or len(self) != len(other):
             return False
         for k, v in self.items():

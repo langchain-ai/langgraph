@@ -2,16 +2,19 @@ import asyncio
 import concurrent.futures
 from collections import deque
 from contextlib import AsyncExitStack, ExitStack
+from itertools import tee
 from types import TracebackType
 from typing import (
     Any,
     AsyncContextManager,
     Callable,
     ContextManager,
+    Iterable,
     List,
     Literal,
     Mapping,
     Optional,
+    Protocol,
     Sequence,
     Tuple,
     Type,
@@ -39,6 +42,7 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_STREAM,
     ERROR,
     INPUT,
     INTERRUPT,
@@ -86,6 +90,27 @@ INPUT_RESUMING = object()
 EMPTY_SEQ = ()
 
 
+class StreamProtocol(Protocol):
+    def extend(self, values: Iterable[Tuple[str, str, Any]]) -> None: ...
+    def popleft(self) -> Tuple[str, str, Any]: ...
+    def __bool__(self) -> bool: ...
+
+
+class DuplexStream(StreamProtocol):
+    def __init__(self, *streams: StreamProtocol) -> None:
+        self.streams = streams
+
+    def extend(self, values: Iterable[Tuple[str, str, Any]]) -> None:
+        for stream, vv in zip(self.streams, tee(values, len(self.streams))):
+            stream.extend(vv)
+
+    def popleft(self) -> Tuple[str, str, Any]:
+        return self.streams[0].popleft()
+
+    def __bool__(self) -> bool:
+        return bool(self.streams[0])
+
+
 class PregelLoop:
     input: Optional[Any]
     config: RunnableConfig
@@ -127,7 +152,7 @@ class PregelLoop:
         "pending", "done", "interrupt_before", "interrupt_after", "out_of_steps"
     ]
     tasks: Sequence[PregelExecutableTask]
-    stream: deque[Tuple[str, Any]]
+    stream: StreamProtocol
     output: Union[None, dict[str, Any], Any] = None
 
     # public
@@ -154,6 +179,10 @@ class PregelLoop:
         self.output_keys = output_keys
         self.stream_keys = stream_keys
         self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
+        if CONFIG_KEY_STREAM in config["configurable"]:
+            self.stream = DuplexStream(
+                self.stream, config["configurable"][CONFIG_KEY_STREAM]
+            )
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -178,11 +207,11 @@ class PregelLoop:
             )
         if task := next((t for t in self.tasks if t.id == task_id), None):
             self.stream.extend(
-                ("updates", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "updates", v)
                 for v in map_output_updates(self.output_keys, [(task, writes)])
             )
             self.stream.extend(
-                ("debug", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
                 for v in map_debug_task_results(
                     self.step, [(task, writes)], self.stream_keys
                 )
@@ -218,7 +247,7 @@ class PregelLoop:
                 self._update_mv(key, values)
             # produce values output
             self.stream.extend(
-                ("values", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "values", v)
                 for v in map_output_values(self.output_keys, writes, self.channels)
             )
             # clear pending writes
@@ -266,7 +295,7 @@ class PregelLoop:
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
             self.stream.extend(
-                ("debug", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
                 for v in map_debug_checkpoint(
                     self.step - 1,  # printing checkpoint for previous step
                     self.checkpoint_config,
@@ -310,7 +339,10 @@ class PregelLoop:
                 return False
 
         # produce debug output
-        self.stream.extend(("debug", v) for v in map_debug_tasks(self.step, self.tasks))
+        self.stream.extend(
+            (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
+            for v in map_debug_tasks(self.step, self.tasks)
+        )
 
         return True
 

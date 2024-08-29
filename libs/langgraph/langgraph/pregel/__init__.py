@@ -63,6 +63,7 @@ from langgraph.constants import (
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_STREAM,
     ERROR,
     INTERRUPT,
     NS_END,
@@ -990,17 +991,16 @@ class Pregel(
 
     def _defaults(
         self,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        debug: Optional[bool] = None,
+        stream_mode: Optional[Union[StreamMode, list[StreamMode]]],
+        output_keys: Optional[Union[str, Sequence[str]]],
+        interrupt_before: Optional[Union[All, Sequence[str]]],
+        interrupt_after: Optional[Union[All, Sequence[str]]],
+        debug: Optional[bool],
     ) -> tuple[
         bool,
         Sequence[StreamMode],
-        Union[str, Sequence[str]],
         Union[str, Sequence[str]],
         Optional[Sequence[str]],
         Optional[Sequence[str]],
@@ -1016,12 +1016,10 @@ class Pregel(
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        if config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None:
+        if CONFIG_KEY_READ in config.get("configurable", {}):
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
-        if config is not None and config.get("configurable", {}).get(
-            CONFIG_KEY_CHECKPOINTER
-        ):
+        if CONFIG_KEY_CHECKPOINTER in config.get("configurable", {}):
             checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
                 CONFIG_KEY_CHECKPOINTER
             ]
@@ -1046,6 +1044,7 @@ class Pregel(
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
+        subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input.
 
@@ -1062,6 +1061,7 @@ class Pregel(
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             debug: Whether to print debug information during execution, defaults to False.
+            subgraphs: Whether to stream subgraphs, defaults to False.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
@@ -1113,6 +1113,20 @@ class Pregel(
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
             ```
         """
+
+        def output() -> Iterator:
+            while loop.stream:
+                ns, mode, payload = loop.stream.popleft()
+                if mode in stream_modes:
+                    if subgraphs and isinstance(stream_mode, list):
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
+                    elif isinstance(stream_mode, list):
+                        yield (mode, payload)
+                    elif subgraphs:
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
+                    else:
+                        yield payload
+
         config = ensure_config(merge_configs(self.config, config))
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
@@ -1155,6 +1169,8 @@ class Pregel(
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
             ) as loop:
+                if subgraphs:
+                    loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1174,13 +1190,7 @@ class Pregel(
                             self.stream_channels_list,
                         )
                     # emit output
-                    while loop.stream:
-                        mode, payload = loop.stream.popleft()
-                        if mode in stream_modes:
-                            if isinstance(stream_mode, list):
-                                yield (mode, payload)
-                            else:
-                                yield payload
+                    yield from output()
                     # debug flag
                     if debug:
                         print_step_tasks(loop.step, loop.tasks)
@@ -1235,13 +1245,8 @@ class Pregel(
                             # remove references to loop vars
                             del fut, task
                         # emit output
-                        while loop.stream:
-                            mode, payload = loop.stream.popleft()
-                            if mode in stream_modes:
-                                if isinstance(stream_mode, list):
-                                    yield (mode, payload)
-                                else:
-                                    yield payload
+                        yield from output()
+                        # maybe stop other tasks
                         if _should_stop_others(done):
                             break
 
@@ -1257,13 +1262,7 @@ class Pregel(
                             self.stream_channels_list,
                         )
             # emit output
-            while loop.stream:
-                mode, payload = loop.stream.popleft()
-                if mode in stream_modes:
-                    if isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    else:
-                        yield payload
+            yield from output()
             # handle exit
             if loop.status == "out_of_steps":
                 raise GraphRecursionError(
@@ -1287,6 +1286,7 @@ class Pregel(
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
+        subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input.
 
@@ -1303,6 +1303,7 @@ class Pregel(
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             debug: Whether to print debug information during execution, defaults to False.
+            subgraphs: Whether to stream subgraphs, defaults to False.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
@@ -1354,6 +1355,20 @@ class Pregel(
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
             ```
         """
+
+        def output() -> Iterator:
+            while loop.stream:
+                ns, mode, payload = loop.stream.popleft()
+                if mode in stream_modes:
+                    if subgraphs and isinstance(stream_mode, list):
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
+                    elif isinstance(stream_mode, list):
+                        yield (mode, payload)
+                    elif subgraphs:
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
+                    else:
+                        yield payload
+
         config = ensure_config(merge_configs(self.config, config))
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
@@ -1404,6 +1419,8 @@ class Pregel(
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
             ) as loop:
+                if subgraphs:
+                    loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -1424,13 +1441,8 @@ class Pregel(
                             self.stream_channels_list,
                         )
                     # emit output
-                    while loop.stream:
-                        mode, payload = loop.stream.popleft()
-                        if mode in stream_modes:
-                            if isinstance(stream_mode, list):
-                                yield (mode, payload)
-                            else:
-                                yield payload
+                    for o in output():
+                        yield o
                     # debug flag
                     if debug:
                         print_step_tasks(loop.step, loop.tasks)
@@ -1487,13 +1499,9 @@ class Pregel(
                             # remove references to loop vars
                             del fut, task
                         # emit output
-                        while loop.stream:
-                            mode, payload = loop.stream.popleft()
-                            if mode in stream_modes:
-                                if isinstance(stream_mode, list):
-                                    yield (mode, payload)
-                                else:
-                                    yield payload
+                        for o in output():
+                            yield o
+                        # maybe stop other tasks
                         if _should_stop_others(done):
                             break
 
@@ -1509,13 +1517,8 @@ class Pregel(
                             self.stream_channels_list,
                         )
             # emit output
-            while loop.stream:
-                mode, payload = loop.stream.popleft()
-                if mode in stream_modes:
-                    if isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    else:
-                        yield payload
+            for o in output():
+                yield o
             # handle exit
             if loop.status == "out_of_steps":
                 raise GraphRecursionError(
