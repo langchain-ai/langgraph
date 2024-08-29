@@ -40,9 +40,9 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
-    CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_TASK_ID,
     ERROR,
     INPUT,
     INTERRUPT,
@@ -60,6 +60,7 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
     should_interrupt,
 )
+from langgraph.pregel.config import patch_configurable
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
     map_debug_task_results,
@@ -178,11 +179,30 @@ class PregelLoop:
         self.specs = specs
         self.output_keys = output_keys
         self.stream_keys = stream_keys
-        self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
+        self.is_nested = CONFIG_KEY_TASK_ID in self.config.get("configurable", {})
         if CONFIG_KEY_STREAM in config["configurable"]:
             self.stream = DuplexStream(
                 self.stream, config["configurable"][CONFIG_KEY_STREAM]
             )
+        if not self.is_nested and config["configurable"].get("checkpoint_ns"):
+            self.config = patch_configurable(
+                config, {"checkpoint_ns": "", "checkpoint_id": None}
+            )
+        if (
+            CONFIG_KEY_CHECKPOINT_MAP in self.config["configurable"]
+            and self.config["configurable"].get("checkpoint_ns")
+            in self.config["configurable"][CONFIG_KEY_CHECKPOINT_MAP]
+        ):
+            self.checkpoint_config = patch_configurable(
+                self.config,
+                {
+                    "checkpoint_id": config["configurable"][CONFIG_KEY_CHECKPOINT_MAP][
+                        self.config["configurable"]["checkpoint_ns"]
+                    ]
+                },
+            )
+        else:
+            self.checkpoint_config = config
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -324,7 +344,14 @@ class PregelLoop:
             for tid, k, v in self.checkpoint_pending_writes:
                 if k in (ERROR, INTERRUPT):
                     continue
-                if task := next((t for t in self.tasks if t.id == tid), None):
+                if task := next(
+                    (
+                        t
+                        for t in self.tasks
+                        if t.id == tid and t.cache_policy is not None
+                    ),
+                    None,
+                ):
                     task.writes.append((k, v))
             # print output for any tasks we applied previous writes to
             for task in self.tasks:
@@ -524,7 +551,9 @@ class SyncPregelLoop(PregelLoop, ContextManager):
 
     def __enter__(self) -> Self:
         saved = (
-            self.checkpointer.get_tuple(self.config) if self.checkpointer else None
+            self.checkpointer.get_tuple(self.checkpoint_config)
+            if self.checkpointer
+            else None
         ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])
         self.checkpoint_config = {
             **self.config,
@@ -616,7 +645,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
 
     async def __aenter__(self) -> Self:
         saved = (
-            await self.checkpointer.aget_tuple(self.config)
+            await self.checkpointer.aget_tuple(self.checkpoint_config)
             if self.checkpointer
             else None
         ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])

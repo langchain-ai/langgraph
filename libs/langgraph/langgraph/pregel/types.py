@@ -57,6 +57,15 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
+class CachePolicy(NamedTuple):
+    """Configuration for caching nodes."""
+
+    pass
+
+
+EXACT_MATCH = CachePolicy()
+
+
 class PregelTask(NamedTuple):
     id: str
     name: str
@@ -73,6 +82,7 @@ class PregelExecutableTask(NamedTuple):
     config: RunnableConfig
     triggers: list[str]
     retry_policy: Optional[RetryPolicy]
+    cache_policy: Optional[CachePolicy]
     id: str
 
 

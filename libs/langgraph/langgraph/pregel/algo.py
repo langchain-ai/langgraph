@@ -50,7 +50,7 @@ from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
+from langgraph.pregel.types import EXACT_MATCH, All, PregelExecutableTask, PregelTask
 
 
 class WritesProtocol(Protocol):
@@ -303,6 +303,7 @@ def prepare_next_tasks(
             if node := proc.get_node():
                 managed.replace_runtime_placeholders(step, packet.arg)
                 writes = deque()
+                task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                 tasks.append(
                     PregelExecutableTask(
                         packet.node,
@@ -351,11 +352,15 @@ def prepare_next_tasks(
                                 },
                                 CONFIG_KEY_RESUMING: is_resuming,
                                 "checkpoint_id": None,
-                                "checkpoint_ns": f"{checkpoint_ns}:{task_id}",
+                                "checkpoint_ns": task_checkpoint_ns,
                             },
                         ),
                         triggers,
                         proc.retry_policy,
+                        None
+                        if task_checkpoint_ns
+                        in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
+                        else EXACT_MATCH,
                         task_id,
                     )
                 )
@@ -406,6 +411,7 @@ def prepare_next_tasks(
             if for_execution:
                 if node := proc.get_node():
                     writes = deque()
+                    task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                     tasks.append(
                         PregelExecutableTask(
                             name,
@@ -455,11 +461,15 @@ def prepare_next_tasks(
                                         parent_ns: checkpoint["id"],
                                     },
                                     CONFIG_KEY_RESUMING: is_resuming,
-                                    "checkpoint_ns": f"{checkpoint_ns}:{task_id}",
+                                    "checkpoint_ns": task_checkpoint_ns,
                                 },
                             ),
                             triggers,
                             proc.retry_policy,
+                            None
+                            if task_checkpoint_ns
+                            in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
+                            else EXACT_MATCH,
                             task_id,
                         )
                     )

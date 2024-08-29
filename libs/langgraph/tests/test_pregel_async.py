@@ -1,6 +1,7 @@
 import asyncio
 import json
 import operator
+import re
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -8892,6 +8893,9 @@ async def test_nested_graph_state(
                             "thread_id": "1",
                             "checkpoint_ns": AnyStr("inner:"),
                             "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                            ),
                         }
                     },
                     metadata={
@@ -9039,6 +9043,9 @@ async def test_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("inner:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                    ),
                 }
             },
             metadata={
@@ -9070,6 +9077,9 @@ async def test_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("inner:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                    ),
                 }
             },
             metadata={
@@ -9096,6 +9106,9 @@ async def test_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("inner:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("inner:"): AnyStr()}
+                    ),
                 }
             },
             metadata={
@@ -9413,6 +9426,9 @@ async def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("child:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
                 }
             },
             metadata={
@@ -9446,6 +9462,13 @@ async def test_doubly_nested_graph_state(
                 "thread_id": "1",
                 "checkpoint_ns": AnyStr(),
                 "checkpoint_id": AnyStr(),
+                "checkpoint_map": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("child:"): AnyStr(),
+                        AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                    }
+                ),
             }
         },
         metadata={
@@ -9495,6 +9518,15 @@ async def test_doubly_nested_graph_state(
                                         "thread_id": "1",
                                         "checkpoint_ns": AnyStr(),
                                         "checkpoint_id": AnyStr(),
+                                        "checkpoint_map": AnyDict(
+                                            {
+                                                "": AnyStr(),
+                                                AnyStr("child:"): AnyStr(),
+                                                AnyStr(
+                                                    re.compile(r"child:.+|child1:")
+                                                ): AnyStr(),
+                                            }
+                                        ),
                                     }
                                 },
                                 metadata={
@@ -9527,6 +9559,9 @@ async def test_doubly_nested_graph_state(
                             "thread_id": "1",
                             "checkpoint_ns": AnyStr("child:"),
                             "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                            ),
                         }
                     },
                     metadata={
@@ -9614,145 +9649,150 @@ async def test_doubly_nested_graph_state(
     )
     # get outer graph history
     outer_history = [c async for c in app.aget_state_history(config)]
-    assert outer_history == [
-        StateSnapshot(
-            values={"my_key": "hi my value here and there and back again"},
-            tasks=(),
-            next=(),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "writes": {
-                    "parent_2": {"my_key": "hi my value here and there and back again"}
+    assert (
+        outer_history[0]
+        == [
+            StateSnapshot(
+                values={"my_key": "hi my value here and there and back again"},
+                tasks=(),
+                next=(),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
                 },
-                "step": 3,
-            },
-            created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-        ),
-        StateSnapshot(
-            values={"my_key": "hi my value here and there"},
-            next=("parent_2",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "writes": {"child": {"my_key": "hi my value here and there"}},
-                "step": 2,
-            },
-            created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            tasks=(PregelTask(id=AnyStr(), name="parent_2"),),
-        ),
-        StateSnapshot(
-            values={"my_key": "hi my value"},
-            tasks=(
-                PregelTask(
-                    AnyStr(),
-                    "child",
-                    state={
-                        "configurable": {
-                            "thread_id": "1",
-                            "checkpoint_ns": AnyStr("child"),
+                metadata={
+                    "parents": {},
+                    "source": "loop",
+                    "writes": {
+                        "parent_2": {
+                            "my_key": "hi my value here and there and back again"
                         }
                     },
-                ),
+                    "step": 3,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
             ),
-            next=("child",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "writes": {"parent_1": {"my_key": "hi my value"}},
-                "step": 1,
-            },
-            created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-        ),
-        StateSnapshot(
-            values={"my_key": "my value"},
-            next=("parent_1",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={
-                "parents": {},
-                "source": "loop",
-                "writes": None,
-                "step": 0,
-            },
-            created_at=AnyStr(),
-            parent_config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            tasks=(PregelTask(id=AnyStr(), name="parent_1"),),
-        ),
-        StateSnapshot(
-            values={},
-            next=("__start__",),
-            config={
-                "configurable": {
-                    "thread_id": "1",
-                    "checkpoint_ns": "",
-                    "checkpoint_id": AnyStr(),
-                }
-            },
-            metadata={
-                "parents": {},
-                "source": "input",
-                "writes": {"my_key": "my value"},
-                "step": -1,
-            },
-            created_at=AnyStr(),
-            parent_config=None,
-            tasks=(PregelTask(id=AnyStr(), name="__start__"),),
-        ),
-    ]
+            StateSnapshot(
+                values={"my_key": "hi my value here and there"},
+                next=("parent_2",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "parents": {},
+                    "source": "loop",
+                    "writes": {"child": {"my_key": "hi my value here and there"}},
+                    "step": 2,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                tasks=(PregelTask(id=AnyStr(), name="parent_2"),),
+            ),
+            StateSnapshot(
+                values={"my_key": "hi my value"},
+                tasks=(
+                    PregelTask(
+                        AnyStr(),
+                        "child",
+                        state={
+                            "configurable": {
+                                "thread_id": "1",
+                                "checkpoint_ns": AnyStr("child"),
+                            }
+                        },
+                    ),
+                ),
+                next=("child",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "parents": {},
+                    "source": "loop",
+                    "writes": {"parent_1": {"my_key": "hi my value"}},
+                    "step": 1,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+            ),
+            StateSnapshot(
+                values={"my_key": "my value"},
+                next=("parent_1",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "parents": {},
+                    "source": "loop",
+                    "writes": None,
+                    "step": 0,
+                },
+                created_at=AnyStr(),
+                parent_config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                tasks=(PregelTask(id=AnyStr(), name="parent_1"),),
+            ),
+            StateSnapshot(
+                values={},
+                next=("__start__",),
+                config={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": "",
+                        "checkpoint_id": AnyStr(),
+                    }
+                },
+                metadata={
+                    "parents": {},
+                    "source": "input",
+                    "writes": {"my_key": "my value"},
+                    "step": -1,
+                },
+                created_at=AnyStr(),
+                parent_config=None,
+                tasks=(PregelTask(id=AnyStr(), name="__start__"),),
+            ),
+        ][0]
+    )
     # get child graph history
     child_history = [
         c async for c in app.aget_state_history(outer_history[2].tasks[0].state)
@@ -9766,6 +9806,9 @@ async def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("child:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
                 }
             },
             metadata={
@@ -9792,6 +9835,9 @@ async def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("child:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
                 }
             },
             metadata={
@@ -9829,6 +9875,9 @@ async def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr("child:"),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {"": AnyStr(), AnyStr("child:"): AnyStr()}
+                    ),
                 }
             },
             metadata={
@@ -9855,6 +9904,13 @@ async def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
                 }
             },
             metadata={
@@ -9886,6 +9942,13 @@ async def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
                 }
             },
             metadata={
@@ -9917,6 +9980,13 @@ async def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
                 }
             },
             metadata={
@@ -9948,6 +10018,13 @@ async def test_doubly_nested_graph_state(
                     "thread_id": "1",
                     "checkpoint_ns": AnyStr(),
                     "checkpoint_id": AnyStr(),
+                    "checkpoint_map": AnyDict(
+                        {
+                            "": AnyStr(),
+                            AnyStr("child:"): AnyStr(),
+                            AnyStr(re.compile(r"child:.+|child1:")): AnyStr(),
+                        }
+                    ),
                 }
             },
             metadata={
@@ -9965,6 +10042,19 @@ async def test_doubly_nested_graph_state(
             parent_config=None,
             tasks=(PregelTask(id=AnyStr(), name="__start__"),),
         ),
+    ]
+
+    # replay grandchild checkpoint
+    assert [
+        c async for c in app.astream(None, grandchild_history[2].config, subgraphs=True)
+    ] == [
+        (
+            (AnyStr("child:"), AnyStr("child_1:")),
+            {
+                "grandchild_1": {"my_key": "hi my value here"},
+                "__metadata__": {"cached": True},
+            },
+        )
     ]
 
 
