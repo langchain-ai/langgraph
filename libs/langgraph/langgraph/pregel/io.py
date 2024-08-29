@@ -96,6 +96,7 @@ class AddableUpdatesDict(AddableDict):
 def map_output_updates(
     output_channels: Union[str, Sequence[str]],
     tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
+    cached: bool = False,
 ) -> Iterator[dict[str, Union[Any, dict[str, Any]]]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     output_tasks = [
@@ -130,6 +131,8 @@ def map_output_updates(
             grouped[node] = None
         if len(value) == 1:
             grouped[node] = value[0]
+    if cached:
+        grouped["__metadata__"] = {"cached": cached}
     yield AddableUpdatesDict(grouped)
 
 

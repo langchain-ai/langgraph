@@ -1025,10 +1025,14 @@ async def test_invoke_two_processes_in_out_interrupt(
     ] == []
     assert [
         c async for c in app.astream(None, history[1].config, stream_mode="updates")
-    ] == []
+    ] == [
+        {"two": {"output": 5}, "__metadata__": {"cached": True}},
+    ]
     assert [
         c async for c in app.astream(None, history[2].config, stream_mode="updates")
-    ] == []
+    ] == [
+        {"one": {"inbox": 4}, "__metadata__": {"cached": True}},
+    ]
 
     # forking and re-running from any prev checkpoint should re-run nodes
     fork_config = await app.aupdate_state(history[0].config, None)
@@ -1220,7 +1224,7 @@ async def test_fork_always_re_runs_nodes(
     ] == []
     assert [
         c async for c in graph.astream(None, history[1].config, stream_mode="updates")
-    ] == []
+    ] == [{"add_one": 1, "__metadata__": {"cached": True}}]
 
     # forking and re-running from any prev checkpoint should re-run nodes
     fork_config = await graph.aupdate_state(history[0].config, None)
