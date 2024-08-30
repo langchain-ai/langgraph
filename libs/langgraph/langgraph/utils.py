@@ -4,15 +4,7 @@ import inspect
 import sys
 from contextvars import copy_context
 from functools import partial, wraps
-from typing import (
-    Any,
-    AsyncIterator,
-    Awaitable,
-    Callable,
-    Optional,
-    Union,
-    get_origin,
-)
+from typing import Any, AsyncIterator, Awaitable, Callable, Optional, Type, Union
 
 from langchain_core.runnables.base import (
     Runnable,
@@ -27,7 +19,14 @@ from langchain_core.runnables.config import (
     var_child_runnable_config,
 )
 from langchain_core.runnables.utils import accepts_config
-from typing_extensions import TypeGuard
+from typing_extensions import (
+    Annotated,
+    NotRequired,
+    ReadOnly,
+    Required,
+    TypeGuard,
+    get_origin,
+)
 
 try:
     from langchain_core.runnables.config import _set_config_context
@@ -191,7 +190,7 @@ def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnab
         )
 
 
-def is_optional_type(type_: Any) -> bool:
+def _is_optional_type(type_: Any) -> bool:
     """Check if a type is Optional."""
 
     if hasattr(type_, "__origin__") and hasattr(type_, "__args__"):
@@ -200,9 +199,73 @@ def is_optional_type(type_: Any) -> bool:
             return True
         if origin is Union:
             return any(
-                arg is type(None) or is_optional_type(arg) for arg in type_.__args__
+                arg is type(None) or _is_optional_type(arg) for arg in type_.__args__
             )
         return origin is None
     if hasattr(type_, "__bound__") and type_.__bound__ is not None:
-        return is_optional_type(type_.__bound__)
+        return _is_optional_type(type_.__bound__)
     return type_ is None
+
+
+def _is_required_type(type_: Any) -> Optional[bool]:
+    """Check if an annotation is marked as Required/NotRequired.
+
+    Returns:
+        - True if required
+        - False if not required
+        - None if not annotated with either
+    """
+    origin = get_origin(type_)
+    if origin is Annotated or origin:
+        # See https://typing.readthedocs.io/en/latest/spec/typeddict.html#interaction-with-annotated
+        return _is_required_type(type_.__args__[0])
+    if origin is Required:
+        return True
+    if origin is NotRequired:
+        return False
+    return None
+
+
+def _is_readonly_type(type_: Any) -> bool:
+    """Check if an annotation is marked as ReadOnly.
+
+    Returns:
+        - True if is read only
+        - False if not read only
+    """
+
+    # See: https://typing.readthedocs.io/en/latest/spec/typeddict.html#typing-readonly-type-qualifier
+    origin = get_origin(type_)
+    if origin is Annotated:
+        return _is_readonly_type(type_.__args__[0])
+    if origin is ReadOnly:
+        return True
+    return False
+
+
+_DEFAULT_KEYS = frozenset()
+
+
+def field_is_optional(name: str, type_: Any, schema: Type[Any]) -> bool:
+    """Determine if the field is optional for a graph's input.
+
+    This is based on:
+        If TypedDict:
+            - Required/NotRequired
+            - total=False -> everything optional
+        - Type annotation (Optional/Union[None])
+    """
+    optional_keys = getattr(schema, "__optional_keys__", _DEFAULT_KEYS)
+    if name in optional_keys:
+        # Either total=False or explicit NotRequired.
+        # No type annotation trumps this.
+        return True
+    if _is_required_type(type_):
+        # Handle Required[<type>]
+        # (we already handled NotRequired and total=False)
+        return False
+    # Note, we ignore ReadOnly attributes,
+    # as they don't make much sense. (we don't care if you mutate the state in your node)
+    # and mutating state in your node has no effect on our graph state.
+    # Base case is the annotation
+    return _is_optional_type(type_)
