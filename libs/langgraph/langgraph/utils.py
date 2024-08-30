@@ -4,7 +4,15 @@ import inspect
 import sys
 from contextvars import copy_context
 from functools import partial, wraps
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+from typing import (
+    Any,
+    AsyncIterator,
+    Awaitable,
+    Callable,
+    Optional,
+    Union,
+    get_origin,
+)
 
 from langchain_core.runnables.base import (
     Runnable,
@@ -33,8 +41,6 @@ except ImportError:
 # Before Python 3.11 native StrEnum is not available
 class StrEnum(str, enum.Enum):
     """A string enum."""
-
-    pass
 
 
 class RunnableCallable(Runnable):
@@ -183,3 +189,20 @@ def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnab
             f"Expected a Runnable, callable or dict."
             f"Instead got an unsupported type: {type(thing)}"
         )
+
+
+def is_optional_type(type_: Any) -> bool:
+    """Check if a type is Optional."""
+
+    if hasattr(type_, "__origin__") and hasattr(type_, "__args__"):
+        origin = get_origin(type_)
+        if origin is Optional:
+            return True
+        if origin is Union:
+            return any(
+                arg is type(None) or is_optional_type(arg) for arg in type_.__args__
+            )
+        return origin is None
+    if hasattr(type_, "__bound__") and type_.__bound__ is not None:
+        return is_optional_type(type_.__bound__)
+    return type_ is None

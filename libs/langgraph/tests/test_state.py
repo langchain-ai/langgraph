@@ -1,5 +1,5 @@
 from typing import Annotated as Annotated2
-from typing import Any
+from typing import Any, Optional
 
 import pytest
 from langchain_core.runnables import RunnableConfig
@@ -86,3 +86,25 @@ def test_state_schema_with_type_hint():
     for i, c in enumerate(graph.stream(input_state, stream_mode="updates")):
         node_name = actions[i].__name__
         assert c[node_name] == output_state
+
+
+def test_state_schema_optional_values():
+    class InputState(TypedDict):
+        val1: str
+        val2: Optional[str]
+
+    class State(InputState):
+        val4: dict
+
+    builder = StateGraph(State, input=InputState)
+    builder.add_node("n", lambda x: x)
+    builder.add_edge("__start__", "n")
+    graph = builder.compile()
+    model = graph.input_schema
+    json_schema = model.schema()
+    expected_required = {"val1"}
+    expected_optional = {"val2"}
+    assert set(json_schema["required"]) == expected_required
+    assert (
+        set(json_schema["properties"].keys()) == expected_required | expected_optional
+    )

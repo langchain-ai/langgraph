@@ -1,7 +1,18 @@
 import functools
 import sys
 import uuid
-from typing import TypedDict
+from typing import (
+    Any,
+    Callable,
+    Dict,
+    ForwardRef,
+    List,
+    Literal,
+    Optional,
+    TypedDict,
+    TypeVar,
+    Union,
+)
 from unittest.mock import patch
 
 import langsmith
@@ -9,7 +20,7 @@ import pytest
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
-from langgraph.utils import is_async_callable, is_async_generator
+from langgraph.utils import is_async_callable, is_async_generator, is_optional_type
 
 
 def test_is_async() -> None:
@@ -119,3 +130,51 @@ async def test_runnable_callable_tracing_nested_async(rt_graph: CompiledGraph) -
             with langsmith.tracing_context(enabled=True):
                 res = await rt_graph.ainvoke({"foo": 1})
     assert isinstance(res["node_run_id"], uuid.UUID)
+
+
+def test_is_optional_type():
+    assert is_optional_type(None)
+    assert not is_optional_type(type(None))
+    assert is_optional_type(Optional[list])
+    assert not is_optional_type(int)
+    assert is_optional_type(Optional[Literal[1, 2, 3]])
+    assert not is_optional_type(Literal[1, 2, 3])
+    assert is_optional_type(Optional[List[int]])
+    assert is_optional_type(Optional[Dict[str, int]])
+    assert not is_optional_type(List[Optional[int]])
+    assert is_optional_type(Union[Optional[str], Optional[int]])
+    assert is_optional_type(
+        Union[
+            Union[Optional[str], Optional[int]], Union[Optional[float], Optional[dict]]
+        ]
+    )
+    assert not is_optional_type(Union[Union[str, int], Union[float, dict]])
+
+    assert is_optional_type(Union[int, None])
+    assert is_optional_type(Union[str, None, int])
+    assert is_optional_type(Union[None, str, int])
+    assert not is_optional_type(Union[int, str])
+
+    assert not is_optional_type(Any)  # Do we actually want this?
+    assert is_optional_type(Optional[Any])
+
+    class MyClass:
+        pass
+
+    assert is_optional_type(Optional[MyClass])
+    assert not is_optional_type(MyClass)
+    assert is_optional_type(Optional[ForwardRef("MyClass")])
+    assert not is_optional_type(ForwardRef("MyClass"))
+
+    assert is_optional_type(Optional[Union[List[int], Dict[str, Optional[int]]]])
+    assert not is_optional_type(Union[List[int], Dict[str, Optional[int]]])
+
+    assert is_optional_type(Optional[Callable[[int], str]])
+    assert not is_optional_type(Callable[[int], Optional[str]])
+
+    T = TypeVar("T")
+    assert is_optional_type(Optional[T])
+    assert not is_optional_type(T)
+
+    U = TypeVar("U", bound=Optional[T])
+    assert is_optional_type(U)
