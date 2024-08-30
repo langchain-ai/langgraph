@@ -1086,6 +1086,17 @@ http2 = ["h2 (>=3,<5)"]
 socks = ["socksio (==1.*)"]
 
 [[package]]
+name = "httpx-sse"
+version = "0.4.0"
+description = "Consume Server-Sent Event (SSE) messages with HTTPX."
+optional = false
+python-versions = ">=3.8"
+files = [
+    {file = "httpx-sse-0.4.0.tar.gz", hash = "sha256:1e81a3a3070ce322add1d3529ed42eb5f70817f45ed6ec915ab753f961139721"},
+    {file = "httpx_sse-0.4.0-py3-none-any.whl", hash = "sha256:f329af6eae57eaa2bdfd962b42524764af68075ea87370a2de920af5341e318f"},
+]
+
+[[package]]
 name = "huggingface-hub"
 version = "0.23.4"
 description = "Client library to download and publish models, datasets and other repos on the huggingface.co hub"
@@ -1848,7 +1859,7 @@ url = "../checkpoint"
 
 [[package]]
 name = "langgraph-checkpoint-postgres"
-version = "1.0.3"
+version = "1.0.4"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 optional = false
 python-versions = "^3.9.0,<4.0"
@@ -1881,6 +1892,24 @@ langgraph-checkpoint = "^1.0.1"
 [package.source]
 type = "directory"
 url = "../checkpoint-sqlite"
+
+[[package]]
+name = "langgraph-sdk"
+version = "0.1.29"
+description = "SDK for interacting with LangGraph API"
+optional = false
+python-versions = "^3.9.0,<4.0"
+files = []
+develop = true
+
+[package.dependencies]
+httpx = ">=0.25.2"
+httpx-sse = ">=0.4.0"
+orjson = ">=3.10.1"
+
+[package.source]
+type = "directory"
+url = "../sdk-py"
 
 [[package]]
 name = "langsmith"
@@ -4310,4 +4339,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "7e0d6fd967987fcf46b038c47b5ca81d86cb8fff89704eac2074f2ce55336a2b"
+content-hash = "2572dc676081900291ebec50f8da03ada539559236019e99de9687d6b751102f"

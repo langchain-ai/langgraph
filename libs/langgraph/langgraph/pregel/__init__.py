@@ -88,6 +88,7 @@ from langgraph.pregel.debug import (
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
+from langgraph.pregel.protocol import PregelProtocol
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy, arun_with_retry, run_with_retry
 from langgraph.pregel.types import (
@@ -184,7 +185,7 @@ class Channel:
 
 
 class Pregel(
-    RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
+    RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]],
 ):
     nodes: Mapping[str, PregelNode]
 
@@ -352,7 +353,9 @@ class Pregel(
             k for k in self.channels if isinstance(self.channels[k], BaseChannel)
         ]
 
-    def get_subgraphs(self, recurse: bool = False) -> Iterator[tuple[str, Pregel]]:
+    def get_subgraphs(
+        self, recurse: bool = False
+    ) -> Iterator[tuple[str, PregelProtocol]]:
         for name, node in self.nodes.items():
             # find the subgraph, if any
             graph: Optional[Pregel] = None
@@ -374,7 +377,7 @@ class Pregel(
 
     async def aget_subgraphs(
         self, recurse: bool = False
-    ) -> AsyncIterator[tuple[str, Pregel]]:
+    ) -> AsyncIterator[tuple[str, PregelProtocol]]:
         for name, node in self.get_subgraphs(recurse=recurse):
             yield name, node
 
