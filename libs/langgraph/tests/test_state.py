@@ -1,3 +1,4 @@
+from dataclasses import dataclass, field
 from typing import Annotated as Annotated2
 from typing import Any, NotRequired, Optional, Required
 
@@ -123,6 +124,50 @@ def test_state_schema_optional_values(total_: bool):
     # The others shoud always have precedence based on the required annotation
     expected_required |= {"val0a", "val3", "val5"}
     expected_optional |= {"val0b", "val4", "val6"}
+
+    assert set(json_schema.get("required", set())) == expected_required
+    assert (
+        set(json_schema["properties"].keys()) == expected_required | expected_optional
+    )
+
+
+@pytest.mark.parametrize("kw_only_", [False, True])
+def test_state_schema_default_values(kw_only_: bool):
+    @dataclass(kw_only=kw_only_)
+    class InputState:
+        val1: str
+        val2: Optional[int]
+        val3: Annotated[Optional[float], "optional annotated"]
+        val4: Optional[str] = None
+        val5: list[int] = field(default_factory=lambda: [1, 2, 3])
+        val6: dict[str, int] = field(default_factory=lambda: {"a": 1})
+        val7: str = field(default=...)
+        val8: Annotated[int, "some metadata"] = 42
+        val9: Annotated[str, "more metadata"] = field(default="some foo")
+        val10: str = "default"
+        val11: Annotated[list[str], "annotated list"] = field(
+            default_factory=lambda: ["a", "b"]
+        )
+
+    builder = StateGraph(InputState)
+    builder.add_node("n", lambda x: x)
+    builder.add_edge("__start__", "n")
+    graph = builder.compile()
+    model = graph.input_schema
+    json_schema = model.schema()
+
+    expected_required = {"val1", "val7"}
+    expected_optional = {
+        "val2",
+        "val3",
+        "val4",
+        "val5",
+        "val6",
+        "val8",
+        "val9",
+        "val10",
+        "val11",
+    }
 
     assert set(json_schema.get("required", set())) == expected_required
     assert (

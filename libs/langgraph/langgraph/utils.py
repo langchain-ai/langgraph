@@ -1,4 +1,5 @@
 import asyncio
+import dataclasses
 import enum
 import inspect
 import sys
@@ -201,6 +202,8 @@ def _is_optional_type(type_: Any) -> bool:
             return any(
                 arg is type(None) or _is_optional_type(arg) for arg in type_.__args__
             )
+        if origin is Annotated:
+            return _is_optional_type(type_.__args__[0])
         return origin is None
     if hasattr(type_, "__bound__") and type_.__bound__ is not None:
         return _is_optional_type(type_.__bound__)
@@ -256,6 +259,7 @@ def field_is_optional(name: str, type_: Any, schema: Type[Any]) -> bool:
         - Type annotation (Optional/Union[None])
     """
     optional_keys = getattr(schema, "__optional_keys__", _DEFAULT_KEYS)
+
     if name in optional_keys:
         # Either total=False or explicit NotRequired.
         # No type annotation trumps this.
@@ -267,5 +271,18 @@ def field_is_optional(name: str, type_: Any, schema: Type[Any]) -> bool:
     # Note, we ignore ReadOnly attributes,
     # as they don't make much sense. (we don't care if you mutate the state in your node)
     # and mutating state in your node has no effect on our graph state.
+
+    if hasattr(schema, "__dataclass_fields__"):
+        field_info = schema.__dataclass_fields__.get(name)
+        if (
+            field_info
+            and (
+                field_info.default is not dataclasses.MISSING
+                and field_info.default is not ...
+            )
+            or (field_info.default_factory is not dataclasses.MISSING)
+        ):
+            return True
+
     # Base case is the annotation
     return _is_optional_type(type_)
