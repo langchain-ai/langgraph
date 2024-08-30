@@ -63,9 +63,6 @@ class CachePolicy(NamedTuple):
     pass
 
 
-EXACT_MATCH = CachePolicy()
-
-
 class PregelTask(NamedTuple):
     id: str
     name: str
