@@ -23,7 +23,7 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.utils import (
     _is_optional_type,
-    field_is_optional,
+    get_field_default,
     is_async_callable,
     is_async_generator,
 )
@@ -200,17 +200,17 @@ def test_is_required():
         val_10: str
 
     annos = MyBaseTypedDict.__annotations__
-    assert not field_is_optional("val_1", annos["val_1"], MyBaseTypedDict)
-    assert not field_is_optional("val_2", annos["val_2"], MyBaseTypedDict)
-    assert field_is_optional("val_3", annos["val_3"], MyBaseTypedDict)
-    assert field_is_optional("val_4", annos["val_4"], MyBaseTypedDict)
+    assert get_field_default("val_1", annos["val_1"], MyBaseTypedDict) == ...
+    assert get_field_default("val_2", annos["val_2"], MyBaseTypedDict) == ...
+    assert get_field_default("val_3", annos["val_3"], MyBaseTypedDict) is None
+    assert get_field_default("val_4", annos["val_4"], MyBaseTypedDict) is None
     # See https://peps.python.org/pep-0655/#interaction-with-annotated
-    assert field_is_optional("val_5", annos["val_5"], MyBaseTypedDict)
-    assert field_is_optional("val_6", annos["val_6"], MyBaseTypedDict)
-    assert not field_is_optional("val_7", annos["val_7"], MyBaseTypedDict)
-    assert not field_is_optional("val_8", annos["val_8"], MyBaseTypedDict)
-    assert field_is_optional("val_9", annos["val_9"], MyBaseTypedDict)
-    assert not field_is_optional("val_10", annos["val_10"], MyBaseTypedDict)
+    assert get_field_default("val_5", annos["val_5"], MyBaseTypedDict) is None
+    assert get_field_default("val_6", annos["val_6"], MyBaseTypedDict) is None
+    assert get_field_default("val_7", annos["val_7"], MyBaseTypedDict) == ...
+    assert get_field_default("val_8", annos["val_8"], MyBaseTypedDict) == ...
+    assert get_field_default("val_9", annos["val_9"], MyBaseTypedDict) is None
+    assert get_field_default("val_10", annos["val_10"], MyBaseTypedDict) == ...
 
     class MyChildDict(MyBaseTypedDict):
         val_11: int
@@ -223,9 +223,9 @@ def test_is_required():
 
     cannos = MyChildDict.__annotations__
     gcannos = MyGrandChildDict.__annotations__
-    assert not field_is_optional("val_11", cannos["val_11"], MyChildDict)
-    assert field_is_optional("val_11b", cannos["val_11b"], MyChildDict)
-    assert field_is_optional("val_11c", cannos["val_11c"], MyChildDict)
-    assert field_is_optional("val_12", gcannos["val_12"], MyGrandChildDict)
-    assert field_is_optional("val_9", gcannos["val_9"], MyGrandChildDict)
-    assert not field_is_optional("val_13", gcannos["val_13"], MyGrandChildDict)
+    assert get_field_default("val_11", cannos["val_11"], MyChildDict) == ...
+    assert get_field_default("val_11b", cannos["val_11b"], MyChildDict) is None
+    assert get_field_default("val_11c", cannos["val_11c"], MyChildDict) is None
+    assert get_field_default("val_12", gcannos["val_12"], MyGrandChildDict) is None
+    assert get_field_default("val_9", gcannos["val_9"], MyGrandChildDict) is None
+    assert get_field_default("val_13", gcannos["val_13"], MyGrandChildDict) == ...

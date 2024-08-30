@@ -44,7 +44,7 @@ from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.utils import RunnableCallable, coerce_to_runnable, field_is_optional
+from langgraph.utils import RunnableCallable, coerce_to_runnable, get_field_default
 
 logger = logging.getLogger(__name__)
 
@@ -492,13 +492,11 @@ class CompiledStateGraph(CompiledGraph):
                         k: (
                             self.channels[k].UpdateType,
                             (
-                                None
-                                if field_is_optional(
+                                get_field_default(
                                     k,
                                     self.channels[k].UpdateType,
                                     self.builder.input,
                                 )
-                                else ...
                             ),
                         )
                         for k in self.builder.schemas[self.builder.input]
