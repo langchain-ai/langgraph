@@ -26,8 +26,9 @@ from langchain_core.runnables.graph import Node as DrawableNode
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import (
-    CHECKPOINT_NAMESPACE_SEPARATOR,
     END,
+    NS_END,
+    NS_SEP,
     START,
     TAG_HIDDEN,
     Send,
@@ -140,8 +141,7 @@ class Graph:
         node: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     @overload
     def add_node(
@@ -150,8 +150,7 @@ class Graph:
         action: RunnableLike,
         *,
         metadata: Optional[dict[str, Any]] = None,
-    ) -> None:
-        ...
+    ) -> None: ...
 
     def add_node(
         self,
@@ -160,10 +159,12 @@ class Graph:
         *,
         metadata: Optional[dict[str, Any]] = None,
     ) -> None:
-        if isinstance(node, str) and CHECKPOINT_NAMESPACE_SEPARATOR in node:
-            raise ValueError(
-                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
-            )
+        if isinstance(node, str):
+            for character in (NS_SEP, NS_END):
+                if character in node:
+                    raise ValueError(
+                        f"'{character}' is a reserved character and is not allowed in the node names."
+                    )
 
         if self.compiled:
             logger.warning(
@@ -192,12 +193,14 @@ class Graph:
             raise ValueError("END cannot be a start node")
         if end_key == START:
             raise ValueError("START cannot be an end node")
-        if not self.support_multiple_edges and start_key in set(
+
+        # run this validation only for non-StateGraph graphs
+        if not hasattr(self, "channels") and start_key in set(
             start for start, _ in self.edges
         ):
             raise ValueError(
                 f"Already found path for node '{start_key}'.\n"
-                "For multiple edges, use StateGraph with an annotated state key."
+                "For multiple edges, use StateGraph with an Annotated state key."
             )
 
         self.edges.add((start_key, end_key))
@@ -481,6 +484,10 @@ class CompiledGraph(Pregel):
             START: graph.add_node(self.get_input_schema(config), START)
         }
         end_nodes: dict[str, DrawableNode] = {}
+        if xray:
+            subgraphs = dict(self.get_subgraphs())
+        else:
+            subgraphs = {}
 
         def add_edge(
             start: str, end: str, label: Optional[str] = None, conditional: bool = False
@@ -500,11 +507,11 @@ class CompiledGraph(Pregel):
                 metadata["__interrupt"] = "after"
             if xray:
                 subgraph = (
-                    node.get_graph(
+                    subgraphs[key].get_graph(
                         config=config,
                         xray=xray - 1 if isinstance(xray, int) and xray > 0 else xray,
                     )
-                    if isinstance(node, CompiledGraph)
+                    if key in subgraphs
                     else node.get_graph(config=config)
                 )
                 subgraph.trim_first_node()

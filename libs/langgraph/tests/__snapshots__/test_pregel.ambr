@@ -33,6 +33,176 @@
   
   '''
 # ---
+# name: test_branch_then[memory]
+  '''
+  graph TD;
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  
+  '''
+# ---
+# name: test_branch_then[memory].1
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	prepare(prepare)
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	finish(finish)
+  	__end__([__end__]):::last
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_branch_then[postgres]
+  '''
+  graph TD;
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  
+  '''
+# ---
+# name: test_branch_then[postgres].1
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	prepare(prepare)
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	finish(finish)
+  	__end__([__end__]):::last
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_branch_then[postgres_pipe]
+  '''
+  graph TD;
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  
+  '''
+# ---
+# name: test_branch_then[postgres_pipe].1
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	prepare(prepare)
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	finish(finish)
+  	__end__([__end__]):::last
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_branch_then[postgres_pool]
+  '''
+  graph TD;
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  
+  '''
+# ---
+# name: test_branch_then[postgres_pool].1
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	prepare(prepare)
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	finish(finish)
+  	__end__([__end__]):::last
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_branch_then[sqlite]
+  '''
+  graph TD;
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  
+  '''
+# ---
+# name: test_branch_then[sqlite].1
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	prepare(prepare)
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	finish(finish)
+  	__end__([__end__]):::last
+  	__start__ --> prepare;
+  	finish --> __end__;
+  	prepare -.-> tool_two_slow;
+  	tool_two_slow --> finish;
+  	prepare -.-> tool_two_fast;
+  	tool_two_fast --> finish;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
 # name: test_conditional_entrypoint_graph
   '{"title": "LangGraphInput"}'
 # ---
@@ -601,6 +771,1761 @@
   
   '''
 # ---
+# name: test_conditional_graph[memory]
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableAssign"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[memory].1
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[memory].2
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_conditional_graph[memory].3
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": 1,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Input"
+      },
+      {
+        "id": 2,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Output"
+      },
+      {
+        "id": 3,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "prompts",
+            "prompt",
+            "PromptTemplate"
+          ],
+          "name": "PromptTemplate"
+        }
+      },
+      {
+        "id": 4,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "language_models",
+            "fake",
+            "FakeStreamingListLLM"
+          ],
+          "name": "FakeStreamingListLLM"
+        }
+      },
+      {
+        "id": 5,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "agent_parser"
+        }
+      },
+      {
+        "id": 6,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "Passthrough"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": 3,
+        "target": 4
+      },
+      {
+        "source": 4,
+        "target": 5
+      },
+      {
+        "source": 1,
+        "target": 3
+      },
+      {
+        "source": 5,
+        "target": 2
+      },
+      {
+        "source": 1,
+        "target": 6
+      },
+      {
+        "source": 6,
+        "target": 2
+      },
+      {
+        "source": "__start__",
+        "target": 1
+      },
+      {
+        "source": "tools",
+        "target": 1
+      },
+      {
+        "source": 2,
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": 2,
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[memory].4
+  '''
+  graph TD;
+  	PromptTemplate --> FakeStreamingListLLM;
+  	FakeStreamingListLLM --> agent_parser;
+  	Parallel_agent_outcome_Input --> PromptTemplate;
+  	agent_parser --> Parallel_agent_outcome_Output;
+  	Parallel_agent_outcome_Input --> Passthrough;
+  	Passthrough --> Parallel_agent_outcome_Output;
+  	__start__ --> Parallel_agent_outcome_Input;
+  	tools --> Parallel_agent_outcome_Input;
+  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
+  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[memory].5
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'agent',
+      }),
+      dict({
+        'source': 'tools',
+        'target': 'agent',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'continue',
+        'source': 'agent',
+        'target': 'tools',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'exit',
+        'source': 'agent',
+        'target': '__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnableAssign',
+          ]),
+          'name': 'agent',
+        }),
+        'id': 'agent',
+        'metadata': dict({
+          '__interrupt': 'after',
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'tools',
+        }),
+        'id': 'tools',
+        'metadata': dict({
+          'parents': dict({
+          }),
+          'variant': 'b',
+          'version': 2,
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+    ]),
+  })
+# ---
+# name: test_conditional_graph[memory].6
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent<hr/><small><em>__interrupt = after</em></small>)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres]
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableAssign"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[postgres].1
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres].2
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres].3
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": 1,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Input"
+      },
+      {
+        "id": 2,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Output"
+      },
+      {
+        "id": 3,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "prompts",
+            "prompt",
+            "PromptTemplate"
+          ],
+          "name": "PromptTemplate"
+        }
+      },
+      {
+        "id": 4,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "language_models",
+            "fake",
+            "FakeStreamingListLLM"
+          ],
+          "name": "FakeStreamingListLLM"
+        }
+      },
+      {
+        "id": 5,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "agent_parser"
+        }
+      },
+      {
+        "id": 6,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "Passthrough"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": 3,
+        "target": 4
+      },
+      {
+        "source": 4,
+        "target": 5
+      },
+      {
+        "source": 1,
+        "target": 3
+      },
+      {
+        "source": 5,
+        "target": 2
+      },
+      {
+        "source": 1,
+        "target": 6
+      },
+      {
+        "source": 6,
+        "target": 2
+      },
+      {
+        "source": "__start__",
+        "target": 1
+      },
+      {
+        "source": "tools",
+        "target": 1
+      },
+      {
+        "source": 2,
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": 2,
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[postgres].4
+  '''
+  graph TD;
+  	PromptTemplate --> FakeStreamingListLLM;
+  	FakeStreamingListLLM --> agent_parser;
+  	Parallel_agent_outcome_Input --> PromptTemplate;
+  	agent_parser --> Parallel_agent_outcome_Output;
+  	Parallel_agent_outcome_Input --> Passthrough;
+  	Passthrough --> Parallel_agent_outcome_Output;
+  	__start__ --> Parallel_agent_outcome_Input;
+  	tools --> Parallel_agent_outcome_Input;
+  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
+  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres].5
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'agent',
+      }),
+      dict({
+        'source': 'tools',
+        'target': 'agent',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'continue',
+        'source': 'agent',
+        'target': 'tools',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'exit',
+        'source': 'agent',
+        'target': '__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnableAssign',
+          ]),
+          'name': 'agent',
+        }),
+        'id': 'agent',
+        'metadata': dict({
+          '__interrupt': 'after',
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'tools',
+        }),
+        'id': 'tools',
+        'metadata': dict({
+          'parents': dict({
+          }),
+          'variant': 'b',
+          'version': 2,
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+    ]),
+  })
+# ---
+# name: test_conditional_graph[postgres].6
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent<hr/><small><em>__interrupt = after</em></small>)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres_pipe]
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableAssign"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[postgres_pipe].1
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres_pipe].2
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres_pipe].3
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": 1,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Input"
+      },
+      {
+        "id": 2,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Output"
+      },
+      {
+        "id": 3,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "prompts",
+            "prompt",
+            "PromptTemplate"
+          ],
+          "name": "PromptTemplate"
+        }
+      },
+      {
+        "id": 4,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "language_models",
+            "fake",
+            "FakeStreamingListLLM"
+          ],
+          "name": "FakeStreamingListLLM"
+        }
+      },
+      {
+        "id": 5,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "agent_parser"
+        }
+      },
+      {
+        "id": 6,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "Passthrough"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": 3,
+        "target": 4
+      },
+      {
+        "source": 4,
+        "target": 5
+      },
+      {
+        "source": 1,
+        "target": 3
+      },
+      {
+        "source": 5,
+        "target": 2
+      },
+      {
+        "source": 1,
+        "target": 6
+      },
+      {
+        "source": 6,
+        "target": 2
+      },
+      {
+        "source": "__start__",
+        "target": 1
+      },
+      {
+        "source": "tools",
+        "target": 1
+      },
+      {
+        "source": 2,
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": 2,
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[postgres_pipe].4
+  '''
+  graph TD;
+  	PromptTemplate --> FakeStreamingListLLM;
+  	FakeStreamingListLLM --> agent_parser;
+  	Parallel_agent_outcome_Input --> PromptTemplate;
+  	agent_parser --> Parallel_agent_outcome_Output;
+  	Parallel_agent_outcome_Input --> Passthrough;
+  	Passthrough --> Parallel_agent_outcome_Output;
+  	__start__ --> Parallel_agent_outcome_Input;
+  	tools --> Parallel_agent_outcome_Input;
+  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
+  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres_pipe].5
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'agent',
+      }),
+      dict({
+        'source': 'tools',
+        'target': 'agent',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'continue',
+        'source': 'agent',
+        'target': 'tools',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'exit',
+        'source': 'agent',
+        'target': '__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnableAssign',
+          ]),
+          'name': 'agent',
+        }),
+        'id': 'agent',
+        'metadata': dict({
+          '__interrupt': 'after',
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'tools',
+        }),
+        'id': 'tools',
+        'metadata': dict({
+          'parents': dict({
+          }),
+          'variant': 'b',
+          'version': 2,
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+    ]),
+  })
+# ---
+# name: test_conditional_graph[postgres_pipe].6
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent<hr/><small><em>__interrupt = after</em></small>)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres_pool]
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableAssign"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[postgres_pool].1
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres_pool].2
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres_pool].3
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": 1,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Input"
+      },
+      {
+        "id": 2,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Output"
+      },
+      {
+        "id": 3,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "prompts",
+            "prompt",
+            "PromptTemplate"
+          ],
+          "name": "PromptTemplate"
+        }
+      },
+      {
+        "id": 4,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "language_models",
+            "fake",
+            "FakeStreamingListLLM"
+          ],
+          "name": "FakeStreamingListLLM"
+        }
+      },
+      {
+        "id": 5,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "agent_parser"
+        }
+      },
+      {
+        "id": 6,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "Passthrough"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": 3,
+        "target": 4
+      },
+      {
+        "source": 4,
+        "target": 5
+      },
+      {
+        "source": 1,
+        "target": 3
+      },
+      {
+        "source": 5,
+        "target": 2
+      },
+      {
+        "source": 1,
+        "target": 6
+      },
+      {
+        "source": 6,
+        "target": 2
+      },
+      {
+        "source": "__start__",
+        "target": 1
+      },
+      {
+        "source": "tools",
+        "target": 1
+      },
+      {
+        "source": 2,
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": 2,
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[postgres_pool].4
+  '''
+  graph TD;
+  	PromptTemplate --> FakeStreamingListLLM;
+  	FakeStreamingListLLM --> agent_parser;
+  	Parallel_agent_outcome_Input --> PromptTemplate;
+  	agent_parser --> Parallel_agent_outcome_Output;
+  	Parallel_agent_outcome_Input --> Passthrough;
+  	Passthrough --> Parallel_agent_outcome_Output;
+  	__start__ --> Parallel_agent_outcome_Input;
+  	tools --> Parallel_agent_outcome_Input;
+  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
+  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[postgres_pool].5
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'agent',
+      }),
+      dict({
+        'source': 'tools',
+        'target': 'agent',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'continue',
+        'source': 'agent',
+        'target': 'tools',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'exit',
+        'source': 'agent',
+        'target': '__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnableAssign',
+          ]),
+          'name': 'agent',
+        }),
+        'id': 'agent',
+        'metadata': dict({
+          '__interrupt': 'after',
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'tools',
+        }),
+        'id': 'tools',
+        'metadata': dict({
+          'parents': dict({
+          }),
+          'variant': 'b',
+          'version': 2,
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+    ]),
+  })
+# ---
+# name: test_conditional_graph[postgres_pool].6
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent<hr/><small><em>__interrupt = after</em></small>)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_conditional_graph[sqlite]
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableAssign"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[sqlite].1
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[sqlite].2
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_conditional_graph[sqlite].3
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": 1,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Input"
+      },
+      {
+        "id": 2,
+        "type": "schema",
+        "data": "Parallel<agent_outcome>Output"
+      },
+      {
+        "id": 3,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "prompts",
+            "prompt",
+            "PromptTemplate"
+          ],
+          "name": "PromptTemplate"
+        }
+      },
+      {
+        "id": 4,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "language_models",
+            "fake",
+            "FakeStreamingListLLM"
+          ],
+          "name": "FakeStreamingListLLM"
+        }
+      },
+      {
+        "id": 5,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain_core",
+            "runnables",
+            "base",
+            "RunnableLambda"
+          ],
+          "name": "agent_parser"
+        }
+      },
+      {
+        "id": 6,
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnablePassthrough"
+          ],
+          "name": "Passthrough"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        },
+        "metadata": {
+          "parents": {},
+          "version": 2,
+          "variant": "b"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": 3,
+        "target": 4
+      },
+      {
+        "source": 4,
+        "target": 5
+      },
+      {
+        "source": 1,
+        "target": 3
+      },
+      {
+        "source": 5,
+        "target": 2
+      },
+      {
+        "source": 1,
+        "target": 6
+      },
+      {
+        "source": 6,
+        "target": 2
+      },
+      {
+        "source": "__start__",
+        "target": 1
+      },
+      {
+        "source": "tools",
+        "target": 1
+      },
+      {
+        "source": 2,
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": 2,
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_graph[sqlite].4
+  '''
+  graph TD;
+  	PromptTemplate --> FakeStreamingListLLM;
+  	FakeStreamingListLLM --> agent_parser;
+  	Parallel_agent_outcome_Input --> PromptTemplate;
+  	agent_parser --> Parallel_agent_outcome_Output;
+  	Parallel_agent_outcome_Input --> Passthrough;
+  	Passthrough --> Parallel_agent_outcome_Output;
+  	__start__ --> Parallel_agent_outcome_Input;
+  	tools --> Parallel_agent_outcome_Input;
+  	Parallel_agent_outcome_Output -. &nbspcontinue&nbsp .-> tools;
+  	Parallel_agent_outcome_Output -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_graph[sqlite].5
+  dict({
+    'edges': list([
+      dict({
+        'source': '__start__',
+        'target': 'agent',
+      }),
+      dict({
+        'source': 'tools',
+        'target': 'agent',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'continue',
+        'source': 'agent',
+        'target': 'tools',
+      }),
+      dict({
+        'conditional': True,
+        'data': 'exit',
+        'source': 'agent',
+        'target': '__end__',
+      }),
+    ]),
+    'nodes': list([
+      dict({
+        'data': '__start__',
+        'id': '__start__',
+        'type': 'schema',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langchain',
+            'schema',
+            'runnable',
+            'RunnableAssign',
+          ]),
+          'name': 'agent',
+        }),
+        'id': 'agent',
+        'metadata': dict({
+          '__interrupt': 'after',
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': dict({
+          'id': list([
+            'langgraph',
+            'utils',
+            'RunnableCallable',
+          ]),
+          'name': 'tools',
+        }),
+        'id': 'tools',
+        'metadata': dict({
+          'parents': dict({
+          }),
+          'variant': 'b',
+          'version': 2,
+        }),
+        'type': 'runnable',
+      }),
+      dict({
+        'data': '__end__',
+        'id': '__end__',
+        'type': 'schema',
+      }),
+    ]),
+  })
+# ---
+# name: test_conditional_graph[sqlite].6
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	agent(agent<hr/><small><em>__interrupt = after</em></small>)
+  	tools(tools<hr/><small><em>parents = {}
+  version = 2
+  variant = b</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
 # name: test_conditional_state_graph
   '{"title": "LangGraphInput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
 # ---
@@ -682,7 +2607,565 @@
   
   '''
 # ---
+# name: test_conditional_state_graph[memory]
+  '{"title": "LangGraphInput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[memory].1
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[memory].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableSequence"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_state_graph[memory].3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_state_graph[postgres]
+  '{"title": "LangGraphInput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[postgres].1
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[postgres].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableSequence"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_state_graph[postgres].3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_state_graph[postgres_pipe]
+  '{"title": "LangGraphInput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[postgres_pipe].1
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[postgres_pipe].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableSequence"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_state_graph[postgres_pipe].3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_state_graph[postgres_pool]
+  '{"title": "LangGraphInput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[postgres_pool].1
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[postgres_pool].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableSequence"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_state_graph[postgres_pool].3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_state_graph[sqlite]
+  '{"title": "LangGraphInput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[sqlite].1
+  '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_conditional_state_graph[sqlite].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langchain",
+            "schema",
+            "runnable",
+            "RunnableSequence"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "exit",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_state_graph[sqlite].3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspexit&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_conditional_state_graph_with_list_edge_inputs
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "A",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "A"
+        }
+      },
+      {
+        "id": "B",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "utils",
+            "RunnableCallable"
+          ],
+          "name": "B"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "A",
+        "target": "__end__"
+      },
+      {
+        "source": "B",
+        "target": "__end__"
+      },
+      {
+        "source": "__start__",
+        "target": "A"
+      },
+      {
+        "source": "__start__",
+        "target": "B"
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_conditional_state_graph_with_list_edge_inputs.1
+  '''
+  graph TD;
+  	A --> __end__;
+  	B --> __end__;
+  	__start__ --> A;
+  	__start__ --> B;
+  
+  '''
+# ---
+# name: test_dynamic_interrupt
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	__end__([__end__]):::last
+  	__start__ -.-> tool_two_slow;
+  	tool_two_slow --> __end__;
+  	__start__ -.-> tool_two_fast;
+  	tool_two_fast --> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
 # name: test_in_one_fan_out_state_graph_waiting_edge
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge[memory]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge[postgres]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge[postgres_pipe]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge[postgres_pool]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query --> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge[sqlite]
   '''
   graph TD;
   	__start__ --> rewrite_query;
@@ -739,17 +3222,6 @@
       }),
     }),
     'properties': dict({
-      'answer': dict({
-        'title': 'Answer',
-        'type': 'string',
-      }),
-      'docs': dict({
-        'items': dict({
-          'type': 'string',
-        }),
-        'title': 'Docs',
-        'type': 'array',
-      }),
       'inner': dict({
         '$ref': '#/definitions/InnerObject',
       }),
@@ -761,13 +3233,48 @@
     'required': list([
       'query',
       'inner',
-      'docs',
     ]),
-    'title': 'State',
+    'title': 'Input',
     'type': 'object',
   })
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1.2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[memory]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[memory].1
   dict({
     'definitions': dict({
       'InnerObject': dict({
@@ -785,17 +3292,6 @@
       }),
     }),
     'properties': dict({
-      'answer': dict({
-        'title': 'Answer',
-        'type': 'string',
-      }),
-      'docs': dict({
-        'items': dict({
-          'type': 'string',
-        }),
-        'title': 'Docs',
-        'type': 'array',
-      }),
       'inner': dict({
         '$ref': '#/definitions/InnerObject',
       }),
@@ -807,9 +3303,311 @@
     'required': list([
       'query',
       'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[memory].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
       'docs',
     ]),
-    'title': 'State',
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres].1
+  dict({
+    'definitions': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'inner': dict({
+        '$ref': '#/definitions/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres_pipe]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres_pipe].1
+  dict({
+    'definitions': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'inner': dict({
+        '$ref': '#/definitions/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres_pipe].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres_pool]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres_pool].1
+  dict({
+    'definitions': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'inner': dict({
+        '$ref': '#/definitions/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[postgres_pool].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[sqlite]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[sqlite].1
+  dict({
+    'definitions': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'inner': dict({
+        '$ref': '#/definitions/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1[sqlite].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
     'type': 'object',
   })
 # ---
@@ -844,25 +3642,6 @@
       }),
     }),
     'properties': dict({
-      'answer': dict({
-        'anyOf': list([
-          dict({
-            'type': 'string',
-          }),
-          dict({
-            'type': 'null',
-          }),
-        ]),
-        'default': None,
-        'title': 'Answer',
-      }),
-      'docs': dict({
-        'items': dict({
-          'type': 'string',
-        }),
-        'title': 'Docs',
-        'type': 'array',
-      }),
       'inner': dict({
         '$ref': '#/$defs/InnerObject',
       }),
@@ -874,13 +3653,48 @@
     'required': list([
       'query',
       'inner',
-      'docs',
     ]),
-    'title': 'State',
+    'title': 'Input',
     'type': 'object',
   })
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2.2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory].1
   dict({
     '$defs': dict({
       'InnerObject': dict({
@@ -898,25 +3712,6 @@
       }),
     }),
     'properties': dict({
-      'answer': dict({
-        'anyOf': list([
-          dict({
-            'type': 'string',
-          }),
-          dict({
-            'type': 'null',
-          }),
-        ]),
-        'default': None,
-        'title': 'Answer',
-      }),
-      'docs': dict({
-        'items': dict({
-          'type': 'string',
-        }),
-        'title': 'Docs',
-        'type': 'array',
-      }),
       'inner': dict({
         '$ref': '#/$defs/InnerObject',
       }),
@@ -928,13 +3723,380 @@
     'required': list([
       'query',
       'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
       'docs',
     ]),
-    'title': 'State',
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_pipe]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_pipe].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_pipe].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_pool]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_pool].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_pool].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[sqlite]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[sqlite].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
+    'title': 'Input',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[sqlite].2
+  dict({
+    'properties': dict({
+      'answer': dict({
+        'title': 'Answer',
+        'type': 'string',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+    }),
+    'required': list([
+      'answer',
+      'docs',
+    ]),
+    'title': 'Output',
     'type': 'object',
   })
 # ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_via_branch
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[memory]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[postgres]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[postgres_pipe]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[postgres_pool]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[sqlite]
   '''
   graph TD;
   	__start__ --> rewrite_query;
@@ -1019,6 +4181,411 @@
   '''
 # ---
 # name: test_message_graph.3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspend&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_message_graph[memory]
+  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[memory].1
+  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[memory].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "tests",
+            "test_pregel",
+            "FakeFuntionChatModel"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "prebuilt",
+            "tool_node",
+            "ToolNode"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "end",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_message_graph[memory].3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspend&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_message_graph[postgres]
+  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[postgres].1
+  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[postgres].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "tests",
+            "test_pregel",
+            "FakeFuntionChatModel"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "prebuilt",
+            "tool_node",
+            "ToolNode"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "end",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_message_graph[postgres].3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspend&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_message_graph[postgres_pipe]
+  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[postgres_pipe].1
+  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[postgres_pipe].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "tests",
+            "test_pregel",
+            "FakeFuntionChatModel"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "prebuilt",
+            "tool_node",
+            "ToolNode"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "end",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_message_graph[postgres_pipe].3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspend&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_message_graph[postgres_pool]
+  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[postgres_pool].1
+  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[postgres_pool].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "tests",
+            "test_pregel",
+            "FakeFuntionChatModel"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "prebuilt",
+            "tool_node",
+            "ToolNode"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "end",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_message_graph[postgres_pool].3
+  '''
+  graph TD;
+  	__start__ --> agent;
+  	tools --> agent;
+  	agent -. &nbspcontinue&nbsp .-> tools;
+  	agent -. &nbspend&nbsp .-> __end__;
+  
+  '''
+# ---
+# name: test_message_graph[sqlite]
+  '{"title": "LangGraphInput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[sqlite].1
+  '{"title": "LangGraphOutput", "type": "array", "items": {"anyOf": [{"$ref": "#/definitions/AIMessage"}, {"$ref": "#/definitions/HumanMessage"}, {"$ref": "#/definitions/ChatMessage"}, {"$ref": "#/definitions/SystemMessage"}, {"$ref": "#/definitions/FunctionMessage"}, {"$ref": "#/definitions/ToolMessage"}]}, "definitions": {"ToolCall": {"title": "ToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "object"}, "id": {"title": "Id", "type": "string"}, "type": {"title": "Type", "enum": ["tool_call"], "type": "string"}}, "required": ["name", "args", "id"]}, "InvalidToolCall": {"title": "InvalidToolCall", "type": "object", "properties": {"name": {"title": "Name", "type": "string"}, "args": {"title": "Args", "type": "string"}, "id": {"title": "Id", "type": "string"}, "error": {"title": "Error", "type": "string"}, "type": {"title": "Type", "enum": ["invalid_tool_call"], "type": "string"}}, "required": ["name", "args", "id", "error"]}, "UsageMetadata": {"title": "UsageMetadata", "type": "object", "properties": {"input_tokens": {"title": "Input Tokens", "type": "integer"}, "output_tokens": {"title": "Output Tokens", "type": "integer"}, "total_tokens": {"title": "Total Tokens", "type": "integer"}}, "required": ["input_tokens", "output_tokens", "total_tokens"]}, "AIMessage": {"title": "AIMessage", "description": "Message from an AI.\\n\\nAIMessage is returned from a chat model as a response to a prompt.\\n\\nThis message represents the output of the model and consists of both\\nthe raw output as returned by the model together standardized fields\\n(e.g., tool calls, usage metadata) added by the LangChain framework.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "ai", "enum": ["ai"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}, "tool_calls": {"title": "Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/ToolCall"}}, "invalid_tool_calls": {"title": "Invalid Tool Calls", "default": [], "type": "array", "items": {"$ref": "#/definitions/InvalidToolCall"}}, "usage_metadata": {"$ref": "#/definitions/UsageMetadata"}}, "required": ["content"]}, "HumanMessage": {"title": "HumanMessage", "description": "Message from a human.\\n\\nHumanMessages are messages that are passed in from a human to the model.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Instantiate a chat model and invoke it with the messages\\n        model = ...\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "human", "enum": ["human"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "example": {"title": "Example", "default": false, "type": "boolean"}}, "required": ["content"]}, "ChatMessage": {"title": "ChatMessage", "description": "Message that can be assigned an arbitrary speaker (i.e. role).", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "chat", "enum": ["chat"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "role": {"title": "Role", "type": "string"}}, "required": ["content", "role"]}, "SystemMessage": {"title": "SystemMessage", "description": "Message for priming AI behavior.\\n\\nThe system message is usually passed in as the first of a sequence\\nof input messages.\\n\\nExample:\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import HumanMessage, SystemMessage\\n\\n        messages = [\\n            SystemMessage(\\n                content=\\"You are a helpful assistant! Your name is Bob.\\"\\n            ),\\n            HumanMessage(\\n                content=\\"What is your name?\\"\\n            )\\n        ]\\n\\n        # Define a chat model and invoke it with the messages\\n        print(model.invoke(messages))", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "system", "enum": ["system"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content"]}, "FunctionMessage": {"title": "FunctionMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nFunctionMessage are an older version of the ToolMessage schema, and\\ndo not contain the tool_call_id field.\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "function", "enum": ["function"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "name"]}, "ToolMessage": {"title": "ToolMessage", "description": "Message for passing the result of executing a tool back to a model.\\n\\nToolMessages contain the result of a tool invocation. Typically, the result\\nis encoded inside the `content` field.\\n\\nExample: A ToolMessage representing a result of 42 from a tool call with id\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        ToolMessage(content=\'42\', tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\')\\n\\n\\nExample: A ToolMessage where only part of the tool output is sent to the model\\n    and the full output is passed in to artifact.\\n\\n    .. versionadded:: 0.2.17\\n\\n    .. code-block:: python\\n\\n        from langchain_core.messages import ToolMessage\\n\\n        tool_output = {\\n            \\"stdout\\": \\"From the graph we can see that the correlation between x and y is ...\\",\\n            \\"stderr\\": None,\\n            \\"artifacts\\": {\\"type\\": \\"image\\", \\"base64_data\\": \\"/9j/4gIcSU...\\"},\\n        }\\n\\n        ToolMessage(\\n            content=tool_output[\\"stdout\\"],\\n            artifact=tool_output,\\n            tool_call_id=\'call_Jja7J89XsjrOLA5r!MEOW!SL\',\\n        )\\n\\nThe tool_call_id field is used to associate the tool call request with the\\ntool call response. This is useful in situations where a chat model is able\\nto request multiple tool calls in parallel.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "default": "tool", "enum": ["tool"], "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}, "tool_call_id": {"title": "Tool Call Id", "type": "string"}, "artifact": {"title": "Artifact"}, "status": {"title": "Status", "default": "success", "enum": ["success", "error"], "type": "string"}}, "required": ["content", "tool_call_id"]}}}'
+# ---
+# name: test_message_graph[sqlite].2
+  '''
+  {
+    "nodes": [
+      {
+        "id": "__start__",
+        "type": "schema",
+        "data": "__start__"
+      },
+      {
+        "id": "agent",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "tests",
+            "test_pregel",
+            "FakeFuntionChatModel"
+          ],
+          "name": "agent"
+        }
+      },
+      {
+        "id": "tools",
+        "type": "runnable",
+        "data": {
+          "id": [
+            "langgraph",
+            "prebuilt",
+            "tool_node",
+            "ToolNode"
+          ],
+          "name": "tools"
+        }
+      },
+      {
+        "id": "__end__",
+        "type": "schema",
+        "data": "__end__"
+      }
+    ],
+    "edges": [
+      {
+        "source": "__start__",
+        "target": "agent"
+      },
+      {
+        "source": "tools",
+        "target": "agent"
+      },
+      {
+        "source": "agent",
+        "target": "tools",
+        "data": "continue",
+        "conditional": true
+      },
+      {
+        "source": "agent",
+        "target": "__end__",
+        "data": "end",
+        "conditional": true
+      }
+    ]
+  }
+  '''
+# ---
+# name: test_message_graph[sqlite].3
   '''
   graph TD;
   	__start__ --> agent;
@@ -1415,6 +4982,96 @@
   
   '''
 # ---
+# name: test_start_branch_then[memory]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	__end__([__end__]):::last
+  	__start__ -.-> tool_two_slow;
+  	tool_two_slow --> __end__;
+  	__start__ -.-> tool_two_fast;
+  	tool_two_fast --> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_start_branch_then[postgres]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	__end__([__end__]):::last
+  	__start__ -.-> tool_two_slow;
+  	tool_two_slow --> __end__;
+  	__start__ -.-> tool_two_fast;
+  	tool_two_fast --> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_start_branch_then[postgres_pipe]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	__end__([__end__]):::last
+  	__start__ -.-> tool_two_slow;
+  	tool_two_slow --> __end__;
+  	__start__ -.-> tool_two_fast;
+  	tool_two_fast --> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_start_branch_then[postgres_pool]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	__end__([__end__]):::last
+  	__start__ -.-> tool_two_slow;
+  	tool_two_slow --> __end__;
+  	__start__ -.-> tool_two_fast;
+  	tool_two_fast --> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_start_branch_then[sqlite]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	tool_two_slow(tool_two_slow)
+  	tool_two_fast(tool_two_fast)
+  	__end__([__end__]):::last
+  	__start__ -.-> tool_two_slow;
+  	tool_two_slow --> __end__;
+  	__start__ -.-> tool_two_fast;
+  	tool_two_fast --> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
 # name: test_state_graph_w_config
   '{"title": "LangGraphConfig", "type": "object", "properties": {"configurable": {"$ref": "#/definitions/Configurable"}}, "definitions": {"Configurable": {"title": "Configurable", "type": "object", "properties": {"tools": {"title": "Tools", "type": "array", "items": {"type": "string"}}}}}}'
 # ---
@@ -1441,6 +5098,158 @@
 # ---
 # name: test_state_graph_w_config_inherited_state_keys.2
   '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+# ---
+# name: test_weather_subgraph[memory]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_weather_subgraph[postgres]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_weather_subgraph[postgres_pipe]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_weather_subgraph[postgres_pool]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_weather_subgraph[sqlite]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_xray_issue
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	p_one(p_one)
+  	p_two___start__(__start__)
+  	p_two_c_one(c_one)
+  	p_two_c_two(c_two)
+  	p_two___end__(__end__)
+  	__end__([__end__]):::last
+  	subgraph p_two
+  	p_two___start__ --> p_two_c_one;
+  	p_two_c_two --> p_two_c_one;
+  	p_two_c_one -. &nbsp0&nbsp .-> p_two_c_two;
+  	p_two_c_one -. &nbsp1&nbsp .-> p_two___end__;
+  	end
+  	__start__ --> p_one;
+  	p_two___end__ --> p_one;
+  	p_one -. &nbsp0&nbsp .-> p_two___start__;
+  	p_one -. &nbsp1&nbsp .-> __end__;
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
 # ---
 # name: test_xray_lance
   dict({

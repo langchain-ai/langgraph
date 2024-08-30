@@ -24,6 +24,7 @@ import {
 
 interface ClientConfig {
   apiUrl?: string;
+  apiKey?: string;
   callerOptions?: AsyncCallerParams;
   timeoutMs?: number;
   defaultHeaders?: Record<string, string | null | undefined>;
@@ -48,6 +49,9 @@ class BaseClient {
     this.timeoutMs = config?.timeoutMs || 12_000;
     this.apiUrl = config?.apiUrl || "http://localhost:8123";
     this.defaultHeaders = config?.defaultHeaders || {};
+    if (config?.apiKey != null) {
+      this.defaultHeaders["X-Api-Key"] = config.apiKey;
+    }
   }
 
   protected prepareFetchOptions(
@@ -555,6 +559,7 @@ export class RunsClient extends BaseClient {
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
+      checkpoint_id: payload?.checkpointId,
     };
     if (payload?.multitaskStrategy != null) {
       json["multitask_strategy"] = payload?.multitaskStrategy;
@@ -571,6 +576,7 @@ export class RunsClient extends BaseClient {
     );
 
     let parser: EventSourceParser;
+    let onEndEvent: () => void;
     const textDecoder = new TextDecoder();
 
     const stream: ReadableStream<{ event: string; data: any }> = (
@@ -594,9 +600,17 @@ export class RunsClient extends BaseClient {
               });
             }
           });
+          onEndEvent = () => {
+            ctrl.enqueue({ event: "end", data: undefined });
+          };
         },
         async transform(chunk) {
-          parser.feed(textDecoder.decode(chunk));
+          const payload = textDecoder.decode(chunk);
+          parser.feed(payload);
+
+          // eventsource-parser will ignore events
+          // that are not terminated by a newline
+          if (payload.trim() === "event: end") onEndEvent();
         },
       }),
     );
@@ -625,6 +639,7 @@ export class RunsClient extends BaseClient {
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
+      checkpoint_id: payload?.checkpointId,
     };
     if (payload?.multitaskStrategy != null) {
       json["multitask_strategy"] = payload?.multitaskStrategy;
@@ -668,6 +683,7 @@ export class RunsClient extends BaseClient {
       assistant_id: assistantId,
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
+      checkpoint_id: payload?.checkpointId,
     };
     if (payload?.multitaskStrategy != null) {
       json["multitask_strategy"] = payload?.multitaskStrategy;

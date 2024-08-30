@@ -1,3 +1,4 @@
+import json
 from typing import Annotated, Any, Callable, Dict, List, Optional, Sequence, Type, Union
 
 import pytest
@@ -9,6 +10,7 @@ from langchain_core.messages import (
     BaseMessage,
     HumanMessage,
     SystemMessage,
+    ToolCall,
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
@@ -18,6 +20,7 @@ from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
 
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState
 from tests.messages import _AnyIdHumanMessage
@@ -55,7 +58,9 @@ class FakeToolCallingModel(BaseChatModel):
     ["memory", "sqlite", "postgres", "postgres_pipe"],
 )
 def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
-    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
+        "checkpointer_" + checkpointer_name
+    )
     model = FakeToolCallingModel()
 
     agent = create_react_agent(model, [], checkpointer=checkpointer)
@@ -76,6 +81,7 @@ def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> 
             "agent": "agent",
         }
         assert saved.metadata == {
+            "parents": {},
             "source": "loop",
             "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
             "step": 1,
@@ -90,7 +96,9 @@ def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> 
 async def test_no_modifier_async(
     request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
+        f"checkpointer_{checkpointer_name}"
+    )
 
     model = FakeToolCallingModel()
 
@@ -112,6 +120,7 @@ async def test_no_modifier_async(
             "agent": "agent",
         }
         assert saved.metadata == {
+            "parents": {},
             "source": "loop",
             "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
             "step": 1,
@@ -499,3 +508,18 @@ def test_tool_node_inject_state() -> None:
     result = node.invoke([msg])
     tool_message = result[-1]
     assert tool_message.content == "hi?"
+
+
+def test_tool_node_ensure_utf8() -> None:
+    @dec_tool
+    def get_day_list(days: list[str]) -> list[str]:
+        """choose days"""
+        return days
+
+    data = ["星期一", "水曜日", "목요일", "Friday"]
+    tools = [get_day_list]
+    tool_calls = [ToolCall(name=get_day_list.name, args={"days": data}, id="test_id")]
+    outputs: list[ToolMessage] = ToolNode(tools).invoke(
+        [AIMessage(content="", tool_calls=tool_calls)]
+    )
+    assert outputs[0].content == json.dumps(data, ensure_ascii=False)

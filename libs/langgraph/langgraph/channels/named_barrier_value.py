@@ -53,7 +53,9 @@ class NamedBarrierValue(Generic[Value], BaseChannel[Value, Value, set[Value]]):
                     self.seen.add(value)
                     updated = True
             else:
-                raise InvalidUpdateError(f"Value {value} not in {self.names}")
+                raise InvalidUpdateError(
+                    f"At key '{self.key}': Value {value} not in {self.names}"
+                )
         return updated
 
     def get(self) -> Value:

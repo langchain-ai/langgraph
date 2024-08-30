@@ -4,6 +4,7 @@ import random
 import time
 from typing import Optional
 
+from langgraph.errors import GraphInterrupt
 from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,9 @@ def run_with_retry(
             task.proc.invoke(task.input, task.config)
             # if successful, end
             break
+        except GraphInterrupt:
+            # if interrupted, end
+            raise
         except Exception as exc:
             if retry_policy is None:
                 raise
@@ -49,7 +53,8 @@ def run_with_retry(
             )
             # log the retry
             logger.info(
-                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}"
+                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
+                exc_info=exc,
             )
 
 
@@ -74,6 +79,9 @@ async def arun_with_retry(
                 await task.proc.ainvoke(task.input, task.config)
             # if successful, end
             break
+        except GraphInterrupt:
+            # if interrupted, end
+            raise
         except Exception as exc:
             if retry_policy is None:
                 raise
@@ -98,5 +106,6 @@ async def arun_with_retry(
             )
             # log the retry
             logger.info(
-                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}"
+                f"Retrying task {task.name} after {interval:.2f} seconds (attempt {attempts}) after {exc.__class__.__name__} {exc}",
+                exc_info=exc,
             )

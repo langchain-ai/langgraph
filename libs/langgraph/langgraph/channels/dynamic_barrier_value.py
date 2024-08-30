@@ -69,7 +69,7 @@ class DynamicBarrierValue(
         if wait_for_names := [v for v in values if isinstance(v, WaitForNames)]:
             if len(wait_for_names) > 1:
                 raise InvalidUpdateError(
-                    "Received multiple WaitForNames updates in the same step."
+                    f"At key '{self.key}': Received multiple WaitForNames updates in the same step."
                 )
             self.names = wait_for_names[0].names
             return True

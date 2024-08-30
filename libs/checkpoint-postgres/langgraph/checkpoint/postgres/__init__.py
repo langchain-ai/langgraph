@@ -1,12 +1,13 @@
 import threading
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional
+from typing import Any, Iterator, List, Optional, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Connection, Cursor, Pipeline
 from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from psycopg_pool import ConnectionPool
 
 from langgraph.checkpoint.base import (
     ChannelVersions,
@@ -21,16 +22,32 @@ from langgraph.checkpoint.postgres.base import (
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
+@contextmanager
+def _get_connection(conn: Union[Connection, ConnectionPool]) -> Iterator[Connection]:
+    if isinstance(conn, Connection):
+        yield conn
+    elif isinstance(conn, ConnectionPool):
+        with conn.connection() as conn:
+            yield conn
+    else:
+        raise TypeError(f"Invalid connection type: {type(conn)}")
+
+
 class PostgresSaver(BasePostgresSaver):
     lock: threading.Lock
 
     def __init__(
         self,
-        conn: Connection,
+        conn: Union[Connection, ConnectionPool],
         pipe: Optional[Pipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
+        if isinstance(conn, ConnectionPool) and pipe is not None:
+            raise ValueError(
+                "Pipeline should be used only with a single Connection, not ConnectionPool."
+            )
+
         self.conn = conn
         self.pipe = pipe
         self.lock = threading.Lock()
@@ -65,22 +82,21 @@ class PostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        with self.lock:
-            with self.conn.cursor(binary=True) as cur:
-                try:
-                    version = cur.execute(
-                        "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                    ).fetchone()["v"]
-                except UndefinedTable:
-                    version = -1
-                for v, migration in zip(
-                    range(version + 1, len(self.MIGRATIONS)),
-                    self.MIGRATIONS[version + 1 :],
-                ):
-                    cur.execute(migration)
-                    cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
-            if self.pipe:
-                self.pipe.sync()
+        with self._cursor() as cur:
+            try:
+                version = cur.execute(
+                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                ).fetchone()["v"]
+            except UndefinedTable:
+                version = -1
+            for v, migration in zip(
+                range(version + 1, len(self.MIGRATIONS)),
+                self.MIGRATIONS[version + 1 :],
+            ):
+                cur.execute(migration)
+                cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+        if self.pipe:
+            self.pipe.sync()
 
     def list(
         self,
@@ -127,30 +143,34 @@ class PostgresSaver(BasePostgresSaver):
         if limit:
             query += f" LIMIT {limit}"
         # if we change this to use .stream() we need to make sure to close the cursor
-        for value in self.conn.execute(query, args, binary=True):
-            yield CheckpointTuple(
-                {
-                    "configurable": {
-                        "thread_id": value["thread_id"],
-                        "checkpoint_ns": value["checkpoint_ns"],
-                        "checkpoint_id": value["checkpoint_id"],
+        with self._cursor() as cur:
+            cur.execute(query, args, binary=True)
+            for value in cur:
+                yield CheckpointTuple(
+                    {
+                        "configurable": {
+                            "thread_id": value["thread_id"],
+                            "checkpoint_ns": value["checkpoint_ns"],
+                            "checkpoint_id": value["checkpoint_id"],
+                        }
+                    },
+                    self._load_checkpoint(
+                        value["checkpoint"],
+                        value["channel_values"],
+                        value["pending_sends"],
+                    ),
+                    self._load_metadata(value["metadata"]),
+                    {
+                        "configurable": {
+                            "thread_id": value["thread_id"],
+                            "checkpoint_ns": value["checkpoint_ns"],
+                            "checkpoint_id": value["parent_checkpoint_id"],
+                        }
                     }
-                },
-                {
-                    **self._load_checkpoint(value["checkpoint"]),
-                    "channel_values": self._load_blobs(value["channel_values"]),
-                },
-                self._load_metadata(value["metadata"]),
-                {
-                    "configurable": {
-                        "thread_id": value["thread_id"],
-                        "checkpoint_ns": value["checkpoint_ns"],
-                        "checkpoint_id": value["parent_checkpoint_id"],
-                    }
-                }
-                if value["parent_checkpoint_id"]
-                else None,
-            )
+                    if value["parent_checkpoint_id"]
+                    else None,
+                    self._load_writes(value["pending_writes"]),
+                )
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database.
@@ -198,7 +218,7 @@ class PostgresSaver(BasePostgresSaver):
             where = "WHERE thread_id = %s AND checkpoint_ns = %s ORDER BY checkpoint_id DESC LIMIT 1"
 
         with self._cursor() as cur:
-            cur = self.conn.execute(
+            cur.execute(
                 self.SELECT_SQL + where,
                 args,
                 binary=True,
@@ -213,10 +233,11 @@ class PostgresSaver(BasePostgresSaver):
                             "checkpoint_id": value["checkpoint_id"],
                         }
                     },
-                    {
-                        **self._load_checkpoint(value["checkpoint"]),
-                        "channel_values": self._load_blobs(value["channel_values"]),
-                    },
+                    self._load_checkpoint(
+                        value["checkpoint"],
+                        value["channel_values"],
+                        value["pending_sends"],
+                    ),
                     self._load_metadata(value["metadata"]),
                     {
                         "configurable": {
@@ -316,7 +337,7 @@ class PostgresSaver(BasePostgresSaver):
             writes (List[Tuple[str, Any]]): List of writes to store.
             task_id (str): Identifier for the task creating the writes.
         """
-        with self._cursor() as cur:
+        with self._cursor(pipeline=True) as cur:
             cur.executemany(
                 self.UPSERT_CHECKPOINT_WRITES_SQL,
                 self._dump_writes(
@@ -330,21 +351,24 @@ class PostgresSaver(BasePostgresSaver):
 
     @contextmanager
     def _cursor(self, *, pipeline: bool = False) -> Iterator[Cursor]:
-        if self.pipe:
-            # a connection in pipeline mode can be used concurrently
-            # in multiple threads/coroutines, but only one cursor can be
-            # used at a time
-            try:
-                with self.conn.cursor(binary=True) as cur:
+        with _get_connection(self.conn) as conn:
+            if self.pipe:
+                # a connection in pipeline mode can be used concurrently
+                # in multiple threads/coroutines, but only one cursor can be
+                # used at a time
+                try:
+                    with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                        yield cur
+                finally:
+                    if pipeline:
+                        self.pipe.sync()
+            elif pipeline:
+                # a connection not in pipeline mode can only be used by one
+                # thread/coroutine at a time, so we acquire a lock
+                with self.lock, conn.pipeline(), conn.cursor(
+                    binary=True, row_factory=dict_row
+                ) as cur:
                     yield cur
-            finally:
-                if pipeline:
-                    self.pipe.sync()
-        elif pipeline:
-            # a connection not in pipeline mode can only be used by one
-            # thread/coroutine at a time, so we acquire a lock
-            with self.lock, self.conn.pipeline(), self.conn.cursor(binary=True) as cur:
-                yield cur
-        else:
-            with self.lock, self.conn.cursor(binary=True) as cur:
-                yield cur
+            else:
+                with self.lock, conn.cursor(binary=True, row_factory=dict_row) as cur:
+                    yield cur

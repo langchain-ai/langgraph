@@ -59,7 +59,7 @@ from langchain_core.messages import HumanMessage
 from langchain_anthropic import ChatAnthropic
 from langchain_core.tools import tool
 from langgraph.checkpoint.memory import MemorySaver
-from langgraph.graph import END, StateGraph, MessagesState
+from langgraph.graph import END, START, StateGraph, MessagesState
 from langgraph.prebuilt import ToolNode
 
 
@@ -107,7 +107,7 @@ workflow.add_node("tools", tool_node)
 
 # Set the entrypoint as `agent`
 # This means that this node is the first one called
-workflow.set_entry_point("agent")
+workflow.add_edge(START, "agent")
 
 # We now add a conditional edge
 workflow.add_conditional_edges(

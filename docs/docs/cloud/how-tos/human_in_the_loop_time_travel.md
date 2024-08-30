@@ -14,7 +14,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
 
     ```python
     from langgraph_sdk import get_client
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url=<DEPLOYMENT_URL>)
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -24,9 +24,18 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl:"whatever-your-deployment-url-is" });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
     const assistantId = agent;
     const thread = await client.threads.create();
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data {}
     ```
 
 ## Replay a state
@@ -38,7 +47,7 @@ Before replaying a state - we need to create states to replay from! In order to 
 === "Python"
 
     ```python
-    input = { 'messages':[{ "role":"user", "content":"Please search the weather in SF" }] }
+    input = {"messages": [{"role": "user", "content": "Please search the weather in SF"}]}
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
@@ -53,7 +62,7 @@ Before replaying a state - we need to create states to replay from! In order to 
 === "Javascript"
 
     ```js
-    const input = {"messages": [{ "role": "human", "content": "Please search the weather in SF"}] }
+    const input = { "messages": [{ "role": "human", "content": "Please search the weather in SF" }] }
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -68,6 +77,41 @@ Before replaying a state - we need to create states to replay from! In order to 
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"Please search the weather in SF\"}]},
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
     
 Output:
@@ -100,23 +144,35 @@ Now let's get our list of states, and invoke from the third state (right before 
     console.log(stateToReplay['next']);
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/history | jq -r '.[2].next'
+    ```
+
 Output:
 
     ['action']
 
 
 
-To rerun from a state, we need to pass in the `checkpoint_id` into the config of the run like follows:
+To rerun from a state, we need first issue an empty update to the thread state. Then we need to pass in the resulting `checkpoint_id` as follows:
 
 === "Python"
 
     ```python
+    state_to_replay = states[2]
+    updated_config = await client.threads.update_state(
+        thread["thread_id"],
+        {"messages": []},
+        checkpoint_id=state_to_replay["checkpoint_id"]
+    )
     async for chunk in client.runs.stream(
         thread["thread_id"],
         assistant_id, # graph_id
         input=None,
         stream_mode="updates",
-        config={"configurable": {"thread_ts": state_to_replay['checkpoint_id']}}
+        checkpoint_id=updated_config["checkpoint_id"]
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -125,13 +181,15 @@ To rerun from a state, we need to pass in the `checkpoint_id` into the config of
 === "Javascript"
 
     ```js
+    const stateToReplay = states[2];
+    const config = await client.threads.updateState(thread["thread_id"], { values: {"messages": [] }, checkpointId: stateToReplay["checkpoint_id"] });
     const streamResponse = client.runs.stream(
       thread["thread_id"],
       assistantId,
       {
         input: null,
         streamMode: "updates",
-        config: {"configurable": {"thread_ts": stateToReplay['checkpoint_id']}},
+        checkpointId: config["checkpoint_id"]
       }
     );
     for await (const chunk of streamResponse) {
@@ -139,6 +197,51 @@ To rerun from a state, we need to pass in the `checkpoint_id` into the config of
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/history | jq -c '
+        .[2] as $state_to_replay |
+        {
+            values: { messages: .[2].values.messages[-1] },
+            checkpoint_id: $state_to_replay.checkpoint_id
+        }' | \
+    curl --request POST \
+        --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+        --header 'Content-Type: application/json' \
+        --data @- | jq .checkpoint_id | \
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"checkpoint_id\": \"$1\",
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -165,7 +268,7 @@ Let's show how to do this to edit the state at a particular point in time. Let's
     # Let's now update the args for that tool call
     last_message['tool_calls'][0]['args'] = {'query': 'current weather in SF'}
 
-    new_state = await client.threads.update_state(thread['thread_id'],{"messages":[last_message]},checkpoint_id=state_to_replay['checkpoint_id'])
+    config = await client.threads.update_state(thread['thread_id'],{"messages":[last_message]},checkpoint_id=state_to_replay['checkpoint_id'])
     ```
 
 === "Javascript"
@@ -176,9 +279,26 @@ Let's show how to do this to edit the state at a particular point in time. Let's
     let lastMessage = stateToReplay['values']['messages'][-1];
 
     // Let's now update the args for that tool call
-    lastMessage['tool_calls'][0]['args'] = {'query': 'current weather in SF'};
+    lastMessage['tool_calls'][0]['args'] = { 'query': 'current weather in SF' };
 
-    const newState = await client.threads.updateState(thread['thread_id'],{values:{"messages":[lastMessage]},checkpointId:stateToReplay['checkpoint_id']});
+    const config = await client.threads.updateState(thread['thread_id'], { values: { "messages": [lastMessage] }, checkpointId: stateToReplay['checkpoint_id'] });
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl -s --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/history | \
+    jq -c '
+        .[2] as $state_to_replay |
+        .[2].values.messages[-1].tool_calls[0].args.query = "current weather in SF" |
+        {
+            values: { messages: .[2].values.messages[-1] },
+            checkpoint_id: $state_to_replay.checkpoint_id
+        }' | \
+    curl --request POST \
+        --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+        --header 'Content-Type: application/json' \
+        --data @-
     ```
 
 Now we can rerun our graph with this new config, starting from the `new_state`, which is a branch of our `state_to_replay`:
@@ -191,7 +311,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
         assistant["assistant_id"], # graph_id
         input=None,
         stream_mode="updates",
-        config={"configurable": {"thread_ts": new_state['configurable']['thread_ts']}}
+        checkpoint_id=config['checkpoint_id']
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -206,7 +326,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
       {
         input: null,
         streamMode: "updates",
-        config: {"configurable": {"thread_ts": newState['configurable']['thread_ts']}},
+        checkpointId: config['checkpoint_id'],
       }
     );
     for await (const chunk of streamResponse) {
@@ -214,6 +334,43 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl -s --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | \
+    jq -c '.checkpoint_id' | \
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"checkpoint_id\": \"$1\",
+       \"stream_mode\": [
+         \"updates\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:

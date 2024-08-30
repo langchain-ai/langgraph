@@ -1,12 +1,13 @@
 import sqlite3
 import threading
-from contextlib import contextmanager
+from contextlib import closing, contextmanager
 from hashlib import md5
 from typing import Any, AsyncIterator, Dict, Iterator, Optional, Sequence, Tuple
 
 from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import (
+    WRITES_IDX_MAP,
     BaseCheckpointSaver,
     ChannelVersions,
     Checkpoint,
@@ -243,7 +244,7 @@ class SqliteSaver(BaseCheckpointSaver):
                     }
                 # find any pending writes
                 cur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
                     (
                         str(config["configurable"]["thread_id"]),
                         checkpoint_ns,
@@ -318,7 +319,7 @@ class SqliteSaver(BaseCheckpointSaver):
         ORDER BY checkpoint_id DESC"""
         if limit:
             query += f" LIMIT {limit}"
-        with self.cursor(transaction=False) as cur:
+        with self.cursor(transaction=False) as cur, closing(self.conn.cursor()) as wcur:
             cur.execute(query, param_values)
             for (
                 thread_id,
@@ -329,6 +330,10 @@ class SqliteSaver(BaseCheckpointSaver):
                 checkpoint,
                 metadata,
             ) in cur:
+                wcur.execute(
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
+                    (thread_id, checkpoint_ns, checkpoint_id),
+                )
                 yield CheckpointTuple(
                     {
                         "configurable": {
@@ -350,6 +355,10 @@ class SqliteSaver(BaseCheckpointSaver):
                         if parent_checkpoint_id
                         else None
                     ),
+                    [
+                        (task_id, channel, self.serde.loads_typed((type, value)))
+                        for task_id, channel, type, value in wcur
+                    ],
                 )
 
     def put(
@@ -425,14 +434,14 @@ class SqliteSaver(BaseCheckpointSaver):
         """
         with self.lock, self.cursor() as cur:
             cur.executemany(
-                "INSERT OR REPLACE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+                "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [
                     (
                         str(config["configurable"]["thread_id"]),
                         str(config["configurable"]["checkpoint_ns"]),
                         str(config["configurable"]["checkpoint_id"]),
                         task_id,
-                        idx,
+                        WRITES_IDX_MAP.get(channel, idx),
                         channel,
                         *self.serde.dumps_typed(value),
                     )

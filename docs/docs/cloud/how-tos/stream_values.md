@@ -1,13 +1,6 @@
 # How to stream full state of your graph
 
-LangGraph Cloud supports multiple streaming modes. The main ones are:
-
-- `values`: This streaming mode streams back values of the graph. This is the **full state of the graph** after each node is called.
-- `updates`: This streaming mode streams back updates to the graph. This is the **update to the state of the graph** after each node is called.
-- `messages`: This streaming mode streams back messages - both complete messages (at the end of a node) as well as **tokens** for any messages generated inside a node. This mode is primarily meant for powering chat applications.
-
-
-This guide covers `stream_mode="values"`.
+This guide covers how to use `stream_mode="values"`, which streams the value of the state at each superstep. This differs from using `stream_mode="updates"`: instead of streaming just the updates to the state from each node, it streams the entire graph state at that superstep. Read [this conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#stream-and-astream) to learn more.```
 
 First let's set up our client and thread:
 
@@ -16,7 +9,7 @@ First let's set up our client and thread:
     ```python
     from langgraph_sdk import get_client
 
-    client = get_client(url="whatever-your-deployment-url-is")
+    client = get_client(url=<DEPLOYMENT_URL>)
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -27,10 +20,18 @@ First let's set up our client and thread:
     ```js
     import { Client } from "@langchain/langgraph-sdk";
 
-    const client = new Client({ apiUrl: "whatever-your-deployment-url-is" });
+    const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
     // create thread
     const thread = await client.threads.create();
     console.log(thread)
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json'
     ```
 
 Output:
@@ -38,7 +39,9 @@ Output:
     {'thread_id': 'bfc68029-1f7b-400f-beab-6f9032a52da4',
      'created_at': '2024-06-24T21:30:07.980789+00:00',
      'updated_at': '2024-06-24T21:30:07.980789+00:00',
-     'metadata': {}}
+     'metadata': {},
+     'status': 'idle',
+     'config': {}}
 
 Now we can stream by values, which streams the full state of the graph after each node has finished executing:
 
@@ -60,7 +63,6 @@ Now we can stream by values, which streams the full state of the graph after eac
     ```
 
 === "Javascript"
-    
 
     ```js
     const input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
@@ -78,6 +80,41 @@ Now we can stream by values, which streams the full state of the graph after eac
       console.log(chunk.data)
       console.log("\n\n")
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in la\"}]},
+       \"stream_mode\": [
+         \"values\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     ' 
     ```
 
 
@@ -148,6 +185,34 @@ If we want to just get the final result, we can use this endpoint and just keep 
       finalAnswer = chunk.data;
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in la\"}]},
+       \"stream_mode\": [
+         \"values\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^data:/ { 
+         sub(/^data: /, "", $0)   
+         data_content = $0          
+     }    
+     END {                                               
+         if (data_content != "") {
+             print data_content
+         }
+     }         
+     '
+    ```
+
 
 Output:
 

@@ -72,13 +72,14 @@ class ValidationNode(RunnableCallable):
 
     Examples:
         Example usage for re-prompting the model to generate a valid response:
-        >>> from typing import Literal
+        >>> from typing import Literal, Annotated, TypedDict
         ...
         >>> from langchain_anthropic import ChatAnthropic
         >>> from langchain_core.pydantic_v1 import BaseModel, validator
         ...
-        >>> from langgraph.graph import END, START, MessageGraph
+        >>> from langgraph.graph import END, START, StateGraph
         >>> from langgraph.prebuilt import ValidationNode
+        >>> from langgraph.graph.message import add_messages
         ...
         ...
         >>> class SelectNumber(BaseModel):
@@ -91,7 +92,10 @@ class ValidationNode(RunnableCallable):
         ...         return v
         ...
         ...
-        >>> builder = MessageGraph()
+        >>> class State(TypedDict):
+        ...     messages: Annotated[list, add_messages]
+        ...
+        >>> builder = StateGraph(State)
         >>> llm = ChatAnthropic(model="claude-3-haiku-20240307").bind_tools([SelectNumber])
         >>> builder.add_node("model", llm)
         >>> builder.add_node("validation", ValidationNode([SelectNumber]))
