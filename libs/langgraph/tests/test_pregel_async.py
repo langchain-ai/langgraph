@@ -347,7 +347,7 @@ async def test_node_not_cancelled_on_other_node_interrupted(
     assert not inner_task_cancelled
     assert awhiles == 1
 
-    assert await graph.ainvoke(None, thread, debug=True) is None
+    assert await graph.ainvoke(None, thread, debug=True) == {"hello": "world"}
 
     assert not inner_task_cancelled
     assert awhiles == 1
@@ -2573,6 +2573,16 @@ async def test_conditional_graph(
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
         {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+        },
+        {
             "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -2798,6 +2808,16 @@ async def test_conditional_graph(
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
         {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+        },
+        {
             "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -2974,6 +2994,14 @@ async def test_conditional_graph(
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
         {
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            },
+        },
+        {
             "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -3011,6 +3039,26 @@ async def test_conditional_graph(
     ]
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
         {
             "tools": {
                 "input": "what is weather in sf",
@@ -6891,6 +6939,7 @@ async def test_nested_graph_interrupts_parallel(
         {"my_key": ""},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
         {"my_key": "got here and there and parallel"},
         {"my_key": "got here and there and parallel and back again"},
     ]
@@ -6904,8 +6953,11 @@ async def test_nested_graph_interrupts_parallel(
         {"my_key": ""},
     ]
     # while we're waiting for the node w/ interrupt inside to finish
-    assert [c async for c in app.astream(None, config, stream_mode="values")] == []
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
+    ]
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
         {"my_key": "got here and there and parallel"},
         {"my_key": "got here and there and parallel and back again"},
     ]
@@ -6919,9 +6971,11 @@ async def test_nested_graph_interrupts_parallel(
         {"my_key": ""},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
         {"my_key": "got here and there and parallel"},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": "got here and there and parallel"},
         {"my_key": "got here and there and parallel and back again"},
     ]
 
@@ -7007,20 +7061,13 @@ async def test_doubly_nested_graph_interrupts(
         c
         async for c in app.astream({"my_key": "my value"}, config, stream_mode="values")
     ] == [
-        {
-            "my_key": "my value",
-        },
-        {
-            "my_key": "hi my value",
-        },
+        {"my_key": "my value"},
+        {"my_key": "hi my value"},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "hi my value here and there",
-        },
-        {
-            "my_key": "hi my value here and there and back again",
-        },
+        {"my_key": "hi my value"},
+        {"my_key": "hi my value here and there"},
+        {"my_key": "hi my value here and there and back again"},
     ]
 
 
