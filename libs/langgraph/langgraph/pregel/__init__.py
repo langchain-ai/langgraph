@@ -28,6 +28,7 @@ from langchain_core.load.dump import dumpd
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.runnables import (
     Runnable,
+    RunnableLambda,
     RunnableSequence,
     RunnableSerializable,
 )
@@ -43,6 +44,7 @@ from langchain_core.runnables.config import (
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     create_model,
+    get_function_nonlocals,
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -102,6 +104,7 @@ from langgraph.pregel.utils import (
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
+from langgraph.utils import RunnableCallable
 
 WriteValue = Union[
     Runnable[Input, Output],
@@ -356,13 +359,26 @@ class Pregel(
         for name, node in self.nodes.items():
             # find the subgraph, if any
             graph: Optional[Pregel] = None
-            if isinstance(node.bound, Pregel):
-                graph = node.bound
-            elif isinstance(node.bound, RunnableSequence):
-                for runnable in node.bound.steps:
-                    if isinstance(runnable, Pregel):
-                        graph = runnable
-                        break
+            candidates = [node.bound]
+            for candidate in candidates:
+                if isinstance(candidate, Pregel):
+                    graph = candidate
+                    break
+                elif isinstance(candidate, RunnableSequence):
+                    candidates.extend(candidate.steps)
+                elif isinstance(candidate, RunnableLambda):
+                    candidates.extend(candidate.deps)
+                elif isinstance(candidate, RunnableCallable):
+                    if candidate.func is not None:
+                        candidates.extend(
+                            nl.__self__ if hasattr(nl, "__self__") else nl
+                            for nl in get_function_nonlocals(candidate.func)
+                        )
+                    if candidate.afunc is not None:
+                        candidates.extend(
+                            nl.__self__ if hasattr(nl, "__self__") else nl
+                            for nl in get_function_nonlocals(candidate.afunc)
+                        )
             # if found, yield recursively
             if graph:
                 yield name, graph
