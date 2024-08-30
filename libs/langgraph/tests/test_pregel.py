@@ -20,6 +20,7 @@ from typing import (
     Tuple,
     TypedDict,
     Union,
+    cast,
     get_type_hints,
 )
 
@@ -2294,6 +2295,16 @@ def test_conditional_graph(
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            }
+        },
+        {
             "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -2504,6 +2515,16 @@ def test_conditional_graph(
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+        },
+        {
             "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -2669,6 +2690,14 @@ def test_conditional_graph(
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            },
+        },
+        {
             "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -2706,6 +2735,26 @@ def test_conditional_graph(
     ]
 
     assert [c for c in app_w_interrupt.stream(None, config)] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
         {
             "tools": {
                 "input": "what is weather in sf",
@@ -8396,17 +8445,12 @@ def test_nested_graph_interrupts_parallel(
     # test stream values w/ nested interrupt
     config = {"configurable": {"thread_id": "3"}}
     assert [*app.stream({"my_key": ""}, config, stream_mode="values")] == [
-        {
-            "my_key": "",
-        },
+        {"my_key": ""},
     ]
     assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "got here and there and parallel",
-        },
-        {
-            "my_key": "got here and there and parallel and back again",
-        },
+        {"my_key": ""},
+        {"my_key": "got here and there and parallel"},
+        {"my_key": "got here and there and parallel and back again"},
     ]
 
     # test interrupts BEFORE the parallel node
@@ -8416,14 +8460,13 @@ def test_nested_graph_interrupts_parallel(
         {"my_key": ""}
     ]
     # while we're waiting for the node w/ interrupt inside to finish
-    assert [*app.stream(None, config, stream_mode="values")] == []
     assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "got here and there and parallel",
-        },
-        {
-            "my_key": "got here and there and parallel and back again",
-        },
+        {"my_key": ""},
+    ]
+    assert [*app.stream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
+        {"my_key": "got here and there and parallel"},
+        {"my_key": "got here and there and parallel and back again"},
     ]
 
     # test interrupts AFTER the parallel node
@@ -8433,12 +8476,12 @@ def test_nested_graph_interrupts_parallel(
         {"my_key": ""}
     ]
     assert [*app.stream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
         {"my_key": "got here and there and parallel"},
     ]
     assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "got here and there and parallel and back again",
-        },
+        {"my_key": "got here and there and parallel"},
+        {"my_key": "got here and there and parallel and back again"},
     ]
 
 
@@ -8520,20 +8563,13 @@ def test_doubly_nested_graph_interrupts(
     # test stream values w/ nested interrupt
     config = {"configurable": {"thread_id": "3"}}
     assert [*app.stream({"my_key": "my value"}, config, stream_mode="values")] == [
-        {
-            "my_key": "my value",
-        },
-        {
-            "my_key": "hi my value",
-        },
+        {"my_key": "my value"},
+        {"my_key": "hi my value"},
     ]
     assert [*app.stream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "hi my value here and there",
-        },
-        {
-            "my_key": "hi my value here and there and back again",
-        },
+        {"my_key": "hi my value"},
+        {"my_key": "hi my value here and there"},
+        {"my_key": "hi my value here and there and back again"},
     ]
 
 
@@ -9786,8 +9822,16 @@ def test_doubly_nested_graph_state(
         )
     ]
 
+    # fork and replay
+    fork = app.update_state(grandchild_history[2].config, None)
+    assert [c for c in app.stream(None, fork, subgraphs=True)] == [
+        (
+            (AnyStr("child:"), AnyStr("child_1:")),
+            {"grandchild_1": {"my_key": "hi my value here"}},
+        )
+    ]
 
-@pytest.mark.skip("TODO")
+
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_to_nested_graphs(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -9835,24 +9879,30 @@ def test_send_to_nested_graphs(
         "subjects": ["cats", "dogs"],
         "jokes": [],
     }
-    actual_snapshot = graph.get_state(config)
-    subgraph_nodes = list(actual_snapshot.subgraphs.keys())
-    assert len(subgraph_nodes) == 2
-    for subgraph_node in subgraph_nodes:
-        assert subgraph_node.split(":")[0] == "generate_joke"
-
-    subgraphs = {
-        subgraph_node: graph.get_state(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": subgraph_node}}
-        )
-        for subgraph_node in subgraph_nodes
-    }
-
-    expected_snapshot = StateSnapshot(
+    outer_state = graph.get_state(config)
+    assert outer_state == StateSnapshot(
         values={"subjects": ["cats", "dogs"], "jokes": []},
         tasks=(
-            PregelTask(AnyStr(), "generate_joke"),
-            PregelTask(AnyStr(), "generate_joke"),
+            PregelTask(
+                AnyStr(),
+                "generate_joke",
+                state={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("generate_joke:"),
+                    }
+                },
+            ),
+            PregelTask(
+                AnyStr(),
+                "generate_joke",
+                state={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("generate_joke:"),
+                    }
+                },
+            ),
         ),
         next=("generate_joke", "generate_joke"),
         config={
@@ -9871,21 +9921,86 @@ def test_send_to_nested_graphs(
                 "checkpoint_id": AnyStr(),
             }
         },
-        subgraphs=subgraphs,
     )
-    assert actual_snapshot == expected_snapshot
+    # check state of each of the inner tasks
+    assert graph.get_state(outer_state.tasks[0].state) == StateSnapshot(
+        values={"subject": "cats - hohoho", "jokes": []},
+        next=("generate",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("generate_joke:"),
+                "checkpoint_id": AnyStr(),
+                "checkpoint_map": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("generate_joke:"): AnyStr(),
+                    }
+                ),
+            }
+        },
+        metadata={
+            "step": 1,
+            "source": "loop",
+            "writes": {"edit": None},
+            "parents": {"": AnyStr()},
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("generate_joke:"),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(PregelTask(id=AnyStr(""), name="generate"),),
+    )
+    assert graph.get_state(outer_state.tasks[1].state) == StateSnapshot(
+        values={"subject": "dogs - hohoho", "jokes": []},
+        next=("generate",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("generate_joke:"),
+                "checkpoint_id": AnyStr(),
+                "checkpoint_map": AnyDict(
+                    {
+                        "": AnyStr(),
+                        AnyStr("generate_joke:"): AnyStr(),
+                    }
+                ),
+            }
+        },
+        metadata={
+            "step": 1,
+            "source": "loop",
+            "writes": {"edit": None},
+            "parents": {"": AnyStr()},
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": AnyStr("generate_joke:"),
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(PregelTask(id=AnyStr(""), name="generate"),),
+    )
+    # update state of dogs joke graph
+    graph.update_state(outer_state.tasks[1].state, {"subject": "turtles - hohoho"})
 
     # continue past interrupt
     assert graph.invoke(None, config=config) == {
         "subjects": ["cats", "dogs"],
-        "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+        "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
     }
 
     actual_snapshot = graph.get_state(config)
     expected_snapshot = StateSnapshot(
         values={
             "subjects": ["cats", "dogs"],
-            "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+            "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
         },
         tasks=(),
         next=(),
@@ -9902,7 +10017,7 @@ def test_send_to_nested_graphs(
             "writes": {
                 "generate_joke": [
                     {"jokes": ["Joke about cats - hohoho"]},
-                    {"jokes": ["Joke about dogs - hohoho"]},
+                    {"jokes": ["Joke about turtles - hohoho"]},
                 ]
             },
             "step": 1,
@@ -9922,17 +10037,11 @@ def test_send_to_nested_graphs(
     actual_history = list(graph.get_state_history(config))
 
     # get subgraph node state for expected history
-    subgraphs = {
-        subgraph_node: graph.get_state(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": subgraph_node}}
-        )
-        for subgraph_node in subgraph_nodes
-    }
     expected_history = [
         StateSnapshot(
             values={
                 "subjects": ["cats", "dogs"],
-                "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+                "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
             },
             tasks=(),
             next=(),
@@ -9949,7 +10058,7 @@ def test_send_to_nested_graphs(
                 "writes": {
                     "generate_joke": [
                         {"jokes": ["Joke about cats - hohoho"]},
-                        {"jokes": ["Joke about dogs - hohoho"]},
+                        {"jokes": ["Joke about turtles - hohoho"]},
                     ]
                 },
                 "step": 1,
@@ -9966,8 +10075,26 @@ def test_send_to_nested_graphs(
         StateSnapshot(
             values={"subjects": ["cats", "dogs"], "jokes": []},
             tasks=(
-                PregelTask(AnyStr(), "generate_joke"),
-                PregelTask(AnyStr(), "generate_joke"),
+                PregelTask(
+                    AnyStr(),
+                    "generate_joke",
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("generate_joke:"),
+                        }
+                    },
+                ),
+                PregelTask(
+                    AnyStr(),
+                    "generate_joke",
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("generate_joke:"),
+                        }
+                    },
+                ),
             ),
             next=("generate_joke", "generate_joke"),
             config={
@@ -9986,7 +10113,6 @@ def test_send_to_nested_graphs(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            subgraphs=subgraphs,
         ),
         StateSnapshot(
             values={"jokes": []},
@@ -10010,6 +10136,389 @@ def test_send_to_nested_graphs(
         ),
     ]
     assert actual_history == expected_history
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_weather_subgraph(
+    request: pytest.FixtureRequest, checkpointer_name: str, snapshot: SnapshotAssertion
+) -> None:
+    from langchain_core.language_models.fake_chat_models import (
+        FakeMessagesListChatModel,
+    )
+    from langchain_core.messages import AIMessage, HumanMessage, ToolCall
+    from langchain_core.tools import tool
+
+    from langgraph.graph import MessagesState
+
+    checkpointer = request.getfixturevalue("checkpointer_" + checkpointer_name)
+
+    # setup subgraph
+
+    @tool
+    def get_weather(city: str):
+        """Get the weather for a specific city"""
+        return f"I'ts sunny in {city}!"
+
+    weather_model = FakeMessagesListChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        id="tool_call123",
+                        name="get_weather",
+                        args={"city": "San Francisco"},
+                    )
+                ],
+            )
+        ]
+    )
+
+    class SubGraphState(MessagesState):
+        city: str
+
+    def model_node(state: SubGraphState):
+        result = weather_model.invoke(state["messages"])
+        return {"city": cast(AIMessage, result).tool_calls[0]["args"]["city"]}
+
+    def weather_node(state: SubGraphState):
+        result = get_weather.invoke({"city": state["city"]})
+        return {"messages": [{"role": "assistant", "content": result}]}
+
+    subgraph = StateGraph(SubGraphState)
+    subgraph.add_node(model_node)
+    subgraph.add_node(weather_node)
+    subgraph.add_edge(START, "model_node")
+    subgraph.add_edge("model_node", "weather_node")
+    subgraph.add_edge("weather_node", END)
+    subgraph = subgraph.compile(interrupt_before=["weather_node"])
+
+    # setup main graph
+
+    class RouterState(MessagesState):
+        route: Literal["weather", "other"]
+
+    class Router(TypedDict):
+        route: Literal["weather", "other"]
+
+    router_model = FakeMessagesListChatModel(
+        responses=[
+            AIMessage(
+                content="",
+                tool_calls=[
+                    ToolCall(
+                        id="tool_call123",
+                        name="router",
+                        args={"dest": "weather"},
+                    )
+                ],
+            )
+        ]
+    )
+
+    def router_node(state: RouterState):
+        system_message = "Classify the incoming query as either about weather or not."
+        messages = [{"role": "system", "content": system_message}] + state["messages"]
+        route = router_model.invoke(messages)
+        return {"route": cast(AIMessage, route).tool_calls[0]["args"]["dest"]}
+
+    def normal_llm_node(state: RouterState):
+        return {"messages": [AIMessage("Hello!")]}
+
+    def route_after_prediction(state: RouterState):
+        if state["route"] == "weather":
+            return "weather_graph"
+        else:
+            return "normal_llm_node"
+
+    graph = StateGraph(RouterState)
+    graph.add_node(router_node)
+    graph.add_node(normal_llm_node)
+    graph.add_node("weather_graph", subgraph)
+    graph.add_edge(START, "router_node")
+    graph.add_conditional_edges("router_node", route_after_prediction)
+    graph.add_edge("normal_llm_node", END)
+    graph.add_edge("weather_graph", END)
+    graph = graph.compile(checkpointer=checkpointer)
+
+    assert graph.get_graph(xray=1).draw_mermaid() == snapshot
+
+    config = {"configurable": {"thread_id": "1"}}
+    inputs = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
+
+    # run until interrupt
+    assert [
+        c
+        for c in graph.stream(
+            inputs, config=config, stream_mode="updates", subgraphs=True
+        )
+    ] == [
+        ((), {"router_node": {"route": "weather"}}),
+        ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+    ]
+
+    # check current state
+    state = graph.get_state(config)
+    assert state == StateSnapshot(
+        values={
+            "messages": [HumanMessage(content="what's the weather in sf", id=AnyStr())],
+            "route": "weather",
+        },
+        next=("weather_graph",),
+        config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {"router_node": {"route": "weather"}},
+            "step": 1,
+            "parents": {},
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="weather_graph",
+                state={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("weather_graph:"),
+                    }
+                },
+            ),
+        ),
+    )
+
+    # update
+    graph.update_state(state.tasks[0].state, {"city": "la"})
+
+    # run after update
+    assert [
+        c
+        for c in graph.stream(
+            None, config=config, stream_mode="updates", subgraphs=True
+        )
+    ] == [
+        (
+            (AnyStr("weather_graph:"),),
+            {
+                "weather_node": {
+                    "messages": [{"role": "assistant", "content": "I'ts sunny in la!"}]
+                }
+            },
+        ),
+        (
+            (),
+            {
+                "weather_graph": {
+                    "messages": [
+                        HumanMessage(content="what's the weather in sf", id=AnyStr()),
+                        AIMessage(content="I'ts sunny in la!", id=AnyStr()),
+                    ]
+                }
+            },
+        ),
+    ]
+
+    # try updating acting as weather node
+    config = {"configurable": {"thread_id": "14"}}
+    inputs = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
+    assert [
+        c
+        for c in graph.stream(
+            inputs, config=config, stream_mode="updates", subgraphs=True
+        )
+    ] == [
+        ((), {"router_node": {"route": "weather"}}),
+        ((AnyStr("weather_graph:"),), {"model_node": {"city": "San Francisco"}}),
+    ]
+    state = graph.get_state(config, subgraphs=True)
+    assert state == StateSnapshot(
+        values={
+            "messages": [HumanMessage(content="what's the weather in sf", id=AnyStr())],
+            "route": "weather",
+        },
+        next=("weather_graph",),
+        config={
+            "configurable": {
+                "thread_id": "14",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {"router_node": {"route": "weather"}},
+            "step": 1,
+            "parents": {},
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "14",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="weather_graph",
+                state=StateSnapshot(
+                    values={
+                        "messages": [
+                            HumanMessage(
+                                content="what's the weather in sf", id=AnyStr()
+                            )
+                        ],
+                        "city": "San Francisco",
+                    },
+                    next=("weather_node",),
+                    config={
+                        "configurable": {
+                            "thread_id": "14",
+                            "checkpoint_ns": AnyStr("weather_graph:"),
+                            "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {
+                                    "": AnyStr(),
+                                    AnyStr("weather_graph:"): AnyStr(),
+                                }
+                            ),
+                        }
+                    },
+                    metadata={
+                        "source": "loop",
+                        "writes": {"model_node": {"city": "San Francisco"}},
+                        "step": 1,
+                        "parents": {"": AnyStr()},
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "14",
+                            "checkpoint_ns": AnyStr("weather_graph:"),
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    tasks=(PregelTask(id=AnyStr(), name="weather_node"),),
+                ),
+            ),
+        ),
+    )
+    graph.update_state(
+        state.tasks[0].state.config,
+        {"messages": [{"role": "assistant", "content": "rainy"}]},
+        as_node="weather_node",
+    )
+    state = graph.get_state(config, subgraphs=True)
+    assert state == StateSnapshot(
+        values={
+            "messages": [HumanMessage(content="what's the weather in sf", id=AnyStr())],
+            "route": "weather",
+        },
+        next=("weather_graph",),
+        config={
+            "configurable": {
+                "thread_id": "14",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        metadata={
+            "source": "loop",
+            "writes": {"router_node": {"route": "weather"}},
+            "step": 1,
+            "parents": {},
+        },
+        created_at=AnyStr(),
+        parent_config={
+            "configurable": {
+                "thread_id": "14",
+                "checkpoint_ns": "",
+                "checkpoint_id": AnyStr(),
+            }
+        },
+        tasks=(
+            PregelTask(
+                id=AnyStr(),
+                name="weather_graph",
+                state=StateSnapshot(
+                    values={
+                        "messages": [
+                            HumanMessage(
+                                content="what's the weather in sf", id=AnyStr()
+                            ),
+                            AIMessage(content="rainy", id=AnyStr()),
+                        ],
+                        "city": "San Francisco",
+                    },
+                    next=(),
+                    config={
+                        "configurable": {
+                            "thread_id": "14",
+                            "checkpoint_ns": AnyStr("weather_graph:"),
+                            "checkpoint_id": AnyStr(),
+                            "checkpoint_map": AnyDict(
+                                {
+                                    "": AnyStr(),
+                                    AnyStr("weather_graph:"): AnyStr(),
+                                }
+                            ),
+                        }
+                    },
+                    metadata={
+                        "source": "update",
+                        "step": 2,
+                        "writes": {
+                            "weather_node": {
+                                "messages": [{"role": "assistant", "content": "rainy"}]
+                            }
+                        },
+                        "parents": {"": AnyStr()},
+                    },
+                    created_at=AnyStr(),
+                    parent_config={
+                        "configurable": {
+                            "thread_id": "14",
+                            "checkpoint_ns": AnyStr("weather_graph:"),
+                            "checkpoint_id": AnyStr(),
+                        }
+                    },
+                    tasks=(),
+                ),
+            ),
+        ),
+    )
+    assert [
+        c
+        for c in graph.stream(
+            None, config=config, stream_mode="updates", subgraphs=True
+        )
+    ] == [
+        (
+            (),
+            {
+                "weather_graph": {
+                    "messages": [
+                        HumanMessage(content="what's the weather in sf", id=AnyStr()),
+                        AIMessage(content="rainy", id=AnyStr()),
+                    ]
+                }
+            },
+        ),
+    ]
 
 
 def test_repeat_condition(snapshot: SnapshotAssertion) -> None:

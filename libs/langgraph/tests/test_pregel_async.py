@@ -347,7 +347,7 @@ async def test_node_not_cancelled_on_other_node_interrupted(
     assert not inner_task_cancelled
     assert awhiles == 1
 
-    assert await graph.ainvoke(None, thread, debug=True) is None
+    assert await graph.ainvoke(None, thread, debug=True) == {"hello": "world"}
 
     assert not inner_task_cancelled
     assert awhiles == 1
@@ -2573,6 +2573,16 @@ async def test_conditional_graph(
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
         {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+        },
+        {
             "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -2798,6 +2808,16 @@ async def test_conditional_graph(
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
         {
+            "agent": {
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="query",
+                    log="tool:search_api:a different query",
+                ),
+                "input": "what is weather in sf",
+            },
+        },
+        {
             "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -2974,6 +2994,14 @@ async def test_conditional_graph(
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
         {
+            "agent": {
+                "input": "what is weather in sf",
+                "agent_outcome": AgentAction(
+                    tool="search_api", tool_input="query", log="tool:search_api:query"
+                ),
+            },
+        },
+        {
             "tools": {
                 "input": "what is weather in sf",
                 "intermediate_steps": [
@@ -3011,6 +3039,26 @@ async def test_conditional_graph(
     ]
 
     assert [c async for c in app_w_interrupt.astream(None, config)] == [
+        {
+            "agent": {
+                "input": "what is weather in sf",
+                "intermediate_steps": [
+                    [
+                        AgentAction(
+                            tool="search_api",
+                            tool_input="query",
+                            log="tool:search_api:query",
+                        ),
+                        "result for query",
+                    ]
+                ],
+                "agent_outcome": AgentAction(
+                    tool="search_api",
+                    tool_input="another",
+                    log="tool:search_api:another",
+                ),
+            }
+        },
         {
             "tools": {
                 "input": "what is weather in sf",
@@ -6891,6 +6939,7 @@ async def test_nested_graph_interrupts_parallel(
         {"my_key": ""},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
         {"my_key": "got here and there and parallel"},
         {"my_key": "got here and there and parallel and back again"},
     ]
@@ -6904,8 +6953,11 @@ async def test_nested_graph_interrupts_parallel(
         {"my_key": ""},
     ]
     # while we're waiting for the node w/ interrupt inside to finish
-    assert [c async for c in app.astream(None, config, stream_mode="values")] == []
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
+    ]
+    assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
         {"my_key": "got here and there and parallel"},
         {"my_key": "got here and there and parallel and back again"},
     ]
@@ -6919,9 +6971,11 @@ async def test_nested_graph_interrupts_parallel(
         {"my_key": ""},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": ""},
         {"my_key": "got here and there and parallel"},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
+        {"my_key": "got here and there and parallel"},
         {"my_key": "got here and there and parallel and back again"},
     ]
 
@@ -7007,20 +7061,13 @@ async def test_doubly_nested_graph_interrupts(
         c
         async for c in app.astream({"my_key": "my value"}, config, stream_mode="values")
     ] == [
-        {
-            "my_key": "my value",
-        },
-        {
-            "my_key": "hi my value",
-        },
+        {"my_key": "my value"},
+        {"my_key": "hi my value"},
     ]
     assert [c async for c in app.astream(None, config, stream_mode="values")] == [
-        {
-            "my_key": "hi my value here and there",
-        },
-        {
-            "my_key": "hi my value here and there and back again",
-        },
+        {"my_key": "hi my value"},
+        {"my_key": "hi my value here and there"},
+        {"my_key": "hi my value here and there and back again"},
     ]
 
 
@@ -8302,8 +8349,16 @@ async def test_doubly_nested_graph_state(
         )
     ]
 
+    # fork and replay
+    fork = await app.aupdate_state(grandchild_history[2].config, None)
+    assert [c async for c in app.astream(None, fork, subgraphs=True)] == [
+        (
+            (AnyStr("child:"), AnyStr("child_1:")),
+            {"grandchild_1": {"my_key": "hi my value here"}},
+        )
+    ]
 
-@pytest.mark.skip("TODO")
+
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_send_to_nested_graphs(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -8351,23 +8406,32 @@ async def test_send_to_nested_graphs(
         "subjects": ["cats", "dogs"],
         "jokes": [],
     }
-    actual_snapshot = await graph.aget_state(config)
-    subgraph_nodes = list(actual_snapshot.subgraphs.keys())
-    assert len(subgraph_nodes) == 2
-    for subgraph_node in subgraph_nodes:
-        assert subgraph_node.split(":")[0] == "generate_joke"
+    # check state
+    outer_state = await graph.aget_state(config)
 
-    subgraphs = {
-        subgraph_node: await graph.aget_state(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": subgraph_node}}
-        )
-        for subgraph_node in subgraph_nodes
-    }
-    expected_snapshot = StateSnapshot(
+    assert outer_state == StateSnapshot(
         values={"subjects": ["cats", "dogs"], "jokes": []},
         tasks=(
-            PregelTask(AnyStr(), "generate_joke"),
-            PregelTask(AnyStr(), "generate_joke"),
+            PregelTask(
+                AnyStr(),
+                "generate_joke",
+                state={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("generate_joke:"),
+                    }
+                },
+            ),
+            PregelTask(
+                AnyStr(),
+                "generate_joke",
+                state={
+                    "configurable": {
+                        "thread_id": "1",
+                        "checkpoint_ns": AnyStr("generate_joke:"),
+                    }
+                },
+            ),
         ),
         next=("generate_joke", "generate_joke"),
         config={
@@ -8386,21 +8450,24 @@ async def test_send_to_nested_graphs(
                 "checkpoint_id": AnyStr(),
             }
         },
-        subgraphs=subgraphs,
     )
-    assert actual_snapshot == expected_snapshot
+
+    # update state of dogs joke graph
+    await graph.aupdate_state(
+        outer_state.tasks[1].state, {"subject": "turtles - hohoho"}
+    )
 
     # continue past interrupt
     assert await graph.ainvoke(None, config=config) == {
         "subjects": ["cats", "dogs"],
-        "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+        "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
     }
 
     actual_snapshot = await graph.aget_state(config)
     expected_snapshot = StateSnapshot(
         values={
             "subjects": ["cats", "dogs"],
-            "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+            "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
         },
         tasks=(),
         next=(),
@@ -8417,7 +8484,7 @@ async def test_send_to_nested_graphs(
             "writes": {
                 "generate_joke": [
                     {"jokes": ["Joke about cats - hohoho"]},
-                    {"jokes": ["Joke about dogs - hohoho"]},
+                    {"jokes": ["Joke about turtles - hohoho"]},
                 ]
             },
             "step": 1,
@@ -8435,18 +8502,11 @@ async def test_send_to_nested_graphs(
 
     # test full history
     actual_history = [c async for c in graph.aget_state_history(config)]
-    # get subgraph node state for expected history
-    subgraphs = {
-        subgraph_node: await graph.aget_state(
-            {"configurable": {"thread_id": "1", "checkpoint_ns": subgraph_node}}
-        )
-        for subgraph_node in subgraph_nodes
-    }
     expected_history = [
         StateSnapshot(
             values={
                 "subjects": ["cats", "dogs"],
-                "jokes": ["Joke about cats - hohoho", "Joke about dogs - hohoho"],
+                "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
             },
             tasks=(),
             next=(),
@@ -8463,7 +8523,7 @@ async def test_send_to_nested_graphs(
                 "writes": {
                     "generate_joke": [
                         {"jokes": ["Joke about cats - hohoho"]},
-                        {"jokes": ["Joke about dogs - hohoho"]},
+                        {"jokes": ["Joke about turtles - hohoho"]},
                     ]
                 },
                 "step": 1,
@@ -8481,8 +8541,26 @@ async def test_send_to_nested_graphs(
             values={"subjects": ["cats", "dogs"], "jokes": []},
             next=("generate_joke", "generate_joke"),
             tasks=(
-                PregelTask(AnyStr(), "generate_joke"),
-                PregelTask(AnyStr(), "generate_joke"),
+                PregelTask(
+                    AnyStr(),
+                    "generate_joke",
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("generate_joke:"),
+                        }
+                    },
+                ),
+                PregelTask(
+                    AnyStr(),
+                    "generate_joke",
+                    state={
+                        "configurable": {
+                            "thread_id": "1",
+                            "checkpoint_ns": AnyStr("generate_joke:"),
+                        }
+                    },
+                ),
             ),
             config={
                 "configurable": {
@@ -8500,7 +8578,6 @@ async def test_send_to_nested_graphs(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            subgraphs=subgraphs,
         ),
         StateSnapshot(
             values={"jokes": []},
