@@ -249,8 +249,8 @@ def _is_readonly_type(type_: Any) -> bool:
 _DEFAULT_KEYS = frozenset()
 
 
-def field_is_optional(name: str, type_: Any, schema: Type[Any]) -> bool:
-    """Determine if the field is optional for a graph's input.
+def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:
+    """Determine the default value for a field in a state schema.
 
     This is based on:
         If TypedDict:
@@ -259,30 +259,28 @@ def field_is_optional(name: str, type_: Any, schema: Type[Any]) -> bool:
         - Type annotation (Optional/Union[None])
     """
     optional_keys = getattr(schema, "__optional_keys__", _DEFAULT_KEYS)
-
     if name in optional_keys:
         # Either total=False or explicit NotRequired.
         # No type annotation trumps this.
-        return True
+        return None
     if _is_required_type(type_):
         # Handle Required[<type>]
         # (we already handled NotRequired and total=False)
-        return False
+        return ...
+    if hasattr(schema, "__dataclass_fields__"):
+        field_info = schema.__dataclass_fields__.get(name)
+        if field_info:
+            if (
+                field_info.default is not dataclasses.MISSING
+                and field_info.default is not ...
+            ):
+                return field_info.default
+            elif field_info.default_factory is not dataclasses.MISSING:
+                return field_info.default_factory()
     # Note, we ignore ReadOnly attributes,
     # as they don't make much sense. (we don't care if you mutate the state in your node)
     # and mutating state in your node has no effect on our graph state.
-
-    if hasattr(schema, "__dataclass_fields__"):
-        field_info = schema.__dataclass_fields__.get(name)
-        if (
-            field_info
-            and (
-                field_info.default is not dataclasses.MISSING
-                and field_info.default is not ...
-            )
-            or (field_info.default_factory is not dataclasses.MISSING)
-        ):
-            return True
-
     # Base case is the annotation
-    return _is_optional_type(type_)
+    if _is_optional_type(type_):
+        return None
+    return ...

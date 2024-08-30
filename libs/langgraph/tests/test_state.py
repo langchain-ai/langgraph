@@ -1,11 +1,11 @@
 from dataclasses import dataclass, field
 from typing import Annotated as Annotated2
-from typing import Any, NotRequired, Optional, Required
+from typing import Any, Optional
 
 import pytest
 from langchain_core.runnables import RunnableConfig
 from pydantic.v1 import BaseModel
-from typing_extensions import Annotated, TypedDict
+from typing_extensions import Annotated, NotRequired, Required, TypedDict
 
 from langgraph.graph.state import StateGraph, _warn_invalid_state_schema
 
