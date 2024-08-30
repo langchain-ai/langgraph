@@ -401,6 +401,11 @@ class PregelLoop:
                 if k in self.checkpoint["channel_versions"]:
                     version = self.checkpoint["channel_versions"][k]
                     self.checkpoint["versions_seen"][INTERRUPT][k] = version
+            # produce values output
+            self.stream.extend(
+                (self.config["configurable"].get("checkpoint_ns", ""), "values", v)
+                for v in map_output_values(self.output_keys, True, self.channels)
+            )
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
             # discard any unfinished tasks from previous checkpoint
