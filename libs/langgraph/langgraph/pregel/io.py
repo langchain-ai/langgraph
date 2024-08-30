@@ -1,4 +1,4 @@
-from typing import Any, Iterator, Mapping, Optional, Sequence, TypeVar, Union
+from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar, Union
 
 from langchain_core.runnables.utils import AddableDict
 
@@ -73,7 +73,7 @@ class AddableValuesDict(AddableDict):
 
 def map_output_values(
     output_channels: Union[str, Sequence[str]],
-    pending_writes: Union[True, Sequence[tuple[str, Any]]],
+    pending_writes: Union[Literal[True], Sequence[tuple[str, Any]]],
     channels: Mapping[str, BaseChannel],
 ) -> Iterator[Union[dict[str, Any], Any]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
