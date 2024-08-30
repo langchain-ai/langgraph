@@ -282,7 +282,7 @@ async def test_dynamic_interrupt(
             "parents": {},
             "source": "input",
             "step": -1,
-            "writes": {"my_key": "value ⛰️", "market": "DE"},
+            "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
         },
     ]
     tup = await tool_two.checkpointer.aget_tuple(thread1)
@@ -929,7 +929,12 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "input", "step": 4, "writes": 3},
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": 4,
+                "writes": {"input": 3},
+            },
             created_at=AnyStr(),
             parent_config=history[3].config,
         ),
@@ -964,7 +969,12 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "input", "step": 2, "writes": 20},
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": 2,
+                "writes": {"input": 20},
+            },
             created_at=AnyStr(),
             parent_config=history[5].config,
         ),
@@ -1014,7 +1024,12 @@ async def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "input", "step": -1, "writes": 2},
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"input": 2},
+            },
             created_at=AnyStr(),
             parent_config=None,
         ),
@@ -1197,7 +1212,12 @@ async def test_fork_always_re_runs_nodes(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "input", "step": -1, "writes": 1},
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": 1},
+            },
             created_at=AnyStr(),
             parent_config=None,
         ),
@@ -1785,7 +1805,12 @@ async def test_pending_writes_resume(
             },
             "channel_values": {"__start__": {"value": 1}},
         },
-        metadata={"parents": {}, "step": -1, "source": "input", "writes": {"value": 1}},
+        metadata={
+            "parents": {},
+            "step": -1,
+            "source": "input",
+            "writes": {"__start__": {"value": 1}},
+        },
         parent_config=None,
         pending_writes=UnsortedSequence(
             (AnyStr(), "value", 1),
@@ -5191,7 +5216,7 @@ async def test_start_branch_then(
             "parents": {},
             "source": "input",
             "step": -1,
-            "writes": {"my_key": "value", "market": "DE"},
+            "writes": {"__start__": {"my_key": "value", "market": "DE"}},
         },
     ]
     assert await tool_two.aget_state(thread1) == StateSnapshot(
@@ -5387,7 +5412,7 @@ async def test_branch_then(
                     "parents": {},
                     "source": "input",
                     "step": -1,
-                    "writes": {"my_key": "value", "market": "DE"},
+                    "writes": {"__start__": {"my_key": "value", "market": "DE"}},
                 },
                 "next": ["__start__"],
                 "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
@@ -5621,7 +5646,7 @@ async def test_branch_then(
                     "parents": {},
                     "source": "input",
                     "step": -1,
-                    "writes": {"my_key": "value", "market": "DE"},
+                    "writes": {"__start__": {"my_key": "value", "market": "DE"}},
                 },
                 "next": ["__start__"],
                 "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
@@ -7290,7 +7315,7 @@ async def test_nested_graph_state(
             metadata={
                 "parents": {},
                 "source": "input",
-                "writes": {"my_key": "my value"},
+                "writes": {"__start__": {"my_key": "my value"}},
                 "step": -1,
             },
             created_at=AnyStr(),
@@ -7378,7 +7403,9 @@ async def test_nested_graph_state(
             },
             metadata={
                 "source": "input",
-                "writes": {"my_key": "hi my value", "other_parent_key": None},
+                "writes": {
+                    "__start__": {"my_key": "hi my value", "other_parent_key": None}
+                },
                 "step": -1,
                 "parents": {"": AnyStr()},
             },
@@ -7550,7 +7577,7 @@ async def test_nested_graph_state(
             metadata={
                 "parents": {},
                 "source": "input",
-                "writes": {"my_key": "my value"},
+                "writes": {"__start__": {"my_key": "my value"}},
                 "step": -1,
             },
             created_at=AnyStr(),
@@ -8147,7 +8174,7 @@ async def test_doubly_nested_graph_state(
             },
             metadata={
                 "source": "input",
-                "writes": {"my_key": "hi my value"},
+                "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
                 "parents": {"": AnyStr()},
             },
@@ -8294,7 +8321,7 @@ async def test_doubly_nested_graph_state(
             },
             metadata={
                 "source": "input",
-                "writes": {"my_key": "hi my value"},
+                "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
                 "parents": AnyDict(
                     {
@@ -8554,7 +8581,7 @@ async def test_send_to_nested_graphs(
             metadata={
                 "parents": {},
                 "source": "input",
-                "writes": {"subjects": ["cats", "dogs"]},
+                "writes": {"__start__": {"subjects": ["cats", "dogs"]}},
                 "step": -1,
             },
             created_at=AnyStr(),
