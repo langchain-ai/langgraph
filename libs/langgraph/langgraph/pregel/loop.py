@@ -122,6 +122,7 @@ class PregelLoop:
     output_keys: Union[str, Sequence[str]]
     stream_keys: Union[str, Sequence[str]]
     is_nested: bool
+    skip_done_tasks: bool
 
     checkpointer_get_next_version: Callable[[Optional[V]], V]
     checkpointer_put_writes: Optional[
@@ -180,6 +181,7 @@ class PregelLoop:
         self.output_keys = output_keys
         self.stream_keys = stream_keys
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get("configurable", {})
+        self.skip_done_tasks = "checkpoint_id" not in config["configurable"]
         if CONFIG_KEY_STREAM in config["configurable"]:
             self.stream = DuplexStream(
                 self.stream, config["configurable"][CONFIG_KEY_STREAM]
@@ -340,18 +342,11 @@ class PregelLoop:
             return False
 
         # if there are pending writes from a previous loop, apply them
-        if self.checkpoint_pending_writes:
+        if self.skip_done_tasks and self.checkpoint_pending_writes:
             for tid, k, v in self.checkpoint_pending_writes:
                 if k in (ERROR, INTERRUPT):
                     continue
-                if task := next(
-                    (
-                        t
-                        for t in self.tasks
-                        if t.id == tid and t.cache_policy is not None
-                    ),
-                    None,
-                ):
+                if task := next((t for t in self.tasks if t.id == tid), None):
                     task.writes.append((k, v))
             # print output for any tasks we applied previous writes to
             for task in self.tasks:

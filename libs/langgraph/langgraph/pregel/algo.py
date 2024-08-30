@@ -50,7 +50,7 @@ from langgraph.pregel.io import read_channel, read_channels
 from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.types import EXACT_MATCH, All, PregelExecutableTask, PregelTask
+from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
 
 
 class WritesProtocol(Protocol):
@@ -357,10 +357,7 @@ def prepare_next_tasks(
                         ),
                         triggers,
                         proc.retry_policy,
-                        None
-                        if task_checkpoint_ns
-                        in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
-                        else EXACT_MATCH,
+                        None,
                         task_id,
                     )
                 )
@@ -466,10 +463,7 @@ def prepare_next_tasks(
                             ),
                             triggers,
                             proc.retry_policy,
-                            None
-                            if task_checkpoint_ns
-                            in configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {})
-                            else EXACT_MATCH,
+                            None,
                             task_id,
                         )
                     )

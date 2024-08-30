@@ -1020,35 +1020,19 @@ async def test_invoke_two_processes_in_out_interrupt(
         ),
     ]
 
-    # forking from any previous checkpoint w/out forking should do nothing
+    # forking from any previous checkpoint should re-run nodes
     assert [
         c async for c in app.astream(None, history[0].config, stream_mode="updates")
     ] == []
     assert [
         c async for c in app.astream(None, history[1].config, stream_mode="updates")
     ] == [
-        {"two": {"output": 5}, "__metadata__": {"cached": True}},
+        {"two": {"output": 5}},
     ]
     assert [
         c async for c in app.astream(None, history[2].config, stream_mode="updates")
     ] == [
-        {"one": {"inbox": 4}, "__metadata__": {"cached": True}},
-    ]
-
-    # forking and re-running from any prev checkpoint should re-run nodes
-    fork_config = await app.aupdate_state(history[0].config, None)
-    assert [
-        c async for c in app.astream(None, fork_config, stream_mode="updates")
-    ] == []
-
-    fork_config = await app.aupdate_state(history[1].config, None)
-    assert [c async for c in app.astream(None, fork_config, stream_mode="updates")] == [
-        {"two": {"output": 5}}
-    ]
-
-    fork_config = await app.aupdate_state(history[2].config, None)
-    assert [c async for c in app.astream(None, fork_config, stream_mode="updates")] == [
-        {"one": {"inbox": 4}}
+        {"one": {"inbox": 4}},
     ]
 
 
@@ -1219,28 +1203,17 @@ async def test_fork_always_re_runs_nodes(
         ),
     ]
 
-    # forking from any previous checkpoint w/out forking should do nothing
+    # forking from any previous checkpoint should re-run nodes
     assert [
         c async for c in graph.astream(None, history[0].config, stream_mode="updates")
     ] == []
     assert [
         c async for c in graph.astream(None, history[1].config, stream_mode="updates")
-    ] == [{"add_one": 1, "__metadata__": {"cached": True}}]
-
-    # forking and re-running from any prev checkpoint should re-run nodes
-    fork_config = await graph.aupdate_state(history[0].config, None)
+    ] == [
+        {"add_one": 1},
+    ]
     assert [
-        c async for c in graph.astream(None, fork_config, stream_mode="updates")
-    ] == []
-
-    fork_config = await graph.aupdate_state(history[1].config, None)
-    assert [
-        c async for c in graph.astream(None, fork_config, stream_mode="updates")
-    ] == [{"add_one": 1}]
-
-    fork_config = await graph.aupdate_state(history[2].config, None)
-    assert [
-        c async for c in graph.astream(None, fork_config, stream_mode="updates")
+        c async for c in graph.astream(None, history[2].config, stream_mode="updates")
     ] == [
         {"add_one": 1},
         {"add_one": 1},
@@ -8340,18 +8313,6 @@ async def test_doubly_nested_graph_state(
     assert [
         c async for c in app.astream(None, grandchild_history[2].config, subgraphs=True)
     ] == [
-        (
-            (AnyStr("child:"), AnyStr("child_1:")),
-            {
-                "grandchild_1": {"my_key": "hi my value here"},
-                "__metadata__": {"cached": True},
-            },
-        )
-    ]
-
-    # fork and replay
-    fork = await app.aupdate_state(grandchild_history[2].config, None)
-    assert [c async for c in app.astream(None, fork, subgraphs=True)] == [
         (
             (AnyStr("child:"), AnyStr("child_1:")),
             {"grandchild_1": {"my_key": "hi my value here"}},
