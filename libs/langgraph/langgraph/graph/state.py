@@ -486,6 +486,10 @@ class CompiledStateGraph(CompiledGraph):
                     __root__=(self.channels[keys[0]].UpdateType, None),
                 )
             else:
+                is_total_false = (
+                    hasattr(self.builder.input, "__total__")
+                    and self.builder.input.__total__ is False
+                )
                 return create_model(  # type: ignore[call-overload]
                     self.get_name("Input"),
                     **{
@@ -493,7 +497,8 @@ class CompiledStateGraph(CompiledGraph):
                             self.channels[k].UpdateType,
                             (
                                 None
-                                if is_optional_type(self.channels[k].UpdateType)
+                                if is_total_false
+                                or is_optional_type(self.channels[k].UpdateType)
                                 else ...
                             ),
                         )

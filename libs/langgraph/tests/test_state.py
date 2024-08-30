@@ -88,8 +88,9 @@ def test_state_schema_with_type_hint():
         assert c[node_name] == output_state
 
 
-def test_state_schema_optional_values():
-    class InputState(TypedDict):
+@pytest.mark.parametrize("total_", [True, False])
+def test_state_schema_optional_values(total_: bool):
+    class InputState(TypedDict, total=total_):  # type: ignore
         val1: str
         val2: Optional[str]
 
@@ -102,9 +103,16 @@ def test_state_schema_optional_values():
     graph = builder.compile()
     model = graph.input_schema
     json_schema = model.schema()
-    expected_required = {"val1"}
-    expected_optional = {"val2"}
-    assert set(json_schema["required"]) == expected_required
+
+    if total_ is False:
+        expected_required = set()
+        expected_optional = {"val2", "val1"}
+    else:
+        expected_required = {"val1"}
+
+        expected_optional = {"val2"}
+
+    assert set(json_schema.get("required", set())) == expected_required
     assert (
         set(json_schema["properties"].keys()) == expected_required | expected_optional
     )
