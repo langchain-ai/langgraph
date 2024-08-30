@@ -59,11 +59,13 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
+    CONFIG_KEY_TASK_ID,
     ERROR,
     INTERRUPT,
     NS_END,
@@ -77,6 +79,7 @@ from langgraph.pregel.algo import (
     local_write,
     prepare_next_tasks,
 )
+from langgraph.pregel.config import patch_configurable
 from langgraph.pregel.debug import (
     print_step_checkpoint,
     print_step_tasks,
@@ -442,7 +445,19 @@ class Pregel(
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(t.name for t in next_tasks),
-                saved.config,
+                patch_configurable(
+                    saved.config,
+                    {
+                        CONFIG_KEY_CHECKPOINT_MAP: {
+                            **saved.metadata["parents"],
+                            saved.config["configurable"][
+                                "checkpoint_ns"
+                            ]: saved.checkpoint["id"],
+                        }
+                    },
+                )
+                if saved.metadata.get("parents")
+                else saved.config,
                 saved.metadata,
                 saved.checkpoint["ts"],
                 saved.parent_config,
@@ -518,7 +533,19 @@ class Pregel(
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
                 tuple(t.name for t in next_tasks),
-                saved.config,
+                patch_configurable(
+                    saved.config,
+                    {
+                        CONFIG_KEY_CHECKPOINT_MAP: {
+                            **saved.metadata["parents"],
+                            saved.config["configurable"][
+                                "checkpoint_ns"
+                            ]: saved.checkpoint["id"],
+                        }
+                    },
+                )
+                if saved.metadata.get("parents")
+                else saved.config,
                 saved.metadata,
                 saved.checkpoint["ts"],
                 saved.parent_config,
@@ -546,12 +573,9 @@ class Pregel(
             for name, pregel in self.get_subgraphs(recurse=True):
                 if name == recast_checkpoint_ns:
                     return pregel.get_state(
-                        {
-                            "configurable": {
-                                **config["configurable"],
-                                CONFIG_KEY_CHECKPOINTER: checkpointer,
-                            }
-                        },
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
                         subgraphs=subgraphs,
                     )
             else:
@@ -584,12 +608,9 @@ class Pregel(
             async for name, pregel in self.aget_subgraphs(recurse=True):
                 if name == recast_checkpoint_ns:
                     return await pregel.aget_state(
-                        {
-                            "configurable": {
-                                **config["configurable"],
-                                CONFIG_KEY_CHECKPOINTER: checkpointer,
-                            }
-                        },
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
                         subgraphs=subgraphs,
                     )
             else:
@@ -627,12 +648,9 @@ class Pregel(
             for name, pregel in self.get_subgraphs(recurse=True):
                 if name == recast_checkpoint_ns:
                     yield from pregel.get_state_history(
-                        {
-                            "configurable": {
-                                **config["configurable"],
-                                CONFIG_KEY_CHECKPOINTER: checkpointer,
-                            }
-                        },
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
                         filter=filter,
                         before=before,
                         limit=limit,
@@ -678,12 +696,9 @@ class Pregel(
             async for name, pregel in self.aget_subgraphs(recurse=True):
                 if name == recast_checkpoint_ns:
                     async for state in pregel.aget_state_history(
-                        {
-                            "configurable": {
-                                **config["configurable"],
-                                CONFIG_KEY_CHECKPOINTER: checkpointer,
-                            }
-                        },
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
                         filter=filter,
                         before=before,
                         limit=limit,
@@ -717,8 +732,31 @@ class Pregel(
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        if not self.checkpointer:
+        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not checkpointer:
             raise ValueError("No checkpointer set")
+
+        if (
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            for name, pregel in self.get_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    return pregel.update_state(
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
+                        values,
+                        as_node,
+                    )
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         # get last checkpoint
         config = merge_configs(self.config, config) if self.config else config
@@ -729,21 +767,12 @@ class Pregel(
         )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
-        checkpoint_config = {
-            **config,
-            "configurable": {
-                **config["configurable"],
-                # TODO: add proper support for updating nested subgraph state
-                "checkpoint_ns": "",
-            },
-        }
+        checkpoint_config = patch_configurable(
+            config,
+            {"checkpoint_ns": config["configurable"].get("checkpoint_ns", "")},
+        )
         if saved:
-            checkpoint_config = {
-                "configurable": {
-                    **config.get("configurable", {}),
-                    **saved.config["configurable"],
-                }
-            }
+            checkpoint_config = patch_configurable(config, saved.config["configurable"])
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
             return self.checkpointer.put(
@@ -797,6 +826,7 @@ class Pregel(
                 deque(),
                 None,
                 [INTERRUPT],
+                None,
                 None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
@@ -935,6 +965,7 @@ class Pregel(
                 None,
                 [INTERRUPT],
                 None,
+                None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
@@ -1016,7 +1047,7 @@ class Pregel(
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        if CONFIG_KEY_READ in config.get("configurable", {}):
+        if CONFIG_KEY_TASK_ID in config.get("configurable", {}):
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
         if CONFIG_KEY_CHECKPOINTER in config.get("configurable", {}):
