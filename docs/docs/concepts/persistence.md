@@ -10,13 +10,13 @@ See [this how-to guide](../how-tos/persistence.ipynb) for an end-to-end example 
 
 First, checkpointers facilitate [human-in-the-loop workflows](agentic_concepts.md#human-in-the-loop) workflows by allowing humans to inspect, interrupt, and approve graph steps. Checkpointers are needed for these workflows as the human has to be able to view the state of a graph at any point in time, and the graph has to be to resume execution after the human has made any updates to the state.
 
-See [these how-to guides](../how-tos/human_in_the_loop/breakpoints/) for concrete examples.
+See [these how-to guides](../how-tos/human_in_the_loop/breakpoints.ipynb) for concrete examples.
 
 ### Memory
 
 Second, it allows for ["memory"](agentic_concepts.md#memory) between interactions. You can use checkpointers to create threads ("sessions") and save the state of a thread after a graph executes. In the case of repeated human interactions (like conversations) any follow up messages can be sent to that thread, which will retain its memory of previous ones.
 
-See [this how-to guide](../how-tos/memory/manage-conversation-history/) for an end-to-end example on how to add and manage conversation memory using checkpointers.
+See [this how-to guide](../how-tos/memory/manage-conversation-history.ipynb) for an end-to-end example on how to add and manage conversation memory using checkpointers.
 
 ### Fault-tolerance
 
@@ -230,7 +230,7 @@ Under the hood, checkpointing is powered by checkpointer objects that conform to
 
 * `langgraph-checkpoint`: The base interface for checkpointer savers ([BaseCheckpointSaver][basecheckpointsaver]) and serialization/deserialization interface ([SerializerProtocol][serializerprotocol]). Includes in-memory checkpointer implementation ([MemorySaver][memorysaver]) for experimentation. LangGraph comes with `langgraph-checkpoint` included.
 * `langgraph-checkpoint-sqlite`: An implementation of LangGraph checkpointer that uses SQLite database ([SqliteSaver][sqlitesaver] / [AsyncSqliteSaver][asyncsqlitesaver]). Ideal for experimentation and local workflows. Needs to be installed separately.
-* `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database (([PostgresSaver][postgressaver] / [AsyncPostgresSaver][asyncpostgressaver])), used in LangGraph Cloud. Ideal for using in production. Needs to be installed separately.
+* `langgraph-checkpoint-postgres`: An advanced checkpointer that uses Postgres database ([PostgresSaver][postgressaver] / [AsyncPostgresSaver][asyncpostgressaver]), used in LangGraph Cloud. Ideal for using in production. Needs to be installed separately.
 
 ### Checkpointer interface
 
