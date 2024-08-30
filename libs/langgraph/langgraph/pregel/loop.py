@@ -422,7 +422,7 @@ class PregelLoop:
                 self.checkpointer_get_next_version,
             ), "Can't write to SharedValues in graph input"
             # save input checkpoint
-            self._put_checkpoint({"source": "input", "writes": self.input})
+            self._put_checkpoint({"source": "input", "writes": dict(input_writes)})
         else:
             raise EmptyInputError(f"Received no input for {input_keys}")
         # done with input
