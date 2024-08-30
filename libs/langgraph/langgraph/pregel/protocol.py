@@ -7,8 +7,10 @@ from langgraph.pregel.types import All, StateSnapshot, StreamMode
 
 
 class PregelProtocol(Protocol):
+    # TODO get_viz
+
     def with_config(
-        self, config: RunnableConfig | None = None, **kwargs: Any
+        self, config: Optional[RunnableConfig] = None, **kwargs: Any
     ) -> Self: ...
 
     def get_subgraphs(

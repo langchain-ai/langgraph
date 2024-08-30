@@ -16,6 +16,12 @@ class RemotePregel(PregelProtocol):
 
     # TODO sync methods
 
+    # TODO aget_subgraphs
+
+    # TODO with_config
+
+    # TODO get_graph
+
     async def aget_state(
         self, config: RunnableConfig, *, subgraphs: bool = False
     ) -> StateSnapshot:
