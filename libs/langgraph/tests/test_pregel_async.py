@@ -570,7 +570,6 @@ async def test_node_schemas_custom_output() -> None:
     async def node_b(state: StateForB):
         assert state == {
             "bye": "world",
-            "now": None,
         }
         return {
             "now": 123,
@@ -4987,11 +4986,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
                     "name": "rewrite_query",
-                    "input": {
-                        "query": "what is weather in sf",
-                        "answer": None,
-                        "docs": [],
-                    },
+                    "input": {"query": "what is weather in sf", "docs": []},
                     "triggers": ["start:rewrite_query"],
                 },
             },
@@ -5022,11 +5017,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
                     "name": "retriever_one",
-                    "input": {
-                        "query": "query: what is weather in sf",
-                        "answer": None,
-                        "docs": [],
-                    },
+                    "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ["rewrite_query"],
                 },
             },
@@ -5040,11 +5031,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
                     "name": "retriever_two",
-                    "input": {
-                        "query": "query: what is weather in sf",
-                        "answer": None,
-                        "docs": [],
-                    },
+                    "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ["rewrite_query"],
                 },
             },
@@ -5105,7 +5092,6 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                     "name": "qa",
                     "input": {
                         "query": "query: what is weather in sf",
-                        "answer": None,
                         "docs": ["doc1", "doc2", "doc3", "doc4"],
                     },
                     "triggers": ["retriever_one", "retriever_two"],
@@ -7403,9 +7389,7 @@ async def test_nested_graph_state(
             },
             metadata={
                 "source": "input",
-                "writes": {
-                    "__start__": {"my_key": "hi my value", "other_parent_key": None}
-                },
+                "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
                 "parents": {"": AnyStr()},
             },

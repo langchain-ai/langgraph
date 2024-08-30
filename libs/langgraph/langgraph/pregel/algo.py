@@ -384,7 +384,7 @@ def prepare_next_tasks(
             try:
                 val = next(
                     _proc_input(
-                        step, name, proc, managed, channels, for_execution=for_execution
+                        step, proc, managed, channels, for_execution=for_execution
                     )
                 )
             except StopIteration:
@@ -474,7 +474,6 @@ def prepare_next_tasks(
 
 def _proc_input(
     step: int,
-    name: str,
     proc: PregelNode,
     managed: ManagedValueMapping,
     channels: Mapping[str, BaseChannel],
@@ -485,16 +484,17 @@ def _proc_input(
     # then invoke the process with the values of all non-empty channels
     if isinstance(proc.channels, dict):
         try:
-            val: dict = {
-                k: read_channel(
-                    channels,
-                    chan,
-                    catch=chan not in proc.triggers,
-                )
-                if chan in channels
-                else managed[k](step)
-                for k, chan in proc.channels.items()
-            }
+            val: dict[str, Any] = {}
+            for k, chan in proc.channels.items():
+                if chan in proc.triggers:
+                    val[k] = read_channel(channels, chan, catch=False)
+                elif chan in channels:
+                    try:
+                        val[k] = read_channel(channels, chan, catch=False)
+                    except EmptyChannelError:
+                        continue
+                else:
+                    val[k] = managed[k](step)
         except EmptyChannelError:
             return
     elif isinstance(proc.channels, list):
