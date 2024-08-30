@@ -27,7 +27,7 @@ from langgraph_sdk.schema import (
     Cron,
     DisconnectMode,
     GraphSchema,
-    Metadata,
+    Json,
     MultitaskStrategy,
     OnCompletionBehavior,
     OnConflictBehavior,
@@ -414,7 +414,7 @@ class AssistantsClient:
         graph_id: Optional[str],
         config: Optional[Config] = None,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Assistant:
@@ -462,7 +462,7 @@ class AssistantsClient:
         *,
         graph_id: Optional[str] = None,
         config: Optional[Config] = None,
-        metadata: Metadata = None,
+        metadata: Json = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -524,7 +524,7 @@ class AssistantsClient:
     async def search(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         graph_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
@@ -600,7 +600,7 @@ class ThreadsClient:
     async def create(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         thread_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Thread:
@@ -675,7 +675,8 @@ class ThreadsClient:
     async def search(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
+        values: Json = None,
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
@@ -708,6 +709,8 @@ class ThreadsClient:
         }
         if metadata:
             payload["metadata"] = metadata
+        if values:
+            payload["values"] = values
         if status:
             payload["status"] = status
         return await self.http.post(
