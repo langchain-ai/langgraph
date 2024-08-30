@@ -76,14 +76,14 @@ select
     ) as channel_values,
     (
         select
-        array_agg(array[cw.task_id::text::bytea, cw.channel::bytea, cw.type::bytea, cw.blob])
+        array_agg(array[cw.task_id::text::bytea, cw.channel::bytea, cw.type::bytea, cw.blob] order by cw.task_id, cw.idx)
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
             and cw.checkpoint_id = checkpoints.checkpoint_id
     ) as pending_writes,
     (
-        select array_agg(array[cw.type::bytea, cw.blob])
+        select array_agg(array[cw.type::bytea, cw.blob] order by cw.idx)
         from checkpoint_writes cw
         where cw.thread_id = checkpoints.thread_id
             and cw.checkpoint_ns = checkpoints.checkpoint_ns
