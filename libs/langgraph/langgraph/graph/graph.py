@@ -484,6 +484,10 @@ class CompiledGraph(Pregel):
             START: graph.add_node(self.get_input_schema(config), START)
         }
         end_nodes: dict[str, DrawableNode] = {}
+        if xray:
+            subgraphs = dict(self.get_subgraphs())
+        else:
+            subgraphs = {}
 
         def add_edge(
             start: str, end: str, label: Optional[str] = None, conditional: bool = False
@@ -503,11 +507,11 @@ class CompiledGraph(Pregel):
                 metadata["__interrupt"] = "after"
             if xray:
                 subgraph = (
-                    node.get_graph(
+                    subgraphs[key].get_graph(
                         config=config,
                         xray=xray - 1 if isinstance(xray, int) and xray > 0 else xray,
                     )
-                    if isinstance(node, CompiledGraph)
+                    if key in subgraphs
                     else node.get_graph(config=config)
                 )
                 subgraph.trim_first_node()

@@ -201,6 +201,8 @@ def _is_optional_type(type_: Any) -> bool:
             return any(
                 arg is type(None) or _is_optional_type(arg) for arg in type_.__args__
             )
+        if origin is Annotated:
+            return _is_optional_type(type_.__args__[0])
         return origin is None
     if hasattr(type_, "__bound__") and type_.__bound__ is not None:
         return _is_optional_type(type_.__bound__)

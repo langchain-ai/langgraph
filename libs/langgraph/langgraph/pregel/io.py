@@ -1,4 +1,4 @@
-from typing import Any, Iterator, Mapping, Optional, Sequence, TypeVar, Union
+from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypeVar, Union
 
 from langchain_core.runnables.utils import AddableDict
 
@@ -73,15 +73,19 @@ class AddableValuesDict(AddableDict):
 
 def map_output_values(
     output_channels: Union[str, Sequence[str]],
-    pending_writes: Sequence[tuple[str, Any]],
+    pending_writes: Union[Literal[True], Sequence[tuple[str, Any]]],
     channels: Mapping[str, BaseChannel],
 ) -> Iterator[Union[dict[str, Any], Any]]:
     """Map pending writes (a sequence of tuples (channel, value)) to output chunk."""
     if isinstance(output_channels, str):
-        if any(chan == output_channels for chan, _ in pending_writes):
+        if pending_writes is True or any(
+            chan == output_channels for chan, _ in pending_writes
+        ):
             yield read_channel(channels, output_channels)
     else:
-        if {c for c, _ in pending_writes if c in output_channels}:
+        if pending_writes is True or {
+            c for c, _ in pending_writes if c in output_channels
+        }:
             yield AddableValuesDict(read_channels(channels, output_channels))
 
 

@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Any, Literal, Optional, Sequence, TypedDict, Union
 
-Metadata = Optional[dict[str, Any]]
+Json = Optional[dict[str, Any]]
 
 RunStatus = Literal["pending", "running", "error", "success", "timeout", "interrupted"]
 
@@ -70,7 +70,7 @@ class Assistant(TypedDict):
     """The time the assistant was created."""
     updated_at: datetime
     """The last time the assistant was updated."""
-    metadata: Metadata
+    metadata: Json
     """The assistant metadata."""
 
 
@@ -81,11 +81,11 @@ class Thread(TypedDict):
     """The time the thread was created."""
     updated_at: datetime
     """The last time the thread was updated."""
-    metadata: Metadata
+    metadata: Json
     """The thread metadata."""
     status: ThreadStatus
     """The status of the thread, one of 'idle', 'busy', 'interrupted'."""
-    values: dict
+    values: Json
     """The current state of the thread."""
 
 
@@ -97,7 +97,7 @@ class ThreadState(TypedDict):
     received."""
     checkpoint_id: str
     """The ID of the checkpoint."""
-    metadata: Metadata
+    metadata: Json
     """Metadata for this state"""
     created_at: Optional[str]
     """Timestamp of state creation"""
@@ -118,7 +118,7 @@ class Run(TypedDict):
     """The last time the run was updated."""
     status: RunStatus
     """The status of the run. One of 'pending', 'running', "error", 'success', "timeout", "interrupted"."""
-    metadata: Metadata
+    metadata: Json
     """The run metadata."""
     multitask_strategy: MultitaskStrategy
     """Strategy to handle concurrent runs on the same thread."""
