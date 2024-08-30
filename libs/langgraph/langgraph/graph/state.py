@@ -44,7 +44,7 @@ from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.utils import RunnableCallable, coerce_to_runnable, is_optional_type
+from langgraph.utils import RunnableCallable, coerce_to_runnable, field_is_optional
 
 logger = logging.getLogger(__name__)
 
@@ -486,10 +486,6 @@ class CompiledStateGraph(CompiledGraph):
                     __root__=(self.channels[keys[0]].UpdateType, None),
                 )
             else:
-                is_total_false = (
-                    hasattr(self.builder.input, "__total__")
-                    and self.builder.input.__total__ is False
-                )
                 return create_model(  # type: ignore[call-overload]
                     self.get_name("Input"),
                     **{
@@ -497,8 +493,11 @@ class CompiledStateGraph(CompiledGraph):
                             self.channels[k].UpdateType,
                             (
                                 None
-                                if is_total_false
-                                or is_optional_type(self.channels[k].UpdateType)
+                                if field_is_optional(
+                                    k,
+                                    self.channels[k].UpdateType,
+                                    self.builder.input,
+                                )
                                 else ...
                             ),
                         )

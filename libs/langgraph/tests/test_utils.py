@@ -8,7 +8,9 @@ from typing import (
     ForwardRef,
     List,
     Literal,
+    NotRequired,
     Optional,
+    Required,
     TypedDict,
     TypeVar,
     Union,
@@ -17,10 +19,16 @@ from unittest.mock import patch
 
 import langsmith
 import pytest
+from typing_extensions import Annotated
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
-from langgraph.utils import is_async_callable, is_async_generator, is_optional_type
+from langgraph.utils import (
+    _is_optional_type,
+    field_is_optional,
+    is_async_callable,
+    is_async_generator,
+)
 
 
 def test_is_async() -> None:
@@ -133,48 +141,93 @@ async def test_runnable_callable_tracing_nested_async(rt_graph: CompiledGraph) -
 
 
 def test_is_optional_type():
-    assert is_optional_type(None)
-    assert not is_optional_type(type(None))
-    assert is_optional_type(Optional[list])
-    assert not is_optional_type(int)
-    assert is_optional_type(Optional[Literal[1, 2, 3]])
-    assert not is_optional_type(Literal[1, 2, 3])
-    assert is_optional_type(Optional[List[int]])
-    assert is_optional_type(Optional[Dict[str, int]])
-    assert not is_optional_type(List[Optional[int]])
-    assert is_optional_type(Union[Optional[str], Optional[int]])
-    assert is_optional_type(
+    assert _is_optional_type(None)
+    assert not _is_optional_type(type(None))
+    assert _is_optional_type(Optional[list])
+    assert not _is_optional_type(int)
+    assert _is_optional_type(Optional[Literal[1, 2, 3]])
+    assert not _is_optional_type(Literal[1, 2, 3])
+    assert _is_optional_type(Optional[List[int]])
+    assert _is_optional_type(Optional[Dict[str, int]])
+    assert not _is_optional_type(List[Optional[int]])
+    assert _is_optional_type(Union[Optional[str], Optional[int]])
+    assert _is_optional_type(
         Union[
             Union[Optional[str], Optional[int]], Union[Optional[float], Optional[dict]]
         ]
     )
-    assert not is_optional_type(Union[Union[str, int], Union[float, dict]])
+    assert not _is_optional_type(Union[Union[str, int], Union[float, dict]])
 
-    assert is_optional_type(Union[int, None])
-    assert is_optional_type(Union[str, None, int])
-    assert is_optional_type(Union[None, str, int])
-    assert not is_optional_type(Union[int, str])
+    assert _is_optional_type(Union[int, None])
+    assert _is_optional_type(Union[str, None, int])
+    assert _is_optional_type(Union[None, str, int])
+    assert not _is_optional_type(Union[int, str])
 
-    assert not is_optional_type(Any)  # Do we actually want this?
-    assert is_optional_type(Optional[Any])
+    assert not _is_optional_type(Any)  # Do we actually want this?
+    assert _is_optional_type(Optional[Any])
 
     class MyClass:
         pass
 
-    assert is_optional_type(Optional[MyClass])
-    assert not is_optional_type(MyClass)
-    assert is_optional_type(Optional[ForwardRef("MyClass")])
-    assert not is_optional_type(ForwardRef("MyClass"))
+    assert _is_optional_type(Optional[MyClass])
+    assert not _is_optional_type(MyClass)
+    assert _is_optional_type(Optional[ForwardRef("MyClass")])
+    assert not _is_optional_type(ForwardRef("MyClass"))
 
-    assert is_optional_type(Optional[Union[List[int], Dict[str, Optional[int]]]])
-    assert not is_optional_type(Union[List[int], Dict[str, Optional[int]]])
+    assert _is_optional_type(Optional[Union[List[int], Dict[str, Optional[int]]]])
+    assert not _is_optional_type(Union[List[int], Dict[str, Optional[int]]])
 
-    assert is_optional_type(Optional[Callable[[int], str]])
-    assert not is_optional_type(Callable[[int], Optional[str]])
+    assert _is_optional_type(Optional[Callable[[int], str]])
+    assert not _is_optional_type(Callable[[int], Optional[str]])
 
     T = TypeVar("T")
-    assert is_optional_type(Optional[T])
-    assert not is_optional_type(T)
+    assert _is_optional_type(Optional[T])
+    assert not _is_optional_type(T)
 
-    U = TypeVar("U", bound=Optional[T])
-    assert is_optional_type(U)
+    U = TypeVar("U", bound=Optional[T])  # type: ignore
+    assert _is_optional_type(U)
+
+
+def test_is_required():
+    class MyBaseTypedDict(TypedDict):
+        val_1: Required[Optional[str]]
+        val_2: Required[str]
+        val_3: NotRequired[str]
+        val_4: NotRequired[Optional[str]]
+        val_5: Annotated[NotRequired[int], "foo"]
+        val_6: NotRequired[Annotated[int, "foo"]]
+        val_7: Annotated[Required[int], "foo"]
+        val_8: Required[Annotated[int, "foo"]]
+        val_9: Optional[str]
+        val_10: str
+
+    annos = MyBaseTypedDict.__annotations__
+    assert not field_is_optional("val_1", annos["val_1"], MyBaseTypedDict)
+    assert not field_is_optional("val_2", annos["val_2"], MyBaseTypedDict)
+    assert field_is_optional("val_3", annos["val_3"], MyBaseTypedDict)
+    assert field_is_optional("val_4", annos["val_4"], MyBaseTypedDict)
+    # See https://peps.python.org/pep-0655/#interaction-with-annotated
+    assert field_is_optional("val_5", annos["val_5"], MyBaseTypedDict)
+    assert field_is_optional("val_6", annos["val_6"], MyBaseTypedDict)
+    assert not field_is_optional("val_7", annos["val_7"], MyBaseTypedDict)
+    assert not field_is_optional("val_8", annos["val_8"], MyBaseTypedDict)
+    assert field_is_optional("val_9", annos["val_9"], MyBaseTypedDict)
+    assert not field_is_optional("val_10", annos["val_10"], MyBaseTypedDict)
+
+    class MyChildDict(MyBaseTypedDict):
+        val_11: int
+        val_11b: Optional[int]
+        val_11c: Union[int, None, str]
+
+    class MyGrandChildDict(MyChildDict, total=False):
+        val_12: int
+        val_13: Required[str]
+
+    cannos = MyChildDict.__annotations__
+    gcannos = MyGrandChildDict.__annotations__
+    assert not field_is_optional("val_11", cannos["val_11"], MyChildDict)
+    assert field_is_optional("val_11b", cannos["val_11b"], MyChildDict)
+    assert field_is_optional("val_11c", cannos["val_11c"], MyChildDict)
+    assert field_is_optional("val_12", gcannos["val_12"], MyGrandChildDict)
+    assert field_is_optional("val_9", gcannos["val_9"], MyGrandChildDict)
+    assert not field_is_optional("val_13", gcannos["val_13"], MyGrandChildDict)

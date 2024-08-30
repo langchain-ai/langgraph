@@ -1,5 +1,5 @@
 from typing import Annotated as Annotated2
-from typing import Any, Optional
+from typing import Any, NotRequired, Optional, Required
 
 import pytest
 from langchain_core.runnables import RunnableConfig
@@ -90,11 +90,19 @@ def test_state_schema_with_type_hint():
 
 @pytest.mark.parametrize("total_", [True, False])
 def test_state_schema_optional_values(total_: bool):
-    class InputState(TypedDict, total=total_):  # type: ignore
+    class SomeParentState(TypedDict):
+        val0a: str
+        val0b: Optional[str]
+
+    class InputState(SomeParentState, total=total_):  # type: ignore
         val1: str
         val2: Optional[str]
+        val3: Required[str]
+        val4: NotRequired[dict]
+        val5: Annotated[Required[str], "foo"]
+        val6: Annotated[NotRequired[str], "bar"]
 
-    class State(InputState):
+    class State(InputState):  # this would be ignored
         val4: dict
 
     builder = StateGraph(State, input=InputState)
@@ -111,6 +119,10 @@ def test_state_schema_optional_values(total_: bool):
         expected_required = {"val1"}
 
         expected_optional = {"val2"}
+
+    # The others shoud always have precedence based on the required annotation
+    expected_required |= {"val0a", "val3", "val5"}
+    expected_optional |= {"val0b", "val4", "val6"}
 
     assert set(json_schema.get("required", set())) == expected_required
     assert (
