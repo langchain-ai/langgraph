@@ -10209,10 +10209,13 @@ def test_weather_subgraph(
         else:
             return "normal_llm_node"
 
+    def weather_graph(state: RouterState):
+        return subgraph.invoke(state)
+
     graph = StateGraph(RouterState)
     graph.add_node(router_node)
     graph.add_node(normal_llm_node)
-    graph.add_node("weather_graph", subgraph)
+    graph.add_node("weather_graph", weather_graph)
     graph.add_edge(START, "router_node")
     graph.add_conditional_edges("router_node", route_after_prediction)
     graph.add_edge("normal_llm_node", END)
