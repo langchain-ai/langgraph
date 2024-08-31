@@ -4,7 +4,6 @@ import asyncio
 import concurrent.futures
 import time
 from collections import deque
-from datetime import datetime, timezone
 from functools import partial
 from typing import (
     Any,
@@ -1232,8 +1231,6 @@ class Pregel(
                     interrupt_after=interrupt_after,
                     manager=run_manager,
                 ):
-                    # start time of superstep
-                    step_start_time = datetime.now(timezone.utc)
                     # debug flag
                     if debug:
                         print_step_checkpoint(
@@ -1485,8 +1482,6 @@ class Pregel(
                     interrupt_after=interrupt_after,
                     manager=run_manager,
                 ):
-                    # start time of superstep
-                    step_start_time = datetime.now(timezone.utc)
                     # debug flag
                     if debug:
                         print_step_checkpoint(

@@ -241,7 +241,9 @@ class PregelLoop:
                 self.stream.extend(
                     (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
                     for v in map_debug_task_results(
-                        self.step, [(task, writes)], self.stream_keys,
+                        self.step,
+                        [(task, writes)],
+                        self.stream_keys,
                     )
                 )
 
