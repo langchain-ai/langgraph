@@ -218,13 +218,13 @@ def _is_required_type(type_: Any) -> Optional[bool]:
         - None if not annotated with either
     """
     origin = get_origin(type_)
-    if origin is Annotated or origin:
-        # See https://typing.readthedocs.io/en/latest/spec/typeddict.html#interaction-with-annotated
-        return _is_required_type(type_.__args__[0])
     if origin is Required:
         return True
     if origin is NotRequired:
         return False
+    if origin is Annotated or getattr(origin, "__args__", None):
+        # See https://typing.readthedocs.io/en/latest/spec/typeddict.html#interaction-with-annotated
+        return _is_required_type(type_.__args__[0])
     return None
 
 
@@ -258,14 +258,21 @@ def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:
         - Type annotation (Optional/Union[None])
     """
     optional_keys = getattr(schema, "__optional_keys__", _DEFAULT_KEYS)
+    irq = _is_required_type(type_)
     if name in optional_keys:
         # Either total=False or explicit NotRequired.
         # No type annotation trumps this.
+        if irq:
+            # Unless it's earlier versions of python & explicit Required
+            return ...
         return None
-    if _is_required_type(type_):
-        # Handle Required[<type>]
-        # (we already handled NotRequired and total=False)
-        return ...
+    if irq is not None:
+        if irq:
+            # Handle Required[<type>]
+            # (we already handled NotRequired and total=False)
+            return ...
+        # Handle NotRequired[<type>] for earlier versions of python
+        return None
     # Note, we ignore ReadOnly attributes,
     # as they don't make much sense. (we don't care if you mutate the state in your node)
     # and mutating state in your node has no effect on our graph state.
