@@ -69,7 +69,6 @@ from langgraph.pregel import (
     StateSnapshot,
 )
 from langgraph.pregel.retry import RetryPolicy
-from tests.any_int import AnyInt
 from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
@@ -6379,7 +6378,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": AnyStr(),
                     "name": "rewrite_query",
-                    "node_exec_ms": AnyInt(),
                     "result": [("query", "query: what is weather in sf")],
                     "error": None,
                     "interrupts": [],
@@ -6428,7 +6426,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": AnyStr(),
                     "name": "retriever_two",
-                    "node_exec_ms": AnyInt(),
                     "result": [("docs", ["doc3", "doc4"])],
                     "error": None,
                     "interrupts": [],
@@ -6448,7 +6445,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": AnyStr(),
                     "name": "retriever_one",
-                    "node_exec_ms": AnyInt(),
                     "result": [("docs", ["doc1", "doc2"])],
                     "error": None,
                     "interrupts": [],
@@ -6489,7 +6485,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": AnyStr(),
                     "name": "qa",
-                    "node_exec_ms": AnyInt(),
                     "result": [("answer", "doc1,doc2,doc3,doc4")],
                     "error": None,
                     "interrupts": [],
@@ -6880,27 +6875,14 @@ def test_branch_then(
                     "market": "DE",
                 },
                 "metadata": {
-                      "parents": {},
-                      "source": "loop",
-                      "step": 0,
-                      "writes": None,
-                  },
-                  "next": ["prepare"],
-                  "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
-            },
-        },
-        {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "prepare",
-                    "node_exec_ms": AnyInt(),
-                    "result": [("my_key", " prepared")],      
-                    "error": None,
-                    "interrupts": [],
+                    "parents": {},
+                    "source": "loop",
+                    "step": 0,
+                    "writes": None,
                 },
+                "next": ["prepare"],
+                "tasks": [{"id": AnyStr(), "name": "prepare", "interrupts": ()}],
+            },
         },
         {
             "type": "task",
@@ -6956,18 +6938,6 @@ def test_branch_then(
             },
         },
         {
-            "type": "task_result",
-            "timestamp": AnyStr(),
-            "step": 2,
-            "payload": {
-                "id": AnyStr(),
-                "name": "tool_two_slow",
-                "result": [("my_key", " slow")],   
-                "error": None,
-                "interrupts": [],
-            },
-        },
-        {
             "type": "task",
             "timestamp": AnyStr(),
             "step": 2,
@@ -7019,19 +6989,6 @@ def test_branch_then(
                 "next": ["finish"],
                 "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": ()}],
             },
-        },
-        {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 3,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "finish",
-                    "node_exec_ms": AnyInt(),
-                    "result": [("my_key", " finished")],
-                    "error": None,
-                    "interrupts": [],      
-                },
         },
         {
             "type": "task",

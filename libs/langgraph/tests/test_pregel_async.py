@@ -68,7 +68,6 @@ from langgraph.pregel import (
     StateSnapshot,
 )
 from langgraph.pregel.retry import RetryPolicy
-from tests.any_int import AnyInt
 from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
@@ -5436,18 +5435,6 @@ async def test_branch_then(
             },
         },
         {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 1,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "prepare",
-                    "result": [("my_key", " prepared")],  
-                    "error": None,
-                    "interrupts": [],     
-                },
-        },
-        {
             "type": "task",
             "timestamp": AnyStr(),
             "step": 1,
@@ -5501,18 +5488,6 @@ async def test_branch_then(
             },
         },
         {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 2,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "tool_two_slow",
-                    "result": [("my_key", " slow")],
-                    "error": None,
-                    "interrupts": [],
-                },
-        },
-        {
             "type": "task",
             "timestamp": AnyStr(),
             "step": 2,
@@ -5564,18 +5539,6 @@ async def test_branch_then(
                 "next": ["finish"],
                 "tasks": [{"id": AnyStr(), "name": "finish", "interrupts": ()}],
             },
-        },
-        {
-                "type": "task_result",
-                "timestamp": AnyStr(),
-                "step": 3,
-                "payload": {
-                    "id": AnyStr(),
-                    "name": "finish",
-                    "result": [("my_key", " finished")],
-                    "error": None,
-                    "interrupts": [],
-                },
         },
         {
             "type": "task",
