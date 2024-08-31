@@ -104,7 +104,6 @@ def map_debug_task_results(
     step: int,
     tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
     stream_keys: Union[str, Sequence[str]],
-    step_start_time: datetime,
 ) -> Iterator[DebugOutputTaskResult]:
     stream_channels_list = (
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
@@ -123,12 +122,8 @@ def map_debug_task_results(
             "timestamp": ts.isoformat(),
             "step": step,
             "payload": {
-                "id": str(
-                    uuid5(TASK_NAMESPACE, json.dumps((task.name, step, metadata)))
-                ),
-                "task_id": task.task_id,
+                "id": task.id,
                 "name": task.name,
-                "node_exec_ms": int((ts - step_start_time).total_seconds() * 1000),
                 "error": next((w[1] for w in writes if w[0] == ERROR), None),
                 "result": [w for w in writes if w[0] in stream_channels_list],
                 "interrupts": [asdict(w[1]) for w in writes if w[0] == INTERRUPT],
