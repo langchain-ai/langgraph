@@ -1,3 +1,4 @@
+import inspect
 from dataclasses import dataclass, field
 from typing import Annotated as Annotated2
 from typing import Any, Optional
@@ -133,7 +134,11 @@ def test_state_schema_optional_values(total_: bool):
 
 @pytest.mark.parametrize("kw_only_", [False, True])
 def test_state_schema_default_values(kw_only_: bool):
-    @dataclass(kw_only=kw_only_)
+    kwargs = {}
+    if "kw_only" in inspect.signature(dataclass).parameters:
+        kwargs = {"kw_only": kw_only_}
+
+    @dataclass(**kwargs)
     class InputState:
         val1: str
         val2: Optional[int]
