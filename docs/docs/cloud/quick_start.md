@@ -68,10 +68,12 @@ This tutorial will use:
 
 === "Python"
 
+        ```
         langgraph
         langchain_anthropic
         tavily-python
         langchain_community
+        ```
 
 === "Javascript"
 
