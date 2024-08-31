@@ -14,7 +14,7 @@ export type StreamEvent =
   | "messages/complete"
   | (string & {});
 
-interface RunsInvokePayload {
+export interface RunsCreatePayload {
   /**
    * Input to the run. Pass `null` to resume from the current state of the thread.
    */
@@ -61,9 +61,14 @@ interface RunsInvokePayload {
    * Abort controller signal to cancel the run.
    */
   signal?: AbortController["signal"];
+
+  /**
+   * Webhook to call when the run is complete.
+   */
+  webhook?: string;
 }
 
-export interface RunsStreamPayload extends RunsInvokePayload {
+export interface RunsStreamPayload extends RunsCreatePayload {
   /**
    * One of `"values"`, `"messages"`, `"updates"` or `"events"`.
    * - `"values"`: Stream the thread state any time it changes.
@@ -80,13 +85,6 @@ export interface RunsStreamPayload extends RunsInvokePayload {
    * for submitting feedback to LangSmith with this key for this run.
    */
   feedbackKeys?: string[];
-}
-
-export interface RunsCreatePayload extends RunsInvokePayload {
-  /**
-   * Webhook to call when the run is complete.
-   */
-  webhook?: string;
 }
 
 export interface CronsCreatePayload extends RunsCreatePayload {

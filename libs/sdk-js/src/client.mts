@@ -560,6 +560,7 @@ export class RunsClient extends BaseClient {
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
       checkpoint_id: payload?.checkpointId,
+      webhook: payload?.webhook,
     };
     if (payload?.multitaskStrategy != null) {
       json["multitask_strategy"] = payload?.multitaskStrategy;
