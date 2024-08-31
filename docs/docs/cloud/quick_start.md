@@ -14,13 +14,25 @@ This tutorial will use:
 
 1.  Create a new application with the following directory and files:
 
+=== "Python"
+
         <my-app>/
         |-- agent.py            # code for your LangGraph agent
         |-- requirements.txt    # Python packages required for your graph
         |-- langgraph.json      # configuration file for LangGraph
         |-- .env                # environment files with API keys
 
-2.  The `agent.py` file should contain Python code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent, read more about it [here](..//concepts/agentic_concepts.md#react-agent).
+=== "Javascript"
+
+        <my-app>/
+        |-- agent.ts            # code for your LangGraph agent
+        |-- package.json        # Javascript packages required for your graph
+        |-- langgraph.json      # configuration file for LangGraph
+        |-- .env                # environment files with API keys
+
+2.  The `agent.py`/`agent.ts` file should contain code for defining your graph. The following code is a simple example, the important thing is that at some point in your file you compile your graph and assign the compiled graph to a variable (in this case the `graph` variable). This example code uses `create_react_agent`, a prebuilt agent. You can read more about it [here](../concepts/agentic_concepts.md#react-agent).
+
+=== "Python"
 
     ```python
     from langchain_anthropic import ChatAnthropic
@@ -34,14 +46,51 @@ This tutorial will use:
     graph = create_react_agent(model, tools)
     ```
 
-3.  The `requirements.txt` file should contain any dependencies for your graph(s). In this case we only require four packages for our graph to run:
+=== "Javascript"
+
+    ```ts
+    import { ChatAnthropic } from "@langchain/anthropic";
+    import { TavilySearchResults } from "@langchain/community/tools/tavily_search";
+    import { createReactAgent } from "@langchain/langgraph/prebuilt";
+
+    const model = new ChatAnthropic({
+      model: "claude-3-5-sonnet-20240620",
+    });
+
+    const tools = [
+      new TavilySearchResults({ maxResults: 3, }),
+    ];
+
+    export const graph = createReactAgent({ llm: model, tools });
+    ```
+
+3.  The `requirements.txt`/`package.json` file should contain any dependencies for your graph(s). In this case we only require four packages for our graph to run:
+
+=== "Python"
 
         langgraph
         langchain_anthropic
         tavily-python
         langchain_community
 
-4.  The [`langgraph.json`][langgraph.json] file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`.
+=== "Javascript"
+
+        ```json
+        {
+          "name": "my-app",
+          "packageManager": "yarn@1.22.22",
+          "dependencies": {
+            "@langchain/community": "^0.2.31",
+            "@langchain/core": "^0.2.31",
+            "@langchain/langgraph": "0.2.0",
+            "@langchain/openai": "^0.2.8"
+          }
+        }
+        ```
+
+4.  The [`langgraph.json`][langgraph.json] file is a configuration file that describes what graph(s) you are going to host. In this case we only have one graph to host: the compiled `graph` object from `agent.py`/`agent.ts`.
+
+=== "Python"
 
     ```json
     {
@@ -53,7 +102,21 @@ This tutorial will use:
     }
     ```
 
-    Learn more about the LangGraph CLI configuration file [here](./reference/cli.md#configuration-file).
+=== "Javascript"
+
+    ```json
+    {
+      "node_version": "20",
+      "dockerfile_lines": [],
+      "dependencies": ["."],
+      "graphs": {
+        "agent": "./src/agent.ts:graph"
+      },
+      "env": ".env"
+    }
+    ```
+
+Learn more about the LangGraph CLI configuration file [here](./reference/cli.md#configuration-file).
 
 5.  The `.env` file should have any environment variables needed to run your graph. This will only be used for local testing, so if you are not testing locally you can skip this step. NOTE: if you do add this, you should NOT check this into git. For this graph, we need two environment variables:
 
