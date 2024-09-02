@@ -31,13 +31,14 @@ from langgraph.checkpoint.base import (
     create_checkpoint,
 )
 from langgraph.constants import (
-    CHECKPOINT_NAMESPACE_SEPARATOR,
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
+    NS_SEP,
     RESERVED,
     TAG_HIDDEN,
     TASKS,
@@ -272,7 +273,8 @@ def prepare_next_tasks(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[list[PregelTask], list[PregelExecutableTask]]:
-    parent_ns = config.get("configurable", {}).get("checkpoint_ns", "")
+    configurable = config.get("configurable", {})
+    parent_ns = configurable.get("checkpoint_ns", "")
     tasks: Union[list[PregelTask], list[PregelExecutableTask]] = []
     # Consume pending packets
     for packet in checkpoint["pending_sends"]:
@@ -291,9 +293,7 @@ def prepare_next_tasks(
             "langgraph_task_idx": len(tasks),
         }
         checkpoint_ns = (
-            f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{packet.node}:{packet.id}"
-            if parent_ns
-            else f"{packet.node}:{packet.id}"
+            f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
         task_id = str(
             uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
@@ -303,6 +303,7 @@ def prepare_next_tasks(
             if node := proc.get_node():
                 managed.replace_runtime_placeholders(step, packet.arg)
                 writes = deque()
+                task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                 tasks.append(
                     PregelExecutableTask(
                         packet.node,
@@ -341,14 +342,22 @@ def prepare_next_tasks(
                                     PregelTaskWrites(packet.node, writes, triggers),
                                     config,
                                 ),
-                                CONFIG_KEY_CHECKPOINTER: checkpointer,
+                                CONFIG_KEY_CHECKPOINTER: (
+                                    checkpointer
+                                    or configurable.get(CONFIG_KEY_CHECKPOINTER)
+                                ),
+                                CONFIG_KEY_CHECKPOINT_MAP: {
+                                    **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
+                                    parent_ns: checkpoint["id"],
+                                },
                                 CONFIG_KEY_RESUMING: is_resuming,
-                                "checkpoint_id": checkpoint["id"],
-                                "checkpoint_ns": checkpoint_ns,
+                                "checkpoint_id": None,
+                                "checkpoint_ns": task_checkpoint_ns,
                             },
                         ),
                         triggers,
                         proc.retry_policy,
+                        None,
                         task_id,
                     )
                 )
@@ -375,7 +384,7 @@ def prepare_next_tasks(
             try:
                 val = next(
                     _proc_input(
-                        step, name, proc, managed, channels, for_execution=for_execution
+                        step, proc, managed, channels, for_execution=for_execution
                     )
                 )
             except StopIteration:
@@ -388,11 +397,7 @@ def prepare_next_tasks(
                 "langgraph_triggers": triggers,
                 "langgraph_task_idx": len(tasks),
             }
-            checkpoint_ns = (
-                f"{parent_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{name}"
-                if parent_ns
-                else name
-            )
+            checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
             task_id = str(
                 uuid5(
                     UUID(checkpoint["id"]),
@@ -403,6 +408,7 @@ def prepare_next_tasks(
             if for_execution:
                 if node := proc.get_node():
                     writes = deque()
+                    task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                     tasks.append(
                         PregelExecutableTask(
                             name,
@@ -443,17 +449,21 @@ def prepare_next_tasks(
                                     ),
                                     CONFIG_KEY_CHECKPOINTER: (
                                         checkpointer
-                                        or config["configurable"].get(
-                                            CONFIG_KEY_CHECKPOINTER
-                                        )
+                                        or configurable.get(CONFIG_KEY_CHECKPOINTER)
                                     ),
+                                    CONFIG_KEY_CHECKPOINT_MAP: {
+                                        **configurable.get(
+                                            CONFIG_KEY_CHECKPOINT_MAP, {}
+                                        ),
+                                        parent_ns: checkpoint["id"],
+                                    },
                                     CONFIG_KEY_RESUMING: is_resuming,
-                                    "checkpoint_id": checkpoint["id"],
-                                    "checkpoint_ns": checkpoint_ns,
+                                    "checkpoint_ns": task_checkpoint_ns,
                                 },
                             ),
                             triggers,
                             proc.retry_policy,
+                            None,
                             task_id,
                         )
                     )
@@ -464,7 +474,6 @@ def prepare_next_tasks(
 
 def _proc_input(
     step: int,
-    name: str,
     proc: PregelNode,
     managed: ManagedValueMapping,
     channels: Mapping[str, BaseChannel],
@@ -475,16 +484,17 @@ def _proc_input(
     # then invoke the process with the values of all non-empty channels
     if isinstance(proc.channels, dict):
         try:
-            val: dict = {
-                k: read_channel(
-                    channels,
-                    chan,
-                    catch=chan not in proc.triggers,
-                )
-                if chan in channels
-                else managed[k](step)
-                for k, chan in proc.channels.items()
-            }
+            val: dict[str, Any] = {}
+            for k, chan in proc.channels.items():
+                if chan in proc.triggers:
+                    val[k] = read_channel(channels, chan, catch=False)
+                elif chan in channels:
+                    try:
+                        val[k] = read_channel(channels, chan, catch=False)
+                    except EmptyChannelError:
+                        continue
+                else:
+                    val[k] = managed[k](step)
         except EmptyChannelError:
             return
     elif isinstance(proc.channels, list):

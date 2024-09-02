@@ -13,7 +13,7 @@ from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint, CheckpointMetadata, PendingWrite
 from langgraph.constants import ERROR, INTERRUPT, TAG_HIDDEN
 from langgraph.pregel.io import read_channels
-from langgraph.pregel.types import PregelExecutableTask, PregelTask
+from langgraph.pregel.types import PregelExecutableTask, PregelTask, StateSnapshot
 
 
 class TaskPayload(TypedDict):
@@ -78,11 +78,11 @@ def map_debug_tasks(
     step: int, tasks: list[PregelExecutableTask]
 ) -> Iterator[DebugOutputTask]:
     ts = datetime.now(timezone.utc).isoformat()
-    for name, input, _, _, config, triggers, _, _ in tasks:
-        if config is not None and TAG_HIDDEN in config.get("tags", []):
+    for task in tasks:
+        if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
             continue
 
-        metadata = config["metadata"].copy()
+        metadata = task.config["metadata"].copy()
         metadata.pop("checkpoint_id", None)
 
         yield {
@@ -90,10 +90,12 @@ def map_debug_tasks(
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, metadata)))),
-                "name": name,
-                "input": input,
-                "triggers": triggers,
+                "id": str(
+                    uuid5(TASK_NAMESPACE, json.dumps((task.name, step, metadata)))
+                ),
+                "name": task.name,
+                "input": task.input,
+                "triggers": task.triggers,
             },
         }
 
@@ -107,11 +109,11 @@ def map_debug_task_results(
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
     ts = datetime.now(timezone.utc).isoformat()
-    for (name, _, _, _, config, _, _, _), writes in tasks:
-        if config is not None and TAG_HIDDEN in config.get("tags", []):
+    for task, writes in tasks:
+        if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
             continue
 
-        metadata = config["metadata"].copy()
+        metadata = task.config["metadata"].copy()
         metadata.pop("checkpoint_id", None)
         # TODO: make task IDs deterministic in tests and reuse task IDs for payload ID
 
@@ -120,8 +122,10 @@ def map_debug_task_results(
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(uuid5(TASK_NAMESPACE, json.dumps((name, step, metadata)))),
-                "name": name,
+                "id": str(
+                    uuid5(TASK_NAMESPACE, json.dumps((task.name, step, metadata)))
+                ),
+                "name": task.name,
                 "error": next((w[1] for w in writes if w[0] == ERROR), None),
                 "result": [w for w in writes if w[0] in stream_channels_list],
                 "interrupts": [asdict(w[1]) for w in writes if w[0] == INTERRUPT],
@@ -160,7 +164,7 @@ def map_debug_checkpoint(
                     "name": t.name,
                     "interrupts": tuple(asdict(i) for i in t.interrupts),
                 }
-                for t in tasks_w_writes(tasks, pending_writes)
+                for t in tasks_w_writes(tasks, pending_writes, None)
             ],
         },
     }
@@ -215,6 +219,7 @@ def print_step_checkpoint(
 def tasks_w_writes(
     tasks: list[PregelExecutableTask],
     pending_writes: Optional[list[PendingWrite]],
+    states: Optional[dict[str, Union[RunnableConfig, StateSnapshot]]],
 ) -> tuple[PregelTask, ...]:
     pending_writes = pending_writes or []
     return tuple(
@@ -232,6 +237,7 @@ def tasks_w_writes(
             tuple(
                 v for tid, n, v in pending_writes if tid == task.id and n == INTERRUPT
             ),
+            states.get(task.id) if states else None,
         )
         for task in tasks
     )

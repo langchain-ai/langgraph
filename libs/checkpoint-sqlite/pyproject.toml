@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint-sqlite"
-version = "1.0.0"
+version = "1.0.1"
 description = "Library with a SQLite implementation of LangGraph checkpoint saver."
 authors = []
 license = "MIT"

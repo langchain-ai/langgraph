@@ -60,7 +60,7 @@ Now we can start our two runs and join the second on euntil it has completed:
         thread["thread_id"],
         assistant_id,
         input={"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
-        multitask_strategychrom="interrupt",
+        multitask_strategy="interrupt",
     )
     # wait until the second run completes
     await client.runs.join(thread["thread_id"], run["run_id"])

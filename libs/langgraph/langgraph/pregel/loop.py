@@ -2,16 +2,19 @@ import asyncio
 import concurrent.futures
 from collections import deque
 from contextlib import AsyncExitStack, ExitStack
+from itertools import tee
 from types import TracebackType
 from typing import (
     Any,
     AsyncContextManager,
     Callable,
     ContextManager,
+    Iterable,
     List,
     Literal,
     Mapping,
     Optional,
+    Protocol,
     Sequence,
     Tuple,
     Type,
@@ -36,8 +39,10 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
-    CONFIG_KEY_READ,
+    CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_RESUMING,
+    CONFIG_KEY_STREAM,
+    CONFIG_KEY_TASK_ID,
     ERROR,
     INPUT,
     INTERRUPT,
@@ -55,6 +60,7 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
     should_interrupt,
 )
+from langgraph.pregel.config import patch_configurable
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
     map_debug_task_results,
@@ -85,6 +91,27 @@ INPUT_RESUMING = object()
 EMPTY_SEQ = ()
 
 
+class StreamProtocol(Protocol):
+    def extend(self, values: Iterable[Tuple[str, str, Any]]) -> None: ...
+    def popleft(self) -> Tuple[str, str, Any]: ...
+    def __bool__(self) -> bool: ...
+
+
+class DuplexStream(StreamProtocol):
+    def __init__(self, *streams: StreamProtocol) -> None:
+        self.streams = streams
+
+    def extend(self, values: Iterable[Tuple[str, str, Any]]) -> None:
+        for stream, vv in zip(self.streams, tee(values, len(self.streams))):
+            stream.extend(vv)
+
+    def popleft(self) -> Tuple[str, str, Any]:
+        return self.streams[0].popleft()
+
+    def __bool__(self) -> bool:
+        return bool(self.streams[0])
+
+
 class PregelLoop:
     input: Optional[Any]
     config: RunnableConfig
@@ -95,6 +122,7 @@ class PregelLoop:
     output_keys: Union[str, Sequence[str]]
     stream_keys: Union[str, Sequence[str]]
     is_nested: bool
+    skip_done_tasks: bool
 
     checkpointer_get_next_version: Callable[[Optional[V]], V]
     checkpointer_put_writes: Optional[
@@ -118,7 +146,6 @@ class PregelLoop:
     checkpoint_config: RunnableConfig
     checkpoint_metadata: CheckpointMetadata
     checkpoint_pending_writes: List[PendingWrite]
-    # (thread_id, checkpoint_ns -> channel_versions)
     checkpoint_previous_versions: dict[str, Union[str, float, int]]
 
     step: int
@@ -127,7 +154,7 @@ class PregelLoop:
         "pending", "done", "interrupt_before", "interrupt_after", "out_of_steps"
     ]
     tasks: Sequence[PregelExecutableTask]
-    stream: deque[Tuple[str, Any]]
+    stream: StreamProtocol
     output: Union[None, dict[str, Any], Any] = None
 
     # public
@@ -153,7 +180,31 @@ class PregelLoop:
         self.specs = specs
         self.output_keys = output_keys
         self.stream_keys = stream_keys
-        self.is_nested = CONFIG_KEY_READ in self.config.get("configurable", {})
+        self.is_nested = CONFIG_KEY_TASK_ID in self.config.get("configurable", {})
+        self.skip_done_tasks = "checkpoint_id" not in config["configurable"]
+        if CONFIG_KEY_STREAM in config["configurable"]:
+            self.stream = DuplexStream(
+                self.stream, config["configurable"][CONFIG_KEY_STREAM]
+            )
+        if not self.is_nested and config["configurable"].get("checkpoint_ns"):
+            self.config = patch_configurable(
+                config, {"checkpoint_ns": "", "checkpoint_id": None}
+            )
+        if (
+            CONFIG_KEY_CHECKPOINT_MAP in self.config["configurable"]
+            and self.config["configurable"].get("checkpoint_ns")
+            in self.config["configurable"][CONFIG_KEY_CHECKPOINT_MAP]
+        ):
+            self.checkpoint_config = patch_configurable(
+                self.config,
+                {
+                    "checkpoint_id": config["configurable"][CONFIG_KEY_CHECKPOINT_MAP][
+                        self.config["configurable"]["checkpoint_ns"]
+                    ]
+                },
+            )
+        else:
+            self.checkpoint_config = config
 
     def put_writes(self, task_id: str, writes: Sequence[tuple[str, Any]]) -> None:
         """Put writes for a task, to be read by the next tick."""
@@ -176,17 +227,23 @@ class PregelLoop:
                 writes,
                 task_id,
             )
+        self._output_writes(task_id, writes)
+
+    def _output_writes(
+        self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
+    ) -> None:
         if task := next((t for t in self.tasks if t.id == task_id), None):
             self.stream.extend(
-                ("updates", v)
-                for v in map_output_updates(self.output_keys, [(task, writes)])
+                (self.config["configurable"].get("checkpoint_ns", ""), "updates", v)
+                for v in map_output_updates(self.output_keys, [(task, writes)], cached)
             )
-            self.stream.extend(
-                ("debug", v)
-                for v in map_debug_task_results(
-                    self.step, [(task, writes)], self.stream_keys
+            if not cached:
+                self.stream.extend(
+                    (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
+                    for v in map_debug_task_results(
+                        self.step, [(task, writes)], self.stream_keys
+                    )
                 )
-            )
 
     def tick(
         self,
@@ -218,7 +275,7 @@ class PregelLoop:
                 self._update_mv(key, values)
             # produce values output
             self.stream.extend(
-                ("values", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "values", v)
                 for v in map_output_values(self.output_keys, writes, self.channels)
             )
             # clear pending writes
@@ -266,7 +323,7 @@ class PregelLoop:
         # produce debug output
         if self._checkpointer_put_after_previous is not None:
             self.stream.extend(
-                ("debug", v)
+                (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
                 for v in map_debug_checkpoint(
                     self.step - 1,  # printing checkpoint for previous step
                     self.checkpoint_config,
@@ -285,12 +342,16 @@ class PregelLoop:
             return False
 
         # if there are pending writes from a previous loop, apply them
-        if self.checkpoint_pending_writes:
+        if self.skip_done_tasks and self.checkpoint_pending_writes:
             for tid, k, v in self.checkpoint_pending_writes:
                 if k in (ERROR, INTERRUPT):
                     continue
                 if task := next((t for t in self.tasks if t.id == tid), None):
                     task.writes.append((k, v))
+            # print output for any tasks we applied previous writes to
+            for task in self.tasks:
+                if task.writes:
+                    self._output_writes(task.id, task.writes, cached=True)
 
         # if all tasks have finished, re-tick
         if all(task.writes for task in self.tasks):
@@ -310,7 +371,10 @@ class PregelLoop:
                 return False
 
         # produce debug output
-        self.stream.extend(("debug", v) for v in map_debug_tasks(self.step, self.tasks))
+        self.stream.extend(
+            (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
+            for v in map_debug_tasks(self.step, self.tasks)
+        )
 
         return True
 
@@ -332,6 +396,11 @@ class PregelLoop:
                 if k in self.checkpoint["channel_versions"]:
                     version = self.checkpoint["channel_versions"][k]
                     self.checkpoint["versions_seen"][INTERRUPT][k] = version
+            # produce values output
+            self.stream.extend(
+                (self.config["configurable"].get("checkpoint_ns", ""), "values", v)
+                for v in map_output_values(self.output_keys, True, self.channels)
+            )
         # map inputs to channel updates
         elif input_writes := deque(map_input(input_keys, self.input)):
             # discard any unfinished tasks from previous checkpoint
@@ -353,7 +422,7 @@ class PregelLoop:
                 self.checkpointer_get_next_version,
             ), "Can't write to SharedValues in graph input"
             # save input checkpoint
-            self._put_checkpoint({"source": "input", "writes": self.input})
+            self._put_checkpoint({"source": "input", "writes": dict(input_writes)})
         else:
             raise EmptyInputError(f"Received no input for {input_keys}")
         # done with input
@@ -362,21 +431,15 @@ class PregelLoop:
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # assign step
         metadata["step"] = self.step
+        metadata["parents"] = self.config["configurable"].get(
+            CONFIG_KEY_CHECKPOINT_MAP, {}
+        )
         # bail if no checkpointer
         if self._checkpointer_put_after_previous is not None:
             # create new checkpoint
             self.checkpoint_metadata = metadata
             self.checkpoint = create_checkpoint(
-                self.checkpoint,
-                self.channels,
-                self.step,
-                # child graphs keep at most one checkpoint per parent checkpoint
-                # this is achieved by writing child checkpoints as progress is made
-                # (so that error recovery / resuming from interrupt don't lose work)
-                # but doing so always with an id equal to that of the parent checkpoint
-                id=self.config["configurable"]["checkpoint_id"]
-                if self.is_nested
-                else None,
+                self.checkpoint, self.channels, self.step
             )
 
             self.checkpoint_config = {
@@ -488,7 +551,9 @@ class SyncPregelLoop(PregelLoop, ContextManager):
 
     def __enter__(self) -> Self:
         saved = (
-            self.checkpointer.get_tuple(self.config) if self.checkpointer else None
+            self.checkpointer.get_tuple(self.checkpoint_config)
+            if self.checkpointer
+            else None
         ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])
         self.checkpoint_config = {
             **self.config,
@@ -580,7 +645,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
 
     async def __aenter__(self) -> Self:
         saved = (
-            await self.checkpointer.aget_tuple(self.config)
+            await self.checkpointer.aget_tuple(self.checkpoint_config)
             if self.checkpointer
             else None
         ) or CheckpointTuple(self.config, empty_checkpoint(), {"step": -2}, None, [])

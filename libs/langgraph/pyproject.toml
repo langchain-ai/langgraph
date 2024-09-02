@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph"
-version = "0.2.14"
+version = "0.2.16"
 description = "Building stateful, multi-actor applications with LLMs"
 authors = []
 license = "MIT"
@@ -66,7 +66,6 @@ omit = ["tests/*"]
 [tool.pytest-watcher]
 now = true
 delay = 0.1
-runner_args = ["--ff", "-v", "-x", "-n", "auto", "--dist", "worksteal", "--snapshot-update", "--tb", "short"]
 patterns = ["*.py"]
 
 [build-system]

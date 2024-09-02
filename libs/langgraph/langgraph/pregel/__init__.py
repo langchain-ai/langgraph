@@ -5,7 +5,6 @@ import concurrent.futures
 import time
 from collections import deque
 from functools import partial
-from inspect import signature
 from typing import (
     Any,
     AsyncIterator,
@@ -29,6 +28,7 @@ from langchain_core.load.dump import dumpd
 from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.runnables import (
     Runnable,
+    RunnableLambda,
     RunnableSequence,
     RunnableSerializable,
 )
@@ -44,6 +44,7 @@ from langchain_core.runnables.config import (
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     create_model,
+    get_function_nonlocals,
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
@@ -60,14 +61,16 @@ from langgraph.checkpoint.base import (
     empty_checkpoint,
 )
 from langgraph.constants import (
-    CHECKPOINT_NAMESPACE_SEPARATOR,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
+    CONFIG_KEY_STREAM,
+    CONFIG_KEY_TASK_ID,
     ERROR,
     INTERRUPT,
-    SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
+    NS_END,
+    NS_SEP,
 )
 from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueSpec
@@ -77,13 +80,13 @@ from langgraph.pregel.algo import (
     local_write,
     prepare_next_tasks,
 )
+from langgraph.pregel.config import patch_checkpoint_map, patch_configurable
 from langgraph.pregel.debug import (
     print_step_checkpoint,
     print_step_tasks,
     print_step_writes,
     tasks_w_writes,
 )
-from langgraph.pregel.get_state import assemble_state_snapshot_hierarchy
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
@@ -101,6 +104,7 @@ from langgraph.pregel.utils import (
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
+from langgraph.utils import RunnableCallable
 
 WriteValue = Union[
     Runnable[Input, Output],
@@ -180,181 +184,6 @@ class Channel:
                 for k, v in kwargs.items()
             ]
         )
-
-
-def _get_checkpoint_ns_to_graph(
-    graph: Pregel,
-    checkpoint_ns_to_graph: Optional[dict[str, Pregel]] = None,
-    checkpoint_ns: str = "",
-    max_depth: int = 10,
-) -> Pregel:
-    if checkpoint_ns_to_graph is None:
-        checkpoint_ns_to_graph = {}
-
-    if max_depth <= 0:
-        raise RecursionError(
-            "Reached maximum recursion depth while building checkpoint NS -> graph mapping."
-        )
-
-    for node_name, node in graph.nodes.items():
-        new_checkpoint_ns = (
-            f"{checkpoint_ns}{CHECKPOINT_NAMESPACE_SEPARATOR}{node_name}"
-            if checkpoint_ns
-            else node_name
-        )
-        if isinstance(node.bound, Pregel):
-            _get_checkpoint_ns_to_graph(
-                node.bound, checkpoint_ns_to_graph, new_checkpoint_ns, max_depth - 1
-            )
-        elif isinstance(node.bound, RunnableSequence):
-            for runnable in node.bound.steps:
-                if isinstance(runnable, Pregel):
-                    _get_checkpoint_ns_to_graph(
-                        runnable,
-                        checkpoint_ns_to_graph,
-                        new_checkpoint_ns,
-                        max_depth - 1,
-                    )
-
-    checkpoint_ns_to_graph[checkpoint_ns] = graph
-    return checkpoint_ns_to_graph
-
-
-def _prepare_state_snapshot(
-    config: RunnableConfig,
-    checkpoint_ns_to_graph: dict[str, Pregel],
-    checkpoint_tuples: Iterator[CheckpointTuple],
-) -> StateSnapshot:
-    checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-    checkpoint_id = config["configurable"].get("checkpoint_id")
-    checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
-    for saved in checkpoint_tuples:
-        saved_checkpoint_ns = saved.config["configurable"]["checkpoint_ns"]
-        saved_checkpoint_id = saved.config["configurable"]["checkpoint_id"]
-        if checkpoint_id and saved_checkpoint_id != checkpoint_id:
-            continue
-
-        graph_checkpoint_ns = saved_checkpoint_ns.split(
-            SEND_CHECKPOINT_NAMESPACE_SEPARATOR
-        )[0]
-        graph = checkpoint_ns_to_graph.get(graph_checkpoint_ns)
-        if graph is None:
-            continue
-
-        with ChannelsManager(
-            graph.channels, saved.checkpoint, saved.config, skip_context=True
-        ) as (
-            channels,
-            managed,
-        ):
-            next_tasks = prepare_next_tasks(
-                saved.checkpoint,
-                graph.nodes,
-                channels,
-                managed,
-                saved.config,
-                saved.metadata.get("step", -1) + 1,
-                for_execution=False,
-            )
-            state_snapshot = StateSnapshot(
-                read_channels(channels, graph.stream_channels_asis),
-                tuple(t.name for t in next_tasks),
-                saved.config,
-                saved.metadata,
-                saved.checkpoint["ts"],
-                saved.parent_config,
-                tasks_w_writes(next_tasks, saved.pending_writes),
-            )
-
-        checkpoint_ns_to_state_snapshots[saved_checkpoint_ns] = state_snapshot
-
-    if not checkpoint_ns_to_state_snapshots:
-        return StateSnapshot(
-            values={},
-            next=(),
-            config=config,
-            metadata=None,
-            created_at=None,
-            parent_config=None,
-            tasks=(),
-        )
-
-    state_snapshot = assemble_state_snapshot_hierarchy(
-        checkpoint_ns, checkpoint_ns_to_state_snapshots
-    )
-    return state_snapshot
-
-
-async def _prepare_state_snapshot_async(
-    config: RunnableConfig,
-    checkpoint_ns_to_graph: dict[str, Pregel],
-    checkpoint_tuples: AsyncIterator[CheckpointTuple],
-) -> StateSnapshot:
-    checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-    checkpoint_id = config["configurable"].get("checkpoint_id")
-    checkpoint_ns_to_state_snapshots: dict[str, StateSnapshot] = {}
-    async for saved in checkpoint_tuples:
-        saved_checkpoint_ns = saved.config["configurable"]["checkpoint_ns"]
-        saved_checkpoint_id = saved.config["configurable"]["checkpoint_id"]
-        if checkpoint_id and saved_checkpoint_id != checkpoint_id:
-            continue
-
-        graph_checkpoint_ns = saved_checkpoint_ns.split(
-            SEND_CHECKPOINT_NAMESPACE_SEPARATOR
-        )[0]
-        graph = checkpoint_ns_to_graph.get(graph_checkpoint_ns)
-        if graph is None:
-            continue
-
-        async with AsyncChannelsManager(
-            graph.channels, saved.checkpoint, saved.config, skip_context=True
-        ) as (channels, managed):
-            next_tasks = prepare_next_tasks(
-                saved.checkpoint,
-                graph.nodes,
-                channels,
-                managed,
-                saved.config,
-                saved.metadata.get("step", -1) + 1,
-                for_execution=False,
-            )
-            state_snapshot = StateSnapshot(
-                read_channels(channels, graph.stream_channels_asis),
-                tuple(t.name for t in next_tasks),
-                saved.config,
-                saved.metadata,
-                saved.checkpoint["ts"],
-                saved.parent_config,
-                tasks_w_writes(next_tasks, saved.pending_writes),
-            )
-
-        checkpoint_ns_to_state_snapshots[saved_checkpoint_ns] = state_snapshot
-
-    if not checkpoint_ns_to_state_snapshots:
-        return StateSnapshot(
-            values={},
-            next=(),
-            config=config,
-            metadata=None,
-            created_at=None,
-            parent_config=None,
-            tasks=(),
-        )
-
-    state_snapshot = assemble_state_snapshot_hierarchy(
-        checkpoint_ns, checkpoint_ns_to_state_snapshots
-    )
-    return state_snapshot
-
-
-def _has_nested_interrupts(
-    graph: Pregel,
-) -> bool:
-    for child in graph.subgraphs:
-        if child.interrupt_after_nodes or child.interrupt_before_nodes:
-            return True
-    else:
-        return False
 
 
 class Pregel(
@@ -526,60 +355,262 @@ class Pregel(
             k for k in self.channels if isinstance(self.channels[k], BaseChannel)
         ]
 
-    @property
-    def subgraphs(self) -> Iterator[Pregel]:
-        for node in self.nodes.values():
-            if isinstance(node.bound, Pregel):
-                yield node.bound
-                yield from node.bound.subgraphs
-            elif isinstance(node.bound, RunnableSequence):
-                for runnable in node.bound.steps:
-                    if isinstance(runnable, Pregel):
-                        yield runnable
-                        yield from runnable.subgraphs
+    def get_subgraphs(self, recurse: bool = False) -> Iterator[tuple[str, Pregel]]:
+        for name, node in self.nodes.items():
+            # find the subgraph, if any
+            graph: Optional[Pregel] = None
+            candidates = [node.bound]
+            for candidate in candidates:
+                if isinstance(candidate, Pregel):
+                    graph = candidate
+                    break
+                elif isinstance(candidate, RunnableSequence):
+                    candidates.extend(candidate.steps)
+                elif isinstance(candidate, RunnableLambda):
+                    candidates.extend(candidate.deps)
+                elif isinstance(candidate, RunnableCallable):
+                    if candidate.func is not None:
+                        candidates.extend(
+                            nl.__self__ if hasattr(nl, "__self__") else nl
+                            for nl in get_function_nonlocals(candidate.func)
+                        )
+                    if candidate.afunc is not None:
+                        candidates.extend(
+                            nl.__self__ if hasattr(nl, "__self__") else nl
+                            for nl in get_function_nonlocals(candidate.afunc)
+                        )
+            # if found, yield recursively
+            if graph:
+                yield name, graph
+                if recurse:
+                    yield from (
+                        (f"{name}{NS_SEP}{n}", s)
+                        for n, s in graph.get_subgraphs(recurse=recurse)
+                    )
 
-    def get_state(self, config: RunnableConfig) -> StateSnapshot:
+    async def aget_subgraphs(
+        self, recurse: bool = False
+    ) -> AsyncIterator[tuple[str, Pregel]]:
+        for name, node in self.get_subgraphs(recurse=recurse):
+            yield name, node
+
+    def _prepare_state_snapshot(
+        self,
+        config: RunnableConfig,
+        saved: Optional[CheckpointTuple],
+        recurse: Optional[BaseCheckpointSaver] = False,
+    ) -> StateSnapshot:
+        if not saved:
+            return StateSnapshot(
+                values={},
+                next=(),
+                config=config,
+                metadata=None,
+                created_at=None,
+                parent_config=None,
+                tasks=(),
+            )
+
+        with ChannelsManager(
+            self.channels, saved.checkpoint, saved.config, skip_context=True
+        ) as (channels, managed):
+            # tasks for this checkpoint
+            next_tasks = prepare_next_tasks(
+                saved.checkpoint,
+                self.nodes,
+                channels,
+                managed,
+                saved.config,
+                saved.metadata.get("step", -1) + 1,
+                for_execution=False,
+            )
+            # get the subgraphs
+            subgraphs = dict(self.get_subgraphs())
+            parent_ns = saved.config["configurable"].get("checkpoint_ns", "")
+            task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
+            for task in next_tasks:
+                if task.name not in subgraphs:
+                    continue
+                # assemble checkpoint_ns for this task
+                task_ns = f"{task.name}{NS_END}{task.id}"
+                if parent_ns:
+                    task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+                if not recurse:
+                    # set config as signal that subgraph checkpoints exist
+                    config = {
+                        "configurable": {
+                            "thread_id": saved.config["configurable"]["thread_id"],
+                            "checkpoint_ns": task_ns,
+                        }
+                    }
+                    task_states[task.id] = config
+                else:
+                    # get the state of the subgraph
+                    config = {
+                        "configurable": {
+                            CONFIG_KEY_CHECKPOINTER: recurse,
+                            "thread_id": saved.config["configurable"]["thread_id"],
+                            "checkpoint_ns": task_ns,
+                        }
+                    }
+                    task_states[task.id] = subgraphs[task.name].get_state(
+                        config, subgraphs=True
+                    )
+            # assemble the state snapshot
+            return StateSnapshot(
+                read_channels(channels, self.stream_channels_asis),
+                tuple(t.name for t in next_tasks),
+                patch_checkpoint_map(saved.config, saved.metadata),
+                saved.metadata,
+                saved.checkpoint["ts"],
+                saved.parent_config,
+                tasks_w_writes(next_tasks, saved.pending_writes, task_states),
+            )
+
+    async def _aprepare_state_snapshot(
+        self,
+        config: RunnableConfig,
+        saved: Optional[CheckpointTuple],
+        recurse: Optional[BaseCheckpointSaver] = False,
+    ) -> StateSnapshot:
+        if not saved:
+            return StateSnapshot(
+                values={},
+                next=(),
+                config=config,
+                metadata=None,
+                created_at=None,
+                parent_config=None,
+                tasks=(),
+            )
+
+        async with AsyncChannelsManager(
+            self.channels, saved.checkpoint, saved.config, skip_context=True
+        ) as (
+            channels,
+            managed,
+        ):
+            # tasks for this checkpoint
+            next_tasks = prepare_next_tasks(
+                saved.checkpoint,
+                self.nodes,
+                channels,
+                managed,
+                saved.config,
+                saved.metadata.get("step", -1) + 1,
+                for_execution=False,
+            )
+            # get the subgraphs
+            subgraphs = {n: g async for n, g in self.aget_subgraphs()}
+            parent_ns = saved.config["configurable"].get("checkpoint_ns", "")
+            task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
+            for task in next_tasks:
+                if task.name not in subgraphs:
+                    continue
+                # assemble checkpoint_ns for this task
+                task_ns = f"{task.name}{NS_END}{task.id}"
+                if parent_ns:
+                    task_ns = f"{parent_ns}{NS_SEP}{task_ns}"
+                if not recurse:
+                    # set config as signal that subgraph checkpoints exist
+                    config = {
+                        "configurable": {
+                            "thread_id": saved.config["configurable"]["thread_id"],
+                            "checkpoint_ns": task_ns,
+                        }
+                    }
+                    task_states[task.id] = config
+                else:
+                    # get the state of the subgraph
+                    config = {
+                        "configurable": {
+                            CONFIG_KEY_CHECKPOINTER: recurse,
+                            "thread_id": saved.config["configurable"]["thread_id"],
+                            "checkpoint_ns": task_ns,
+                        }
+                    }
+                    task_states[task.id] = await subgraphs[task.name].aget_state(
+                        config, subgraphs=recurse
+                    )
+            # assemble the state snapshot
+            return StateSnapshot(
+                read_channels(channels, self.stream_channels_asis),
+                tuple(t.name for t in next_tasks),
+                patch_checkpoint_map(saved.config, saved.metadata),
+                saved.metadata,
+                saved.checkpoint["ts"],
+                saved.parent_config,
+                tasks_w_writes(next_tasks, saved.pending_writes, task_states),
+            )
+
+    def get_state(
+        self, config: RunnableConfig, *, subgraphs: bool = False
+    ) -> StateSnapshot:
         """Get the current state of the graph."""
-        if not self.checkpointer:
+        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not checkpointer:
             raise ValueError("No checkpointer set")
 
+        if (
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            for name, pregel in self.get_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    return pregel.get_state(
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
+                        subgraphs=subgraphs,
+                    )
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+
         config = merge_configs(self.config, config) if self.config else config
-        saved = self.checkpointer.get_tuple(config)
-        checkpoint_config = saved.config if saved else config
-        checkpoint_ns_to_graph: dict[str, Pregel] = _get_checkpoint_ns_to_graph(self)
-
-        # we only lookup subgraph checkpoints if we actually have subgraphs
-        if len(set(checkpoint_ns_to_graph)) == 1:
-            checkpoint_tuples = (saved,)
-        else:
-            checkpoint_tuples = self.checkpointer.list(saved.config)
-
-        return _prepare_state_snapshot(
-            checkpoint_config, checkpoint_ns_to_graph, checkpoint_tuples
+        saved = checkpointer.get_tuple(config)
+        return self._prepare_state_snapshot(
+            config, saved, recurse=checkpointer if subgraphs else None
         )
 
-    async def aget_state(self, config: RunnableConfig) -> StateSnapshot:
+    async def aget_state(
+        self, config: RunnableConfig, *, subgraphs: bool = False
+    ) -> StateSnapshot:
         """Get the current state of the graph."""
-        if not self.checkpointer:
+        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not checkpointer:
             raise ValueError("No checkpointer set")
 
+        if (
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            async for name, pregel in self.aget_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    return await pregel.aget_state(
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
+                        subgraphs=subgraphs,
+                    )
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+
         config = merge_configs(self.config, config) if self.config else config
-        saved = await self.checkpointer.aget_tuple(config)
-        checkpoint_config = saved.config if saved else config
-        checkpoint_ns_to_graph: dict[str, Pregel] = _get_checkpoint_ns_to_graph(self)
-
-        # we only lookup subgraph checkpoints if we actually have subgraphs
-        if len(set(checkpoint_ns_to_graph)) == 1:
-
-            async def alist_checkpoints():
-                yield saved
-
-            checkpoint_tuples = alist_checkpoints()
-        else:
-            checkpoint_tuples = self.checkpointer.alist(saved.config)
-
-        return await _prepare_state_snapshot_async(
-            checkpoint_config, checkpoint_ns_to_graph, checkpoint_tuples
+        saved = await checkpointer.aget_tuple(config)
+        return await self._aprepare_state_snapshot(
+            config, saved, recurse=checkpointer if subgraphs else None
         )
 
     def get_state_history(
@@ -591,37 +622,44 @@ class Pregel(
         limit: Optional[int] = None,
     ) -> Iterator[StateSnapshot]:
         """Get the history of the state of the graph."""
-        if not self.checkpointer:
+        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not checkpointer:
             raise ValueError("No checkpointer set")
+
         if (
-            filter is not None
-            and signature(self.checkpointer.list).parameters.get("filter") is None
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            for name, pregel in self.get_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    yield from pregel.get_state_history(
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
+                        filter=filter,
+                        before=before,
+                        limit=limit,
+                    )
+                    return
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
+
+        config = merge_configs(
+            self.config, config, {"configurable": {"checkpoint_ns": checkpoint_ns}}
+        )
+        # eagerly consume list() to avoid holding up the db cursor
+        for checkpoint_tuple in list(
+            checkpointer.list(config, before=before, limit=limit, filter=filter)
         ):
-            raise ValueError("Checkpointer does not support filtering")
-
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_ns_to_graph = _get_checkpoint_ns_to_graph(self)
-        # find all matching checkpoint tuples for parent and subgraphs
-        checkpoint_tuples = [
-            checkpoint_tuple
-            for checkpoint_tuple in self.checkpointer.list(
-                merge_configs(self.config, config) if self.config else config,
-                before=before,
-                limit=limit,
-                filter=filter,
+            yield self._prepare_state_snapshot(
+                checkpoint_tuple.config, checkpoint_tuple
             )
-        ]
-        for checkpoint_tuple in checkpoint_tuples:
-            if (
-                checkpoint_tuple.config["configurable"]["checkpoint_ns"]
-                != checkpoint_ns
-            ):
-                continue
-
-            state_snapshot = _prepare_state_snapshot(
-                checkpoint_tuple.config, checkpoint_ns_to_graph, iter(checkpoint_tuples)
-            )
-            yield state_snapshot
 
     async def aget_state_history(
         self,
@@ -632,43 +670,48 @@ class Pregel(
         limit: Optional[int] = None,
     ) -> AsyncIterator[StateSnapshot]:
         """Get the history of the state of the graph."""
-        if not self.checkpointer:
+        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not checkpointer:
             raise ValueError("No checkpointer set")
+
         if (
-            filter is not None
-            and signature(self.checkpointer.list).parameters.get("filter") is None
-        ):
-            raise ValueError("Checkpointer does not support filtering")
-
-        checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        checkpoint_ns_to_graph = _get_checkpoint_ns_to_graph(self)
-        # find all matching checkpoint tuples for parent and subgraphs
-        checkpoint_tuples = [
-            checkpoint_tuple
-            async for checkpoint_tuple in self.checkpointer.alist(
-                merge_configs(self.config, config) if self.config else config,
-                before=before,
-                limit=limit,
-                filter=filter,
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
             )
-        ]
+            # find the subgraph with the matching name
+            async for name, pregel in self.aget_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    async for state in pregel.aget_state_history(
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
+                        filter=filter,
+                        before=before,
+                        limit=limit,
+                    ):
+                        yield state
+                    return
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
-        # turn matching checkpoint tuples into an async iterator
-        async def alist_checkpoints() -> AsyncIterator[CheckpointTuple]:
-            for checkpoint_tuple in checkpoint_tuples:
-                yield checkpoint_tuple
-
-        for checkpoint_tuple in checkpoint_tuples:
-            if (
-                checkpoint_tuple.config["configurable"]["checkpoint_ns"]
-                != checkpoint_ns
-            ):
-                continue
-
-            state_snapshot = await _prepare_state_snapshot_async(
-                checkpoint_tuple.config, checkpoint_ns_to_graph, alist_checkpoints()
+        config = merge_configs(
+            self.config, config, {"configurable": {"checkpoint_ns": checkpoint_ns}}
+        )
+        # eagerly consume list() to avoid holding up the db cursor
+        for checkpoint_tuple in [
+            c
+            async for c in checkpointer.alist(
+                config, before=before, limit=limit, filter=filter
             )
-            yield state_snapshot
+        ]:
+            yield await self._aprepare_state_snapshot(
+                checkpoint_tuple.config, checkpoint_tuple
+            )
 
     def update_state(
         self,
@@ -680,45 +723,62 @@ class Pregel(
         node `as_node`. If `as_node` is not provided, it will be set to the last node
         that updated the state, if not ambiguous.
         """
-        if not self.checkpointer:
+        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not checkpointer:
             raise ValueError("No checkpointer set")
+
+        # delegate to subgraph
+        if (
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            for name, pregel in self.get_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    return pregel.update_state(
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
+                        values,
+                        as_node,
+                    )
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         # get last checkpoint
         config = merge_configs(self.config, config) if self.config else config
-        saved = self.checkpointer.get_tuple(config)
+        saved = checkpointer.get_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
             saved.checkpoint["channel_versions"].copy() if saved else {}
         )
         step = saved.metadata.get("step", -1) if saved else -1
         # merge configurable fields with previous checkpoint config
-        checkpoint_config = {
-            **config,
-            "configurable": {
-                **config["configurable"],
-                # TODO: add proper support for updating nested subgraph state
-                "checkpoint_ns": "",
-            },
-        }
+        checkpoint_config = patch_configurable(
+            config,
+            {"checkpoint_ns": config["configurable"].get("checkpoint_ns", "")},
+        )
         if saved:
-            checkpoint_config = {
-                "configurable": {
-                    **config.get("configurable", {}),
-                    **saved.config["configurable"],
-                }
-            }
+            checkpoint_config = patch_configurable(config, saved.config["configurable"])
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
-            return self.checkpointer.put(
+            next_config = checkpointer.put(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step),
                 {
                     "source": "update",
                     "step": step + 1,
                     "writes": {},
+                    "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 {},
             )
+            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
         elif as_node is None and not any(
             v for vv in checkpoint["versions_seen"].values() for v in vv.values()
         ):
@@ -760,6 +820,7 @@ class Pregel(
                 None,
                 [INTERRUPT],
                 None,
+                None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
@@ -792,24 +853,26 @@ class Pregel(
             )
             # save task writes
             if saved:
-                self.checkpointer.put_writes(checkpoint_config, task.writes, task.id)
+                checkpointer.put_writes(checkpoint_config, task.writes, task.id)
             # apply to checkpoint and save
             assert not apply_writes(
-                checkpoint, channels, [task], self.checkpointer.get_next_version
+                checkpoint, channels, [task], checkpointer.get_next_version
             ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-            return self.checkpointer.put(
+            next_config = checkpointer.put(
                 checkpoint_config,
                 checkpoint,
                 {
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
+                    "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
+            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
     async def aupdate_state(
         self,
@@ -817,12 +880,36 @@ class Pregel(
         values: dict[str, Any] | Any,
         as_node: Optional[str] = None,
     ) -> RunnableConfig:
-        if not self.checkpointer:
+        checkpointer: Optional[BaseCheckpointSaver] = config["configurable"].get(
+            CONFIG_KEY_CHECKPOINTER, self.checkpointer
+        )
+        if not checkpointer:
             raise ValueError("No checkpointer set")
+
+        # delegate to subgraph
+        if (
+            checkpoint_ns := config["configurable"].get("checkpoint_ns", "")
+        ) and CONFIG_KEY_CHECKPOINTER not in config["configurable"]:
+            # remove task_ids from checkpoint_ns
+            recast_checkpoint_ns = NS_SEP.join(
+                part.split(NS_END)[0] for part in checkpoint_ns.split(NS_SEP)
+            )
+            # find the subgraph with the matching name
+            async for name, pregel in self.aget_subgraphs(recurse=True):
+                if name == recast_checkpoint_ns:
+                    return await pregel.aupdate_state(
+                        patch_configurable(
+                            config, {CONFIG_KEY_CHECKPOINTER: checkpointer}
+                        ),
+                        values,
+                        as_node,
+                    )
+            else:
+                raise ValueError(f"Subgraph {recast_checkpoint_ns} not found")
 
         # get last checkpoint
         config = merge_configs(self.config, config) if self.config else config
-        saved = await self.checkpointer.aget_tuple(config)
+        saved = await checkpointer.aget_tuple(config)
         checkpoint = copy_checkpoint(saved.checkpoint) if saved else empty_checkpoint()
         checkpoint_previous_versions = (
             saved.checkpoint["channel_versions"].copy() if saved else {}
@@ -846,16 +933,18 @@ class Pregel(
             }
         # find last node that updated the state, if not provided
         if values is None and as_node is None:
-            return await self.checkpointer.aput(
+            next_config = await checkpointer.aput(
                 checkpoint_config,
                 create_checkpoint(checkpoint, None, step),
                 {
                     "source": "update",
                     "step": step + 1,
                     "writes": {},
+                    "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 {},
             )
+            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
         elif as_node is None and not saved:
             if (
                 isinstance(self.input_channels, str)
@@ -895,6 +984,7 @@ class Pregel(
                 None,
                 [INTERRUPT],
                 None,
+                None,
                 str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
             # execute task
@@ -927,40 +1017,39 @@ class Pregel(
             )
             # save task writes
             if saved:
-                await self.checkpointer.aput_writes(
-                    checkpoint_config, task.writes, task.id
-                )
+                await checkpointer.aput_writes(checkpoint_config, task.writes, task.id)
             # apply to checkpoint and save
             assert not apply_writes(
-                checkpoint, channels, [task], self.checkpointer.get_next_version
+                checkpoint, channels, [task], checkpointer.get_next_version
             ), "Can't write to SharedValues from update_state"
             checkpoint = create_checkpoint(checkpoint, channels, step + 1)
-            return await self.checkpointer.aput(
+            next_config = await checkpointer.aput(
                 checkpoint_config,
                 checkpoint,
                 {
                     "source": "update",
                     "step": step + 1,
                     "writes": {as_node: values},
+                    "parents": saved.metadata.get("parents", {}) if saved else {},
                 },
                 get_new_channel_versions(
                     checkpoint_previous_versions, checkpoint["channel_versions"]
                 ),
             )
+            return patch_checkpoint_map(next_config, saved.metadata if saved else None)
 
     def _defaults(
         self,
-        config: Optional[RunnableConfig] = None,
+        config: RunnableConfig,
         *,
-        stream_mode: Optional[Union[StreamMode, list[StreamMode]]] = None,
-        output_keys: Optional[Union[str, Sequence[str]]] = None,
-        interrupt_before: Optional[Union[All, Sequence[str]]] = None,
-        interrupt_after: Optional[Union[All, Sequence[str]]] = None,
-        debug: Optional[bool] = None,
+        stream_mode: Optional[Union[StreamMode, list[StreamMode]]],
+        output_keys: Optional[Union[str, Sequence[str]]],
+        interrupt_before: Optional[Union[All, Sequence[str]]],
+        interrupt_after: Optional[Union[All, Sequence[str]]],
+        debug: Optional[bool],
     ) -> tuple[
         bool,
         Sequence[StreamMode],
-        Union[str, Sequence[str]],
         Union[str, Sequence[str]],
         Optional[Sequence[str]],
         Optional[Sequence[str]],
@@ -976,14 +1065,10 @@ class Pregel(
         stream_mode = stream_mode if stream_mode is not None else self.stream_mode
         if not isinstance(stream_mode, list):
             stream_mode = [stream_mode]
-        if config and config.get("configurable", {}).get(CONFIG_KEY_READ) is not None:
+        if CONFIG_KEY_TASK_ID in config.get("configurable", {}):
             # if being called as a node in another graph, always use values mode
             stream_mode = ["values"]
-        if (
-            config is not None
-            and config.get("configurable", {}).get(CONFIG_KEY_CHECKPOINTER)
-            and (interrupt_after or interrupt_before or _has_nested_interrupts(self))
-        ):
+        if CONFIG_KEY_CHECKPOINTER in config.get("configurable", {}):
             checkpointer: Optional[BaseCheckpointSaver] = config["configurable"][
                 CONFIG_KEY_CHECKPOINTER
             ]
@@ -1008,6 +1093,7 @@ class Pregel(
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
+        subgraphs: bool = False,
     ) -> Iterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input.
 
@@ -1024,6 +1110,7 @@ class Pregel(
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             debug: Whether to print debug information during execution, defaults to False.
+            subgraphs: Whether to stream subgraphs, defaults to False.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
@@ -1075,6 +1162,20 @@ class Pregel(
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
             ```
         """
+
+        def output() -> Iterator:
+            while loop.stream:
+                ns, mode, payload = loop.stream.popleft()
+                if mode in stream_modes:
+                    if subgraphs and isinstance(stream_mode, list):
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
+                    elif isinstance(stream_mode, list):
+                        yield (mode, payload)
+                    elif subgraphs:
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
+                    else:
+                        yield payload
+
         config = ensure_config(merge_configs(self.config, config))
         callback_manager = get_callback_manager_for_config(config)
         run_manager = callback_manager.on_chain_start(
@@ -1117,6 +1218,8 @@ class Pregel(
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
             ) as loop:
+                if subgraphs:
+                    loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1136,13 +1239,7 @@ class Pregel(
                             self.stream_channels_list,
                         )
                     # emit output
-                    while loop.stream:
-                        mode, payload = loop.stream.popleft()
-                        if mode in stream_modes:
-                            if isinstance(stream_mode, list):
-                                yield (mode, payload)
-                            else:
-                                yield payload
+                    yield from output()
                     # debug flag
                     if debug:
                         print_step_tasks(loop.step, loop.tasks)
@@ -1197,13 +1294,8 @@ class Pregel(
                             # remove references to loop vars
                             del fut, task
                         # emit output
-                        while loop.stream:
-                            mode, payload = loop.stream.popleft()
-                            if mode in stream_modes:
-                                if isinstance(stream_mode, list):
-                                    yield (mode, payload)
-                                else:
-                                    yield payload
+                        yield from output()
+                        # maybe stop other tasks
                         if _should_stop_others(done):
                             break
 
@@ -1219,13 +1311,7 @@ class Pregel(
                             self.stream_channels_list,
                         )
             # emit output
-            while loop.stream:
-                mode, payload = loop.stream.popleft()
-                if mode in stream_modes:
-                    if isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    else:
-                        yield payload
+            yield from output()
             # handle exit
             if loop.status == "out_of_steps":
                 raise GraphRecursionError(
@@ -1249,6 +1335,7 @@ class Pregel(
         interrupt_before: Optional[Union[All, Sequence[str]]] = None,
         interrupt_after: Optional[Union[All, Sequence[str]]] = None,
         debug: Optional[bool] = None,
+        subgraphs: bool = False,
     ) -> AsyncIterator[Union[dict[str, Any], Any]]:
         """Stream graph steps for a single input.
 
@@ -1265,6 +1352,7 @@ class Pregel(
             interrupt_before: Nodes to interrupt before, defaults to all nodes in the graph.
             interrupt_after: Nodes to interrupt after, defaults to all nodes in the graph.
             debug: Whether to print debug information during execution, defaults to False.
+            subgraphs: Whether to stream subgraphs, defaults to False.
 
         Yields:
             The output of each step in the graph. The output shape depends on the stream_mode.
@@ -1316,6 +1404,20 @@ class Pregel(
             {'type': 'task_result', 'timestamp': '2024-06-23T...+00:00', 'step': 2, 'payload': {'id': '...', 'name': 'b', 'result': [('alist', ['there'])]}}
             ```
         """
+
+        def output() -> Iterator:
+            while loop.stream:
+                ns, mode, payload = loop.stream.popleft()
+                if mode in stream_modes:
+                    if subgraphs and isinstance(stream_mode, list):
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
+                    elif isinstance(stream_mode, list):
+                        yield (mode, payload)
+                    elif subgraphs:
+                        yield (tuple(ns.split(NS_SEP)) if ns else (), payload)
+                    else:
+                        yield payload
+
         config = ensure_config(merge_configs(self.config, config))
         callback_manager = get_async_callback_manager_for_config(config)
         run_manager = await callback_manager.on_chain_start(
@@ -1366,6 +1468,8 @@ class Pregel(
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
             ) as loop:
+                if subgraphs:
+                    loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
@@ -1386,13 +1490,8 @@ class Pregel(
                             self.stream_channels_list,
                         )
                     # emit output
-                    while loop.stream:
-                        mode, payload = loop.stream.popleft()
-                        if mode in stream_modes:
-                            if isinstance(stream_mode, list):
-                                yield (mode, payload)
-                            else:
-                                yield payload
+                    for o in output():
+                        yield o
                     # debug flag
                     if debug:
                         print_step_tasks(loop.step, loop.tasks)
@@ -1449,13 +1548,9 @@ class Pregel(
                             # remove references to loop vars
                             del fut, task
                         # emit output
-                        while loop.stream:
-                            mode, payload = loop.stream.popleft()
-                            if mode in stream_modes:
-                                if isinstance(stream_mode, list):
-                                    yield (mode, payload)
-                                else:
-                                    yield payload
+                        for o in output():
+                            yield o
+                        # maybe stop other tasks
                         if _should_stop_others(done):
                             break
 
@@ -1471,13 +1566,8 @@ class Pregel(
                             self.stream_channels_list,
                         )
             # emit output
-            while loop.stream:
-                mode, payload = loop.stream.popleft()
-                if mode in stream_modes:
-                    if isinstance(stream_mode, list):
-                        yield (mode, payload)
-                    else:
-                        yield payload
+            for o in output():
+                yield o
             # handle exit
             if loop.status == "out_of_steps":
                 raise GraphRecursionError(

@@ -31,11 +31,7 @@ from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import (
-    CHECKPOINT_NAMESPACE_SEPARATOR,
-    SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
-    TAG_HIDDEN,
-)
+from langgraph.constants import NS_END, NS_SEP, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
 from langgraph.graph.graph import (
     END,
@@ -321,10 +317,7 @@ class StateGraph(Graph):
         if node == END or node == START:
             raise ValueError(f"Node `{node}` is reserved.")
 
-        for character in (
-            CHECKPOINT_NAMESPACE_SEPARATOR,
-            SEND_CHECKPOINT_NAMESPACE_SEPARATOR,
-        ):
+        for character in (NS_SEP, NS_END):
             if character in node:
                 raise ValueError(
                     f"'{character}' is a reserved character and is not allowed in the node names."

@@ -50,7 +50,6 @@ class SendProtocol(Protocol):
     # Mirrors langgraph.constants.Send
     node: str
     arg: Any
-    id: str
 
     def __hash__(self) -> int: ...
 

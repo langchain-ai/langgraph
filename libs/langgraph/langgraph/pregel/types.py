@@ -57,11 +57,18 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
+class CachePolicy(NamedTuple):
+    """Configuration for caching nodes."""
+
+    pass
+
+
 class PregelTask(NamedTuple):
     id: str
     name: str
     error: Optional[Exception] = None
     interrupts: tuple[Interrupt, ...] = ()
+    state: Union[None, RunnableConfig, "StateSnapshot"] = None
 
 
 class PregelExecutableTask(NamedTuple):
@@ -72,6 +79,7 @@ class PregelExecutableTask(NamedTuple):
     config: RunnableConfig
     triggers: list[str]
     retry_policy: Optional[RetryPolicy]
+    cache_policy: Optional[CachePolicy]
     id: str
 
 
@@ -92,8 +100,6 @@ class StateSnapshot(NamedTuple):
     """Config used to fetch the parent snapshot, if any"""
     tasks: tuple[PregelTask, ...]
     """Tasks to execute in this step. If already attempted, may contain an error."""
-    subgraph_state_snapshots: Optional[dict[str, "StateSnapshot"]] = None
-    """State snapshots of subgraphs represented as a mapping from checkpoint namespace (`checkpoint_ns`) to snapshot."""
 
 
 All = Literal["*"]

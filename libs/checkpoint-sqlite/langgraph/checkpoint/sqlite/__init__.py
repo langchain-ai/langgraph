@@ -244,7 +244,7 @@ class SqliteSaver(BaseCheckpointSaver):
                     }
                 # find any pending writes
                 cur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
                     (
                         str(config["configurable"]["thread_id"]),
                         checkpoint_ns,
@@ -331,7 +331,7 @@ class SqliteSaver(BaseCheckpointSaver):
                 metadata,
             ) in cur:
                 wcur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
                     (thread_id, checkpoint_ns, checkpoint_id),
                 )
                 yield CheckpointTuple(
