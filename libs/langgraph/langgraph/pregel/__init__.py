@@ -25,7 +25,7 @@ from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
 from langchain_core.load.dump import dumpd
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
+from pydantic import BaseModel, Field, root_validator
 from langchain_core.runnables import (
     Runnable,
     RunnableLambda,

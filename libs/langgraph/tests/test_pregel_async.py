@@ -6140,7 +6140,7 @@ async def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
 async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class(
     snapshot: SnapshotAssertion, mocker: MockerFixture
 ) -> None:
-    from langchain_core.pydantic_v1 import BaseModel, ValidationError
+    from pydantic import BaseModel, ValidationError
 
     setup = mocker.Mock()
     teardown = mocker.Mock()

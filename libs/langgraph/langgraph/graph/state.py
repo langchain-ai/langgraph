@@ -17,7 +17,7 @@ from typing import (
     overload,
 )
 
-from langchain_core.pydantic_v1 import BaseModel
+from pydantic import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.utils import (

@@ -443,11 +443,11 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
+    assert app.input_schema.model_json_schema() == {"title": "LangGraphInput", "type": "integer"}
+    assert app.output_schema.model_json_schema() == {"title": "LangGraphOutput", "type": "integer"}
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # raise warnings as errors
-        assert app.config_schema().schema() == {
+        assert app.config_schema().model_json_schema() == {
             "properties": {},
             "title": "LangGraphConfig",
             "type": "object",
@@ -492,14 +492,14 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
         input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
+    assert app.input_schema.model_json_schema() == {"title": "LangGraphInput", "type": "integer"}
+    assert app.output_schema.model_json_schema() == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
-            "output": {"title": "Output", "type": "integer"},
-            "fixed": {"title": "Fixed", "type": "integer"},
-            "output_plus_one": {"title": "Output Plus One", "type": "integer"},
+            "output": {"title": "Output", "type": "integer", "default": None},
+            "fixed": {"title": "Fixed", "type": "integer", "default": None},
+            "output_plus_one": {"title": "Output Plus One", "type": "integer", "default": None},
         },
     }
     assert app.invoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
@@ -520,7 +520,7 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output", "type": "integer"}},
+        "properties": {"output": {"title": "Output", "type": "integer", "default": None}},
     }
     assert app.invoke(2) == {"output": 3}
 
@@ -539,12 +539,12 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {
         "title": "LangGraphInput",
         "type": "object",
-        "properties": {"input": {"title": "Input", "type": "integer"}},
+        "properties": {"input": {"title": "Input", "type": "integer", "default": None}},
     }
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output", "type": "integer"}},
+        "properties": {"output": {"title": "Output", "type": "integer", "default": None}},
     }
     assert app.invoke({"input": 2}) == {"output": 3}
 
@@ -2250,7 +2250,7 @@ def test_conditional_graph(
         ]
         is not None
     )
-
+    breakpoint()
     app_w_interrupt.update_state(
         config,
         {
@@ -7559,7 +7559,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from langchain_core.pydantic_v1 import BaseModel, ValidationError
+    from pydantic import BaseModel, ValidationError
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     setup = mocker.Mock()
@@ -10787,7 +10787,7 @@ def test_remove_message_from_node():
 
 def test_xray_lance(snapshot: SnapshotAssertion):
     from langchain_core.messages import AnyMessage, HumanMessage
-    from langchain_core.pydantic_v1 import BaseModel, Field
+    from pydantic import BaseModel, Field
 
     class Analyst(BaseModel):
         affiliation: str = Field(

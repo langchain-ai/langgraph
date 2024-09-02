@@ -24,7 +24,7 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
-from langchain_core.pydantic_v1 import BaseModel, ValidationError
+from pydantic import BaseModel, ValidationError
 from langchain_core.runnables import (
     RunnableConfig,
 )
@@ -75,7 +75,7 @@ class ValidationNode(RunnableCallable):
         >>> from typing import Literal, Annotated, TypedDict
         ...
         >>> from langchain_anthropic import ChatAnthropic
-        >>> from langchain_core.pydantic_v1 import BaseModel, validator
+        >>> from pydantic import BaseModel, validator
         ...
         >>> from langgraph.graph import END, START, StateGraph
         >>> from langgraph.prebuilt import ValidationNode
