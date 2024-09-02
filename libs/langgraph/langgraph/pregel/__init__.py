@@ -230,7 +230,7 @@ class Pregel(
 
     config: Optional[RunnableConfig] = None
 
-    name: str = "LangGraph"
+    name: Optional[str] = "LangGraph"
 
     class Config:
         arbitrary_types_allowed = True
@@ -247,6 +247,7 @@ class Pregel(
 
     @root_validator(skip_on_failure=True)
     def validate_on_init(cls, values: dict[str, Any]) -> dict[str, Any]:
+        breakpoint()
         if not values["auto_validate"]:
             return values
         validate_graph(
