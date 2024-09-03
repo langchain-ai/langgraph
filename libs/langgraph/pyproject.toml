@@ -14,10 +14,9 @@ langgraph-checkpoint = "^1.0.2"
 
 
 [tool.poetry.group.dev.dependencies]
-pytest = "^7.3.0"
+pytest = "^8.3.2"
 pytest-cov = "^4.0.0"
 pytest-dotenv = "^0.5.2"
-pytest-asyncio = "^0.20.3"
 pytest-mock  = "^3.10.0"
 syrupy = "^4.0.2"
 httpx = "^0.26.0"
@@ -73,7 +72,6 @@ requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
 [tool.pytest.ini_options]
-asyncio_mode = "auto"
 # --strict-markers will raise errors on unknown marks.
 # https://docs.pytest.org/en/7.1.x/how-to/mark.html#raising-errors-on-unknown-marks
 #

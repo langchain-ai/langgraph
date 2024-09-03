@@ -15,7 +15,7 @@ coverage:
 		--cov-report term-missing:skip-covered
 
 start-postgres:
-	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait
+	docker compose -f tests/compose-postgres.yml up -V --force-recreate --wait --remove-orphans
 
 stop-postgres:
 	docker compose -f tests/compose-postgres.yml down -v

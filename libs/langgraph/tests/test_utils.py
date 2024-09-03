@@ -11,6 +11,8 @@ from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
 from langgraph.utils import is_async_callable, is_async_generator
 
+pytestmark = pytest.mark.anyio
+
 
 def test_is_async() -> None:
     async def func() -> None:
