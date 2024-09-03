@@ -1,11 +1,11 @@
 import asyncio
-import functools
 from contextlib import asynccontextmanager
 from typing import (
     Any,
     AsyncIterator,
     Dict,
     Iterator,
+    List,
     Optional,
     Sequence,
     Tuple,
@@ -29,20 +29,6 @@ from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.sqlite.utils import search_where
 
 T = TypeVar("T", bound=callable)
-
-
-def not_implemented_sync_method(func: T) -> T:
-    @functools.wraps(func)
-    def wrapper(*args, **kwargs):
-        raise NotImplementedError(
-            "The AsyncSqliteSaver does not support synchronous methods. "
-            "Consider using the SqliteSaver instead.\n"
-            "from langgraph.checkpoint.sqlite import SqliteSaver\n"
-            "See https://langchain-ai.github.io/langgraph/reference/checkpoints/langgraph.checkpoint.sqlite.SqliteSaver "
-            "for more information."
-        )
-
-    return wrapper
 
 
 class AsyncSqliteSaver(BaseCheckpointSaver):
@@ -132,6 +118,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         self.jsonplus_serde = JsonPlusSerializer()
         self.conn = conn
         self.lock = asyncio.Lock()
+        self.loop = asyncio.get_running_loop()
         self.is_setup = False
 
     @classmethod
@@ -150,16 +137,24 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         async with aiosqlite.connect(conn_string) as conn:
             yield AsyncSqliteSaver(conn)
 
-    @not_implemented_sync_method
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database.
 
-        Note:
-            This method is not implemented for the AsyncSqliteSaver. Use `aget` instead.
-            Or consider using the [SqliteSaver][sqlitesaver] checkpointer.
-        """
+        This method retrieves a checkpoint tuple from the SQLite database based on the
+        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        the matching thread ID and checkpoint ID is retrieved. Otherwise, the latest checkpoint
+        for the given thread ID is retrieved.
 
-    @not_implemented_sync_method
+        Args:
+            config (RunnableConfig): The config to use for retrieving the checkpoint.
+
+        Returns:
+            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+        """
+        return asyncio.run_coroutine_threadsafe(
+            self.aget_tuple(config), self.loop
+        ).result()
+
     def list(
         self,
         config: Optional[RunnableConfig],
@@ -168,21 +163,60 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         before: Optional[RunnableConfig] = None,
         limit: Optional[int] = None,
     ) -> Iterator[CheckpointTuple]:
-        """List checkpoints from the database.
+        """List checkpoints from the database asynchronously.
 
-        Note:
-            This method is not implemented for the AsyncSqliteSaver. Use `alist` instead.
-            Or consider using the [SqliteSaver][sqlitesaver] checkpointer.
+        This method retrieves a list of checkpoint tuples from the SQLite database based
+        on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
+
+        Args:
+            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            limit (Optional[int]): Maximum number of checkpoints to return.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
         """
+        aiter_ = self.alist(config, filter=filter, before=before, limit=limit)
+        while True:
+            try:
+                yield asyncio.run_coroutine_threadsafe(
+                    anext(aiter_), self.loop
+                ).result()
+            except StopAsyncIteration:
+                break
 
-    @not_implemented_sync_method
     def put(
         self,
         config: RunnableConfig,
         checkpoint: Checkpoint,
         metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
     ) -> RunnableConfig:
-        """Save a checkpoint to the database. FOO"""
+        """Save a checkpoint to the database.
+
+        This method saves a checkpoint to the SQLite database. The checkpoint is associated
+        with the provided config and its parent config (if any).
+
+        Args:
+            config (RunnableConfig): The config to associate with the checkpoint.
+            checkpoint (Checkpoint): The checkpoint to save.
+            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (ChannelVersions): New channel versions as of this write.
+
+        Returns:
+            RunnableConfig: Updated configuration after storing the checkpoint.
+        """
+        return asyncio.run_coroutine_threadsafe(
+            self.aput(config, checkpoint, metadata, new_versions), self.loop
+        ).result()
+
+    def put_writes(
+        self, config: RunnableConfig, writes: List[Tuple[str, Any]], task_id: str
+    ) -> None:
+        return asyncio.run_coroutine_threadsafe(
+            self.aput_writes(config, writes, task_id), self.loop
+        ).result()
 
     async def setup(self) -> None:
         """Set up the checkpoint database asynchronously.

@@ -8,6 +8,8 @@ from langgraph.channels.last_value import LastValue
 from langgraph.channels.topic import Topic
 from langgraph.errors import EmptyChannelError, InvalidUpdateError
 
+pytestmark = pytest.mark.anyio
+
 
 def test_last_value() -> None:
     with LastValue(int).from_checkpoint(None, {}) as channel:

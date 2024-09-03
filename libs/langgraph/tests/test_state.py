@@ -1,3 +1,4 @@
+import warnings
 from typing import Annotated as Annotated2
 from typing import Any
 
@@ -45,7 +46,8 @@ def test_warns_invalid_schema(schema: Any):
 )
 def test_doesnt_warn_valid_schema(schema: Any):
     # Assert the function does not raise a warning
-    with pytest.warns(None):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         _warn_invalid_state_schema(schema)
 
 
