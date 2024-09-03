@@ -514,6 +514,7 @@ async def test_cancel_graph_astream_events_v2(checkpointer_name: Optional[str]) 
                 if chunk["event"] == "on_chain_stream" and not chunk["parent_ids"]:
                     got_event = True
                     assert chunk["data"]["chunk"] == {"alittlewhile": {"value": 2}}
+                    await asyncio.sleep(0.1)
                     break
 
         # did break
@@ -2204,8 +2205,6 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_conditional_graph(checkpointer_name: str) -> None:
-    from copy import deepcopy
-
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
@@ -2243,12 +2242,15 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
 
     # Define tool execution logic
     async def execute_tools(data: dict) -> dict:
+        data = data.copy()
         agent_action: AgentAction = data.pop("agent_outcome")
         observation = await {t.name: t for t in tools}[agent_action.tool].ainvoke(
             agent_action.tool_input
         )
         if data.get("intermediate_steps") is None:
             data["intermediate_steps"] = []
+        else:
+            data["intermediate_steps"] = data["intermediate_steps"].copy()
         data["intermediate_steps"].append([agent_action, observation])
         return data
 
@@ -2301,10 +2303,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
         ),
     }
 
-    # deepcopy because the nodes mutate the data
-    assert [
-        deepcopy(c) async for c in app.astream({"input": "what is weather in sf"})
-    ] == [
+    assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
         {
             "agent": {
                 "input": "what is weather in sf",
