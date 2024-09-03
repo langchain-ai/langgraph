@@ -51,6 +51,7 @@ class RunnableCallable(Runnable):
         recurse: bool = True,
         **kwargs: Any,
     ) -> None:
+        self.name = None
         if name is not None:
             self.name = name
         elif func:

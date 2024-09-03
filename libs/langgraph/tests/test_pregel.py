@@ -2194,7 +2194,6 @@ def test_conditional_graph(
         checkpointer=checkpointer,
         interrupt_after=["agent"],
     )
-    breakpoint()
     config = {"configurable": {"thread_id": "1"}}
 
     assert app_w_interrupt.get_graph().to_json() == snapshot
@@ -2251,7 +2250,6 @@ def test_conditional_graph(
         ]
         is not None
     )
-    breakpoint()
     app_w_interrupt.update_state(
         config,
         {
