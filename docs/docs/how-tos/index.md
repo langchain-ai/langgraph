@@ -28,6 +28,7 @@ LangGraph makes it easy to persist state across graph runs. The guide below show
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
+- [How to share state between threads](momery/shared-state.ipynb)
 
 ## Human in the Loop
 
