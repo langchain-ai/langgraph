@@ -1,11 +1,11 @@
 import warnings
 from typing import Annotated as Annotated2
-from typing import Any
+from typing import Any, Optional
 
 import pytest
 from langchain_core.runnables import RunnableConfig
 from pydantic.v1 import BaseModel
-from typing_extensions import Annotated, TypedDict
+from typing_extensions import Annotated, NotRequired, Required, TypedDict
 
 from langgraph.graph.state import StateGraph, _warn_invalid_state_schema
 
@@ -88,3 +88,45 @@ def test_state_schema_with_type_hint():
     for i, c in enumerate(graph.stream(input_state, stream_mode="updates")):
         node_name = actions[i].__name__
         assert c[node_name] == output_state
+
+
+@pytest.mark.parametrize("total_", [True, False])
+def test_state_schema_optional_values(total_: bool):
+    class SomeParentState(TypedDict):
+        val0a: str
+        val0b: Optional[str]
+
+    class InputState(SomeParentState, total=total_):  # type: ignore
+        val1: str
+        val2: Optional[str]
+        val3: Required[str]
+        val4: NotRequired[dict]
+        val5: Annotated[Required[str], "foo"]
+        val6: Annotated[NotRequired[str], "bar"]
+
+    class State(InputState):  # this would be ignored
+        val4: dict
+
+    builder = StateGraph(State, input=InputState)
+    builder.add_node("n", lambda x: x)
+    builder.add_edge("__start__", "n")
+    graph = builder.compile()
+    model = graph.input_schema
+    json_schema = model.schema()
+
+    if total_ is False:
+        expected_required = set()
+        expected_optional = {"val2", "val1"}
+    else:
+        expected_required = {"val1"}
+
+        expected_optional = {"val2"}
+
+    # The others should always have precedence based on the required annotation
+    expected_required |= {"val0a", "val3", "val5"}
+    expected_optional |= {"val0b", "val4", "val6"}
+
+    assert set(json_schema.get("required", set())) == expected_required
+    assert (
+        set(json_schema["properties"].keys()) == expected_required | expected_optional
+    )
