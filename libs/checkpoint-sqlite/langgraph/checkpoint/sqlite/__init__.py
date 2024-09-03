@@ -104,10 +104,12 @@ class SqliteSaver(BaseCheckpointSaver):
                 with SqliteSaver.from_conn_string("checkpoints.sqlite") as memory:
                     ...
         """
-        with sqlite3.connect(
-            conn_string,
-            # https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
-            check_same_thread=False,
+        with closing(
+            sqlite3.connect(
+                conn_string,
+                # https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
+                check_same_thread=False,
+            )
         ) as conn:
             yield SqliteSaver(conn)
 
