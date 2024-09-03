@@ -1,8 +1,16 @@
 from __future__ import annotations
 
-from typing import Any, Callable, Mapping, Optional, Sequence, Union
+from typing import (
+    Any,
+    AsyncIterator,
+    Callable,
+    Iterator,
+    Mapping,
+    Optional,
+    Sequence,
+    Union,
+)
 
-from langchain_core.pydantic_v1 import Field
 from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
@@ -10,7 +18,7 @@ from langchain_core.runnables import (
     RunnableSequence,
     RunnableSerializable,
 )
-from langchain_core.runnables.base import Other, RunnableBindingBase, coerce_to_runnable
+from langchain_core.runnables.base import Input, Other, Output, coerce_to_runnable
 from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
@@ -99,20 +107,47 @@ class ChannelRead(RunnableCallable):
 DEFAULT_BOUND: RunnablePassthrough = RunnablePassthrough()
 
 
-class PregelNode(RunnableBindingBase):
+class PregelNode(Runnable):
     channels: Union[list[str], Mapping[str, str]]
 
-    triggers: list[str] = Field(default_factory=list)
+    triggers: list[str]
 
-    mapper: Optional[Callable[[Any], Any]] = None
+    mapper: Optional[Callable[[Any], Any]]
 
-    writers: list[Runnable] = Field(default_factory=list)
+    writers: list[Runnable]
 
-    bound: Runnable[Any, Any] = Field(default=DEFAULT_BOUND)
+    bound: Runnable[Any, Any]
 
-    kwargs: Mapping[str, Any] = Field(default_factory=dict)
+    retry_policy: Optional[RetryPolicy]
 
-    retry_policy: Optional[RetryPolicy] = None
+    config: RunnableConfig
+
+    def __init__(
+        self,
+        *,
+        channels: Union[list[str], Mapping[str, str]],
+        triggers: Sequence[str],
+        mapper: Optional[Callable[[Any], Any]] = None,
+        writers: Optional[list[Runnable]] = None,
+        tags: Optional[list[str]] = None,
+        metadata: Optional[Mapping[str, Any]] = None,
+        bound: Optional[Runnable[Any, Any]] = None,
+        retry_policy: Optional[RetryPolicy] = None,
+        config: Optional[RunnableConfig] = None,
+    ) -> None:
+        self.channels = channels
+        self.triggers = list(triggers)
+        self.mapper = mapper
+        self.writers = writers or []
+        self.bound = bound if bound is not None else DEFAULT_BOUND
+        self.retry_policy = retry_policy
+        self.config = merge_configs(
+            config, {"tags": tags or [], "metadata": metadata or {}}
+        )
+
+    def copy(self, update: dict[str, Any]) -> PregelNode:
+        attrs = {**self.__dict__, **update}
+        return PregelNode(**attrs)
 
     def get_writers(self) -> list[Runnable]:
         """Get writers with optimizations applied."""
@@ -144,38 +179,6 @@ class PregelNode(RunnableBindingBase):
             return RunnableSequence(self.bound, *writers)
         else:
             return self.bound
-
-    def __init__(
-        self,
-        *,
-        channels: Union[list[str], Mapping[str, str]],
-        triggers: Sequence[str],
-        mapper: Optional[Callable[[Any], Any]] = None,
-        writers: Optional[list[Runnable]] = None,
-        tags: Optional[list[str]] = None,
-        metadata: Optional[Mapping[str, Any]] = None,
-        bound: Optional[Runnable[Any, Any]] = None,
-        kwargs: Optional[Mapping[str, Any]] = None,
-        config: Optional[RunnableConfig] = None,
-        retry_policy: Optional[RetryPolicy] = None,
-        **other_kwargs: Any,
-    ) -> None:
-        super().__init__(
-            channels=channels,
-            triggers=triggers,
-            mapper=mapper,
-            writers=writers or [],
-            bound=bound or DEFAULT_BOUND,
-            kwargs=kwargs or {},
-            retry_policy=retry_policy,
-            config=merge_configs(
-                config, {"tags": tags or [], "metadata": metadata or {}}
-            ),
-            **other_kwargs,
-        )
-
-    def __repr_args__(self) -> Any:
-        return [(k, v) for k, v in super().__repr_args__() if k != "bound"]
 
     def join(self, channels: Sequence[str]) -> PregelNode:
         assert isinstance(channels, list) or isinstance(
@@ -226,3 +229,42 @@ class PregelNode(RunnableBindingBase):
         ],
     ) -> RunnableSerializable:
         raise NotImplementedError()
+
+    def invoke(
+        self,
+        input: Input,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Optional[Any],
+    ) -> Output:
+        return self.bound.invoke(input, merge_configs(self.config, config), **kwargs)
+
+    async def ainvoke(
+        self,
+        input: Input,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Optional[Any],
+    ) -> Output:
+        return await self.bound.ainvoke(
+            input, merge_configs(self.config, config), **kwargs
+        )
+
+    def stream(
+        self,
+        input: Input,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Optional[Any],
+    ) -> Iterator[Output]:
+        yield from self.bound.stream(
+            input, merge_configs(self.config, config), **kwargs
+        )
+
+    async def astream(
+        self,
+        input: Input,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Optional[Any],
+    ) -> AsyncIterator[Output]:
+        async for item in self.bound.astream(
+            input, merge_configs(self.config, config), **kwargs
+        ):
+            yield item

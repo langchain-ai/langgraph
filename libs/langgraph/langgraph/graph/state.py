@@ -17,12 +17,12 @@ from typing import (
     overload,
 )
 
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.utils import (
     create_model,
 )
+from pydantic import BaseModel
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
