@@ -19,9 +19,7 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
-from langchain_core.runnables.utils import (
-    create_model,
-)
+from langchain_core.runnables.utils import create_model
 from pydantic import BaseModel
 
 from langgraph.channels.base import BaseChannel
@@ -33,14 +31,7 @@ from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import NS_END, NS_SEP, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
-from langgraph.graph.graph import (
-    END,
-    START,
-    Branch,
-    CompiledGraph,
-    Graph,
-    Send,
-)
+from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -53,7 +44,7 @@ from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.utils import RunnableCallable, coerce_to_runnable
+from langgraph.utils import RunnableCallable, coerce_to_runnable, get_field_default
 
 logger = logging.getLogger(__name__)
 
@@ -498,7 +489,16 @@ class CompiledStateGraph(CompiledGraph):
                 return create_model(  # type: ignore[call-overload]
                     self.get_name("Input"),
                     **{
-                        k: (self.channels[k].UpdateType, None)
+                        k: (
+                            self.channels[k].UpdateType,
+                            (
+                                get_field_default(
+                                    k,
+                                    self.channels[k].UpdateType,
+                                    self.builder.input,
+                                )
+                            ),
+                        )
                         for k in self.builder.schemas[self.builder.input]
                         if isinstance(self.channels[k], BaseChannel)
                     },

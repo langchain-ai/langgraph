@@ -41,11 +41,12 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
+    create_model,
     get_function_nonlocals,
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
-from pydantic import BaseModel, create_model
+from pydantic import BaseModel
 from typing_extensions import Self
 
 from langgraph.channels.base import (
@@ -237,7 +238,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         interrupt_before_nodes: Union[All, Sequence[str]] = (),
         input_channels: Union[str, Sequence[str]],
         step_timeout: Optional[float] = None,
-        debug: bool = False,
+        debug: Optional[bool] = None,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         store: Optional[BaseStore] = None,
         retry_policy: Optional[RetryPolicy] = None,

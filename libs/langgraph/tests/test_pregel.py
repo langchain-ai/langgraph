@@ -9940,10 +9940,12 @@ def test_send_to_nested_graphs(
     graph.update_state(outer_state.tasks[1].state, {"subject": "turtles - hohoho"})
 
     # continue past interrupt
-    assert graph.invoke(None, config=config) == {
-        "subjects": ["cats", "dogs"],
-        "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
-    }
+    assert sorted(
+        graph.stream(None, config=config), key=lambda d: d["generate_joke"]["jokes"][0]
+    ) == [
+        {"generate_joke": {"jokes": ["Joke about cats - hohoho"]}},
+        {"generate_joke": {"jokes": ["Joke about turtles - hohoho"]}},
+    ]
 
     actual_snapshot = graph.get_state(config)
     expected_snapshot = StateSnapshot(

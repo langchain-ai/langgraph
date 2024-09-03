@@ -276,7 +276,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         """
         await self.setup()
         checkpoint_ns = config["configurable"].get("checkpoint_ns", "")
-        async with self.conn.cursor() as cur:
+        async with self.lock, self.conn.cursor() as cur:
             # find the latest checkpoint for the thread_id
             if checkpoint_id := get_checkpoint_id(config):
                 await cur.execute(
@@ -371,7 +371,9 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         ORDER BY checkpoint_id DESC"""
         if limit:
             query += f" LIMIT {limit}"
-        async with self.conn.execute(query, params) as cur, self.conn.cursor() as wcur:
+        async with self.lock, self.conn.execute(
+            query, params
+        ) as cur, self.conn.cursor() as wcur:
             async for (
                 thread_id,
                 checkpoint_ns,
@@ -438,7 +440,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
         serialized_metadata = self.jsonplus_serde.dumps(metadata)
-        async with self.conn.execute(
+        async with self.lock, self.conn.execute(
             "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
             (
                 str(config["configurable"]["thread_id"]),
@@ -475,7 +477,7 @@ class AsyncSqliteSaver(BaseCheckpointSaver):
             task_id (str): Identifier for the task creating the writes.
         """
         await self.setup()
-        async with self.conn.cursor() as cur:
+        async with self.lock, self.conn.cursor() as cur:
             await cur.executemany(
                 "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [
