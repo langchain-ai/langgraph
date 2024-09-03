@@ -2,6 +2,7 @@ import asyncio
 import json
 import operator
 import re
+import sys
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -8675,6 +8676,10 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
         assert actual_history == expected_history
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_weather_subgraph(
     checkpointer_name: str, snapshot: SnapshotAssertion
