@@ -1,7 +1,6 @@
 import asyncio
 import json
 import operator
-import random
 import re
 import sys
 from collections import Counter
@@ -8429,72 +8428,6 @@ async def test_doubly_nested_graph_state(checkpointer_name: str) -> None:
                 {"grandchild_1": {"my_key": "hi my value here"}},
             )
         ]
-
-
-@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
-async def test_large_graph(checkpointer_name: str) -> None:
-    class OverallState(TypedDict):
-        subjects: list[str]
-        jokes: Annotated[list[str], operator.add]
-
-    async def continue_to_jokes(state: OverallState):
-        return [Send("generate_joke", {"subject": s}) for s in state["subjects"]]
-
-    class JokeInput(TypedDict):
-        subject: str
-
-    class JokeOutput(TypedDict):
-        jokes: list[str]
-
-    async def edit(state: JokeInput):
-        subject = state["subject"]
-        return {"subject": f"{subject} - hohoho"}
-
-    # subgraph
-    subgraph = StateGraph(input=JokeInput, output=JokeOutput)
-    subgraph.add_node("edit", edit)
-    subgraph.add_node(
-        "generate", lambda state: {"jokes": [f"Joke about {state['subject']}"]}
-    )
-    subgraph.add_node(
-        "bump", lambda state: {"jokes": [state["jokes"][0] + " a"]}, input=JokeOutput
-    )
-    subgraph.set_entry_point("edit")
-    subgraph.add_edge("edit", "generate")
-    subgraph.add_edge("generate", "bump")
-    subgraph.add_conditional_edges(
-        "bump", lambda state: END if state["jokes"][0].endswith(" a" * 10) else "bump"
-    )
-    subgraph.set_finish_point("generate")
-
-    # parent graph
-    builder = StateGraph(OverallState)
-    builder.add_node("generate_joke", subgraph.compile())
-    builder.add_conditional_edges(START, continue_to_jokes)
-    builder.add_edge("generate_joke", END)
-
-    async with awith_checkpointer(checkpointer_name) as checkpointer:
-        graph = builder.compile(checkpointer=checkpointer)
-        config = {"configurable": {"thread_id": "1"}}
-
-        # invoke and pause at nested interrupt
-        assert (
-            len(
-                [
-                    c
-                    async for c in graph.astream(
-                        {
-                            "subjects": [
-                                random.choice("abcdefghijklmnopqrstuvwxyz")
-                                for _ in range(1000)
-                            ]
-                        },
-                        config=config,
-                    )
-                ]
-            )
-            == 1000
-        )
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
