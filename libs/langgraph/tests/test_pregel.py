@@ -74,10 +74,7 @@ from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
 from tests.conftest import ALL_CHECKPOINTERS_SYNC
 from tests.fake_tracer import FakeTracer
-from tests.memory_assert import (
-    MemorySaverAssertCheckpointMetadata,
-    MemorySaverNoPending,
-)
+from tests.memory_assert import MemorySaverAssertCheckpointMetadata
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
 
@@ -1626,29 +1623,6 @@ def test_cond_edge_after_send() -> None:
     assert graph.invoke(["0"]) == ["0", "1", "2", "2", "3"]
 
 
-async def test_checkpointer_null_pending_writes() -> None:
-    class Node:
-        def __init__(self, name: str):
-            self.name = name
-            setattr(self, "__name__", name)
-
-        def __call__(self, state):
-            return [self.name]
-
-    builder = StateGraph(Annotated[list, operator.add])
-    builder.add_node(Node("1"))
-    builder.add_edge(START, "1")
-    graph = builder.compile(checkpointer=MemorySaverNoPending())
-    assert graph.invoke([], {"configurable": {"thread_id": "foo"}}) == ["1"]
-    assert graph.invoke([], {"configurable": {"thread_id": "foo"}}) == ["1"] * 2
-    assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
-        "1"
-    ] * 3
-    assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
-        "1"
-    ] * 4
-
-
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_invoke_checkpoint_three(
     mocker: MockerFixture, request: pytest.FixtureRequest, checkpointer_name: str
@@ -1929,7 +1903,7 @@ def test_invoke_two_processes_no_in(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
     two = Channel.subscribe_to("between") | add_one
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         Pregel(nodes={"one": one, "two": two})
 
 
@@ -9969,10 +9943,12 @@ def test_send_to_nested_graphs(
     graph.update_state(outer_state.tasks[1].state, {"subject": "turtles - hohoho"})
 
     # continue past interrupt
-    assert graph.invoke(None, config=config) == {
-        "subjects": ["cats", "dogs"],
-        "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
-    }
+    assert sorted(
+        graph.stream(None, config=config), key=lambda d: d["generate_joke"]["jokes"][0]
+    ) == [
+        {"generate_joke": {"jokes": ["Joke about cats - hohoho"]}},
+        {"generate_joke": {"jokes": ["Joke about turtles - hohoho"]}},
+    ]
 
     actual_snapshot = graph.get_state(config)
     expected_snapshot = StateSnapshot(

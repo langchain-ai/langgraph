@@ -44,7 +44,7 @@ Now, let's import our required packages and instantiate our client, assistant, a
     const thread = await client.threads.create();
     ```
 
-Now we can start our two runs and join the second on euntil it has completed:
+Now we can start our two runs and join the second one until it has completed:
 
 === "Python"
 
