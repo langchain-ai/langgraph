@@ -2,6 +2,7 @@ import asyncio
 import json
 import operator
 import re
+import sys
 from collections import Counter
 from contextlib import asynccontextmanager, contextmanager
 from typing import (
@@ -8675,6 +8676,10 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
         assert actual_history == expected_history
 
 
+@pytest.mark.skipif(
+    sys.version_info < (3, 11),
+    reason="Python 3.11+ is required for async contextvars support",
+)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_weather_subgraph(
     checkpointer_name: str, snapshot: SnapshotAssertion
@@ -8766,8 +8771,10 @@ async def test_weather_subgraph(
         else:
             return "normal_llm_node"
 
-    async def weather_graph(state: RouterState):
-        return await subgraph.ainvoke(state)
+    def weather_graph(state: RouterState):
+        # this tests that all async checkpointers tested also implement sync methods
+        # as the subgraph called with sync invoke will use sync checkpointer methods
+        return subgraph.invoke(state)
 
     graph = StateGraph(RouterState)
     graph.add_node(router_node)
@@ -8777,6 +8784,9 @@ async def test_weather_subgraph(
     graph.add_conditional_edges("router_node", route_after_prediction)
     graph.add_edge("normal_llm_node", END)
     graph.add_edge("weather_graph", END)
+
+    def get_first_in_list():
+        return [*graph.get_state_history(config, limit=1)][0]
 
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         graph = graph.compile(checkpointer=checkpointer)
@@ -8841,6 +8851,8 @@ async def test_weather_subgraph(
                 ),
             ),
         )
+        # confirm that list() delegates to alist() correctly
+        assert await asyncio.to_thread(get_first_in_list) == state
 
         # update
         await graph.aupdate_state(state.tasks[0].state, {"city": "la"})
