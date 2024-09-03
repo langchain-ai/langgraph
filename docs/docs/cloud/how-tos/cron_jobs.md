@@ -12,9 +12,8 @@ First, let's setup our SDK client, assistant, and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
-    # get default assistant
-    assistants = await client.assistants.search()
-    assistant = [a for a in assistants if not a["config"]][0]
+    # agent is the name of our deployed graph
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -26,9 +25,8 @@ First, let's setup our SDK client, assistant, and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    // get default assistant
-    const assistants = await client.assistants.search();
-    const assistant = assistants.find(a => !a.config);
+    // agent is the name of our deployed graph
+    const assistantId = "agent";
     // create thread
     const thread = await client.threads.create();
     console.log(thread)
@@ -43,7 +41,7 @@ First, let's setup our SDK client, assistant, and thread:
         --data '{
             "limit": 10,
             "offset": 0
-        }' | jq -c 'map(select(.config == null or .config == {})) | .[0]' && \
+        }' | jq -c 'map(select(.config == null or .config == {})) | .[0].graph_id' && \
     curl --request POST \
         --url <DEPLOYMENT_URL>/threads \
         --header 'Content-Type: application/json' \
@@ -73,7 +71,7 @@ To create a cron job associated with a specific thread, you can write:
     # This schedules a job to run at 15:27 (3:27PM) every day
     cron_job = await client.crons.create_for_thread(
         thread["thread_id"],
-        assistant["assistant_id"],
+        assistant_id,
         schedule="27 15 * * *",
         input={"messages": [{"role": "user", "content": "What time is it?"}]},
     )
@@ -85,7 +83,7 @@ To create a cron job associated with a specific thread, you can write:
     // This schedules a job to run at 15:27 (3:27PM) every day
     let cronJob = await client.crons.create_for_thread(
         thread["thread_id"],
-        assistant["assistant_id"],
+        assistantId,
         {
             schedule:"27 15 * * *",
             input:{"messages": [{"role": "user", "content": "What time is it?"}]},
@@ -134,7 +132,7 @@ You can also create stateless cron jobs by using the following code:
     ```python
     # This schedules a job to run at 15:27 (3:27PM) every day
     cron_job_stateless = await client.crons.create(
-        assistant["assistant_id"],
+        assistant_id,
         schedule="27 15 * * *",
         input={"messages": [{"role": "user", "content": "What time is it?"}]},
     )
@@ -145,7 +143,7 @@ You can also create stateless cron jobs by using the following code:
     ```js
     // This schedules a job to run at 15:27 (3:27PM) every day
     let cronJobStateless = await client.crons.create(
-        assistant["assistant_id"],
+        assistantId,
         {
             schedule:"27 15 * * *",
             input:{"messages": [{"role": "user", "content": "What time is it?"}]},

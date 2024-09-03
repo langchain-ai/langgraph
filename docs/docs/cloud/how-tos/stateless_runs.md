@@ -12,9 +12,8 @@ First, let's setup our client:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
-    # get default assistant
-    assistants = await client.assistants.search()
-    assistant = [a for a in assistants if not a["config"]][0]
+    # agent is the name of our deployed graph
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     ```
@@ -25,9 +24,8 @@ First, let's setup our client:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    // get default assistant
-    const assistants = await client.assistants.search();
-    const assistant = assistants.find(a => !a.config);
+    // agent is the name of our deployed graph
+    const assistantId = "agent";
     // create thread
     const thread = await client.threads.create();
     ```
@@ -41,7 +39,7 @@ First, let's setup our client:
         --data '{
             "limit": 10,
             "offset": 0
-        }' | jq -c 'map(select(.config == null or .config == {})) | .[0]' && \
+        }' | jq -c 'map(select(.config == null or .config == {})) | .[0].graph_id' && \
     curl --request POST \
         --url <DEPLOYMENT_URL>/threads \
         --header 'Content-Type: application/json' \
@@ -64,7 +62,7 @@ We can stream the results of a stateless run in an almost identical fashion to h
     async for chunk in client.runs.stream(
         # Don't pass in a thread_id and the stream will be stateless
         None,
-        assistant["assistant_id"],  # graph_id
+        assistant_id,
         input=input,
         stream_mode="updates",
     ):
@@ -84,7 +82,7 @@ We can stream the results of a stateless run in an almost identical fashion to h
     const streamResponse = client.runs.stream(
         // Don't pass in a thread_id and the stream will be stateless
         null,
-        assistant["assistant_id"],
+        assistantId,
         {
             input,
             streamMode: "updates"
@@ -125,7 +123,7 @@ In addition to streaming, you can also wait for a stateless result by using the 
     ```python
     stateless_run_result = await client.runs.wait(
         None,
-        assistant["assistant_id"],
+        assistant_id,
         input=input,
     )
     print(stateless_run_result)
@@ -136,7 +134,7 @@ In addition to streaming, you can also wait for a stateless result by using the 
     ```js
     let statelessRunResult = await client.runs.wait(
         null,
-        assistant["assistant_id"],
+        assistantId,
         { input: input },
     );
     console.log(statelessRunResult);
