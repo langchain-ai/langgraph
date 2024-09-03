@@ -3881,7 +3881,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+    from langchain_core.messages import AIMessage, HumanMessage
     from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
@@ -3938,8 +3938,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     ) == {
         "messages": [
             _AnyIdHumanMessage(content="what is weather in sf"),
-            AIMessage(
-                id=AnyStr(),
+            _AnyIdAIMessage(
                 content="",
                 tool_calls=[
                     {
@@ -3949,14 +3948,12 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
-            AIMessage(
-                id=AnyStr(),
+            _AnyIdAIMessage(
                 content="",
                 tool_calls=[
                     {
@@ -3971,13 +3968,13 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for another",
                 name="search_api",
                 tool_call_id="tool_call234",
                 id=AnyStr(),
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a third one",
                 name="search_api",
                 tool_call_id="tool_call567",
@@ -4007,7 +4004,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -4016,7 +4013,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                                 "args": {"query": "query"},
                             },
                         ],
-                        id=AnyStr(),
                     )
                 ]
             }
@@ -4024,11 +4020,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for query",
                         name="search_api",
                         tool_call_id="tool_call123",
-                        id=AnyStr(),
                     )
                 ]
             }
@@ -4036,7 +4031,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -4050,7 +4045,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                                 "args": {"query": "a third one"},
                             },
                         ],
-                        id=AnyStr(),
                     )
                 ]
             }
@@ -4058,17 +4052,15 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for another",
                         name="search_api",
                         tool_call_id="tool_call234",
-                        id=AnyStr(),
                     ),
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for a third one",
                         name="search_api",
                         tool_call_id="tool_call567",
-                        id=AnyStr(),
                     ),
                 ]
             }
@@ -4082,8 +4074,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
-                        id=AnyStr(),
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -4099,11 +4090,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for query",
                         name="search_api",
                         tool_call_id="tool_call123",
-                        id=AnyStr(),
                     )
                 ]
             }
@@ -4111,8 +4101,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
-                        id=AnyStr(),
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -4133,17 +4122,15 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for another",
                         name="search_api",
                         tool_call_id="tool_call234",
-                        id=AnyStr(),
                     ),
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for a third one",
                         name="search_api",
                         tool_call_id="tool_call567",
-                        id=AnyStr(),
                     ),
                 ]
             }
@@ -4693,7 +4680,6 @@ def test_message_graph(
         AIMessage,
         BaseMessage,
         HumanMessage,
-        ToolMessage,
     )
     from langchain_core.outputs import ChatGeneration, ChatResult
     from langchain_core.tools import tool
@@ -4813,9 +4799,8 @@ def test_message_graph(
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
-        HumanMessage(
+        _AnyIdHumanMessage(
             content="what is weather in sf",
-            id="00000000-0000-4000-8000-000000000002",  # adds missing ids
         ),
         AIMessage(
             content="",
@@ -4828,11 +4813,10 @@ def test_message_graph(
             ],
             id="ai1",  # respects ids passed in
         ),
-        ToolMessage(
+        _AnyIdToolMessage(
             content="result for query",
             name="search_api",
             tool_call_id="tool_call123",
-            id="00000000-0000-4000-8000-000000000011",
         ),
         AIMessage(
             content="",
@@ -4845,11 +4829,10 @@ def test_message_graph(
             ],
             id="ai2",
         ),
-        ToolMessage(
+        _AnyIdToolMessage(
             content="result for another",
             name="search_api",
             tool_call_id="tool_call456",
-            id="00000000-0000-4000-8000-000000000020",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -4870,11 +4853,10 @@ def test_message_graph(
         },
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000036",
                 )
             ]
         },
@@ -4893,11 +4875,10 @@ def test_message_graph(
         },
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000045",
                 )
             ]
         },
@@ -5017,11 +4998,10 @@ def test_message_graph(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 )
             ]
         },
@@ -5054,11 +5034,10 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -5117,11 +5096,10 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
         ],
@@ -5250,11 +5228,10 @@ def test_message_graph(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 )
             ]
         },
@@ -5287,11 +5264,10 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -5350,7 +5326,7 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -5390,7 +5366,7 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -10096,7 +10072,7 @@ def test_weather_subgraph(
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, HumanMessage, ToolCall
+    from langchain_core.messages import AIMessage, ToolCall
     from langchain_core.tools import tool
 
     from langgraph.graph import MessagesState
@@ -10523,7 +10499,7 @@ def test_checkpoint_metadata() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+    from langchain_core.messages import AIMessage, AnyMessage
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
 

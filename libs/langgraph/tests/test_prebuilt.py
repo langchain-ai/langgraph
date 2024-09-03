@@ -456,7 +456,7 @@ def test_tool_node_inject_state() -> None:
         """Tool 1 docstring."""
         return msgs[0].content
 
-    node = ToolNode([tool1, tool2, tool3, tool4])
+    node = ToolNode([tool1, tool2, tool3, tool4], handle_tool_errors=False)
     for tool_name in ("tool1", "tool2", "tool3"):
         tool_call = {
             "name": tool_name,
