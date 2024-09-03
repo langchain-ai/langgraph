@@ -333,7 +333,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
     def list(
         self,
-        config: RunnableConfig | None,
+        config: Optional[RunnableConfig],
         *,
         filter: Optional[dict[str, Any]] = None,
         before: Optional[RunnableConfig] = None,
