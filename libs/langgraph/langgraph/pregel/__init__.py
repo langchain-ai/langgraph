@@ -238,7 +238,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         interrupt_before_nodes: Union[All, Sequence[str]] = (),
         input_channels: Union[str, Sequence[str]],
         step_timeout: Optional[float] = None,
-        debug: bool = False,
+        debug: Optional[bool] = None,
         checkpointer: Optional[BaseCheckpointSaver] = None,
         store: Optional[BaseStore] = None,
         retry_policy: Optional[RetryPolicy] = None,
