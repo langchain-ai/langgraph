@@ -23,7 +23,7 @@ stop-postgres:
 TEST_PATH ?= .
 
 test:
-	make start-postgres && poetry run pytest $(TEST_PATH) --snapshot-update; \
+	make start-postgres && poetry run pytest $(TEST_PATH); \
 	EXIT_CODE=$$?; \
 	make stop-postgres; \
 	exit $$EXIT_CODE
