@@ -4771,8 +4771,8 @@ async def test_message_graph(checkpointer_name: str) -> None:
             ],
             tasks=(PregelTask(AnyStr(), "tools"),),
             next=("tools",),
-            config=app_w_interrupt.checkpointer.get_tuple(config).config,
-            created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
+            config=tup.config,
+            created_at=tup.checkpoint["ts"],
             metadata={
                 "parents": {},
                 "source": "loop",
