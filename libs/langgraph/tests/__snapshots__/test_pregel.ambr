@@ -3300,6 +3300,10 @@
         'type': 'string',
       }),
     }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
     'title': 'LangGraphInput',
     'type': 'object',
   })
@@ -3362,6 +3366,10 @@
         'type': 'string',
       }),
     }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
     'title': 'LangGraphInput',
     'type': 'object',
   })
@@ -3424,6 +3432,10 @@
         'type': 'string',
       }),
     }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
     'title': 'LangGraphInput',
     'type': 'object',
   })
@@ -3486,6 +3498,10 @@
         'type': 'string',
       }),
     }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
     'title': 'LangGraphInput',
     'type': 'object',
   })
@@ -3548,6 +3564,10 @@
         'type': 'string',
       }),
     }),
+    'required': list([
+      'query',
+      'inner',
+    ]),
     'title': 'LangGraphInput',
     'type': 'object',
   })
