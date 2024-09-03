@@ -5491,17 +5491,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                     "triggers": ["start:prepare"],
                 },
             },
-        },
-        {
-            "type": "task_result",
-            "timestamp": AnyStr(),
-            "step": 1,
-            "payload": {
-                "id": AnyStr(),
-                "name": "prepare",
-                "result": [("my_key", " prepared")],
-                "error": None,
-                "interrupts": [],
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": AnyStr(),
+                    "name": "prepare",
+                    "result": [("my_key", " prepared")],
+                    "error": None,
+                    "interrupts": [],
+                },
             },
             {
                 "type": "checkpoint",
@@ -5546,17 +5546,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                     "triggers": ["branch:prepare:condition:tool_two_slow"],
                 },
             },
-        },
-        {
-            "type": "task_result",
-            "timestamp": AnyStr(),
-            "step": 2,
-            "payload": {
-                "id": AnyStr(),
-                "name": "tool_two_slow",
-                "result": [("my_key", " slow")],
-                "error": None,
-                "interrupts": [],
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 2,
+                "payload": {
+                    "id": AnyStr(),
+                    "name": "tool_two_slow",
+                    "result": [("my_key", " slow")],
+                    "error": None,
+                    "interrupts": [],
+                },
             },
             {
                 "type": "checkpoint",
@@ -5599,17 +5599,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                     "triggers": ["branch:prepare:condition::then"],
                 },
             },
-        },
-        {
-            "type": "task_result",
-            "timestamp": AnyStr(),
-            "step": 3,
-            "payload": {
-                "id": AnyStr(),
-                "name": "finish",
-                "result": [("my_key", " finished")],
-                "error": None,
-                "interrupts": [],
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 3,
+                "payload": {
+                    "id": AnyStr(),
+                    "name": "finish",
+                    "result": [("my_key", " finished")],
+                    "error": None,
+                    "interrupts": [],
+                },
             },
             {
                 "type": "checkpoint",
@@ -5728,17 +5728,17 @@ async def test_branch_then(checkpointer_name: str) -> None:
                     "triggers": ["start:prepare"],
                 },
             },
-        },
-        {
-            "type": "task_result",
-            "timestamp": AnyStr(),
-            "step": 1,
-            "payload": {
-                "id": AnyStr(),
-                "name": "prepare",
-                "result": [("my_key", " prepared")],
-                "error": None,
-                "interrupts": [],
+            {
+                "type": "task_result",
+                "timestamp": AnyStr(),
+                "step": 1,
+                "payload": {
+                    "id": AnyStr(),
+                    "name": "prepare",
+                    "result": [("my_key", " prepared")],
+                    "error": None,
+                    "interrupts": [],
+                },
             },
             {
                 "type": "checkpoint",
