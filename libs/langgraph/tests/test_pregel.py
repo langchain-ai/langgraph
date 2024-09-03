@@ -9784,7 +9784,6 @@ def test_doubly_nested_graph_state(
     ]
 
 
-@pytest.mark.repeat(10)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_to_nested_graphs(
     request: pytest.FixtureRequest, checkpointer_name: str
