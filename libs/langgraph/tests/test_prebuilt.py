@@ -14,11 +14,10 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
-from pydantic import BaseModel as BaseModelV2
+from pydantic import BaseModel
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
@@ -379,11 +378,6 @@ class MyModel(BaseModel):
     some_other_val: str
 
 
-class MyModelV2(BaseModelV2):
-    some_val: int
-    some_other_val: str
-
-
 @dec_tool
 def my_tool(some_val: int, some_other_val: str) -> str:
     """Cool."""
@@ -395,7 +389,6 @@ def my_tool(some_val: int, some_other_val: str) -> str:
     [
         my_function,
         MyModel,
-        MyModelV2,
         my_tool,
     ],
 )

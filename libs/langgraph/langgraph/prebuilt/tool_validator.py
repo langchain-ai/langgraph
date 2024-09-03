@@ -24,13 +24,12 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
-from langchain_core.pydantic_v1 import BaseModel, ValidationError
 from langchain_core.runnables import (
     RunnableConfig,
 )
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool, create_schema_from_function
-from pydantic import BaseModel as BaseModelV2
+from pydantic import BaseModel, ValidationError
 from pydantic import ValidationError as ValidationErrorV2
 
 from langgraph.utils import RunnableCallable
@@ -75,7 +74,7 @@ class ValidationNode(RunnableCallable):
         >>> from typing import Literal, Annotated, TypedDict
         ...
         >>> from langchain_anthropic import ChatAnthropic
-        >>> from langchain_core.pydantic_v1 import BaseModel, validator
+        >>> from pydantic import BaseModel, validator
         ...
         >>> from langgraph.graph import END, START, StateGraph
         >>> from langgraph.prebuilt import ValidationNode
@@ -176,7 +175,7 @@ class ValidationNode(RunnableCallable):
                     )
                 self.schemas_by_name[schema.name] = schema.args_schema
             elif isinstance(schema, type) and issubclass(
-                schema, (BaseModel, BaseModelV2)
+                schema, BaseModel
             ):
                 self.schemas_by_name[schema.__name__] = cast(Type[BaseModel], schema)
             elif callable(schema):
