@@ -424,6 +424,10 @@ class Graph:
 class CompiledGraph(Pregel):
     builder: Graph
 
+    def __init__(self, *, builder: Graph, **kwargs):
+        super().__init__(**kwargs)
+        self.builder = builder
+
     def attach_node(self, key: str, node: NodeSpec) -> None:
         self.channels[key] = EphemeralValue(Any)
         self.nodes[key] = (
