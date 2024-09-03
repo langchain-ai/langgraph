@@ -1,5 +1,4 @@
 import asyncio
-import json
 import operator
 import re
 import sys
@@ -60,7 +59,6 @@ from langgraph.managed.shared_value import SharedValue
 from langgraph.prebuilt.chat_agent_executor import (
     create_tool_calling_executor,
 )
-from langgraph.prebuilt.tool_executor import ToolExecutor
 from langgraph.prebuilt.tool_node import ToolNode
 from langgraph.pregel import (
     Channel,
@@ -82,7 +80,7 @@ from tests.memory_assert import (
     MemorySaverAssertCheckpointMetadata,
     MemorySaverNoPending,
 )
-from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
+from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage, _AnyIdToolMessage
 
 pytestmark = pytest.mark.anyio
 
@@ -656,8 +654,14 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
+    assert app.input_schema.model_json_schema() == {
+        "title": "LangGraphInput",
+        "type": "integer",
+    }
+    assert app.output_schema.model_json_schema() == {
+        "title": "LangGraphOutput",
+        "type": "integer",
+    }
     assert await app.ainvoke(2) == 3
     assert await app.ainvoke(2, output_keys=["output"]) == {"output": 3}
 
@@ -697,14 +701,21 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
         input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
+    assert app.input_schema.model_json_schema() == {
+        "title": "LangGraphInput",
+        "type": "integer",
+    }
+    assert app.output_schema.model_json_schema() == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
-            "output": {"title": "Output", "type": "integer"},
-            "fixed": {"title": "Fixed", "type": "integer"},
-            "output_plus_one": {"title": "Output Plus One", "type": "integer"},
+            "output": {"title": "Output", "type": "integer", "default": None},
+            "fixed": {"title": "Fixed", "type": "integer", "default": None},
+            "output_plus_one": {
+                "title": "Output Plus One",
+                "type": "integer",
+                "default": None,
+            },
         },
     }
     assert await app.ainvoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
@@ -721,11 +732,16 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
+    assert app.input_schema.model_json_schema() == {
+        "title": "LangGraphInput",
+        "type": "integer",
+    }
+    assert app.output_schema.model_json_schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output", "type": "integer"}},
+        "properties": {
+            "output": {"title": "Output", "type": "integer", "default": None}
+        },
     }
     assert await app.ainvoke(2) == {"output": 3}
 
@@ -741,15 +757,17 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {
+    assert app.input_schema.model_json_schema() == {
         "title": "LangGraphInput",
         "type": "object",
-        "properties": {"input": {"title": "Input", "type": "integer"}},
+        "properties": {"input": {"title": "Input", "type": "integer", "default": None}},
     }
-    assert app.output_schema.schema() == {
+    assert app.output_schema.model_json_schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output", "type": "integer"}},
+        "properties": {
+            "output": {"title": "Output", "type": "integer", "default": None}
+        },
     }
     assert await app.ainvoke({"input": 2}) == {"output": 3}
 
@@ -3826,7 +3844,7 @@ async def test_prebuilt_tool_chat() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+    from langchain_core.messages import AIMessage, HumanMessage
     from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
@@ -3879,8 +3897,7 @@ async def test_prebuilt_tool_chat() -> None:
     ) == {
         "messages": [
             _AnyIdHumanMessage(content="what is weather in sf"),
-            AIMessage(
-                id=AnyStr(),
+            _AnyIdAIMessage(
                 content="",
                 tool_calls=[
                     {
@@ -3890,14 +3907,12 @@ async def test_prebuilt_tool_chat() -> None:
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
-            AIMessage(
-                id=AnyStr(),
+            _AnyIdAIMessage(
                 content="",
                 tool_calls=[
                     {
@@ -3912,13 +3927,12 @@ async def test_prebuilt_tool_chat() -> None:
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for another",
                 name="search_api",
                 tool_call_id="tool_call234",
-                id=AnyStr(),
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a third one",
                 name="search_api",
                 tool_call_id="tool_call567",
@@ -3937,8 +3951,7 @@ async def test_prebuilt_tool_chat() -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
-                        id=AnyStr(),
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -3954,11 +3967,10 @@ async def test_prebuilt_tool_chat() -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for query",
                         name="search_api",
                         tool_call_id="tool_call123",
-                        id=AnyStr(),
                     )
                 ]
             }
@@ -3966,8 +3978,7 @@ async def test_prebuilt_tool_chat() -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
-                        id=AnyStr(),
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -3988,17 +3999,15 @@ async def test_prebuilt_tool_chat() -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for another",
+                        name="search_api",
                         tool_call_id="tool_call234",
-                        name="search_api",
-                        id=AnyStr(),
                     ),
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for a third one",
-                        tool_call_id="tool_call567",
                         name="search_api",
-                        id=AnyStr(),
+                        tool_call_id="tool_call567",
                     ),
                 ]
             }
@@ -4135,10 +4144,9 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for query",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
             AIMessage(
@@ -4157,16 +4165,14 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for another",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call234",
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a third one",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call567",
             ),
             AIMessage(content="answer", id="ai3"),
@@ -4196,10 +4202,9 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
         },
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for query",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call123",
                 )
             }
@@ -4226,20 +4231,18 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
         },
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for another",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call234",
                 )
             },
         },
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for a third one",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call567",
                 ),
             },
@@ -4381,10 +4384,9 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
         assert [c async for c in app_w_interrupt.astream(None, config)] == [
             {
                 "tools": {
-                    "messages": ToolMessage(
+                    "messages": _AnyIdToolMessage(
                         content="result for a different query",
                         name="search_api",
-                        id=AnyStr(),
                         tool_call_id="tool_call123",
                     )
                 }
@@ -4427,10 +4429,9 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                             },
                         ],
                     ),
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for a different query",
                         name="search_api",
-                        id=AnyStr(),
                         tool_call_id="tool_call123",
                     ),
                     AIMessage(
@@ -4453,8 +4454,10 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             },
             tasks=(PregelTask(AnyStr(), "tools"), PregelTask(AnyStr(), "tools")),
             next=("tools", "tools"),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
+            config=app_w_interrupt.checkpointer.get_tuple(config).config,
+            created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint[
+                "ts"
+            ],
             metadata={
                 "parents": {},
                 "source": "loop",
@@ -4507,10 +4510,9 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                             },
                         ],
                     ),
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for a different query",
                         name="search_api",
-                        id=AnyStr(),
                         tool_call_id="tool_call123",
                     ),
                     AIMessage(content="answer", id="ai2"),
@@ -4525,7 +4527,9 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
                 "source": "update",
                 "step": 5,
                 "writes": {
-                    "agent": {"messages": AIMessage(content="answer", id="ai2")}
+                    "agent": {
+                        "messages": AIMessage(content="answer", id="ai2"),
+                    }
                 },
             },
             parent_config=[
@@ -4536,11 +4540,10 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_message_graph(checkpointer_name: str) -> None:
-    from langchain_core.agents import AgentAction
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, FunctionMessage, HumanMessage
+    from langchain_core.messages import AIMessage, HumanMessage
     from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
@@ -4558,63 +4561,46 @@ async def test_message_graph(checkpointer_name: str) -> None:
         responses=[
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
                         "name": "search_api",
-                        "arguments": json.dumps("query"),
+                        "args": {"query": "query"},
                     }
-                },
+                ],
                 id="ai1",
             ),
             AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
                         "name": "search_api",
-                        "arguments": json.dumps("another"),
+                        "args": {"query": "another"},
                     }
-                },
+                ],
                 id="ai2",
             ),
             AIMessage(content="answer", id="ai3"),
         ]
     )
 
-    tool_executor = ToolExecutor(tools)
-
     # Define the function that determines whether to continue or not
     def should_continue(messages):
         last_message = messages[-1]
         # If there is no function call, then we finish
-        if "function_call" not in last_message.additional_kwargs:
+        if not last_message.tool_calls:
             return "end"
         # Otherwise if there is, we continue
         else:
             return "continue"
-
-    async def call_tool(messages):
-        # Based on the continue condition
-        # we know the last message involves a function call
-        last_message = messages[-1]
-        # We construct an AgentAction from the function_call
-        action = AgentAction(
-            tool=last_message.additional_kwargs["function_call"]["name"],
-            tool_input=json.loads(
-                last_message.additional_kwargs["function_call"]["arguments"]
-            ),
-            log="",
-        )
-        # We call the tool_executor and get back a response
-        response = await tool_executor.ainvoke(action)
-        # We use the response to create a FunctionMessage
-        return FunctionMessage(content=str(response), name=action.tool)
 
     # Define a new graph
     workflow = MessageGraph()
 
     # Define the two nodes we will cycle between
     workflow.add_node("agent", model)
-    workflow.add_node("tools", call_tool)
+    workflow.add_node("tools", ToolNode(tools))
 
     # Set the entrypoint as `agent`
     # This means that this node is the first one called
@@ -4651,23 +4637,41 @@ async def test_message_graph(checkpointer_name: str) -> None:
     app = workflow.compile()
 
     assert await app.ainvoke(HumanMessage(content="what is weather in sf")) == [
-        _AnyIdHumanMessage(content="what is weather in sf"),
-        AIMessage(
-            content="",
-            additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"query"'}
-            },
-            id="ai1",
+        _AnyIdHumanMessage(
+            content="what is weather in sf",
         ),
-        FunctionMessage(content="result for query", name="search_api", id=AnyStr()),
         AIMessage(
             content="",
-            additional_kwargs={
-                "function_call": {"name": "search_api", "arguments": '"another"'}
-            },
+            tool_calls=[
+                {
+                    "id": "tool_call123",
+                    "name": "search_api",
+                    "args": {"query": "query"},
+                }
+            ],
+            id="ai1",  # respects ids passed in
+        ),
+        _AnyIdToolMessage(
+            content="result for query",
+            name="search_api",
+            tool_call_id="tool_call123",
+        ),
+        AIMessage(
+            content="",
+            tool_calls=[
+                {
+                    "id": "tool_call456",
+                    "name": "search_api",
+                    "args": {"query": "another"},
+                }
+            ],
             id="ai2",
         ),
-        FunctionMessage(content="result for another", name="search_api", id=AnyStr()),
+        _AnyIdToolMessage(
+            content="result for another",
+            name="search_api",
+            tool_call_id="tool_call456",
+        ),
         AIMessage(content="answer", id="ai3"),
     ]
 
@@ -4677,30 +4681,46 @@ async def test_message_graph(checkpointer_name: str) -> None:
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"query"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call123",
+                        "name": "search_api",
+                        "args": {"query": "query"},
+                    }
+                ],
                 id="ai1",
             )
         },
         {
-            "tools": FunctionMessage(
-                content="result for query", name="search_api", id=AnyStr()
-            )
+            "tools": [
+                _AnyIdToolMessage(
+                    content="result for query",
+                    name="search_api",
+                    tool_call_id="tool_call123",
+                )
+            ]
         },
         {
             "agent": AIMessage(
                 content="",
-                additional_kwargs={
-                    "function_call": {"name": "search_api", "arguments": '"another"'}
-                },
+                tool_calls=[
+                    {
+                        "id": "tool_call456",
+                        "name": "search_api",
+                        "args": {"query": "another"},
+                    }
+                ],
                 id="ai2",
             )
         },
         {
-            "tools": FunctionMessage(
-                content="result for another", name="search_api", id=AnyStr()
-            )
+            "tools": [
+                _AnyIdToolMessage(
+                    content="result for another",
+                    name="search_api",
+                    tool_call_id="tool_call456",
+                )
+            ]
         },
         {"agent": AIMessage(content="answer", id="ai3")},
     ]
@@ -4721,9 +4741,13 @@ async def test_message_graph(checkpointer_name: str) -> None:
             {
                 "agent": AIMessage(
                     content="",
-                    additional_kwargs={
-                        "function_call": {"name": "search_api", "arguments": '"query"'}
-                    },
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        }
+                    ],
                     id="ai1",
                 )
             },
@@ -4735,16 +4759,20 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "function_call": {"name": "search_api", "arguments": '"query"'}
-                    },
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "query"},
+                        }
+                    ],
                     id="ai1",
                 ),
             ],
             tasks=(PregelTask(AnyStr(), "tools"),),
             next=("tools",),
-            config=tup.config,
-            created_at=tup.checkpoint["ts"],
+            config=app_w_interrupt.checkpointer.get_tuple(config).config,
+            created_at=app_w_interrupt.checkpointer.get_tuple(config).checkpoint["ts"],
             metadata={
                 "parents": {},
                 "source": "loop",
@@ -4752,12 +4780,13 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 "writes": {
                     "agent": AIMessage(
                         content="",
-                        additional_kwargs={
-                            "function_call": {
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
                                 "name": "search_api",
-                                "arguments": '"query"',
+                                "args": {"query": "query"},
                             }
-                        },
+                        ],
                         id="ai1",
                     )
                 },
@@ -4769,9 +4798,7 @@ async def test_message_graph(checkpointer_name: str) -> None:
 
         # modify ai message
         last_message = (await app_w_interrupt.aget_state(config)).values[-1]
-        last_message.additional_kwargs["function_call"]["arguments"] = (
-            '"a different query"'
-        )
+        last_message.tool_calls[0]["args"] = {"query": "a different query"}
         await app_w_interrupt.aupdate_state(config, last_message)
 
         # message was replaced instead of appended
@@ -4781,13 +4808,14 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"a different query"',
-                        }
-                    },
                     id="ai1",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        }
+                    ],
                 ),
             ],
             tasks=(PregelTask(AnyStr(), "tools"),),
@@ -4801,12 +4829,13 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 "writes": {
                     "agent": AIMessage(
                         content="",
-                        additional_kwargs={
-                            "function_call": {
+                        tool_calls=[
+                            {
+                                "id": "tool_call123",
                                 "name": "search_api",
-                                "arguments": '"a different query"',
+                                "args": {"query": "a different query"},
                             }
-                        },
+                        ],
                         id="ai1",
                     )
                 },
@@ -4818,21 +4847,24 @@ async def test_message_graph(checkpointer_name: str) -> None:
 
         assert [c async for c in app_w_interrupt.astream(None, config)] == [
             {
-                "tools": FunctionMessage(
-                    content="result for a different query",
-                    name="search_api",
-                    id=AnyStr(),
-                )
+                "tools": [
+                    _AnyIdToolMessage(
+                        content="result for a different query",
+                        name="search_api",
+                        tool_call_id="tool_call123",
+                    )
+                ]
             },
             {
                 "agent": AIMessage(
                     content="",
-                    additional_kwargs={
-                        "function_call": {
+                    tool_calls=[
+                        {
+                            "id": "tool_call456",
                             "name": "search_api",
-                            "arguments": '"another"',
+                            "args": {"query": "another"},
                         }
-                    },
+                    ],
                     id="ai2",
                 )
             },
@@ -4844,27 +4876,29 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"a different query"',
-                        }
-                    },
                     id="ai1",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        }
+                    ],
                 ),
-                FunctionMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
-                    id=AnyStr(),
+                    tool_call_id="tool_call123",
                 ),
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "function_call": {
+                    tool_calls=[
+                        {
+                            "id": "tool_call456",
                             "name": "search_api",
-                            "arguments": '"another"',
+                            "args": {"query": "another"},
                         }
-                    },
+                    ],
                     id="ai2",
                 ),
             ],
@@ -4879,12 +4913,13 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 "writes": {
                     "agent": AIMessage(
                         content="",
-                        additional_kwargs={
-                            "function_call": {
+                        tool_calls=[
+                            {
+                                "id": "tool_call456",
                                 "name": "search_api",
-                                "arguments": '"another"',
+                                "args": {"query": "another"},
                             }
-                        },
+                        ],
                         id="ai2",
                     )
                 },
@@ -4906,18 +4941,19 @@ async def test_message_graph(checkpointer_name: str) -> None:
                 _AnyIdHumanMessage(content="what is weather in sf"),
                 AIMessage(
                     content="",
-                    additional_kwargs={
-                        "function_call": {
-                            "name": "search_api",
-                            "arguments": '"a different query"',
-                        }
-                    },
                     id="ai1",
+                    tool_calls=[
+                        {
+                            "id": "tool_call123",
+                            "name": "search_api",
+                            "args": {"query": "a different query"},
+                        }
+                    ],
                 ),
-                FunctionMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
-                    id=AnyStr(),
+                    tool_call_id="tool_call123",
                 ),
                 AIMessage(content="answer", id="ai2"),
             ],
@@ -6283,8 +6319,8 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
     app = workflow.compile()
 
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_input_schema().schema() == snapshot
-    assert app.get_output_schema().schema() == snapshot
+    assert app.get_input_schema().model_json_schema() == snapshot
+    assert app.get_output_schema().model_json_schema() == snapshot
 
     with pytest.raises(ValidationError):
         await app.ainvoke({"query": {}})
@@ -8499,7 +8535,7 @@ async def test_weather_subgraph(
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, HumanMessage, ToolCall
+    from langchain_core.messages import AIMessage, ToolCall
     from langchain_core.tools import tool
 
     from langgraph.graph import MessagesState
@@ -8623,9 +8659,7 @@ async def test_weather_subgraph(
         state = await graph.aget_state(config)
         assert state == StateSnapshot(
             values={
-                "messages": [
-                    HumanMessage(content="what's the weather in sf", id=AnyStr())
-                ],
+                "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
                 "route": "weather",
             },
             next=("weather_graph",),
@@ -8691,10 +8725,8 @@ async def test_weather_subgraph(
                 {
                     "weather_graph": {
                         "messages": [
-                            HumanMessage(
-                                content="what's the weather in sf", id=AnyStr()
-                            ),
-                            AIMessage(content="I'ts sunny in la!", id=AnyStr()),
+                            _AnyIdHumanMessage(content="what's the weather in sf"),
+                            _AnyIdAIMessage(content="I'ts sunny in la!"),
                         ]
                     }
                 },
@@ -8716,9 +8748,7 @@ async def test_weather_subgraph(
         state = await graph.aget_state(config, subgraphs=True)
         assert state == StateSnapshot(
             values={
-                "messages": [
-                    HumanMessage(content="what's the weather in sf", id=AnyStr())
-                ],
+                "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
                 "route": "weather",
             },
             next=("weather_graph",),
@@ -8750,9 +8780,7 @@ async def test_weather_subgraph(
                     state=StateSnapshot(
                         values={
                             "messages": [
-                                HumanMessage(
-                                    content="what's the weather in sf", id=AnyStr()
-                                )
+                                _AnyIdHumanMessage(content="what's the weather in sf")
                             ],
                             "city": "San Francisco",
                         },
@@ -8797,9 +8825,7 @@ async def test_weather_subgraph(
         state = await graph.aget_state(config, subgraphs=True)
         assert state == StateSnapshot(
             values={
-                "messages": [
-                    HumanMessage(content="what's the weather in sf", id=AnyStr())
-                ],
+                "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
                 "route": "weather",
             },
             next=("weather_graph",),
@@ -8831,10 +8857,8 @@ async def test_weather_subgraph(
                     state=StateSnapshot(
                         values={
                             "messages": [
-                                HumanMessage(
-                                    content="what's the weather in sf", id=AnyStr()
-                                ),
-                                AIMessage(content="rainy", id=AnyStr()),
+                                _AnyIdHumanMessage(content="what's the weather in sf"),
+                                _AnyIdAIMessage(content="rainy"),
                             ],
                             "city": "San Francisco",
                         },
@@ -8888,10 +8912,8 @@ async def test_weather_subgraph(
                 {
                     "weather_graph": {
                         "messages": [
-                            HumanMessage(
-                                content="what's the weather in sf", id=AnyStr()
-                            ),
-                            AIMessage(content="rainy", id=AnyStr()),
+                            _AnyIdHumanMessage(content="what's the weather in sf"),
+                            _AnyIdAIMessage(content="rainy"),
                         ]
                     }
                 },

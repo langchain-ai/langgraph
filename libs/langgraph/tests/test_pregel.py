@@ -526,8 +526,11 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
+    assert app.input_schema.model_json_schema() == {
+        "title": "LangGraphInput",
+        "type": "integer",
+    }
+    assert app.output_schema.model_json_schema() == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
@@ -548,12 +551,12 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {
+    assert app.input_schema.model_json_schema() == {
         "title": "LangGraphInput",
         "type": "object",
         "properties": {"input": {"title": "Input", "type": "integer", "default": None}},
     }
-    assert app.output_schema.schema() == {
+    assert app.output_schema.model_json_schema() == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
@@ -2830,8 +2833,8 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
 
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -2871,8 +2874,8 @@ def test_conditional_entrypoint_to_multiple_state_graph(
 
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -3012,8 +3015,8 @@ def test_conditional_state_graph(
 
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -3796,9 +3799,9 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
 
     app = builder.compile()
 
-    assert app.config_schema().schema_json() == snapshot
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.config_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
 
     assert builder.channels.keys() == {"input", "agent_outcome", "intermediate_steps"}
 
@@ -3861,8 +3864,8 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -3928,8 +3931,8 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     app = create_tool_calling_executor(model, tools)
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -3972,7 +3975,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                 content="result for another",
                 name="search_api",
                 tool_call_id="tool_call234",
-                id=AnyStr(),
             ),
             _AnyIdToolMessage(
                 content="result for a third one",
@@ -4793,8 +4795,8 @@ def test_message_graph(
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
+    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
     assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
@@ -7775,8 +7777,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
     app = workflow.compile()
 
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_input_schema().schema() == snapshot
-    assert app.get_output_schema().schema() == snapshot
+    assert app.get_input_schema().model_json_schema() == snapshot
+    assert app.get_output_schema().model_json_schema() == snapshot
 
     with pytest.raises(ValidationError), assert_ctx_once():
         app.invoke({"query": {}})
