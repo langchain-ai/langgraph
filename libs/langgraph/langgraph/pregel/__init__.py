@@ -41,12 +41,11 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
-    create_model,
     get_function_nonlocals,
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
-from pydantic import BaseModel
+from pydantic import BaseModel, create_model
 from typing_extensions import Self
 
 from langgraph.channels.base import (

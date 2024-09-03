@@ -75,7 +75,7 @@ from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
 from tests.conftest import ALL_CHECKPOINTERS_SYNC
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
-from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
+from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage, _AnyIdToolMessage
 
 
 def test_graph_validation() -> None:
@@ -440,11 +440,17 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
+    assert app.input_schema.model_json_schema() == {
+        "title": "LangGraphInput",
+        "type": "integer",
+    }
+    assert app.output_schema.model_json_schema() == {
+        "title": "LangGraphOutput",
+        "type": "integer",
+    }
     with warnings.catch_warnings():
         warnings.simplefilter("error")  # raise warnings as errors
-        assert app.config_schema().schema() == {
+        assert app.config_schema().model_json_schema() == {
             "properties": {},
             "title": "LangGraphConfig",
             "type": "object",
@@ -489,14 +495,21 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
         input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
+    assert app.input_schema.model_json_schema() == {
+        "title": "LangGraphInput",
+        "type": "integer",
+    }
+    assert app.output_schema.model_json_schema() == {
         "title": "LangGraphOutput",
         "type": "object",
         "properties": {
-            "output": {"title": "Output", "type": "integer"},
-            "fixed": {"title": "Fixed", "type": "integer"},
-            "output_plus_one": {"title": "Output Plus One", "type": "integer"},
+            "output": {"title": "Output", "type": "integer", "default": None},
+            "fixed": {"title": "Fixed", "type": "integer", "default": None},
+            "output_plus_one": {
+                "title": "Output Plus One",
+                "type": "integer",
+                "default": None,
+            },
         },
     }
     assert app.invoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
@@ -517,7 +530,9 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output", "type": "integer"}},
+        "properties": {
+            "output": {"title": "Output", "type": "integer", "default": None}
+        },
     }
     assert app.invoke(2) == {"output": 3}
 
@@ -536,12 +551,14 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
     assert app.input_schema.schema() == {
         "title": "LangGraphInput",
         "type": "object",
-        "properties": {"input": {"title": "Input", "type": "integer"}},
+        "properties": {"input": {"title": "Input", "type": "integer", "default": None}},
     }
     assert app.output_schema.schema() == {
         "title": "LangGraphOutput",
         "type": "object",
-        "properties": {"output": {"title": "Output", "type": "integer"}},
+        "properties": {
+            "output": {"title": "Output", "type": "integer", "default": None}
+        },
     }
     assert app.invoke({"input": 2}) == {"output": 3}
 
@@ -4274,10 +4291,9 @@ def test_state_graph_packets(
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for query",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
             AIMessage(
@@ -4296,16 +4312,14 @@ def test_state_graph_packets(
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for another",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call234",
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a third one",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call567",
             ),
             AIMessage(content="answer", id="ai3"),
@@ -4335,10 +4349,9 @@ def test_state_graph_packets(
         },
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for query",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call123",
                 )
             }
@@ -4365,20 +4378,18 @@ def test_state_graph_packets(
         },
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for another",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call234",
                 )
             },
         },
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for a third one",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call567",
                 ),
             },
@@ -4515,10 +4526,9 @@ def test_state_graph_packets(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call123",
                 )
             }
@@ -4560,10 +4570,9 @@ def test_state_graph_packets(
                         },
                     ],
                 ),
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call123",
                 ),
                 AIMessage(
@@ -4640,10 +4649,9 @@ def test_state_graph_packets(
                         },
                     ],
                 ),
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call123",
                 ),
                 AIMessage(content="answer", id="ai2"),
@@ -5539,9 +5547,8 @@ def test_root_graph(
     app = workflow.compile()
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
-        HumanMessage(
+        _AnyIdHumanMessage(
             content="what is weather in sf",
-            id="00000000-0000-4000-8000-000000000002",  # adds missing ids
         ),
         AIMessage(
             content="",
@@ -5554,11 +5561,10 @@ def test_root_graph(
             ],
             id="ai1",  # respects ids passed in
         ),
-        ToolMessage(
+        _AnyIdToolMessage(
             content="result for query",
             name="search_api",
             tool_call_id="tool_call123",
-            id="00000000-0000-4000-8000-000000000011",
         ),
         AIMessage(
             content="",
@@ -5571,11 +5577,10 @@ def test_root_graph(
             ],
             id="ai2",
         ),
-        ToolMessage(
+        _AnyIdToolMessage(
             content="result for another",
             name="search_api",
             tool_call_id="tool_call456",
-            id="00000000-0000-4000-8000-000000000020",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -5743,11 +5748,10 @@ def test_root_graph(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 )
             ]
         },
@@ -5780,7 +5784,7 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -5843,7 +5847,7 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -5976,11 +5980,10 @@ def test_root_graph(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 )
             ]
         },
@@ -6013,7 +6016,7 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -6076,11 +6079,10 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
         ],
@@ -6116,7 +6118,7 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -6188,11 +6190,10 @@ def test_root_graph(
                         }
                     ],
                 ),
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 ),
                 AIMessage(content="answer", id="ai2"),
                 _AnyIdAIMessage(content="an extra message"),
@@ -6236,7 +6237,7 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 id="00000000-0000-4000-8000-000000000091",
@@ -7524,6 +7525,170 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
+
+
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
+def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
+    snapshot: SnapshotAssertion,
+    mocker: MockerFixture,
+    request: pytest.FixtureRequest,
+    checkpointer_name: str,
+) -> None:
+    from pydantic.v1 import BaseModel, ValidationError
+
+    checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
+    setup = mocker.Mock()
+    teardown = mocker.Mock()
+
+    @contextmanager
+    def assert_ctx_once() -> Iterator[None]:
+        assert setup.call_count == 0
+        assert teardown.call_count == 0
+        try:
+            yield
+        finally:
+            assert setup.call_count == 1
+            assert teardown.call_count == 1
+            setup.reset_mock()
+            teardown.reset_mock()
+
+    @contextmanager
+    def make_httpx_client() -> Iterator[httpx.Client]:
+        setup()
+        with httpx.Client() as client:
+            try:
+                yield client
+            finally:
+                teardown()
+
+    def sorted_add(
+        x: list[str], y: Union[list[str], list[tuple[str, str]]]
+    ) -> list[str]:
+        if isinstance(y[0], tuple):
+            for rem, _ in y:
+                x.remove(rem)
+            y = [t[1] for t in y]
+        return sorted(operator.add(x, y))
+
+    class InnerObject(BaseModel):
+        yo: int
+
+    class State(BaseModel):
+        class Config:
+            arbitrary_types_allowed = True
+
+        query: str
+        inner: InnerObject
+        answer: Optional[str] = None
+        docs: Annotated[list[str], sorted_add]
+        client: Annotated[httpx.Client, Context(make_httpx_client)]
+
+    class Input(BaseModel):
+        query: str
+        inner: InnerObject
+
+    class Output(BaseModel):
+        answer: str
+        docs: list[str]
+
+    class StateUpdate(BaseModel):
+        query: Optional[str] = None
+        answer: Optional[str] = None
+        docs: Optional[list[str]] = None
+
+    def rewrite_query(data: State) -> State:
+        return {"query": f"query: {data.query}"}
+
+    def analyzer_one(data: State) -> State:
+        return StateUpdate(query=f"analyzed: {data.query}")
+
+    def retriever_one(data: State) -> State:
+        return {"docs": ["doc1", "doc2"]}
+
+    def retriever_two(data: State) -> State:
+        time.sleep(0.1)
+        return {"docs": ["doc3", "doc4"]}
+
+    def qa(data: State) -> State:
+        return {"answer": ",".join(data.docs)}
+
+    def decider(data: State) -> str:
+        assert isinstance(data, State)
+        return "retriever_two"
+
+    workflow = StateGraph(State, input=Input, output=Output)
+
+    workflow.add_node("rewrite_query", rewrite_query)
+    workflow.add_node("analyzer_one", analyzer_one)
+    workflow.add_node("retriever_one", retriever_one)
+    workflow.add_node("retriever_two", retriever_two)
+    workflow.add_node("qa", qa)
+
+    workflow.set_entry_point("rewrite_query")
+    workflow.add_edge("rewrite_query", "analyzer_one")
+    workflow.add_edge("analyzer_one", "retriever_one")
+    workflow.add_conditional_edges(
+        "rewrite_query", decider, {"retriever_two": "retriever_two"}
+    )
+    workflow.add_edge(["retriever_one", "retriever_two"], "qa")
+    workflow.set_finish_point("qa")
+
+    app = workflow.compile()
+
+    with pytest.raises(ValidationError), assert_ctx_once():
+        app.invoke({"query": {}})
+
+    with assert_ctx_once():
+        assert app.invoke({"query": "what is weather in sf", "inner": {"yo": 1}}) == {
+            "docs": ["doc1", "doc2", "doc3", "doc4"],
+            "answer": "doc1,doc2,doc3,doc4",
+        }
+
+    with assert_ctx_once():
+        assert [
+            *app.stream({"query": "what is weather in sf", "inner": {"yo": 1}})
+        ] == [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ]
+
+    app_w_interrupt = workflow.compile(
+        checkpointer=checkpointer,
+        interrupt_after=["retriever_one"],
+    )
+    config = {"configurable": {"thread_id": "1"}}
+
+    with assert_ctx_once():
+        assert [
+            c
+            for c in app_w_interrupt.stream(
+                {"query": "what is weather in sf", "inner": {"yo": 1}}, config
+            )
+        ] == [
+            {"rewrite_query": {"query": "query: what is weather in sf"}},
+            {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
+            {"retriever_two": {"docs": ["doc3", "doc4"]}},
+            {"retriever_one": {"docs": ["doc1", "doc2"]}},
+        ]
+
+    with assert_ctx_once():
+        assert [c for c in app_w_interrupt.stream(None, config)] == [
+            {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
+        ]
+
+    with assert_ctx_once():
+        assert app_w_interrupt.update_state(
+            config, {"docs": ["doc5"]}, as_node="rewrite_query"
+        ) == {
+            "configurable": {
+                "thread_id": "1",
+                "checkpoint_id": AnyStr(),
+                "checkpoint_ns": "",
+            }
+        }
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -9616,7 +9781,6 @@ def test_doubly_nested_graph_state(
     ]
 
 
-@pytest.mark.repeat(10)
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_send_to_nested_graphs(
     request: pytest.FixtureRequest, checkpointer_name: str
@@ -9776,12 +9940,10 @@ def test_send_to_nested_graphs(
     graph.update_state(outer_state.tasks[1].state, {"subject": "turtles - hohoho"})
 
     # continue past interrupt
-    assert sorted(
-        graph.stream(None, config=config), key=lambda d: d["generate_joke"]["jokes"][0]
-    ) == [
-        {"generate_joke": {"jokes": ["Joke about cats - hohoho"]}},
-        {"generate_joke": {"jokes": ["Joke about turtles - hohoho"]}},
-    ]
+    assert graph.invoke(None, config=config) == {
+        "subjects": ["cats", "dogs"],
+        "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
+    }
 
     actual_snapshot = graph.get_state(config)
     expected_snapshot = StateSnapshot(
@@ -10051,7 +10213,7 @@ def test_weather_subgraph(
     state = graph.get_state(config)
     assert state == StateSnapshot(
         values={
-            "messages": [HumanMessage(content="what's the weather in sf", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
             "route": "weather",
         },
         next=("weather_graph",),
@@ -10113,8 +10275,8 @@ def test_weather_subgraph(
             {
                 "weather_graph": {
                     "messages": [
-                        HumanMessage(content="what's the weather in sf", id=AnyStr()),
-                        AIMessage(content="I'ts sunny in la!", id=AnyStr()),
+                        _AnyIdHumanMessage(content="what's the weather in sf"),
+                        _AnyIdAIMessage(content="I'ts sunny in la!"),
                     ]
                 }
             },
@@ -10136,7 +10298,7 @@ def test_weather_subgraph(
     state = graph.get_state(config, subgraphs=True)
     assert state == StateSnapshot(
         values={
-            "messages": [HumanMessage(content="what's the weather in sf", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
             "route": "weather",
         },
         next=("weather_graph",),
@@ -10168,9 +10330,7 @@ def test_weather_subgraph(
                 state=StateSnapshot(
                     values={
                         "messages": [
-                            HumanMessage(
-                                content="what's the weather in sf", id=AnyStr()
-                            )
+                            _AnyIdHumanMessage(content="what's the weather in sf")
                         ],
                         "city": "San Francisco",
                     },
@@ -10215,7 +10375,7 @@ def test_weather_subgraph(
     state = graph.get_state(config, subgraphs=True)
     assert state == StateSnapshot(
         values={
-            "messages": [HumanMessage(content="what's the weather in sf", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
             "route": "weather",
         },
         next=("weather_graph",),
@@ -10247,10 +10407,8 @@ def test_weather_subgraph(
                 state=StateSnapshot(
                     values={
                         "messages": [
-                            HumanMessage(
-                                content="what's the weather in sf", id=AnyStr()
-                            ),
-                            AIMessage(content="rainy", id=AnyStr()),
+                            _AnyIdHumanMessage(content="what's the weather in sf"),
+                            _AnyIdAIMessage(content="rainy"),
                         ],
                         "city": "San Francisco",
                     },
@@ -10302,8 +10460,8 @@ def test_weather_subgraph(
             {
                 "weather_graph": {
                     "messages": [
-                        HumanMessage(content="what's the weather in sf", id=AnyStr()),
-                        AIMessage(content="rainy", id=AnyStr()),
+                        _AnyIdHumanMessage(content="what's the weather in sf"),
+                        _AnyIdAIMessage(content="rainy"),
                     ]
                 }
             },
@@ -10450,9 +10608,8 @@ def test_checkpoint_metadata() -> None:
     ) == {
         "messages": [
             _AnyIdHumanMessage(content="what is weather in sf"),
-            AIMessage(
+            _AnyIdAIMessage(
                 content="",
-                id=AnyStr(),
                 tool_calls=[
                     {
                         "name": "search_api",
@@ -10462,10 +10619,9 @@ def test_checkpoint_metadata() -> None:
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for query",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
             _AnyIdAIMessage(content="answer"),

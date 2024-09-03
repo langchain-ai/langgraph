@@ -174,9 +174,7 @@ class ValidationNode(RunnableCallable):
                         f"Tool {schema.name} does not have an args_schema defined."
                     )
                 self.schemas_by_name[schema.name] = schema.args_schema
-            elif isinstance(schema, type) and issubclass(
-                schema, BaseModel
-            ):
+            elif isinstance(schema, type) and issubclass(schema, BaseModel):
                 self.schemas_by_name[schema.__name__] = cast(Type[BaseModel], schema)
             elif callable(schema):
                 base_model = create_schema_from_function("Validation", schema)
