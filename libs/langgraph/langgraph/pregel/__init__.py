@@ -25,12 +25,10 @@ from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
 from langchain_core.load.dump import dumpd
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.runnables import (
     Runnable,
     RunnableLambda,
     RunnableSequence,
-    RunnableSerializable,
 )
 from langchain_core.runnables.base import Input, Output, coerce_to_runnable
 from langchain_core.runnables.config import (
@@ -48,6 +46,7 @@ from langchain_core.runnables.utils import (
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
+from pydantic import BaseModel
 from typing_extensions import Self
 
 from langgraph.channels.base import (
@@ -186,16 +185,10 @@ class Channel:
         )
 
 
-class Pregel(
-    RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
-):
+class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     nodes: Mapping[str, PregelNode]
 
-    channels: Mapping[str, Union[BaseChannel, ManagedValueSpec]] = Field(
-        default_factory=dict
-    )
-
-    auto_validate: bool = True
+    channels: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
 
     stream_mode: StreamMode = "values"
     """Mode to stream output, defaults to 'values'."""
@@ -205,16 +198,16 @@ class Pregel(
     stream_channels: Optional[Union[str, Sequence[str]]] = None
     """Channels to stream, defaults to all channels not in reserved channels"""
 
-    interrupt_after_nodes: Union[All, Sequence[str]] = Field(default_factory=list)
+    interrupt_after_nodes: Union[All, Sequence[str]]
 
-    interrupt_before_nodes: Union[All, Sequence[str]] = Field(default_factory=list)
+    interrupt_before_nodes: Union[All, Sequence[str]]
 
     input_channels: Union[str, Sequence[str]]
 
     step_timeout: Optional[float] = None
     """Maximum time to wait for a step to complete, in seconds. Defaults to None."""
 
-    debug: bool = Field(default_factory=get_debug)
+    debug: bool
     """Whether to print debug information during execution. Defaults to False."""
 
     checkpointer: Optional[BaseCheckpointSaver] = None
@@ -232,36 +225,50 @@ class Pregel(
 
     name: str = "LangGraph"
 
-    class Config:
-        arbitrary_types_allowed = True
+    def __init__(
+        self,
+        *,
+        nodes: Mapping[str, PregelNode],
+        channels: Mapping[str, Union[BaseChannel, ManagedValueSpec]] = None,
+        auto_validate: bool = True,
+        stream_mode: StreamMode = "values",
+        output_channels: Union[str, Sequence[str]],
+        stream_channels: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_after_nodes: Union[All, Sequence[str]] = (),
+        interrupt_before_nodes: Union[All, Sequence[str]] = (),
+        input_channels: Union[str, Sequence[str]],
+        step_timeout: Optional[float] = None,
+        debug: Optional[bool] = None,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
+        store: Optional[BaseStore] = None,
+        retry_policy: Optional[RetryPolicy] = None,
+        config_type: Optional[Type[Any]] = None,
+        config: Optional[RunnableConfig] = None,
+        name: str = "LangGraph",
+    ) -> None:
+        self.nodes = nodes
+        self.channels = channels or {}
+        self.stream_mode = stream_mode
+        self.output_channels = output_channels
+        self.stream_channels = stream_channels
+        self.interrupt_after_nodes = interrupt_after_nodes
+        self.interrupt_before_nodes = interrupt_before_nodes
+        self.input_channels = input_channels
+        self.step_timeout = step_timeout
+        self.debug = debug if debug is not None else get_debug()
+        self.checkpointer = checkpointer
+        self.store = store
+        self.retry_policy = retry_policy
+        self.config_type = config_type
+        self.config = config
+        self.name = name
+        if auto_validate:
+            self.validate()
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
-        return self.copy(
-            update={"config": cast(RunnableConfig, {**(config or {}), **kwargs})}
-        )
-
-    @classmethod
-    def is_lc_serializable(cls) -> bool:
-        """Return whether the graph can be serialized by Langchain."""
-        return True
-
-    @root_validator(skip_on_failure=True)
-    def validate_on_init(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if not values["auto_validate"]:
-            return values
-        validate_graph(
-            values["nodes"],
-            values["channels"],
-            values["input_channels"],
-            values["output_channels"],
-            values["stream_channels"],
-            values["interrupt_after_nodes"],
-            values["interrupt_before_nodes"],
-        )
-        if values["interrupt_after_nodes"] or values["interrupt_before_nodes"]:
-            if not values["checkpointer"]:
-                raise ValueError("Interrupts require a checkpointer")
-        return values
+        attrs = {**self.__dict__}
+        attrs["config"] = merge_configs(self.config, config, kwargs)
+        return self.__class__(**attrs)
 
     def validate(self) -> Self:
         validate_graph(

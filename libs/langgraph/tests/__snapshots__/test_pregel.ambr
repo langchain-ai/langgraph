@@ -3304,7 +3304,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3323,11 +3323,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
@@ -3374,7 +3370,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3393,11 +3389,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
@@ -3444,7 +3436,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3463,11 +3455,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
@@ -3514,7 +3502,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3533,11 +3521,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
@@ -3584,7 +3568,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3603,11 +3587,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
