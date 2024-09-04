@@ -514,7 +514,7 @@ async def test_cancel_graph_astream_events_v2(checkpointer_name: Optional[str]) 
                 if chunk["event"] == "on_chain_stream" and not chunk["parent_ids"]:
                     got_event = True
                     assert chunk["data"]["chunk"] == {"alittlewhile": {"value": 2}}
-                    await asyncio.sleep(0)
+                    await asyncio.sleep(0.1)
                     break
 
         # did break
