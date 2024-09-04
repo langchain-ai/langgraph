@@ -1,4 +1,3 @@
-import json
 from collections import defaultdict, deque
 from functools import partial
 from typing import (
@@ -270,16 +269,19 @@ def prepare_next_tasks(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[list[PregelTask], list[PregelExecutableTask]]:
+    checkpoint_id = UUID(checkpoint["id"])
     configurable = config.get("configurable", {})
     parent_ns = configurable.get("checkpoint_ns", "")
     tasks: Union[list[PregelTask], list[PregelExecutableTask]] = []
     # Consume pending packets
     for packet in checkpoint["pending_sends"]:
         if not isinstance(packet, Send):
-            logger.warn(f"Ignoring invalid packet type {type(packet)} in pending sends")
+            logger.warning(
+                f"Ignoring invalid packet type {type(packet)} in pending sends"
+            )
             continue
         if packet.node not in processes:
-            logger.warn(f"Ignoring unknown node name {packet.node} in pending sends")
+            logger.warning(f"Ignoring unknown node name {packet.node} in pending sends")
             continue
         # create task id
         triggers = [TASKS]
@@ -293,7 +295,12 @@ def prepare_next_tasks(
             f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
         task_id = str(
-            uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
+            uuid5(
+                checkpoint_id,
+                "".join(
+                    (checkpoint_ns, str(step), packet.node, *triggers, str(len(tasks)))
+                ),
+            )
         )
         if for_execution:
             proc = processes[packet.node]
@@ -397,8 +404,10 @@ def prepare_next_tasks(
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
             task_id = str(
                 uuid5(
-                    UUID(checkpoint["id"]),
-                    json.dumps((checkpoint_ns, metadata)),
+                    checkpoint_id,
+                    "".join(
+                        (checkpoint_ns, str(step), name, *triggers, str(len(tasks)))
+                    ),
                 )
             )
 
