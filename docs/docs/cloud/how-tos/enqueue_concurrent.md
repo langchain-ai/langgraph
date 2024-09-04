@@ -7,7 +7,7 @@ The guide covers the `enqueue` option for double texting, which adds the interru
 
 First, we will define a quick helper function for printing out JS and CURL model outputs (you can skip this if using Python):
 
-=== "Javascript:
+=== "Javascript":
 
     ```js
     function prettyPrint(m) {
