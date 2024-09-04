@@ -4,20 +4,44 @@ This guide assumes knowledge of what double-texting is, which you can learn abou
 
 The guide covers the `interrupt` option for double texting, which interrupts the prior run of the graph and starts a new one with the double-text. This option does not delete the first run, but rather keeps it in the database but sets its status to `interrupted`. Below is a quick example of using the `interrupt` option.
 
-First, we will define a quick helper function for printing out JS model outputs (you can skip this if using Python):
+First, we will define a quick helper function for printing out JS and CURL model outputs (you can skip this if using Python):
 
-```js
-function prettyPrint(m) {
-  const padded = " " + m['type'] + " ";
-  const sepLen = Math.floor((80 - padded.length) / 2);
-  const sep = "=".repeat(sepLen);
-  const secondSep = sep + (padded.length % 2 ? "=" : "");
-  
-  console.log(`${sep}${padded}${secondSep}`);
-  console.log("\n\n");
-  console.log(m.content);
-}
-```
+=== "Javascript:
+
+    ```js
+    function prettyPrint(m) {
+      const padded = " " + m['type'] + " ";
+      const sepLen = Math.floor((80 - padded.length) / 2);
+      const sep = "=".repeat(sepLen);
+      const secondSep = sep + (padded.length % 2 ? "=" : "");
+      
+      console.log(`${sep}${padded}${secondSep}`);
+      console.log("\n\n");
+      console.log(m.content);
+    }
+    ```
+
+=== "CURL"
+
+    ```bash
+    # PLACE THIS IN A FILE CALLED pretty_print.sh
+    pretty_print() {
+      local type="$1"
+      local content="$2"
+      local padded=" $type "
+      local total_width=80
+      local sep_len=$(( (total_width - ${#padded}) / 2 ))
+      local sep=$(printf '=%.0s' $(eval "echo {1.."${sep_len}"}"))
+      local second_sep=$sep
+      if (( (total_width - ${#padded}) % 2 )); then
+        second_sep="${second_sep}="
+      fi
+
+      echo "${sep}${padded}${second_sep}"
+      echo
+      echo "$content"
+    }
+    ```
 
 Now, let's import our required packages and instantiate our client, assistant, and thread.
 
@@ -44,6 +68,14 @@ Now, let's import our required packages and instantiate our client, assistant, a
     // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json'
     ```
 
 Now we can start our two runs and join the second on euntil it has completed:
@@ -92,6 +124,26 @@ Now we can start our two runs and join the second on euntil it has completed:
     await client.runs.join(thread["thread_id"], run["run_id"]);
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOY<ENT_URL>>/threads/<THREAD_ID>/runs \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\",
+      \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what\'s the weather in sf?\"}]},
+    }" && sleep 2 && curl --request POST \
+    --url <DEPLOY<ENT_URL>>/threads/<THREAD_ID>/runs \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\",
+      \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what\'s the weather in nyc?\"}]},
+      \"multitask_strategy\": \"interrupt\"
+    }" && curl --request GET \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/<RUN_ID>/join
+    ```
+
 We can see that the thread has partial data from the first run + data from the second run
 
 
@@ -112,6 +164,18 @@ We can see that the thread has partial data from the first run + data from the s
     for (const m of state['values']['messages']) {
       prettyPrint(m);
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    source pretty_print.sh && curl --request GET \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | \
+    jq -c '.values.messages[]' | while read -r element; do
+        type=$(echo "$element" | jq -r '.type')
+        content=$(echo "$element" | jq -r '.content | if type == "array" then tostring else . end')
+        pretty_print "$type" "$content"
+    done
     ```
 
 Output:

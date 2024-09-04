@@ -89,7 +89,7 @@ We can stream the results of a stateless run in an almost identical fashion to h
       }
     );
     for await (const chunk of streamResponse) {
-      if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
+      if (chunk.data && !("run_id" in chunk.data)) {
         console.log(chunk.data);
       }
     }

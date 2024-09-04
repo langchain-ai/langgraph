@@ -45,6 +45,14 @@ First, we need to setup our client so that we can communicate with our hosted gr
     const thread = await client.threads.create();
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json'
+    ```
+
 ## Example with no review
 
 Let's look at an example when no review is required (because no tools are called)
@@ -87,6 +95,42 @@ Let's look at an example when no review is required (because no tools are called
     }
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"hi!\"}]},
+       \"stream_mode\": [
+         \"updates\"
+       ],
+       \"interrupt_before\": [\"action\"]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
+    ```
+
 Output:
 
     {'messages': [{'content': 'hi!', 'additional_kwargs': {}, 'response_metadata': {}, 'type': 'human', 'name': None, 'id': '39c51f14-2d5c-4690-883a-d940854b1845', 'example': False}]}
@@ -111,6 +155,13 @@ If we check the state, we can see that it is finished
     console.log(state.next);
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request GET \
+        --url http://localhost:8173/threads/1a3914ad-ccf8-4f76-af0e-16e3800b2543/state | jq -c '.next'
+    ```
+
 Output:
 
     []
@@ -128,7 +179,6 @@ Let's now look at what it looks like to approve a tool call. Note that we don't 
         thread["thread_id"],
         "agent",
         input=input,
-        stream_mode="values",
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -144,7 +194,6 @@ Let's now look at what it looks like to approve a tool call. Note that we don't 
       assistantId,
       {
         input: input,
-        streamMode: "values",
       }
     );
 
@@ -153,6 +202,38 @@ Let's now look at what it looks like to approve a tool call. Note that we don't 
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf?\"}]}
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -177,6 +258,13 @@ If we now check, we can see that it is waiting on human review:
     const state = await client.threads.getState(thread["thread_id"]);
 
     console.log(state.next);
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request GET \
+        --url http://localhost:8173/threads/1a3914ad-ccf8-4f76-af0e-16e3800b2543/state | jq -c '.next'
     ```
 
 Output:
@@ -205,7 +293,7 @@ To approve the tool call, we can just continue the thread with no edits. To do t
       thread["thread_id"],
       assistantId,
       {
-        input: undefined,
+        input: null,
         streamMode: "values",
       }
     );
@@ -215,6 +303,37 @@ To approve the tool call, we can just continue the thread with no edits. To do t
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\"
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -260,6 +379,38 @@ Let's now say we want to edit the tool call. E.g. change some of the parameters 
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf?\"}]}
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -316,7 +467,6 @@ To do this, we first need to update the state. We can do this by passing a messa
         thread["thread_id"],
         "agent",
         input=None,
-        stream_mode="values",
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -365,9 +515,7 @@ To do this, we first need to update the state. We can do this by passing a messa
       thread["thread_id"],
       assistantId,
       {
-        input: undefined,
-        streamMode: "values",
-        interruptBefore: ["action"],
+        input: null,
       }
     );
 
@@ -376,6 +524,57 @@ To do this, we first need to update the state. We can do this by passing a messa
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+    --header 'Content-Type: application/json' \
+    --data "{
+        \"values\": { \"messages\": [$(curl --request GET \
+            --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state |
+            jq -c '{
+            role: "assistant",
+            content: .values.messages[-1].content,
+            tool_calls: [
+                {
+                id: .values.messages[-1].tool_calls[0].id,
+                name: "weather_search",
+                args: { city: "San Francisco, USA" }
+                }
+            ],
+            id: .values.messages[-1].id
+            }')
+        ]},
+        \"as_node\": \"human_review_node\"
+    }" && echo "Resuming Execution" && curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "assistant_id": "agent"
+    }' | \
+    sed 's/\r$//' | \
+    awk '
+    /^event:/ {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+        sub(/^event: /, "", $0)
+        event_type = $0
+        data_content = ""
+    }
+    /^data:/ {
+        sub(/^data: /, "", $0)
+        data_content = $0
+    }
+    END {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+    }
+    '
     ```
 
 Output:
@@ -411,7 +610,6 @@ For this example we will just add a single tool call representing the feedback. 
         thread["thread_id"],
         "agent",
         input=input,
-        stream_mode="values",
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -427,7 +625,6 @@ For this example we will just add a single tool call representing the feedback. 
       assistantId,
       {
         input: input,
-        streamMode: "values",
       }
     );
 
@@ -436,6 +633,38 @@ For this example we will just add a single tool call representing the feedback. 
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf?\"}]}
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -521,7 +750,7 @@ To do this, we first need to update the state. We can do this by passing a messa
       thread["thread_id"],
       assistantId,
       {
-        input: undefined,
+        input: null,
         streamMode: "values",
         interruptBefore: ["action"],
       }
@@ -533,6 +762,52 @@ To do this, we first need to update the state. We can do this by passing a messa
       }
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+    --header 'Content-Type: application/json' \
+    --data "{
+        \"values\": { \"messages\": [$(curl --request GET \
+            --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state |
+            jq -c '{
+            role: "tool",
+            content: "User requested changes: pass in the country as well",
+            name: "get_weather",
+            tool_call_id: .values.messages[-1].id.tool_calls[0].id
+            }')
+        ]},
+        \"as_node\": \"human_review_node\"
+    }" && echo "Resuming Execution" && curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "assistant_id": "agent"
+    }' | \
+    sed 's/\r$//' | \
+    awk '
+    /^event:/ {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+        sub(/^event: /, "", $0)
+        event_type = $0
+        data_content = ""
+    }
+    /^data:/ {
+        sub(/^data: /, "", $0)
+        data_content = $0
+    }
+    END {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+    }
+    '
+    ```
+
 
 Output:
 
@@ -554,7 +829,6 @@ We can see that we now get to another breakpoint - because it went back to the m
         thread["thread_id"],
         "agent",
         input=None,
-        stream_mode="values",
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -567,8 +841,7 @@ We can see that we now get to another breakpoint - because it went back to the m
       thread["thread_id"],
       assistantId,
       {
-        input: undefined,
-        streamMode: "values",
+        input: null,
       }
     );
 
@@ -577,6 +850,37 @@ We can see that we now get to another breakpoint - because it went back to the m
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\"
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
