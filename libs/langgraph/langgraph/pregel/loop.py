@@ -45,6 +45,7 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
+    TAG_HIDDEN,
 )
 from langgraph.errors import EmptyInputError, GraphInterrupt
 from langgraph.managed.base import (
@@ -437,14 +438,11 @@ class PregelLoop:
                 if isinstance(self.stream_keys, str)
                 else self.stream_keys,
             )
+        # create new checkpoint
+        self.checkpoint = create_checkpoint(self.checkpoint, self.channels, self.step)
         # bail if no checkpointer
         if self._checkpointer_put_after_previous is not None:
-            # create new checkpoint
             self.checkpoint_metadata = metadata
-            self.checkpoint = create_checkpoint(
-                self.checkpoint, self.channels, self.step
-            )
-
             self.checkpoint_config = {
                 **self.checkpoint_config,
                 "configurable": {
@@ -459,7 +457,6 @@ class PregelLoop:
             new_versions = get_new_channel_versions(
                 self.checkpoint_previous_versions, channel_versions
             )
-
             self.checkpoint_previous_versions = channel_versions
 
             # save it, without blocking
@@ -510,15 +507,20 @@ class PregelLoop:
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
     ) -> None:
         if task := next((t for t in self.tasks if t.id == task_id), None):
-            self._emit(
-                (self.config["configurable"].get("checkpoint_ns", ""), "updates", v)
-                for v in map_output_updates(self.output_keys, [(task, writes)], cached)
-            )
+            if task.config is not None and TAG_HIDDEN in task.config.get("tags"):
+                return
+            if writes[0][0] != ERROR and writes[0][0] != INTERRUPT:
+                self._emit(
+                    (self.config["configurable"].get("checkpoint_ns", ""), "updates", v)
+                    for v in map_output_updates(
+                        self.output_keys, [(task, writes)], cached
+                    )
+                )
             if not cached:
                 self._emit(
                     (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
                     for v in map_debug_task_results(
-                        self.step, [(task, writes)], self.stream_keys
+                        self.step, (task, writes), self.stream_keys
                     )
                 )
 

@@ -102,17 +102,25 @@ def local_read(
 ) -> Union[dict[str, Any], Any]:
     if isinstance(select, str):
         managed_keys = []
+        for c, _ in task.writes:
+            if c == select:
+                updated = {c}
+                break
+        else:
+            updated = set()
     else:
         managed_keys = [k for k in select if k in managed]
         select = [k for k in select if k not in managed]
-    if fresh:
-        new_checkpoint = create_checkpoint(copy_checkpoint(checkpoint), channels, -1)
-        with ChannelsManager(channels, new_checkpoint, config, skip_context=True) as (
-            channels,
-            _,
-        ):
-            apply_writes(new_checkpoint, channels, [task], None)
-            values = read_channels(channels, select)
+        updated = set(select).intersection(c for c, _ in task.writes)
+    if fresh and updated:
+        with ChannelsManager(
+            {k: v for k, v in channels.items() if k in updated},
+            checkpoint,
+            config,
+            skip_context=True,
+        ) as (local_channels, _):
+            apply_writes(copy_checkpoint(checkpoint), local_channels, [task], None)
+            values = read_channels({**channels, **local_channels}, select)
     else:
         values = read_channels(channels, select)
     if managed_keys:
@@ -171,7 +179,10 @@ def apply_writes(
 
     # Consume all channels that were read
     for chan in {
-        chan for task in tasks for chan in task.triggers if chan not in RESERVED
+        chan
+        for task in tasks
+        for chan in task.triggers
+        if chan not in RESERVED and chan in channels
     }:
         if channels[chan].consume():
             if get_next_version is not None:

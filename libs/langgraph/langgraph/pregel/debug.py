@@ -96,33 +96,25 @@ def map_debug_tasks(
 
 def map_debug_task_results(
     step: int,
-    tasks: list[tuple[PregelExecutableTask, Sequence[tuple[str, Any]]]],
+    task_tup: tuple[PregelExecutableTask, Sequence[tuple[str, Any]]],
     stream_keys: Union[str, Sequence[str]],
 ) -> Iterator[DebugOutputTaskResult]:
     stream_channels_list = (
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
-    ts = datetime.now(timezone.utc)
-    for task, writes in tasks:
-        if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
-            continue
-
-        metadata = task.config["metadata"].copy()
-        metadata.pop("checkpoint_id", None)
-        # TODO: make task IDs deterministic in tests and reuse task IDs for payload ID
-
-        yield {
-            "type": "task_result",
-            "timestamp": ts.isoformat(),
-            "step": step,
-            "payload": {
-                "id": task.id,
-                "name": task.name,
-                "error": next((w[1] for w in writes if w[0] == ERROR), None),
-                "result": [w for w in writes if w[0] in stream_channels_list],
-                "interrupts": [asdict(w[1]) for w in writes if w[0] == INTERRUPT],
-            },
-        }
+    task, writes = task_tup
+    yield {
+        "type": "task_result",
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+        "step": step,
+        "payload": {
+            "id": task.id,
+            "name": task.name,
+            "error": next((w[1] for w in writes if w[0] == ERROR), None),
+            "result": [w for w in writes if w[0] in stream_channels_list],
+            "interrupts": [asdict(w[1]) for w in writes if w[0] == INTERRUPT],
+        },
+    }
 
 
 def map_debug_checkpoint(
