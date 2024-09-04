@@ -6,7 +6,6 @@ from functools import partial
 from typing import (
     Any,
     AsyncIterator,
-    Awaitable,
     Callable,
     Dict,
     Iterator,
@@ -28,14 +27,12 @@ from langchain_core.runnables import (
     RunnableLambda,
     RunnableSequence,
 )
-from langchain_core.runnables.base import Input, Output, coerce_to_runnable
+from langchain_core.runnables.base import Input, Output
 from langchain_core.runnables.config import (
     RunnableConfig,
     ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
-    merge_configs,
-    patch_config,
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
@@ -76,7 +73,6 @@ from langgraph.pregel.algo import (
     local_write,
     prepare_next_tasks,
 )
-from langgraph.pregel.config import patch_checkpoint_map, patch_configurable
 from langgraph.pregel.debug import tasks_w_writes
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
@@ -96,14 +92,15 @@ from langgraph.pregel.utils import (
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.utils import RunnableCallable
+from langgraph.utils.config import (
+    merge_configs,
+    patch_checkpoint_map,
+    patch_config,
+    patch_configurable,
+)
+from langgraph.utils.runnable import RunnableCallable
 
-WriteValue = Union[
-    Runnable[Input, Output],
-    Callable[[Input], Output],
-    Callable[[Input], Awaitable[Output]],
-    Any,
-]
+WriteValue = Union[Callable[[Input], Output], Any]
 
 
 class Channel:
@@ -168,11 +165,9 @@ class Channel:
         return ChannelWrite(
             [ChannelWriteEntry(c) for c in channels]
             + [
-                (
-                    ChannelWriteEntry(k, skip_none=True, mapper=coerce_to_runnable(v))
-                    if isinstance(v, Runnable) or callable(v)
-                    else ChannelWriteEntry(k, value=v)
-                )
+                ChannelWriteEntry(k, mapper=v)
+                if callable(v)
+                else ChannelWriteEntry(k, value=v)
                 for k, v in kwargs.items()
             ]
         )
@@ -809,7 +804,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             managed,
         ):
             # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].get_writers()
+            writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
@@ -973,7 +968,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             managed,
         ):
             # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].get_writers()
+            writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
@@ -1424,7 +1419,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                while loop.tick(
+                while await asyncio.to_thread(
+                    loop.tick,
                     input_keys=self.input_channels,
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,

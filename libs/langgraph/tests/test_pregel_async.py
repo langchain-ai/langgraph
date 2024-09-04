@@ -514,6 +514,7 @@ async def test_cancel_graph_astream_events_v2(checkpointer_name: Optional[str]) 
                 if chunk["event"] == "on_chain_stream" and not chunk["parent_ids"]:
                     got_event = True
                     assert chunk["data"]["chunk"] == {"alittlewhile": {"value": 2}}
+                    await asyncio.sleep(0.1)
                     break
 
         # did break
@@ -2087,9 +2088,7 @@ async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> Non
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     one = (
-        Channel.subscribe_to("input")
-        | add_one
-        | Channel.write_to(output=RunnablePassthrough(), between=RunnablePassthrough())
+        Channel.subscribe_to("input") | add_one | Channel.write_to("output", "between")
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
