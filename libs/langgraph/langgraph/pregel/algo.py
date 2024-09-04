@@ -297,7 +297,7 @@ def prepare_next_tasks(
         )
         if for_execution:
             proc = processes[packet.node]
-            if node := proc.get_node():
+            if node := proc.node:
                 managed.replace_runtime_placeholders(step, packet.arg)
                 writes = deque()
                 task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
@@ -403,7 +403,7 @@ def prepare_next_tasks(
             )
 
             if for_execution:
-                if node := proc.get_node():
+                if node := proc.node:
                     writes = deque()
                     task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                     tasks.append(

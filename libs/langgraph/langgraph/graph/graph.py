@@ -55,7 +55,7 @@ class Branch(NamedTuple):
 
     def run(
         self,
-        writer: Callable[[list[str]], Optional[Runnable]],
+        writer: Callable[[list[str], RunnableConfig], None],
         reader: Optional[Callable[[RunnableConfig], Any]] = None,
     ) -> None:
         return ChannelWrite.register_writer(
@@ -75,7 +75,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[], Any]],
-        writer: Callable[[list[str]], Optional[Runnable]],
+        writer: Callable[[list[str], RunnableConfig], None],
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -86,7 +86,7 @@ class Branch(NamedTuple):
         else:
             value = input
         result = self.path.invoke(value, config)
-        return self._finish(writer, input, result)
+        return self._finish(writer, input, result, config)
 
     async def _aroute(
         self,
@@ -94,7 +94,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[], Any]],
-        writer: Callable[[list[str]], Optional[Runnable]],
+        writer: Callable[[list[str], RunnableConfig], Optional[Runnable]],
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -105,10 +105,14 @@ class Branch(NamedTuple):
         else:
             value = input
         result = await self.path.ainvoke(value, config)
-        return self._finish(writer, input, result)
+        return self._finish(writer, input, result, config)
 
     def _finish(
-        self, writer: Callable[[list[str]], Optional[Runnable]], input: Any, result: Any
+        self,
+        writer: Callable[[list[str], RunnableConfig], None],
+        input: Any,
+        result: Any,
+        config: RunnableConfig,
     ):
         if not isinstance(result, list):
             result = [result]
@@ -120,7 +124,7 @@ class Branch(NamedTuple):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):
             raise InvalidUpdateError("Cannot send a packet to the END node")
-        return writer(destinations) or input
+        return writer(destinations, config) or input
 
 
 class Graph:
@@ -449,7 +453,9 @@ class CompiledGraph(Pregel):
             self.nodes[end].channels.append(start)
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
+        def branch_writer(
+            packets: list[Union[str, Send]], config: RunnableConfig
+        ) -> Optional[ChannelWrite]:
             writes = [
                 (
                     ChannelWriteEntry(f"branch:{start}:{name}:{p}" if p != END else END)

@@ -2,17 +2,18 @@ import asyncio
 import enum
 import inspect
 import sys
+from contextlib import AsyncExitStack
 from contextvars import copy_context
 from functools import partial, wraps
-from typing import Any, AsyncIterator, Awaitable, Callable, Optional
+from typing import Any, AsyncIterator, Awaitable, Callable, Iterator, Optional
 
-from langchain_core.load.serializable import to_json_not_implemented
 from langchain_core.runnables.base import (
     Runnable,
     RunnableConfig,
     RunnableLambda,
     RunnableLike,
     RunnableParallel,
+    RunnableSequence,
 )
 from langchain_core.runnables.config import (
     ensure_config,
@@ -21,7 +22,8 @@ from langchain_core.runnables.config import (
     run_in_executor,
     var_child_runnable_config,
 )
-from langchain_core.runnables.utils import accepts_config, accepts_run_manager
+from langchain_core.runnables.utils import Input, Output, accepts_config
+from langchain_core.tracers._streaming import _StreamingCallbackHandler
 from typing_extensions import TypeGuard
 
 from langgraph.utils.config import merge_configs, patch_config
@@ -73,16 +75,13 @@ class RunnableCallable(Runnable):
         self.func = func
         if func is not None:
             self.func_accepts_config = accepts_config(func)
-            self.func_accepts_run_manager = accepts_run_manager(func)
         self.afunc = afunc
         if afunc is not None:
             self.afunc_accepts_config = accepts_config(afunc)
-            self.afunc_accepts_run_manager = accepts_run_manager(afunc)
         self.config: Optional[RunnableConfig] = {"tags": tags} if tags else None
         self.kwargs = kwargs
         self.trace = trace
         self.recurse = recurse
-        self.serialized = to_json_not_implemented(self)
 
     def __repr__(self) -> str:
         repr_args = {
@@ -102,13 +101,15 @@ class RunnableCallable(Runnable):
                 " via the async API (ainvoke, astream, etc.)"
             )
         kwargs = {**self.kwargs, **kwargs}
+        if self.func_accepts_config:
+            kwargs["config"] = config
         config = ensure_config(merge_configs(self.config, config))
         context = copy_context()
         if self.trace:
             config = ensure_config(config)
             callback_manager = get_callback_manager_for_config(config)
             run_manager = callback_manager.on_chain_start(
-                self.serialized,
+                None,
                 input,
                 name=config.get("run_name") or self.get_name(),
                 run_id=config.pop("run_id", None),
@@ -117,10 +118,6 @@ class RunnableCallable(Runnable):
                 child_config = patch_config(config, callbacks=run_manager.get_child())
                 context = copy_context()
                 context.run(_set_config_context, child_config)
-                if self.func_accepts_config:
-                    kwargs["config"] = config
-                if self.func_accepts_run_manager:
-                    kwargs["run_manager"] = run_manager
                 ret = context.run(self.func, input, **kwargs)
             except BaseException as e:
                 run_manager.on_chain_error(e)
@@ -129,8 +126,6 @@ class RunnableCallable(Runnable):
                 run_manager.on_chain_end(ret)
         else:
             context.run(_set_config_context, config)
-            if self.func_accepts_config:
-                kwargs["config"] = config
             ret = context.run(self.func, input, **kwargs)
         if isinstance(ret, Runnable) and self.recurse:
             return ret.invoke(input, config)
@@ -142,12 +137,14 @@ class RunnableCallable(Runnable):
         if not self.afunc:
             return self.invoke(input, config)
         kwargs = {**self.kwargs, **kwargs}
+        if self.afunc_accepts_config:
+            kwargs["config"] = config
         config = ensure_config(merge_configs(self.config, config))
         context = copy_context()
         if self.trace:
             callback_manager = get_async_callback_manager_for_config(config)
             run_manager = await callback_manager.on_chain_start(
-                self.serialized,
+                None,
                 input,
                 name=config.get("run_name") or self.name,
                 run_id=config.pop("run_id", None),
@@ -155,10 +152,6 @@ class RunnableCallable(Runnable):
             try:
                 child_config = patch_config(config, callbacks=run_manager.get_child())
                 context.run(_set_config_context, child_config)
-                if self.afunc_accepts_config:
-                    kwargs["config"] = config
-                if self.afunc_accepts_run_manager:
-                    kwargs["run_manager"] = run_manager
                 coro = self.afunc(input, **kwargs)
                 if ASYNCIO_ACCEPTS_CONTEXT:
                     ret = await asyncio.create_task(coro, context=context)
@@ -171,8 +164,6 @@ class RunnableCallable(Runnable):
                 await run_manager.on_chain_end(ret)
         else:
             context.run(_set_config_context, config)
-            if self.afunc_accepts_config:
-                kwargs["config"] = config
             if ASYNCIO_ACCEPTS_CONTEXT:
                 ret = await asyncio.create_task(
                     self.afunc(input, **kwargs), context=context
@@ -236,3 +227,293 @@ def coerce_to_runnable(thing: RunnableLike, *, name: str, trace: bool) -> Runnab
             f"Expected a Runnable, callable or dict."
             f"Instead got an unsupported type: {type(thing)}"
         )
+
+
+class RunnableSeq(Runnable):
+    """A simpler version of RunnableSequence."""
+
+    def __init__(
+        self,
+        *steps: RunnableLike,
+        name: Optional[str] = None,
+    ) -> None:
+        """Create a new RunnableSequence.
+
+        Args:
+            steps: The steps to include in the sequence.
+            name: The name of the Runnable. Defaults to None.
+            first: The first Runnable in the sequence. Defaults to None.
+            middle: The middle Runnables in the sequence. Defaults to None.
+            last: The last Runnable in the sequence. Defaults to None.
+
+        Raises:
+            ValueError: If the sequence has less than 2 steps.
+        """
+        steps_flat: list[Runnable] = []
+        for step in steps:
+            if isinstance(step, RunnableSequence):
+                steps_flat.extend(step.steps)
+            elif isinstance(step, RunnableSeq):
+                steps_flat.extend(step.steps)
+            else:
+                steps_flat.append(coerce_to_runnable(step, name=None, trace=True))
+        if len(steps_flat) < 2:
+            raise ValueError(
+                f"RunnableSeq must have at least 2 steps, got {len(steps_flat)}"
+            )
+        self.steps = steps_flat
+        self.name = name
+
+    def __or__(
+        self,
+        other: Any,
+    ) -> Runnable:
+        if isinstance(other, RunnableSequence):
+            return RunnableSeq(
+                *self.steps,
+                other.first,
+                *other.middle,
+                other.last,
+                name=self.name or other.name,
+            )
+        elif isinstance(other, RunnableSeq):
+            return RunnableSeq(
+                *self.steps,
+                *other.steps,
+                name=self.name or other.name,
+            )
+        else:
+            return RunnableSeq(
+                *self.steps,
+                coerce_to_runnable(other),
+                name=self.name,
+            )
+
+    def __ror__(
+        self,
+        other: Any,
+    ) -> Runnable:
+        if isinstance(other, RunnableSequence):
+            return RunnableSequence(
+                other.first,
+                *other.middle,
+                other.last,
+                *self.steps,
+                name=other.name or self.name,
+            )
+        elif isinstance(other, RunnableSeq):
+            return RunnableSeq(
+                *other.steps,
+                *self.steps,
+                name=other.name or self.name,
+            )
+        else:
+            return RunnableSequence(
+                coerce_to_runnable(other),
+                *self.steps,
+                name=self.name,
+            )
+
+    def invoke(
+        self, input: Input, config: Optional[RunnableConfig] = None, **kwargs: Any
+    ) -> Output:
+        # setup callbacks and context
+        config = ensure_config(config)
+        callback_manager = get_callback_manager_for_config(config)
+        # start the root run
+        run_manager = callback_manager.on_chain_start(
+            None,
+            input,
+            name=config.get("run_name") or self.get_name(),
+            run_id=config.pop("run_id", None),
+        )
+
+        # invoke all steps in sequence
+        try:
+            for i, step in enumerate(self.steps):
+                # mark each step as a child run
+                config = patch_config(
+                    config, callbacks=run_manager.get_child(f"seq:step:{i+1}")
+                )
+                context = copy_context()
+                context.run(_set_config_context, config)
+                if i == 0:
+                    input = context.run(step.invoke, input, config, **kwargs)
+                else:
+                    input = context.run(step.invoke, input, config)
+        # finish the root run
+        except BaseException as e:
+            run_manager.on_chain_error(e)
+            raise
+        else:
+            run_manager.on_chain_end(input)
+            return input
+
+    async def ainvoke(
+        self,
+        input: Input,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Optional[Any],
+    ) -> Output:
+        # setup callbacks
+        config = ensure_config(config)
+        callback_manager = get_async_callback_manager_for_config(config)
+        # start the root run
+        run_manager = await callback_manager.on_chain_start(
+            None,
+            input,
+            name=config.get("run_name") or self.get_name(),
+            run_id=config.pop("run_id", None),
+        )
+
+        # invoke all steps in sequence
+        try:
+            for i, step in enumerate(self.steps):
+                # mark each step as a child run
+                config = patch_config(
+                    config, callbacks=run_manager.get_child(f"seq:step:{i+1}")
+                )
+                context = copy_context()
+                context.run(_set_config_context, config)
+                if i == 0:
+                    coro = step.ainvoke(input, config, **kwargs)
+                else:
+                    coro = step.ainvoke(input, config)
+                if ASYNCIO_ACCEPTS_CONTEXT:
+                    input = await asyncio.create_task(coro, context=context)
+                else:
+                    input = await asyncio.create_task(coro)
+        # finish the root run
+        except BaseException as e:
+            await run_manager.on_chain_error(e)
+            raise
+        else:
+            await run_manager.on_chain_end(input)
+            return input
+
+    def stream(
+        self,
+        input: Input,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Optional[Any],
+    ) -> Iterator[Output]:
+        # setup callbacks
+        config = ensure_config(config)
+        callback_manager = get_callback_manager_for_config(config)
+        # start the root run
+        run_manager = callback_manager.on_chain_start(
+            None,
+            input,
+            name=config.get("run_name") or self.get_name(),
+            run_id=config.pop("run_id", None),
+        )
+
+        try:
+            # stream the last steps
+            # transform the input stream of each step with the next
+            # steps that don't natively support transforming an input stream will
+            # buffer input in memory until all available, and then start emitting output
+            for idx, step in enumerate(self.steps):
+                config = patch_config(
+                    config,
+                    callbacks=run_manager.get_child(f"seq:step:{idx+1}"),
+                )
+                if idx == 0:
+                    iterator = step.stream(input, config, **kwargs)
+                else:
+                    iterator = step.transform(iterator, config)
+            if stream_handler := next(
+                (
+                    h
+                    for h in run_manager.handlers
+                    if isinstance(h, _StreamingCallbackHandler)
+                ),
+                None,
+            ):
+                # populates streamed_output in astream_log() output if needed
+                iterator = stream_handler.tap_output_iter(run_manager.run_id, iterator)
+            output: Output = None
+            add_supported = False
+            for chunk in iterator:
+                yield chunk
+                # collect final output
+                if output is None:
+                    output = chunk
+                elif add_supported:
+                    try:
+                        output = output + chunk
+                    except TypeError:
+                        output = chunk
+                        add_supported = False
+                else:
+                    output = chunk
+        except BaseException as e:
+            run_manager.on_chain_error(e)
+            raise
+        else:
+            run_manager.on_chain_end(output)
+
+    async def astream(
+        self,
+        input: Input,
+        config: Optional[RunnableConfig] = None,
+        **kwargs: Optional[Any],
+    ) -> AsyncIterator[Output]:
+        # setup callbacks
+        config = ensure_config(config)
+        callback_manager = get_async_callback_manager_for_config(config)
+        # start the root run
+        run_manager = await callback_manager.on_chain_start(
+            None,
+            input,
+            name=config.get("run_name") or self.get_name(),
+            run_id=config.pop("run_id", None),
+        )
+
+        try:
+            async with AsyncExitStack() as stack:
+                # stream the last steps
+                # transform the input stream of each step with the next
+                # steps that don't natively support transforming an input stream will
+                # buffer input in memory until all available, and then start emitting output
+                for idx, step in enumerate(self.steps):
+                    config = patch_config(
+                        config,
+                        callbacks=run_manager.get_child(f"seq:step:{idx+1}"),
+                    )
+                    if idx == 0:
+                        aiterator = step.astream(input, config, **kwargs)
+                    else:
+                        aiterator = step.atransform(aiterator, config)
+                    if hasattr(aiterator, "aclose"):
+                        stack.push_async_callback(aiterator.aclose)
+                if stream_handler := next(
+                    (
+                        h
+                        for h in run_manager.handlers
+                        if isinstance(h, _StreamingCallbackHandler)
+                    ),
+                    None,
+                ):
+                    # populates streamed_output in astream_log() output if needed
+                    aiterator = stream_handler.tap_output_aiter(
+                        run_manager.run_id, aiterator
+                    )
+                output: Output = None
+                add_supported = False
+                async for chunk in aiterator:
+                    yield chunk
+                    # collect final output
+                    if add_supported:
+                        try:
+                            output = output + chunk
+                        except TypeError:
+                            output = chunk
+                            add_supported = False
+                    else:
+                        output = chunk
+        except BaseException as e:
+            await run_manager.on_chain_error(e)
+            raise
+        else:
+            await run_manager.on_chain_end(output)
