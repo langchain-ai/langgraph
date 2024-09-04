@@ -1,5 +1,15 @@
 import json
-from typing import Annotated, Any, Callable, Dict, List, Optional, Sequence, Type, Union
+from typing import (
+    Annotated,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Type,
+    Union,
+)
 
 import pytest
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -463,6 +473,10 @@ def test_tool_node_inject_state() -> None:
         """Tool 1 docstring."""
         return msgs[0].content
 
+    class AgentState(BaseModel):
+        messages: List[AnyMessage]
+        foo: str
+
     node = ToolNode([tool1, tool2, tool3, tool4])
     for tool_name in ("tool1", "tool2", "tool3"):
         tool_call = {
@@ -473,6 +487,12 @@ def test_tool_node_inject_state() -> None:
         }
         msg = AIMessage("hi?", tool_calls=[tool_call])
         result = node.invoke({"messages": [msg], "foo": "bar"})
+        tool_message = result["messages"][-1]
+        assert tool_message.content == "bar"
+
+        # test pydantic v1 state
+        state_v1 = AgentState(messages=[msg], foo="bar")
+        result = node.invoke(state_v1)
         tool_message = result["messages"][-1]
         assert tool_message.content == "bar"
 
