@@ -1,6 +1,6 @@
 # How to Set Up a LangGraph Application for Deployment
 
-A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `pyproject.toml` to define your package's dependencies. 
+A LangGraph application must be configured with a [LangGraph API configuration file](../reference/cli.md#configuration-file) in order to be deployed to LangGraph Cloud (or to be self-hosted). This how-to guide discusses the basic steps to setup a LangGraph application for deployment using `pyproject.toml` to define your package's dependencies.
 
 This walkthrough is based on [this repository](https://github.com/langchain-ai/langgraph-example), which you can play around with to learn more about how to setup your LangGraph application for deployment.
 
@@ -34,6 +34,7 @@ After each step, an example file directory is provided to demonstrate how code c
 Dependencies can optionally be specified in one of the following files: `pyproject.toml`, `setup.py`, or `requirements.txt`. If none of these files is created, then dependencies can be specified later in the [LangGraph API configuration file](#create-langgraph-api-config).
 
 The dependencies below will be included in the image, you can also use them in your code, as long as with a compatible version range:
+
 ```
 langgraph>=0.2.7,<0.3.0
 langgraph-checkpoint>=1.0.4
