@@ -30,7 +30,7 @@ First let's set up our client and thread:
     const assistantID = assistants[0]['assistant_id'];
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
     ```
 
 === "CURL"
@@ -130,26 +130,49 @@ The first time we poll it, we can see `status=pending`:
 
 Output:
 
-    {
-        run_id: '1ef6712a-f75a-661b-bb4c-e42a5c03a9be',
-        thread_id: '5cb1e8a1-34b3-4a61-a34e-71a9799bd00d',
-        assistant_id: 'fe096781-5601-53d2-b2f6-0d3403f7e9ca',
-        created_at: '2024-08-30T20:55:00.001589+00:00',
-        updated_at: '2024-08-30T20:55:00.001589+00:00',
-        metadata: {},
-        status: 'pending',
-        kwargs: {
-            input: { messages: [Array] },
-            config: { metadata: [Object], configurable: [Object] },
-            webhook: null,
-            temporary: false,
-            stream_mode: [ 'values' ],
-            feedback_keys: null,
-            interrupt_after: null,
-            interrupt_before: null
-        },
-        multitask_strategy: 'reject'
-    }
+        {
+            "run_id": "1ef6a5f8-bd86-6763-bbd6-bff042db7b1b",
+            "thread_id": "7885f0cf-94ad-4040-91d7-73f7ba007c8a",
+            "assistant_id": "fe096781-5601-53d2-b2f6-0d3403f7e9ca",
+            "created_at": "2024-09-04T01:46:47.244887+00:00",
+            "updated_at": "2024-09-04T01:46:47.244887+00:00",
+            "metadata": {},
+            "status": "pending",
+            "kwargs": {
+                "input": {
+                    "messages": [
+                        {
+                            "role": "human",
+                            "content": "what's the weather in sf"
+                        }
+                    ]
+                },
+                "config": {
+                    "metadata": {
+                        "created_by": "system"
+                    },
+                    "configurable": {
+                        "run_id": "1ef6a5f8-bd86-6763-bbd6-bff042db7b1b",
+                        "user_id": "",
+                        "graph_id": "agent",
+                        "thread_id": "7885f0cf-94ad-4040-91d7-73f7ba007c8a",
+                        "assistant_id": "fe096781-5601-53d2-b2f6-0d3403f7e9ca",
+                        "checkpoint_id": null
+                    }
+                },
+                "webhook": null,
+                "temporary": false,
+                "stream_mode": [
+                    "values"
+                ],
+                "feedback_keys": null,
+                "interrupt_after": null,
+                "interrupt_before": null
+            },
+            "multitask_strategy": "reject"
+        }
+
+
 
 Now we can join the run, wait for it to finish and check that status again:
 
@@ -179,27 +202,49 @@ Now we can join the run, wait for it to finish and check that status again:
 Output:
 
     {
-        run_id: '1ef6712a-f75a-661b-bb4c-e42a5c03a9be',
-        thread_id: '5cb1e8a1-34b3-4a61-a34e-71a9799bd00d',
-        assistant_id: 'fe096781-5601-53d2-b2f6-0d3403f7e9ca',
-        created_at: '2024-08-30T20:59:02.257586+00:00',
-        updated_at: '2024-08-30T20:59:02.257586+00:00',
-        metadata: {},
-        status: 'success',
-        kwargs: {
-            input: { messages: [Array] },
-            config: { metadata: [Object], configurable: [Object] },
-            webhook: null,
-            temporary: false,
-            stream_mode: [ 'values' ],
-            feedback_keys: null,
-            interrupt_after: null,
-            interrupt_before: null
+        "run_id": "1ef6a5f8-bd86-6763-bbd6-bff042db7b1b",
+        "thread_id": "7885f0cf-94ad-4040-91d7-73f7ba007c8a",
+        "assistant_id": "fe096781-5601-53d2-b2f6-0d3403f7e9ca",
+        "created_at": "2024-09-04T01:46:47.244887+00:00",
+        "updated_at": "2024-09-04T01:46:47.244887+00:00",
+        "metadata": {},
+        "status": "success",
+        "kwargs": {
+            "input": {
+                "messages": [
+                    {
+                        "role": "human",
+                        "content": "what's the weather in sf"
+                    }
+                ]
+            },
+            "config": {
+                "metadata": {
+                    "created_by": "system"
+                },
+                "configurable": {
+                    "run_id": "1ef6a5f8-bd86-6763-bbd6-bff042db7b1b",
+                    "user_id": "",
+                    "graph_id": "agent",
+                    "thread_id": "7885f0cf-94ad-4040-91d7-73f7ba007c8a",
+                    "assistant_id": "fe096781-5601-53d2-b2f6-0d3403f7e9ca",
+                    "checkpoint_id": null
+                }
+            },
+            "webhook": null,
+            "temporary": false,
+            "stream_mode": [
+                "values"
+            ],
+            "feedback_keys": null,
+            "interrupt_after": null,
+            "interrupt_before": null
         },
-        multitask_strategy: 'reject'
+        "multitask_strategy": "reject"
     }
 
-Perfect! The run succeeded as we would expect. We can double check that the run worked as expected by printing out the final response:
+
+Perfect! The run succeeded as we would expect. We can double check that the run worked as expected by printing out the final state:
 
 === "Python"
 
