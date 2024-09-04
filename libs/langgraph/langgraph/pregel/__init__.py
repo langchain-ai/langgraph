@@ -1,8 +1,6 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
-import time
 from collections import deque
 from functools import partial
 from typing import (
@@ -66,12 +64,11 @@ from langgraph.constants import (
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
-    ERROR,
     INTERRUPT,
     NS_END,
     NS_SEP,
 )
-from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
+from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.algo import (
     apply_writes,
@@ -80,17 +77,13 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
 )
 from langgraph.pregel.config import patch_checkpoint_map, patch_configurable
-from langgraph.pregel.debug import (
-    print_step_checkpoint,
-    print_step_tasks,
-    print_step_writes,
-    tasks_w_writes,
-)
+from langgraph.pregel.debug import tasks_w_writes
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.retry import RetryPolicy, arun_with_retry, run_with_retry
+from langgraph.pregel.retry import RetryPolicy
+from langgraph.pregel.runner import PregelRunner
 from langgraph.pregel.types import (
     All,
     PregelExecutableTask,
@@ -1170,9 +1163,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ```
         """
 
+        stream = deque()
+
         def output() -> Iterator:
-            while loop.stream:
-                ns, mode, payload = loop.stream.popleft()
+            while stream:
+                ns, mode, payload = stream.popleft()
                 if mode in stream_modes:
                     if subgraphs and isinstance(stream_mode, list):
                         yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
@@ -1217,6 +1212,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
             with SyncPregelLoop(
                 input,
+                stream=stream.append,
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1224,7 +1220,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 specs=self.channels,
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
+                debug=debug,
             ) as loop:
+                # create runner
+                runner = PregelRunner(
+                    submit=loop.submit,
+                    put_writes=loop.put_writes,
+                )
+                # enable subgraph streaming
                 if subgraphs:
                     loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 # Similarly to Bulk Synchronous Parallel / Pregel model
@@ -1238,85 +1241,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     interrupt_after=interrupt_after,
                     manager=run_manager,
                 ):
-                    # debug flag
-                    if debug:
-                        print_step_checkpoint(
-                            loop.checkpoint_metadata,
-                            loop.channels,
-                            self.stream_channels_list,
-                        )
-                    # emit output
-                    yield from output()
-                    # debug flag
-                    if debug:
-                        print_step_tasks(loop.step, loop.tasks)
-
-                    # execute tasks, and wait for one to fail or all to finish.
-                    # each task is independent from all other concurrent tasks
-                    # yield updates/debug output as each task finishes
-                    futures = {
-                        loop.submit(
-                            run_with_retry,
-                            task,
-                            self.retry_policy,
-                        ): task
-                        for task in loop.tasks
-                        if not task.writes
-                    }
-                    all_futures = futures.copy()
-                    end_time = (
-                        self.step_timeout + time.monotonic()
-                        if self.step_timeout
-                        else None
-                    )
-                    if not futures:
-                        done, inflight = set(), set()
-                    while futures:
-                        done, inflight = concurrent.futures.wait(
-                            futures,
-                            return_when=concurrent.futures.FIRST_COMPLETED,
-                            timeout=(
-                                max(0, end_time - time.monotonic())
-                                if end_time
-                                else None
-                            ),
-                        )
-                        if not done:
-                            break  # timed out
-                        for fut in done:
-                            task = futures.pop(fut)
-                            if exc := _exception(fut):
-                                # save error to checkpointer
-                                if isinstance(exc, GraphInterrupt):
-                                    loop.put_writes(
-                                        task.id, [(INTERRUPT, i) for i in exc.args[0]]
-                                    )
-                                else:
-                                    loop.put_writes(task.id, [(ERROR, exc)])
-
-                            else:
-                                # save task writes to checkpointer
-                                loop.put_writes(task.id, task.writes)
-                        else:
-                            # remove references to loop vars
-                            del fut, task
+                    for _ in runner.tick(
+                        loop.tasks,
+                        timeout=self.step_timeout,
+                        retry_policy=self.retry_policy,
+                    ):
                         # emit output
-                        yield from output()
-                        # maybe stop other tasks
-                        if _should_stop_others(done):
-                            break
-
-                    # panic on failure or timeout
-                    _panic_or_proceed(all_futures, loop.step)
-                    # don't keep futures around in memory longer than needed
-                    del done, inflight, futures
-                    # debug flag
-                    if debug:
-                        print_step_writes(
-                            loop.step,
-                            [w for t in loop.tasks for w in t.writes],
-                            self.stream_channels_list,
-                        )
+                        for o in output():
+                            yield o
             # emit output
             yield from output()
             # handle exit
@@ -1412,9 +1344,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ```
         """
 
+        stream = deque()
+
         def output() -> Iterator:
-            while loop.stream:
-                ns, mode, payload = loop.stream.popleft()
+            while stream:
+                ns, mode, payload = stream.popleft()
                 if mode in stream_modes:
                     if subgraphs and isinstance(stream_mode, list):
                         yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
@@ -1467,6 +1401,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
             async with AsyncPregelLoop(
                 input,
+                stream=stream.append,
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1475,9 +1410,15 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
             ) as loop:
+                # create runner
+                runner = PregelRunner(
+                    submit=loop.submit,
+                    put_writes=loop.put_writes,
+                    use_astream=do_stream is not None,
+                )
+                # enable subgraph streaming
                 if subgraphs:
                     loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
-                aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
@@ -1489,89 +1430,14 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     interrupt_after=interrupt_after,
                     manager=run_manager,
                 ):
-                    # debug flag
-                    if debug:
-                        print_step_checkpoint(
-                            loop.checkpoint_metadata,
-                            loop.channels,
-                            self.stream_channels_list,
-                        )
-                    # emit output
-                    for o in output():
-                        yield o
-                    # debug flag
-                    if debug:
-                        print_step_tasks(loop.step, loop.tasks)
-
-                    # execute tasks, and wait for one to fail or all to finish.
-                    # each task is independent from all other concurrent tasks
-                    # yield updates/debug output as each task finishes
-                    futures = {
-                        loop.submit(
-                            arun_with_retry,
-                            task,
-                            self.retry_policy,
-                            stream=do_stream,
-                            __name__=task.name,
-                            __cancel_on_exit__=True,
-                        ): task
-                        for task in loop.tasks
-                        if not task.writes
-                    }
-                    all_futures = futures.copy()
-                    end_time = (
-                        self.step_timeout + aioloop.time()
-                        if self.step_timeout
-                        else None
-                    )
-                    if not futures:
-                        done, inflight = set(), set()
-                    while futures:
-                        done, inflight = await asyncio.wait(
-                            futures,
-                            return_when=asyncio.FIRST_COMPLETED,
-                            timeout=(
-                                max(0, end_time - aioloop.time()) if end_time else None
-                            ),
-                        )
-                        if not done:
-                            break  # timed out
-
-                        for fut in done:
-                            task = futures.pop(fut)
-                            if exc := _exception(fut):
-                                # save error to checkpointer
-                                if isinstance(exc, GraphInterrupt):
-                                    loop.put_writes(
-                                        task.id, [(INTERRUPT, i) for i in exc.args[0]]
-                                    )
-                                else:
-                                    loop.put_writes(task.id, [(ERROR, exc)])
-
-                            else:
-                                # save task writes to checkpointer
-                                loop.put_writes(task.id, task.writes)
-                        else:
-                            # remove references to loop vars
-                            del fut, task
+                    async for _ in runner.atick(
+                        loop.tasks,
+                        timeout=self.step_timeout,
+                        retry_policy=self.retry_policy,
+                    ):
                         # emit output
                         for o in output():
                             yield o
-                        # maybe stop other tasks
-                        if _should_stop_others(done):
-                            break
-
-                    # panic on failure or timeout
-                    _panic_or_proceed(all_futures, loop.step, asyncio.TimeoutError)
-                    # don't keep futures around in memory longer than needed
-                    del done, inflight, futures
-                    # debug flag
-                    if debug:
-                        print_step_writes(
-                            loop.step,
-                            [w for t in loop.tasks for w in t.writes],
-                            self.stream_channels_list,
-                        )
             # emit output
             for o in output():
                 yield o
@@ -1692,57 +1558,3 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             return latest
         else:
             return chunks
-
-
-def _should_stop_others(
-    done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
-) -> bool:
-    for fut in done:
-        if fut.cancelled():
-            return True
-        if exc := fut.exception():
-            return not isinstance(exc, GraphInterrupt)
-    else:
-        return False
-
-
-def _exception(
-    fut: Union[concurrent.futures.Future[Any], asyncio.Task[Any]],
-) -> Optional[BaseException]:
-    if fut.cancelled():
-        if isinstance(fut, asyncio.Task):
-            return asyncio.CancelledError()
-        else:
-            return concurrent.futures.CancelledError()
-    else:
-        return fut.exception()
-
-
-def _panic_or_proceed(
-    futs: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
-    step: int,
-    timeout_exc_cls: Type[Exception] = TimeoutError,
-) -> None:
-    done: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
-    inflight: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
-    for fut in futs:
-        if fut.done():
-            done.add(fut)
-        else:
-            inflight.add(fut)
-    while done:
-        # if any task failed
-        if exc := _exception(done.pop()):
-            # cancel all pending tasks
-            while inflight:
-                inflight.pop().cancel()
-            # raise the exception
-            raise exc
-
-    if inflight:
-        # if we got here means we timed out
-        while inflight:
-            # cancel all pending tasks
-            inflight.pop().cancel()
-        # raise timeout error
-        raise timeout_exc_cls(f"Timed out at step {step}")

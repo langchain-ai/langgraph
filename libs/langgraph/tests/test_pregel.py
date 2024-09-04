@@ -1957,8 +1957,6 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 def test_conditional_graph(
     snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    from copy import deepcopy
-
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
@@ -2000,12 +1998,15 @@ def test_conditional_graph(
 
     # Define tool execution logic
     def execute_tools(data: dict) -> dict:
+        data = data.copy()
         agent_action: AgentAction = data.pop("agent_outcome")
         observation = {t.name: t for t in tools}[agent_action.tool].invoke(
             agent_action.tool_input
         )
         if data.get("intermediate_steps") is None:
             data["intermediate_steps"] = []
+        else:
+            data["intermediate_steps"] = data["intermediate_steps"].copy()
         data["intermediate_steps"].append([agent_action, observation])
         return data
 
@@ -2066,8 +2067,7 @@ def test_conditional_graph(
         ),
     }
 
-    # deepcopy because the nodes mutate the data
-    assert [deepcopy(c) for c in app.stream({"input": "what is weather in sf"})] == [
+    assert [c for c in app.stream({"input": "what is weather in sf"})] == [
         {
             "agent": {
                 "input": "what is weather in sf",
