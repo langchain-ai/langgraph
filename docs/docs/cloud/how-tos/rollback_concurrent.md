@@ -6,7 +6,7 @@ The guide covers the `rollback` option for double texting, which interrupts the 
 
 First, we will define a quick helper function for printing out JS and CURL model outputs (you can skip this if using Python):
 
-=== "Javascript":
+=== "Javascript"
 
     ```js
     function prettyPrint(m) {
