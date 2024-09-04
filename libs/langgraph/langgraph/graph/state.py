@@ -19,7 +19,8 @@ from typing import (
 
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
-from pydantic import BaseModel, RootModel, create_model
+from langchain_core.runnables.utils import create_model
+from pydantic import BaseModel
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -478,8 +479,7 @@ class CompiledStateGraph(CompiledGraph):
             if len(keys) == 1 and keys[0] == "__root__":
                 return create_model(  # type: ignore[call-overload]
                     self.get_name("Input"),
-                    __base__=RootModel,
-                    root=(self.channels[keys[0]].UpdateType, None),
+                    __root__=(self.channels[keys[0]].UpdateType, None),
                 )
             else:
                 return create_model(  # type: ignore[call-overload]

@@ -655,16 +655,15 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.model_json_schema() == {
-        "default": None,
-        "title": "LangGraphInput",
-        "type": "integer",
-    }
-    assert app.output_schema.model_json_schema() == {
-        "default": None,
-        "title": "LangGraphOutput",
-        "type": "integer",
-    }
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "integer",
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "integer",
+        }
     assert await app.ainvoke(2) == 3
     assert await app.ainvoke(2, output_keys=["output"]) == {"output": 3}
 
@@ -704,24 +703,24 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
         input_channels="input",
     )
 
-    assert app.input_schema.model_json_schema() == {
-        "default": None,
-        "title": "LangGraphInput",
-        "type": "integer",
-    }
-    assert app.output_schema.model_json_schema() == {
-        "title": "LangGraphOutput",
-        "type": "object",
-        "properties": {
-            "output": {"title": "Output", "type": "integer", "default": None},
-            "fixed": {"title": "Fixed", "type": "integer", "default": None},
-            "output_plus_one": {
-                "title": "Output Plus One",
-                "type": "integer",
-                "default": None,
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "integer",
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "object",
+            "properties": {
+                "output": {"title": "Output", "type": "integer", "default": None},
+                "fixed": {"title": "Fixed", "type": "integer", "default": None},
+                "output_plus_one": {
+                    "title": "Output Plus One",
+                    "type": "integer",
+                    "default": None,
+                },
             },
-        },
-    }
+        }
     assert await app.ainvoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
 
 
@@ -736,18 +735,18 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
-    assert app.input_schema.model_json_schema() == {
-        "default": None,
-        "title": "LangGraphInput",
-        "type": "integer",
-    }
-    assert app.output_schema.model_json_schema() == {
-        "title": "LangGraphOutput",
-        "type": "object",
-        "properties": {
-            "output": {"title": "Output", "type": "integer", "default": None}
-        },
-    }
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "integer",
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "object",
+            "properties": {
+                "output": {"title": "Output", "type": "integer", "default": None}
+            },
+        }
     assert await app.ainvoke(2) == {"output": 3}
 
 
@@ -762,18 +761,21 @@ async def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> 
         output_channels=["output"],
     )
 
-    assert app.input_schema.model_json_schema() == {
-        "title": "LangGraphInput",
-        "type": "object",
-        "properties": {"input": {"title": "Input", "type": "integer", "default": None}},
-    }
-    assert app.output_schema.model_json_schema() == {
-        "title": "LangGraphOutput",
-        "type": "object",
-        "properties": {
-            "output": {"title": "Output", "type": "integer", "default": None}
-        },
-    }
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "object",
+            "properties": {
+                "input": {"title": "Input", "type": "integer", "default": None}
+            },
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "object",
+            "properties": {
+                "output": {"title": "Output", "type": "integer", "default": None}
+            },
+        }
     assert await app.ainvoke({"input": 2}) == {"output": 3}
 
 

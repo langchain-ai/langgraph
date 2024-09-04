@@ -2,7 +2,6 @@ from __future__ import annotations
 
 import asyncio
 import concurrent.futures
-import inspect
 import time
 from collections import deque
 from functools import partial
@@ -42,11 +41,12 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
+    create_model,
     get_function_nonlocals,
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
-from pydantic import BaseModel, Field, RootModel, create_model
+from pydantic import BaseModel
 from typing_extensions import Self
 
 from langgraph.channels.base import (
@@ -322,16 +322,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     ) -> Type[BaseModel]:
         config = merge_configs(self.config, config)
         if isinstance(self.input_channels, str):
-            if inspect.isclass(self.InputType) and issubclass(
-                self.InputType, BaseModel
-            ):
-                return self.InputType
-
-            return create_model(  # type: ignore[call-overload]
-                self.get_name("Input"),
-                __base__=RootModel,
-                root=(self.InputType, None),
-            )
+            return super().get_input_schema(config)
         else:
             return create_model(  # type: ignore[call-overload]
                 self.get_name("Input"),
@@ -351,52 +342,12 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     ) -> Type[BaseModel]:
         config = merge_configs(self.config, config)
         if isinstance(self.output_channels, str):
-            if inspect.isclass(self.OutputType) and issubclass(
-                self.OutputType, BaseModel
-            ):
-                return self.OutputType
-            return create_model(  # type: ignore[call-overload]
-                self.get_name("Output"),
-                __base__=RootModel,
-                root=(self.OutputType, None),
-            )
+            return super().get_output_schema(config)
         else:
             return create_model(  # type: ignore[call-overload]
                 self.get_name("Output"),
                 **{k: (self.channels[k].ValueType, None) for k in self.output_channels},
             )
-
-    def config_schema(
-        self, *, include: Optional[Sequence[str]] = None
-    ) -> Type[BaseModel]:
-        include = include or []
-        config_specs = self.config_specs
-        configurable = (
-            create_model(  # type: ignore[call-overload]
-                "Configurable",
-                **{
-                    spec.id: (
-                        spec.annotation,
-                        Field(
-                            spec.default, title=spec.name, description=spec.description
-                        ),
-                    )
-                    for spec in config_specs
-                },
-            )
-            if config_specs
-            else None
-        )
-
-        return create_model(  # type: ignore[call-overload]
-            self.get_name("Config"),
-            **({"configurable": (configurable, None)} if configurable else {}),
-            **{
-                field_name: (field_type, None)
-                for field_name, field_type in RunnableConfig.__annotations__.items()
-                if field_name in [i for i in include if i != "configurable"]
-            },
-        )
 
     @property
     def stream_channels_list(self) -> Sequence[str]:

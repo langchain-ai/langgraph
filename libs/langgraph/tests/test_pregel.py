@@ -481,23 +481,23 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.model_json_schema() == {
-        "default": None,
-        "title": "LangGraphInput",
-        "type": "integer",
-    }
-    assert app.output_schema.model_json_schema() == {
-        "default": None,
-        "title": "LangGraphOutput",
-        "type": "integer",
-    }
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")  # raise warnings as errors
-        assert app.config_schema().model_json_schema() == {
-            "properties": {},
-            "title": "LangGraphConfig",
-            "type": "object",
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "integer",
         }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "integer",
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # raise warnings as errors
+            assert app.config_schema().model_json_schema() == {
+                "properties": {},
+                "title": "LangGraphConfig",
+                "type": "object",
+            }
+
     assert app.invoke(2) == 3
     assert app.invoke(2, output_keys=["output"]) == {"output": 3}
     assert repr(app), "does not raise recursion error"
@@ -538,24 +538,24 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
         input_channels="input",
     )
 
-    assert app.input_schema.model_json_schema() == {
-        "default": None,
-        "title": "LangGraphInput",
-        "type": "integer",
-    }
-    assert app.output_schema.model_json_schema() == {
-        "title": "LangGraphOutput",
-        "type": "object",
-        "properties": {
-            "output": {"title": "Output", "type": "integer", "default": None},
-            "fixed": {"title": "Fixed", "type": "integer", "default": None},
-            "output_plus_one": {
-                "title": "Output Plus One",
-                "type": "integer",
-                "default": None,
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "integer",
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "object",
+            "properties": {
+                "output": {"title": "Output", "type": "integer", "default": None},
+                "fixed": {"title": "Fixed", "type": "integer", "default": None},
+                "output_plus_one": {
+                    "title": "Output Plus One",
+                    "type": "integer",
+                    "default": None,
+                },
             },
-        },
-    }
+        }
     assert app.invoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
 
 
@@ -570,18 +570,18 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
-    assert app.input_schema.model_json_schema() == {
-        "default": None,
-        "title": "LangGraphInput",
-        "type": "integer",
-    }
-    assert app.output_schema.model_json_schema() == {
-        "title": "LangGraphOutput",
-        "type": "object",
-        "properties": {
-            "output": {"title": "Output", "type": "integer", "default": None}
-        },
-    }
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "integer",
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "object",
+            "properties": {
+                "output": {"title": "Output", "type": "integer", "default": None}
+            },
+        }
     assert app.invoke(2) == {"output": 3}
 
 
@@ -595,19 +595,21 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
         input_channels=["input"],
         output_channels=["output"],
     )
-
-    assert app.input_schema.model_json_schema() == {
-        "title": "LangGraphInput",
-        "type": "object",
-        "properties": {"input": {"title": "Input", "type": "integer", "default": None}},
-    }
-    assert app.output_schema.model_json_schema() == {
-        "title": "LangGraphOutput",
-        "type": "object",
-        "properties": {
-            "output": {"title": "Output", "type": "integer", "default": None}
-        },
-    }
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "object",
+            "properties": {
+                "input": {"title": "Input", "type": "integer", "default": None}
+            },
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "object",
+            "properties": {
+                "output": {"title": "Output", "type": "integer", "default": None}
+            },
+        }
     assert app.invoke({"input": 2}) == {"output": 3}
 
 

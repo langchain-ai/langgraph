@@ -112,7 +112,7 @@ def test_state_schema_optional_values(total_: bool):
     builder.add_edge("__start__", "n")
     graph = builder.compile()
     model = graph.input_schema
-    json_schema = model.model_json_schema()
+    json_schema = model.schema()
 
     if total_ is False:
         expected_required = set()
