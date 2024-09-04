@@ -1,10 +1,9 @@
-import json
 from collections import defaultdict
 from dataclasses import asdict
 from datetime import datetime, timezone
 from pprint import pformat
 from typing import Any, Iterator, Literal, Mapping, Optional, Sequence, TypedDict, Union
-from uuid import UUID, uuid5
+from uuid import UUID
 
 from langchain_core.runnables.config import RunnableConfig
 from langchain_core.utils.input import get_bolded_text, get_colored_text
@@ -82,17 +81,12 @@ def map_debug_tasks(
         if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
             continue
 
-        metadata = task.config["metadata"].copy()
-        metadata.pop("checkpoint_id", None)
-
         yield {
             "type": "task",
             "timestamp": ts,
             "step": step,
             "payload": {
-                "id": str(
-                    uuid5(TASK_NAMESPACE, json.dumps((task.name, step, metadata)))
-                ),
+                "id": task.id,
                 "name": task.name,
                 "input": task.input,
                 "triggers": task.triggers,

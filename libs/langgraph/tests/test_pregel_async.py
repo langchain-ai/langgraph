@@ -1306,7 +1306,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
+                "id": AnyStr(),
                 "name": "one",
                 "input": 2,
                 "triggers": ["input"],
@@ -1317,7 +1317,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
+                "id": AnyStr(),
                 "name": "two",
                 "input": [12],
                 "triggers": ["inbox"],
@@ -1352,7 +1352,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
+                "id": AnyStr(),
                 "name": "two",
                 "input": [3],
                 "triggers": ["inbox"],
@@ -5019,7 +5019,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
+                    "id": AnyStr(),
                     "name": "rewrite_query",
                     "input": {"query": "what is weather in sf", "docs": []},
                     "triggers": ["start:rewrite_query"],
@@ -5050,7 +5050,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
+                    "id": AnyStr(),
                     "name": "retriever_one",
                     "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ["rewrite_query"],
@@ -5064,7 +5064,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
+                    "id": AnyStr(),
                     "name": "retriever_two",
                     "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ["rewrite_query"],
@@ -5123,7 +5123,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
+                    "id": AnyStr(),
                     "name": "qa",
                     "input": {
                         "query": "query: what is weather in sf",
@@ -5482,7 +5482,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
+                    "id": AnyStr(),
                     "name": "prepare",
                     "input": {"my_key": "value", "market": "DE"},
                     "triggers": ["start:prepare"],
@@ -5537,7 +5537,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
+                    "id": AnyStr(),
                     "name": "tool_two_slow",
                     "input": {"my_key": "value prepared", "market": "DE"},
                     "triggers": ["branch:prepare:condition:tool_two_slow"],
@@ -5590,7 +5590,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
+                    "id": AnyStr(),
                     "name": "finish",
                     "input": {"my_key": "value prepared slow", "market": "DE"},
                     "triggers": ["branch:prepare:condition::then"],
@@ -5719,7 +5719,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "1a591be4-f85c-558f-8d00-1ccac0d1877f",
+                    "id": AnyStr(),
                     "name": "prepare",
                     "input": {"my_key": "value", "market": "DE"},
                     "triggers": ["start:prepare"],

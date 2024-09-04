@@ -1884,13 +1884,13 @@ url = "../checkpoint-sqlite"
 
 [[package]]
 name = "langsmith"
-version = "0.1.111"
+version = "0.1.112"
 description = "Client library to connect to the LangSmith LLM Tracing and Evaluation Platform."
 optional = false
 python-versions = "<4.0,>=3.8.1"
 files = [
-    {file = "langsmith-0.1.111-py3-none-any.whl", hash = "sha256:e5c702764911193c9812fe55136ae01cd0b9ddf5dff0b068ce6fd60eeddbcb40"},
-    {file = "langsmith-0.1.111.tar.gz", hash = "sha256:bab24fd6125685f588d682693c4a3253e163804242829b1ff902e1a3e984a94c"},
+    {file = "langsmith-0.1.112-py3-none-any.whl", hash = "sha256:38ecc62df35e55e5aa9a05ecf1f1483d5a4db3275b9da4876ae27364714b3717"},
+    {file = "langsmith-0.1.112.tar.gz", hash = "sha256:08c47a9497261c332bc4b15e2930d8e751310e63652ecdc78382a5dd07cb42e2"},
 ]
 
 [package.dependencies]
