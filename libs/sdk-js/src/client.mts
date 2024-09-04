@@ -654,6 +654,25 @@ export class RunsClient extends BaseClient {
     });
   }
 
+  /**
+   * Create a batch of background runs.
+   *
+   * @param payloads An array of payloads for creating runs.
+   * @returns An array of created runs.
+   */
+  async createBatch(payloads: RunsCreatePayload[]): Promise<Run[]> {
+    const filteredPayloads = payloads.map(payload => {
+      return Object.fromEntries(
+        Object.entries(payload).filter(([_, v]) => v !== undefined)
+      );
+    });
+
+    return this.fetch<Run[]>("/runs/batch", {
+      method: "POST",
+      json: filteredPayloads,
+    });
+  }
+
   async wait(
     threadId: null,
     assistantId: string,
