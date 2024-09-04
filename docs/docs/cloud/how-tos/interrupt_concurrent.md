@@ -180,10 +180,10 @@ We can see that the thread has partial data from the first run + data from the s
 
 Output:
 
-    ================================[1m Human Message [0m=================================
+    ================================ Human Message =================================
     
     what's the weather in sf?
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     [{'id': 'toolu_01MjNtVJwEcpujRGrf3x6Pih', 'input': {'query': 'weather in san francisco'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}]
     Tool Calls:
@@ -191,14 +191,14 @@ Output:
      Call ID: toolu_01MjNtVJwEcpujRGrf3x6Pih
       Args:
         query: weather in san francisco
-    =================================[1m Tool Message [0m=================================
+    ================================= Tool Message =================================
     Name: tavily_search_results_json
     
     [{"url": "https://www.wunderground.com/hourly/us/ca/san-francisco/KCASANFR2002/date/2024-6-18", "content": "High 64F. Winds W at 10 to 20 mph. A few clouds from time to time. Low 49F. Winds W at 10 to 20 mph. Temp. San Francisco Weather Forecasts. Weather Underground provides local & long-range weather ..."}]
-    ================================[1m Human Message [0m=================================
+    ================================ Human Message =================================
     
     what's the weather in nyc?
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     [{'id': 'toolu_01KtE1m1ifPLQAx4fQLyZL9Q', 'input': {'query': 'weather in new york city'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}]
     Tool Calls:
@@ -206,11 +206,11 @@ Output:
      Call ID: toolu_01KtE1m1ifPLQAx4fQLyZL9Q
       Args:
         query: weather in new york city
-    =================================[1m Tool Message [0m=================================
+    ================================= Tool Message =================================
     Name: tavily_search_results_json
     
     [{"url": "https://www.accuweather.com/en/us/new-york/10021/june-weather/349727", "content": "Get the monthly weather forecast for New York, NY, including daily high/low, historical averages, to help you plan ahead."}]
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     The search results provide weather forecasts and information for New York City. Based on the top result from AccuWeather, here are some key details about the weather in NYC:
     

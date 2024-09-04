@@ -190,10 +190,10 @@ We can verify that the original thread finished executing:
 
 Output:
 
-    ================================[1m Human Message [0m=================================
+    ================================ Human Message =================================
     
     what's the weather in sf?
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     [{'id': 'toolu_01CyewEifV2Kmi7EFKHbMDr1', 'input': {'query': 'weather in san francisco'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}]
     Tool Calls:
@@ -201,11 +201,11 @@ Output:
      Call ID: toolu_01CyewEifV2Kmi7EFKHbMDr1
       Args:
         query: weather in san francisco
-    =================================[1m Tool Message [0m=================================
+    ================================= Tool Message =================================
     Name: tavily_search_results_json
     
     [{"url": "https://www.accuweather.com/en/us/san-francisco/94103/june-weather/347629", "content": "Get the monthly weather forecast for San Francisco, CA, including daily high/low, historical averages, to help you plan ahead."}]
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     According to the search results from Tavily, the current weather in San Francisco is:
     
