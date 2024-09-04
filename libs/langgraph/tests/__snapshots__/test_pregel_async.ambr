@@ -1229,15 +1229,15 @@
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
   	__end__([__end__]):::last
-  	subgraph weather_graph
-  	weather_graph_model_node --> weather_graph_weather_node;
-  	end
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
   	router_node -.-> normal_llm_node;
   	router_node -.-> weather_graph_model_node;
   	router_node -.-> __end__;
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -1254,15 +1254,15 @@
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
   	__end__([__end__]):::last
-  	subgraph weather_graph
-  	weather_graph_model_node --> weather_graph_weather_node;
-  	end
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
   	router_node -.-> normal_llm_node;
   	router_node -.-> weather_graph_model_node;
   	router_node -.-> __end__;
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -1279,15 +1279,15 @@
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
   	__end__([__end__]):::last
-  	subgraph weather_graph
-  	weather_graph_model_node --> weather_graph_weather_node;
-  	end
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
   	router_node -.-> normal_llm_node;
   	router_node -.-> weather_graph_model_node;
   	router_node -.-> __end__;
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc
@@ -1304,15 +1304,15 @@
   	weather_graph_model_node(model_node)
   	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
   	__end__([__end__]):::last
-  	subgraph weather_graph
-  	weather_graph_model_node --> weather_graph_weather_node;
-  	end
   	__start__ --> router_node;
   	normal_llm_node --> __end__;
   	weather_graph_weather_node --> __end__;
   	router_node -.-> normal_llm_node;
   	router_node -.-> weather_graph_model_node;
   	router_node -.-> __end__;
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
   	classDef default fill:#f2f0ff,line-height:1.2
   	classDef first fill-opacity:0
   	classDef last fill:#bfb6fc

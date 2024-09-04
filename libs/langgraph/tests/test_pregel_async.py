@@ -4454,10 +4454,8 @@ async def test_state_graph_packets(checkpointer_name: str) -> None:
             },
             tasks=(PregelTask(AnyStr(), "tools"), PregelTask(AnyStr(), "tools")),
             next=("tools", "tools"),
-            config=app_w_interrupt.checkpointer.get_tuple(config).config,
-            created_at=(app_w_interrupt.checkpointer.get_tuple(config)).checkpoint[
-                "ts"
-            ],
+            config=tup.config,
+            created_at=tup.checkpoint["ts"],
             metadata={
                 "parents": {},
                 "source": "loop",
