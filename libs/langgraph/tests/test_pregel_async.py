@@ -8467,15 +8467,19 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         graph = builder.compile(checkpointer=checkpointer)
         config = {"configurable": {"thread_id": "1"}}
+        tracer = FakeTracer()
 
         # invoke and pause at nested interrupt
-        assert await graph.ainvoke({"subjects": ["cats", "dogs"]}, config=config) == {
+        assert await graph.ainvoke(
+            {"subjects": ["cats", "dogs"]}, config={**config, "callbacks": [tracer]}
+        ) == {
             "subjects": ["cats", "dogs"],
             "jokes": [],
         }
+        assert len(tracer.runs) == 1, "Should produce exactly 1 root run"
+
         # check state
         outer_state = await graph.aget_state(config)
-
         assert outer_state == StateSnapshot(
             values={"subjects": ["cats", "dogs"], "jokes": []},
             tasks=(

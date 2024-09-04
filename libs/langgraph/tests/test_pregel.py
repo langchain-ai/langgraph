@@ -9823,12 +9823,18 @@ def test_send_to_nested_graphs(
 
     graph = builder.compile(checkpointer=checkpointer)
     config = {"configurable": {"thread_id": "1"}}
+    tracer = FakeTracer()
 
     # invoke and pause at nested interrupt
-    assert graph.invoke({"subjects": ["cats", "dogs"]}, config=config) == {
+    assert graph.invoke(
+        {"subjects": ["cats", "dogs"]}, config={**config, "callbacks": [tracer]}
+    ) == {
         "subjects": ["cats", "dogs"],
         "jokes": [],
     }
+    assert len(tracer.runs) == 1, "Should produce exactly 1 root run"
+
+    # check state
     outer_state = graph.get_state(config)
     assert outer_state == StateSnapshot(
         values={"subjects": ["cats", "dogs"], "jokes": []},
