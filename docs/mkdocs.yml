@@ -126,7 +126,6 @@ nav:
   - "How-to Guides":
       - "how-tos/index.md"
       - Controllability:
-          - Create subgraphs: how-tos/subgraph.ipynb
           - Create branches for parallel execution: how-tos/branching.ipynb
           - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
           - Control graph recursion limit: how-tos/recursion-limit.ipynb
@@ -138,7 +137,6 @@ nav:
           - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
-          - Manage state in subgraphs: how-tos/subgraphs-manage-state.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
           - Add dynamic breakpoints: how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
@@ -162,6 +160,9 @@ nav:
           - Pass graph state to tools: how-tos/pass-run-time-values-to-tools.ipynb
           - Pass config to tools: how-tos/pass-config-to-tools.ipynb
           - Handle many tools: how-tos/many-tools.ipynb
+      - Subgraphs:
+          - Create subgraphs: how-tos/subgraph.ipynb
+          - Manage state in subgraphs: how-tos/subgraphs-manage-state.ipynb
       - State Management:
           - Use Pydantic model as state: how-tos/state-model.ipynb
           - Use a context object in state: how-tos/state-context-key.ipynb

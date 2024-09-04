@@ -12,7 +12,6 @@ Welcome to the LangGraph how-to guides! These guides provide practical, step-by-
 LangGraph is known for being a highly controllable agent framework.
 These how-to guides show how to achieve that controllability.
 
-- [How to create subgraphs](subgraph.ipynb)
 - [How to create branches for parallel execution](branching.ipynb)
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
 - [How to control graph recursion limit](recursion-limit.ipynb)
@@ -28,7 +27,6 @@ LangGraph makes it easy to persist state across graph runs. The guide below show
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
-- [How to manage state in subgraphs](subgraphs-manage-state.ipynb)
 
 ## Human in the Loop
 
@@ -64,6 +62,11 @@ These guides show how to use different streaming modes.
 - [How to pass graph state to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
 - [How to handle large numbers of tools](many-tools.ipynb)
+
+## Subgraphs
+
+- [How to create subgraphs](subgraph.ipynb)
+- [How to manage state in subgraphs](subgraphs-manage-state.ipynb)
 
 ## State Management
 
