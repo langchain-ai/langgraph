@@ -512,7 +512,9 @@ class CompiledGraph(Pregel):
         for key, n in self.builder.nodes.items():
             node = n.runnable
             metadata = n.metadata or {}
-            if key in self.interrupt_before_nodes:
+            if key in self.interrupt_before_nodes and key in self.interrupt_after_nodes:
+                metadata["__interrupt"] = "before,after"
+            elif key in self.interrupt_before_nodes:
                 metadata["__interrupt"] = "before"
             elif key in self.interrupt_after_nodes:
                 metadata["__interrupt"] = "after"
