@@ -17,11 +17,7 @@ from typing import (
 from uuid import UUID, uuid5
 
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
-from langchain_core.runnables.config import (
-    RunnableConfig,
-    merge_configs,
-    patch_config,
-)
+from langchain_core.runnables.config import RunnableConfig
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import (
@@ -51,6 +47,7 @@ from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
+from langgraph.utils.config import merge_configs, patch_config
 
 
 class WritesProtocol(Protocol):

@@ -36,8 +36,6 @@ from langchain_core.runnables.config import (
     ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
-    merge_configs,
-    patch_config,
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
@@ -79,7 +77,6 @@ from langgraph.pregel.algo import (
     local_write,
     prepare_next_tasks,
 )
-from langgraph.pregel.config import patch_checkpoint_map, patch_configurable
 from langgraph.pregel.debug import (
     print_step_checkpoint,
     print_step_tasks,
@@ -103,7 +100,13 @@ from langgraph.pregel.utils import (
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.utils import RunnableCallable
+from langgraph.utils.config import (
+    merge_configs,
+    patch_checkpoint_map,
+    patch_config,
+    patch_configurable,
+)
+from langgraph.utils.runnable import RunnableCallable
 
 WriteValue = Union[
     Runnable[Input, Output],

@@ -60,7 +60,6 @@ from langgraph.pregel.algo import (
     prepare_next_tasks,
     should_interrupt,
 )
-from langgraph.pregel.config import patch_configurable
 from langgraph.pregel.debug import (
     map_debug_checkpoint,
     map_debug_task_results,
@@ -84,6 +83,7 @@ from langgraph.pregel.types import PregelExecutableTask
 from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.store.base import BaseStore
 from langgraph.store.batch import AsyncBatchedStore
+from langgraph.utils.config import patch_configurable
 
 V = TypeVar("V")
 INPUT_DONE = object()
