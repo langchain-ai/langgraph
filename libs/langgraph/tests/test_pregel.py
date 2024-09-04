@@ -34,6 +34,7 @@ from langchain_core.runnables import (
     RunnablePick,
 )
 from langsmith import traceable
+from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
@@ -76,6 +77,46 @@ from tests.conftest import ALL_CHECKPOINTERS_SYNC
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage, _AnyIdToolMessage
+
+
+# define these objects to avoid importing langchain_core.agents
+# and therefore avoid relying on core Pydantic version
+class AgentAction(BaseModel):
+    tool: str
+    tool_input: Union[str, dict]
+    log: str
+    type: Literal["AgentAction"] = "AgentAction"
+
+    model_config = {
+        "json_schema_extra": {
+            "description": (
+                """Represents a request to execute an action by an agent.
+
+The action consists of the name of the tool to execute and the input to pass
+to the tool. The log is used to pass along extra information about the action."""
+            )
+        }
+    }
+
+
+class AgentFinish(BaseModel):
+    """Final return value of an ActionAgent.
+
+    Agents return an AgentFinish when they have reached a stopping condition.
+    """
+
+    return_values: dict
+    log: str
+    type: Literal["AgentFinish"] = "AgentFinish"
+    model_config = {
+        "json_schema_extra": {
+            "description": (
+                """Final return value of an ActionAgent.
+
+Agents return an AgentFinish when they have reached a stopping condition."""
+            )
+        }
+    }
 
 
 def test_graph_validation() -> None:
@@ -441,10 +482,12 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     gapp = graph.compile()
 
     assert app.input_schema.model_json_schema() == {
+        "default": None,
         "title": "LangGraphInput",
         "type": "integer",
     }
     assert app.output_schema.model_json_schema() == {
+        "default": None,
         "title": "LangGraphOutput",
         "type": "integer",
     }
@@ -496,6 +539,7 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
     )
 
     assert app.input_schema.model_json_schema() == {
+        "default": None,
         "title": "LangGraphInput",
         "type": "integer",
     }
@@ -527,6 +571,7 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     )
 
     assert app.input_schema.model_json_schema() == {
+        "default": None,
         "title": "LangGraphInput",
         "type": "integer",
     }
@@ -1979,7 +2024,6 @@ def test_conditional_graph(
 ) -> None:
     from copy import deepcopy
 
-    from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
@@ -2897,7 +2941,6 @@ def test_conditional_state_graph(
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
@@ -3709,7 +3752,6 @@ def test_conditional_state_graph_with_list_edge_inputs(snapshot: SnapshotAsserti
 
 
 def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) -> None:
-    from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool

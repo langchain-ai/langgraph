@@ -204,10 +204,10 @@
   '''
 # ---
 # name: test_conditional_entrypoint_graph
-  '{"title": "LangGraphInput"}'
+  '{"default": null, "title": "LangGraphInput"}'
 # ---
 # name: test_conditional_entrypoint_graph.1
-  '{"title": "LangGraphOutput"}'
+  '{"default": null, "title": "LangGraphOutput"}'
 # ---
 # name: test_conditional_entrypoint_graph.2
   '''
