@@ -18,7 +18,7 @@ from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_SEND, TASKS, Send
 from langgraph.errors import InvalidUpdateError
-from langgraph.utils import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable
 
 TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
 R = TypeVar("R", bound=Runnable)

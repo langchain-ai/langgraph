@@ -44,7 +44,11 @@ from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.utils import RunnableCallable, coerce_to_runnable, get_field_default
+from langgraph.utils.fields import get_field_default
+from langgraph.utils.runnable import (
+    RunnableCallable,
+    coerce_to_runnable,
+)
 
 logger = logging.getLogger(__name__)
 

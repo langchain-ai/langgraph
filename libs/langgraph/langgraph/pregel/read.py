@@ -19,13 +19,13 @@ from langchain_core.runnables import (
     RunnableSerializable,
 )
 from langchain_core.runnables.base import Input, Other, Output, coerce_to_runnable
-from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
-from langgraph.utils import RunnableCallable
+from langgraph.utils.config import merge_configs
+from langgraph.utils.runnable import RunnableCallable
 
 READ_TYPE = Callable[[str, bool], Union[Any, dict[str, Any]]]
 
