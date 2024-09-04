@@ -4,6 +4,8 @@ from typing import AsyncIterator, Optional
 from uuid import UUID, uuid4
 
 import pytest
+from langchain_core import __version__ as core_version
+from packaging import version
 from psycopg import AsyncConnection, Connection
 from psycopg_pool import AsyncConnectionPool, ConnectionPool
 from pytest_mock import MockerFixture
@@ -16,6 +18,7 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from tests.memory_assert import MemorySaverAssertImmutable
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
+SHOULD_CHECK_SNAPSHOTS = version.parse(core_version) >= version.parse("0.3.0")
 
 
 @pytest.fixture

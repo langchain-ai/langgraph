@@ -73,7 +73,7 @@ from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
-from tests.conftest import ALL_CHECKPOINTERS_SYNC
+from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage, _AnyIdToolMessage
@@ -2099,11 +2099,12 @@ def test_conditional_graph(
 
     app = workflow.compile()
 
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_graph().draw_mermaid() == snapshot
-    assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
-    assert app.get_graph(xray=True).draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+        assert app.get_graph().draw_mermaid() == snapshot
+        assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
+        assert app.get_graph(xray=True).draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -2234,8 +2235,9 @@ def test_conditional_graph(
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    assert app_w_interrupt.get_graph().to_json() == snapshot
-    assert app_w_interrupt.get_graph().draw_mermaid() == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app_w_interrupt.get_graph().to_json() == snapshot
+        assert app_w_interrupt.get_graph().draw_mermaid() == snapshot
 
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
@@ -2877,10 +2879,11 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
 
     app = workflow.compile()
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert (
         app.invoke("what is weather in sf", debug=True)
@@ -2918,10 +2921,11 @@ def test_conditional_entrypoint_to_multiple_state_graph(
 
     app = workflow.compile()
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"locations": ["sf", "nyc"]}, debug=True) == {
         "locations": ["sf", "nyc"],
@@ -3058,10 +3062,11 @@ def test_conditional_state_graph(
 
     app = workflow.compile()
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     with assert_ctx_once():
         assert app.invoke({"input": "what is weather in sf"}) == {
@@ -3841,9 +3846,10 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
 
     app = builder.compile()
 
-    assert json.dumps(app.config_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.config_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
 
     assert builder.channels.keys() == {"input", "agent_outcome", "intermediate_steps"}
 
@@ -3906,10 +3912,11 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 
     app = workflow.compile()
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -3973,10 +3980,11 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     app = create_tool_calling_executor(model, tools)
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
@@ -4837,10 +4845,11 @@ def test_message_graph(
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
 
-    assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
         _AnyIdHumanMessage(
@@ -7818,9 +7827,10 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_input_schema().model_json_schema() == snapshot
-    assert app.get_output_schema().model_json_schema() == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+        assert app.get_input_schema().model_json_schema() == snapshot
+        assert app.get_output_schema().model_json_schema() == snapshot
 
     with pytest.raises(ValidationError), assert_ctx_once():
         app.invoke({"query": {}})

@@ -73,6 +73,7 @@ from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
 from tests.conftest import (
     ALL_CHECKPOINTERS_ASYNC,
     ALL_CHECKPOINTERS_ASYNC_PLUS_NONE,
+    SHOULD_CHECK_SNAPSHOTS,
     awith_checkpointer,
 )
 from tests.fake_tracer import FakeTracer
@@ -655,10 +656,12 @@ async def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     gapp = graph.compile()
 
     assert app.input_schema.model_json_schema() == {
+        "default": None,
         "title": "LangGraphInput",
         "type": "integer",
     }
     assert app.output_schema.model_json_schema() == {
+        "default": None,
         "title": "LangGraphOutput",
         "type": "integer",
     }
@@ -702,6 +705,7 @@ async def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> N
     )
 
     assert app.input_schema.model_json_schema() == {
+        "default": None,
         "title": "LangGraphInput",
         "type": "integer",
     }
@@ -733,6 +737,7 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
     )
 
     assert app.input_schema.model_json_schema() == {
+        "default": None,
         "title": "LangGraphInput",
         "type": "integer",
     }
@@ -6504,9 +6509,10 @@ async def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydant
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_input_schema().model_json_schema() == snapshot
-    assert app.get_output_schema().model_json_schema() == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+        assert app.get_input_schema().model_json_schema() == snapshot
+        assert app.get_output_schema().model_json_schema() == snapshot
 
     with pytest.raises(ValidationError):
         await app.ainvoke({"query": {}})
