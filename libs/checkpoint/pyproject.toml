@@ -10,7 +10,7 @@ packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
-langchain-core = ">=0.2.22,<0.3"
+langchain-core = { git = "https://github.com/langchain-ai/langchain.git", branch="v0.3rc", subdirectory = "libs/core"}
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.6.2"
