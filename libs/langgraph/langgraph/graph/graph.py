@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections import defaultdict
 from typing import (
@@ -97,7 +98,7 @@ class Branch(NamedTuple):
         writer: Callable[[list[str], RunnableConfig], Optional[Runnable]],
     ) -> Runnable:
         if reader:
-            value = reader(config)
+            value = await asyncio.to_thread(reader, config)
             # passthrough additional keys from node to branch
             # only doable when using dict states
             if isinstance(value, dict) and isinstance(input, dict):
