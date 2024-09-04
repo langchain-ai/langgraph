@@ -11,9 +11,8 @@ First let's set up our client and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
-    # we will use the first assistant for the rest of this walkthrough
-    assistants = await client.assistants.search()
-    assistant_id = assistants[0]['assistant_id']
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -25,9 +24,8 @@ First let's set up our client and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    // we will use the first assistant for the rest of this walkthrough
-    const assistants = await client.assistants.search();
-    const assistantID = assistants[0]['assistant_id'];
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
     // create thread
     const thread = await client.threads.create();
     console.log(thread);
@@ -44,13 +42,13 @@ First let's set up our client and thread:
 Output:
 
     {
-        thread_id: '5cb1e8a1-34b3-4a61-a34e-71a9799bd00d',
-        created_at: '2024-08-30T20:35:52.062934+00:00',
-        updated_at: '2024-08-30T20:35:52.062934+00:00',
-        metadata: {},
-        status: 'idle',
-        config: {},
-        values: null
+        'thread_id': '5cb1e8a1-34b3-4a61-a34e-71a9799bd00d',
+        'created_at': '2024-08-30T20:35:52.062934+00:00',
+        'updated_at': '2024-08-30T20:35:52.062934+00:00',
+        'metadata': {},
+        'status': 'idle',
+        'config': {},
+        'values': None
     }
 
 If we list the current runs on this thread, we will see that it's empty:

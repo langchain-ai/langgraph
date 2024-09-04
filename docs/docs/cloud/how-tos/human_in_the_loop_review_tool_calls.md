@@ -29,6 +29,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```python
     from langgraph_sdk import get_client
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -39,6 +40,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
     ```
@@ -66,7 +68,7 @@ Let's look at an example when no review is required (because no tools are called
 === "Javascript"
 
     ```js
-    const input = {"messages": [{ "role": "human", "content": "hi!"}] }
+    const input = { "messages": [{ "role": "human", "content": "hi!" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -77,6 +79,7 @@ Let's look at an example when no review is required (because no tools are called
         interruptBefore: ["action"],
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
@@ -134,7 +137,7 @@ Let's now look at what it looks like to approve a tool call. Note that we don't 
 === "Javascript"
 
     ```js
-    const input = {"messages": [{"role": "user", "content": "what's the weather in sf?"}]}
+    const input = { "messages": [{ "role": "user", "content": "what's the weather in sf?" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -144,6 +147,7 @@ Let's now look at what it looks like to approve a tool call. Note that we don't 
         streamMode: "values",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
@@ -205,6 +209,7 @@ To approve the tool call, we can just continue the thread with no edits. To do t
         streamMode: "values",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
@@ -239,7 +244,7 @@ Let's now say we want to edit the tool call. E.g. change some of the parameters 
 === "Javascript"
 
     ```js
-    const input = {"messages": [{"role": "user", "content": "what's the weather in sf?"}]}
+    const input = { "messages": [{ "role": "user", "content": "what's the weather in sf?" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -249,6 +254,7 @@ Let's now say we want to edit the tool call. E.g. change some of the parameters 
         streamMode: "values",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
@@ -332,42 +338,43 @@ To do this, we first need to update the state. We can do this by passing a messa
 
     // Construct a replacement tool call
     const newMessage = {
-        role: "assistant",
-        content: currentContent,
-        tool_calls: [
-            {
-                id: toolCallId,
-                name: "weather_search",
-                args: { city: "San Francisco, USA" }
-            }
-        ],
-        // Ensure the ID is the same as the message you're replacing
-        id: currentId
+      role: "assistant",
+      content: currentContent,
+      tool_calls: [
+        {
+          id: toolCallId,
+          name: "weather_search",
+          args: { city: "San Francisco, USA" }
+        }
+      ],
+      // Ensure the ID is the same as the message you're replacing
+      id: currentId
     };
 
     await client.threads.updateState(
-        thread.thread_id,  // Thread ID
-        {
+      thread.thread_id,  // Thread ID
+      {
         values: { "messages": [newMessage] },  // Updated message
         asNode: "human_review_node"
-        }  // Acting as human_review_node
+      }  // Acting as human_review_node
     );
 
     console.log("\nResuming Execution");
     // Continue executing from here
     const streamResponseResumed = client.runs.stream(
-    thread["thread_id"],
-    assistantId,
-    {
+      thread["thread_id"],
+      assistantId,
+      {
         input: undefined,
         streamMode: "values",
         interruptBefore: ["action"],
-    }
+      }
     );
+
     for await (const chunk of streamResponseResumed) {
-    if (chunk.data && chunk.event !== "metadata") {
+      if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
-    }
+      }
     }
     ```
 
@@ -413,7 +420,7 @@ For this example we will just add a single tool call representing the feedback. 
 === "Javascript"
 
     ```js
-    const input = {"messages": [{"role": "user", "content": "what's the weather in sf?"}]}
+    const input = { "messages": [{ "role": "user", "content": "what's the weather in sf?" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -423,6 +430,7 @@ For this example we will just add a single tool call representing the feedback. 
         streamMode: "values",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
@@ -493,35 +501,36 @@ To do this, we first need to update the state. We can do this by passing a messa
 
     // Construct a replacement tool call
     const newMessage = {
-        role: "tool",
-        content: "User requested changes: pass in the country as well",
-        name: "weather_search",
-        tool_call_id: toolCallId,
+      role: "tool",
+      content: "User requested changes: pass in the country as well",
+      name: "weather_search",
+      tool_call_id: toolCallId,
     };
 
     await client.threads.updateState(
-        thread.thread_id,  // Thread ID
-        {
+      thread.thread_id,  // Thread ID
+      {
         values: { "messages": [newMessage] },  // Updated message
         asNode: "human_review_node"
-        }  // Acting as human_review_node
+      }  // Acting as human_review_node
     );
 
     console.log("\nResuming Execution");
     // Continue executing from here
     const streamResponseEdited = client.runs.stream(
-    thread["thread_id"],
-    assistantId,
-    {
+      thread["thread_id"],
+      assistantId,
+      {
         input: undefined,
         streamMode: "values",
         interruptBefore: ["action"],
-    }
+      }
     );
+
     for await (const chunk of streamResponseEdited) {
-    if (chunk.data && chunk.event !== "metadata") {
+      if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
-    }
+      }
     }
     ```
 
@@ -562,6 +571,7 @@ We can see that we now get to another breakpoint - because it went back to the m
         streamMode: "values",
       }
     );
+
     for await (const chunk of streamResponseResumed) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);

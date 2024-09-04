@@ -22,6 +22,7 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     ```python
     from langgraph_sdk import get_client
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -32,7 +33,8 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    const assistantId = "agent"
+    // Using the graph deployed with the name "agent"
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 
@@ -73,7 +75,7 @@ And, now let's compile it with a breakpoint before the tool node:
 === "Javascript"
 
     ```js
-    const input = { "messages": [{ "role": "human", "content": "what's the weather in sf"}] }
+    const input = { messages: [{ role: "human", content: "what's the weather in sf" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -81,9 +83,10 @@ And, now let's compile it with a breakpoint before the tool node:
       {
         input: input,
         streamMode: "updates",
-        interruptBefore: ["action"],
+        interruptBefore: ["action"]
       }
     );
+
     for await (const chunk of streamResponse) {
       console.log(`Receiving new event of type: ${chunk.event}...`);
       console.log(chunk.data);

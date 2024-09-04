@@ -27,12 +27,12 @@ If you look at the agent we defined, you can see that inside the `call_model` no
 
     ```js
     function callModel(state: State, config: RunnableConfig) {
-        const messages = state.messages;
-        const modelName = config.configurable?.model_name ?? "anthropic";
-        const model = _getModel(modelName);
-        const response = model.invoke(messages);
-        // We return a list, because this will get added to the existing list
-        return { messages: [response] };
+      const messages = state.messages;
+      const modelName = config.configurable?.model_name ?? "anthropic";
+      const model = _getModel(modelName);
+      const response = model.invoke(messages);
+      // We return a list, because this will get added to the existing list
+      return { messages: [response] };
     }
     ```
 
@@ -46,7 +46,7 @@ First let's set up our client and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
-
+    # Select an assistant that is not configured
     assistants = await client.assistants.search()
     assistant = [a for a in assistants if not a["config"]][0]
     ```
@@ -57,7 +57,7 @@ First let's set up our client and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-
+    // Select an assistant that is not configured
     const assistants = await client.assistants.search();
     const assistant = assistants.find(a => !a.config);
     ```
@@ -91,7 +91,7 @@ We can now call `.get_schemas` to get schemas associated with this graph:
 
     ```js
     const schemas = await client.assistants.getSchemas(
-        assistant["assistant_id"]
+      assistant["assistant_id"]
     );
     // There are multiple types of schemas
     // We can get the `config_schema` to look at the the configurable parameters
@@ -133,8 +133,8 @@ Now we can initialize an assistant with config:
 
     ```js
     let openAIAssistant = await client.assistants.create(
-        // "agent" is the name of a graph we deployed
-        "agent", {"configurable": {"model_name": "openai"}} 
+      // "agent" is the name of a graph we deployed
+      "agent", { "configurable": { "model_name": "openai" } }
     );
 
     console.log(openAIAssistant);
@@ -158,7 +158,7 @@ Output:
         "updated_at": "2024-08-31T03:09:10.230718+00:00",
         "config": {
             "configurable": {
-            "model_name": "open_ai"
+                "model_name": "open_ai"
             }
         },
         "metadata": {}
@@ -186,20 +186,21 @@ We can verify the config is indeed taking effect:
 
     ```js
     const thread = await client.threads.create();
-    let input =  {"messages": [{"role": "user", "content": "who made you?"}]}
+    let input = { "messages": [{ "role": "user", "content": "who made you?" }] };
 
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        openAIAssistant["assistant_id"],
-        {
+      thread["thread_id"],
+      openAIAssistant["assistant_id"],
+      {
         input,
         streamMode: "updates"
-        }
+      }
     );
+
     for await (const event of streamResponse) {
-        console.log(`Receiving event of type: ${event.event}`);
-        console.log(event.data);
-        console.log("\n\n");
+      console.log(`Receiving event of type: ${event.event}`);
+      console.log(event.data);
+      console.log("\n\n");
     }
     ```
 

@@ -22,9 +22,8 @@ In this example, we will show calling a webhook after streaming a run. First, le
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
-    # get default assistant
-    assistants = await client.assistants.search()
-    assistant = [a for a in assistants if not a["config"]][0]
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -36,12 +35,11 @@ In this example, we will show calling a webhook after streaming a run. First, le
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    // get default assistant
-    const assistants = await client.assistants.search();
-    const assistant = assistants.find(a => !a.config);
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
     ```
 
 === "CURL"
@@ -82,7 +80,7 @@ Now we can invoke a run with a webhook:
 
     async for chunk in client.runs.stream(
         thread_id=thread["thread_id"],
-        assistant_id="agent",
+        assistant_id=assistant_id,
         input=input,
         stream_mode="events",
         webhook="your-webhook"
@@ -95,12 +93,12 @@ Now we can invoke a run with a webhook:
 
     ```js
     // create input
-    const input = { "messages": [{ "role": "human", "content": "Hello!" }] }
+    const input = { messages: [{ role: "human", content: "Hello!" }] };
 
     // stream events
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      assistant["id"],
+      assistantID,
       {
         input: input,
         webhook: "your-webhook"

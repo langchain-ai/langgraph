@@ -14,6 +14,8 @@ First let's set up our client and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -25,18 +27,25 @@ First let's set up our client and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
     ```
 
 
 Output:
 
-    {'thread_id': 'd0cbe9ad-f11c-443a-9f6f-dca0ae5a0dd3',
-     'created_at': '2024-06-21T22:10:27.696862+00:00',
-     'updated_at': '2024-06-21T22:10:27.696862+00:00',
-     'metadata': {}}
+    {
+        'thread_id': 'd0cbe9ad-f11c-443a-9f6f-dca0ae5a0dd3',
+        'created_at': '2024-06-21T22:10:27.696862+00:00',
+        'updated_at': '2024-06-21T22:10:27.696862+00:00',
+        'metadata': {},
+        'status': 'idle',
+        'config': {},
+        'values': None
+    }
 
 
 
@@ -56,7 +65,7 @@ Output:
     # stream debug
     async for chunk in client.runs.stream(
         thread_id=thread["thread_id"],
-        assistant_id="agent",
+        assistant_id=assistant_id,
         input=input,
         stream_mode="debug",
     ):
@@ -70,23 +79,24 @@ Output:
     ```js
     // create input
     const input = {
-        "messages": [
-            {
-                "role": "human",
-                "content": "What's the weather in SF?",
-            }
-        ]
-    }
+      messages: [
+        {
+          role: "human",
+          content: "What's the weather in SF?",
+        }
+      ]
+    };
 
     // stream debug
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      "agent",
+      assistantID,
       {
         input,
         streamMode: "debug"
       }
     );
+
     for await (const chunk of streamResponse) {
       console.log(`Receiving new event of type: ${chunk.event}...`);
       console.log(chunk.data);

@@ -1,6 +1,6 @@
 # How to stream state updates of your graph
 
-This guide covers how to use `stream_mode="updates"` for your graph, which will stream the updates to the graph state that are made after each node is executed. This differs from using `stream_mode="values"`: instead of streaming the entire value of the state at each superstep, it only streams the updates from each of the nodes that made an update to the state at that superstep. Read [this conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#stream-and-astream) to learn more.```
+This guide covers how to use `stream_mode="updates"` for your graph, which will stream the updates to the graph state that are made after each node is executed. This differs from using `stream_mode="values"`: instead of streaming the entire value of the state at each superstep, it only streams the updates from each of the nodes that made an update to the state at that superstep. Read [this conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#stream-and-astream) to learn more.
 
 First let's set up our client and thread:
 
@@ -23,7 +23,7 @@ First let's set up our client and thread:
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
     ```
 
 === "CURL"
@@ -36,12 +36,15 @@ First let's set up our client and thread:
 
 Output:
 
-    {'thread_id': '979e3c89-a702-4882-87c2-7a59a250ce16',
-     'created_at': '2024-06-21T15:22:07.453100+00:00',
-     'updated_at': '2024-06-21T15:22:07.453100+00:00',
-     'metadata': {},
-     'status': 'idle',
-     'config': {}}
+    {
+      'thread_id': '979e3c89-a702-4882-87c2-7a59a250ce16',
+      'created_at': '2024-06-21T15:22:07.453100+00:00',
+      'updated_at': '2024-06-21T15:22:07.453100+00:00',
+      'metadata': {},
+      'status': 'idle',
+      'config': {},
+      'values': None 
+    }
 
 Now we can stream by updates, which outputs updates made to the state by each node after it has executed:
 
@@ -72,13 +75,13 @@ Now we can stream by updates, which outputs updates made to the state by each no
 
     ```js
     const input = {
-      "messages": [
+      messages: [
         {
-          "role": "human",
-          "content": "What's the weather in la",
+          role: "human",
+          content: "What's the weather in la"
         }
       ]
-    }
+    };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -88,6 +91,7 @@ Now we can stream by updates, which outputs updates made to the state by each no
         streamMode: "updates"
       }
     );
+
     for await (const chunk of streamResponse) {
       console.log(`Receiving new event of type: ${chunk.event}...`);
       console.log(chunk.data);

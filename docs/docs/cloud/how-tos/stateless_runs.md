@@ -12,7 +12,7 @@ First, let's setup our client:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
-    # agent is the name of our deployed graph
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
@@ -24,7 +24,7 @@ First, let's setup our client:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    // agent is the name of our deployed graph
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     // create thread
     const thread = await client.threads.create();
@@ -74,24 +74,24 @@ We can stream the results of a stateless run in an almost identical fashion to h
 
     ```js
     let input = {
-        "messages": [
-            {"role": "user", "content": "Hello! My name is Bagatur and I am 26 years old."}
-        ]
+      messages: [
+        { role: "user", content: "Hello! My name is Bagatur and I am 26 years old." }
+      ]
     };
 
     const streamResponse = client.runs.stream(
-        // Don't pass in a thread_id and the stream will be stateless
-        null,
-        assistantId,
-        {
-            input,
-            streamMode: "updates"
-        }
+      // Don't pass in a thread_id and the stream will be stateless
+      null,
+      assistantId,
+      {
+        input,
+        streamMode: "updates"
+      }
     );
     for await (const chunk of streamResponse) {
-        if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
-            console.log(chunk.data);
-        }
+      if (chunk.data && !chunk.data.hasOwnProperty("run_id")) {
+        console.log(chunk.data);
+      }
     }
     ```
 
@@ -133,9 +133,9 @@ In addition to streaming, you can also wait for a stateless result by using the 
 
     ```js
     let statelessRunResult = await client.runs.wait(
-        null,
-        assistantId,
-        { input: input },
+      null,
+      assistantId,
+      { input: input }
     );
     console.log(statelessRunResult);
     ```

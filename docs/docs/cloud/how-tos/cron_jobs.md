@@ -12,7 +12,7 @@ First, let's setup our SDK client, assistant, and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
-    # agent is the name of our deployed graph
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
@@ -25,11 +25,11 @@ First, let's setup our SDK client, assistant, and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    // agent is the name of our deployed graph
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
     ```
 
 === "CURL"
@@ -81,14 +81,14 @@ To create a cron job associated with a specific thread, you can write:
 
     ```js
     // This schedules a job to run at 15:27 (3:27PM) every day
-    let cronJob = await client.crons.create_for_thread(
-        thread["thread_id"],
-        assistantId,
-        {
-            schedule:"27 15 * * *",
-            input:{"messages": [{"role": "user", "content": "What time is it?"}]},
-        }
-    )
+    const cronJob = await client.crons.create_for_thread(
+      thread["thread_id"],
+      assistantId,
+      {
+        schedule: "27 15 * * *",
+        input: { messages: [{ role: "user", content: "What time is it?" }] }
+      }
+    );
     ```
 
 === "CURL"
@@ -142,13 +142,13 @@ You can also create stateless cron jobs by using the following code:
 
     ```js
     // This schedules a job to run at 15:27 (3:27PM) every day
-    let cronJobStateless = await client.crons.create(
-        assistantId,
-        {
-            schedule:"27 15 * * *",
-            input:{"messages": [{"role": "user", "content": "What time is it?"}]},
-        }
-    )
+    const cronJobStateless = await client.crons.create(
+      assistantId,
+      {
+        schedule: "27 15 * * *",
+        input: { messages: [{ role: "user", content: "What time is it?" }] }
+      }
+    );
     ```
 
 === "CURL"

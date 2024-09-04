@@ -30,7 +30,7 @@ You'll see that the second agent will respond using information from the [checkp
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
     
     const openAIAssistant = await client.assistants.create(
-        { graphId: "agent", config: {"configurable": {"model_name": "openai"}}}
+      { graphId: "agent", config: {"configurable": {"model_name": "openai"}}}
     );
 
     const assistants = await client.assistants.search();
@@ -149,17 +149,17 @@ We can now run the OpenAI assistant on the thread first.
     let input =  {"messages": [{"role": "user", "content": "who made you?"}]}
 
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        openAIAssistant["assistant_id"],
-        {
+      thread["thread_id"],
+      openAIAssistant["assistant_id"],
+      {
         input,
         streamMode: "updates"
-        }
+      }
     );
     for await (const event of streamResponse) {
-        console.log(`Receiving event of type: ${event.event}`);
-        console.log(event.data);
-        console.log("\n\n");
+      console.log(`Receiving event of type: ${event.event}`);
+      console.log(event.data);
+      console.log("\n\n");
     }
     ```
 
@@ -241,17 +241,17 @@ Now, we can run it on the default assistant and see that this second assistant i
     let input =  {"messages": [{"role": "user", "content": "and you?"}]}
 
     const streamResponse = client.runs.stream(
-        thread["thread_id"],
-        defaultAssistant["assistant_id"],
-        {
+      thread["thread_id"],
+      defaultAssistant["assistant_id"],
+      {
         input,
         streamMode: "updates"
-        }
+      }
     );
     for await (const event of streamResponse) {
-        console.log(`Receiving event of type: ${event.event}`);
-        console.log(event.data);
-        console.log("\n\n");
+      console.log(`Receiving event of type: ${event.event}`);
+      console.log(event.data);
+      console.log("\n\n");
     }
     ```
 
