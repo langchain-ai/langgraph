@@ -13,6 +13,8 @@ def patch_configurable(
 ) -> RunnableConfig:
     if config is None:
         return {"configurable": patch}
+    elif "configurable" not in config:
+        return {**config, "configurable": patch}
     else:
         return {**config, "configurable": {**config["configurable"], **patch}}
 
@@ -130,7 +132,7 @@ def patch_config(
     Returns:
         RunnableConfig: The patched config.
     """
-    config = config or {}
+    config = config.copy() or {}
     if callbacks is not None:
         # If we're replacing callbacks, we need to unset run_name
         # As that should apply only to the same run as the original callbacks

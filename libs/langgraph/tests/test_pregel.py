@@ -1848,9 +1848,7 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     one = (
-        Channel.subscribe_to("input")
-        | add_one
-        | Channel.write_to(output=RunnablePassthrough(), between=RunnablePassthrough())
+        Channel.subscribe_to("input") | add_one | Channel.write_to("output", "between")
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
@@ -4824,7 +4822,7 @@ def test_message_graph(
             content="result for query",
             name="search_api",
             tool_call_id="tool_call123",
-            id="00000000-0000-4000-8000-000000000011",
+            id="00000000-0000-4000-8000-000000000010",
         ),
         AIMessage(
             content="",
@@ -4841,7 +4839,7 @@ def test_message_graph(
             content="result for another",
             name="search_api",
             tool_call_id="tool_call456",
-            id="00000000-0000-4000-8000-000000000020",
+            id="00000000-0000-4000-8000-000000000018",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -4866,7 +4864,7 @@ def test_message_graph(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000036",
+                    id="00000000-0000-4000-8000-000000000033",
                 )
             ]
         },
@@ -4889,7 +4887,7 @@ def test_message_graph(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000045",
+                    id="00000000-0000-4000-8000-000000000041",
                 )
             ]
         },
@@ -5558,7 +5556,7 @@ def test_root_graph(
             content="result for query",
             name="search_api",
             tool_call_id="tool_call123",
-            id="00000000-0000-4000-8000-000000000011",
+            id="00000000-0000-4000-8000-000000000010",
         ),
         AIMessage(
             content="",
@@ -5575,7 +5573,7 @@ def test_root_graph(
             content="result for another",
             name="search_api",
             tool_call_id="tool_call456",
-            id="00000000-0000-4000-8000-000000000020",
+            id="00000000-0000-4000-8000-000000000018",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -5600,7 +5598,7 @@ def test_root_graph(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000036",
+                    id="00000000-0000-4000-8000-000000000033",
                 )
             ]
         },
@@ -5623,7 +5621,7 @@ def test_root_graph(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000045",
+                    id="00000000-0000-4000-8000-000000000041",
                 )
             ]
         },
@@ -6223,7 +6221,7 @@ def test_root_graph(
         "__root__": [
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000077",
+                id="00000000-0000-4000-8000-000000000070",
             ),
             AIMessage(
                 content="",
@@ -6239,12 +6237,12 @@ def test_root_graph(
             ToolMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000091",
+                id="00000000-0000-4000-8000-000000000082",
                 tool_call_id="tool_call123",
             ),
             AIMessage(content="answer", id="ai2"),
             AIMessage(
-                content="an extra message", id="00000000-0000-4000-8000-000000000101"
+                content="an extra message", id="00000000-0000-4000-8000-000000000091"
             ),
             HumanMessage(content="what is weather in la"),
         ],

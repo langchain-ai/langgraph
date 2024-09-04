@@ -8,7 +8,6 @@ from functools import partial
 from typing import (
     Any,
     AsyncIterator,
-    Awaitable,
     Callable,
     Dict,
     Iterator,
@@ -30,7 +29,7 @@ from langchain_core.runnables import (
     RunnableLambda,
     RunnableSequence,
 )
-from langchain_core.runnables.base import Input, Output, coerce_to_runnable
+from langchain_core.runnables.base import Input, Output
 from langchain_core.runnables.config import (
     RunnableConfig,
     ensure_config,
@@ -108,12 +107,7 @@ from langgraph.utils.config import (
 )
 from langgraph.utils.runnable import RunnableCallable
 
-WriteValue = Union[
-    Runnable[Input, Output],
-    Callable[[Input], Output],
-    Callable[[Input], Awaitable[Output]],
-    Any,
-]
+WriteValue = Union[Callable[[Input], Output], Any]
 
 
 class Channel:
@@ -178,11 +172,9 @@ class Channel:
         return ChannelWrite(
             [ChannelWriteEntry(c) for c in channels]
             + [
-                (
-                    ChannelWriteEntry(k, skip_none=True, mapper=coerce_to_runnable(v))
-                    if isinstance(v, Runnable) or callable(v)
-                    else ChannelWriteEntry(k, value=v)
-                )
+                ChannelWriteEntry(k, mapper=v)
+                if callable(v)
+                else ChannelWriteEntry(k, value=v)
                 for k, v in kwargs.items()
             ]
         )
@@ -819,7 +811,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             managed,
         ):
             # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].get_writers()
+            writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
@@ -983,7 +975,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             managed,
         ):
             # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].get_writers()
+            writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
