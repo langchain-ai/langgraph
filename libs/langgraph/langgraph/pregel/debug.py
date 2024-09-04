@@ -108,7 +108,7 @@ def map_debug_task_results(
     stream_channels_list = (
         [stream_keys] if isinstance(stream_keys, str) else stream_keys
     )
-    ts = datetime.now(timezone.utc).isoformat()
+    ts = datetime.now(timezone.utc)
     for task, writes in tasks:
         if task.config is not None and TAG_HIDDEN in task.config.get("tags", []):
             continue
@@ -119,12 +119,10 @@ def map_debug_task_results(
 
         yield {
             "type": "task_result",
-            "timestamp": ts,
+            "timestamp": ts.isoformat(),
             "step": step,
             "payload": {
-                "id": str(
-                    uuid5(TASK_NAMESPACE, json.dumps((task.name, step, metadata)))
-                ),
+                "id": task.id,
                 "name": task.name,
                 "error": next((w[1] for w in writes if w[0] == ERROR), None),
                 "result": [w for w in writes if w[0] in stream_channels_list],

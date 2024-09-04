@@ -1,3 +1,4 @@
+import asyncio
 import logging
 from collections import defaultdict
 from typing import (
@@ -38,7 +39,7 @@ from langgraph.pregel import Channel, Pregel
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
-from langgraph.utils import RunnableCallable, coerce_to_runnable
+from langgraph.utils.runnable import RunnableCallable, coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
@@ -55,7 +56,7 @@ class Branch(NamedTuple):
 
     def run(
         self,
-        writer: Callable[[list[str]], Optional[Runnable]],
+        writer: Callable[[list[str], RunnableConfig], None],
         reader: Optional[Callable[[RunnableConfig], Any]] = None,
     ) -> None:
         return ChannelWrite.register_writer(
@@ -75,7 +76,7 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[], Any]],
-        writer: Callable[[list[str]], Optional[Runnable]],
+        writer: Callable[[list[str], RunnableConfig], None],
     ) -> Runnable:
         if reader:
             value = reader(config)
@@ -86,7 +87,7 @@ class Branch(NamedTuple):
         else:
             value = input
         result = self.path.invoke(value, config)
-        return self._finish(writer, input, result)
+        return self._finish(writer, input, result, config)
 
     async def _aroute(
         self,
@@ -94,10 +95,10 @@ class Branch(NamedTuple):
         config: RunnableConfig,
         *,
         reader: Optional[Callable[[], Any]],
-        writer: Callable[[list[str]], Optional[Runnable]],
+        writer: Callable[[list[str], RunnableConfig], Optional[Runnable]],
     ) -> Runnable:
         if reader:
-            value = reader(config)
+            value = await asyncio.to_thread(reader, config)
             # passthrough additional keys from node to branch
             # only doable when using dict states
             if isinstance(value, dict) and isinstance(input, dict):
@@ -105,10 +106,14 @@ class Branch(NamedTuple):
         else:
             value = input
         result = await self.path.ainvoke(value, config)
-        return self._finish(writer, input, result)
+        return self._finish(writer, input, result, config)
 
     def _finish(
-        self, writer: Callable[[list[str]], Optional[Runnable]], input: Any, result: Any
+        self,
+        writer: Callable[[list[str], RunnableConfig], None],
+        input: Any,
+        result: Any,
+        config: RunnableConfig,
     ):
         if not isinstance(result, list):
             result = [result]
@@ -120,7 +125,7 @@ class Branch(NamedTuple):
             raise ValueError("Branch did not return a valid destination")
         if any(p.node == END for p in destinations if isinstance(p, Send)):
             raise InvalidUpdateError("Cannot send a packet to the END node")
-        return writer(destinations) or input
+        return writer(destinations, config) or input
 
 
 class Graph:
@@ -424,6 +429,10 @@ class Graph:
 class CompiledGraph(Pregel):
     builder: Graph
 
+    def __init__(self, *, builder: Graph, **kwargs):
+        super().__init__(**kwargs)
+        self.builder = builder
+
     def attach_node(self, key: str, node: NodeSpec) -> None:
         self.channels[key] = EphemeralValue(Any)
         self.nodes[key] = (
@@ -445,7 +454,9 @@ class CompiledGraph(Pregel):
             self.nodes[end].channels.append(start)
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
+        def branch_writer(
+            packets: list[Union[str, Send]], config: RunnableConfig
+        ) -> Optional[ChannelWrite]:
             writes = [
                 (
                     ChannelWriteEntry(f"branch:{start}:{name}:{p}" if p != END else END)
@@ -484,6 +495,10 @@ class CompiledGraph(Pregel):
             START: graph.add_node(self.get_input_schema(config), START)
         }
         end_nodes: dict[str, DrawableNode] = {}
+        if xray:
+            subgraphs = dict(self.get_subgraphs())
+        else:
+            subgraphs = {}
 
         def add_edge(
             start: str, end: str, label: Optional[str] = None, conditional: bool = False
@@ -503,11 +518,11 @@ class CompiledGraph(Pregel):
                 metadata["__interrupt"] = "after"
             if xray:
                 subgraph = (
-                    node.get_graph(
+                    subgraphs[key].get_graph(
                         config=config,
                         xray=xray - 1 if isinstance(xray, int) and xray > 0 else xray,
                     )
-                    if isinstance(node, CompiledGraph)
+                    if key in subgraphs
                     else node.get_graph(config=config)
                 )
                 subgraph.trim_first_node()

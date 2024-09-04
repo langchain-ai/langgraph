@@ -74,10 +74,7 @@ from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
 from tests.conftest import ALL_CHECKPOINTERS_SYNC
 from tests.fake_tracer import FakeTracer
-from tests.memory_assert import (
-    MemorySaverAssertCheckpointMetadata,
-    MemorySaverNoPending,
-)
+from tests.memory_assert import MemorySaverAssertCheckpointMetadata
 from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
 
 
@@ -294,7 +291,6 @@ def test_node_schemas_custom_output() -> None:
     def node_b(state: StateForB):
         assert state == {
             "bye": "world",
-            "now": None,
         }
         return {
             "now": 123,
@@ -707,7 +703,12 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "input", "step": 4, "writes": 3},
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": 4,
+                "writes": {"input": 3},
+            },
             created_at=AnyStr(),
             parent_config=history[3].config,
         ),
@@ -742,7 +743,12 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "input", "step": 2, "writes": 20},
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": 2,
+                "writes": {"input": 20},
+            },
             created_at=AnyStr(),
             parent_config=history[5].config,
         ),
@@ -792,7 +798,12 @@ def test_invoke_two_processes_in_out_interrupt(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "input", "step": -1, "writes": 2},
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"input": 2},
+            },
             created_at=AnyStr(),
             parent_config=None,
         ),
@@ -967,7 +978,12 @@ def test_fork_always_re_runs_nodes(
                     "checkpoint_id": AnyStr(),
                 }
             },
-            metadata={"parents": {}, "source": "input", "step": -1, "writes": 1},
+            metadata={
+                "parents": {},
+                "source": "input",
+                "step": -1,
+                "writes": {"__start__": 1},
+            },
             created_at=AnyStr(),
             parent_config=None,
         ),
@@ -1064,7 +1080,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
+                "id": AnyStr(),
                 "name": "one",
                 "result": [("inbox", 3)],
                 "error": None,
@@ -1076,7 +1092,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
+                "id": AnyStr(),
                 "name": "two",
                 "result": [("output", 13)],
                 "error": None,
@@ -1099,7 +1115,7 @@ def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
+                "id": AnyStr(),
                 "name": "two",
                 "result": [("output", 4)],
                 "error": None,
@@ -1566,7 +1582,12 @@ def test_pending_writes_resume(
             },
             "channel_values": {"__start__": {"value": 1}},
         },
-        metadata={"parents": {}, "step": -1, "source": "input", "writes": {"value": 1}},
+        metadata={
+            "parents": {},
+            "step": -1,
+            "source": "input",
+            "writes": {"__start__": {"value": 1}},
+        },
         parent_config=None,
         pending_writes=UnsortedSequence(
             (AnyStr(), "value", 1),
@@ -1600,29 +1621,6 @@ def test_cond_edge_after_send() -> None:
     builder.add_conditional_edges("2", route_to_three)
     graph = builder.compile()
     assert graph.invoke(["0"]) == ["0", "1", "2", "2", "3"]
-
-
-async def test_checkpointer_null_pending_writes() -> None:
-    class Node:
-        def __init__(self, name: str):
-            self.name = name
-            setattr(self, "__name__", name)
-
-        def __call__(self, state):
-            return [self.name]
-
-    builder = StateGraph(Annotated[list, operator.add])
-    builder.add_node(Node("1"))
-    builder.add_edge(START, "1")
-    graph = builder.compile(checkpointer=MemorySaverNoPending())
-    assert graph.invoke([], {"configurable": {"thread_id": "foo"}}) == ["1"]
-    assert graph.invoke([], {"configurable": {"thread_id": "foo"}}) == ["1"] * 2
-    assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
-        "1"
-    ] * 3
-    assert (await graph.ainvoke([], {"configurable": {"thread_id": "foo"}})) == [
-        "1"
-    ] * 4
 
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
@@ -1850,9 +1848,7 @@ def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> None:
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     one = (
-        Channel.subscribe_to("input")
-        | add_one
-        | Channel.write_to(output=RunnablePassthrough(), between=RunnablePassthrough())
+        Channel.subscribe_to("input") | add_one | Channel.write_to("output", "between")
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
@@ -1905,7 +1901,7 @@ def test_invoke_two_processes_no_in(mocker: MockerFixture) -> None:
     one = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
     two = Channel.subscribe_to("between") | add_one
 
-    with pytest.raises(ValueError):
+    with pytest.raises(TypeError):
         Pregel(nodes={"one": one, "two": two})
 
 
@@ -1959,8 +1955,6 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 def test_conditional_graph(
     snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    from copy import deepcopy
-
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
@@ -2002,12 +1996,15 @@ def test_conditional_graph(
 
     # Define tool execution logic
     def execute_tools(data: dict) -> dict:
+        data = data.copy()
         agent_action: AgentAction = data.pop("agent_outcome")
         observation = {t.name: t for t in tools}[agent_action.tool].invoke(
             agent_action.tool_input
         )
         if data.get("intermediate_steps") is None:
             data["intermediate_steps"] = []
+        else:
+            data["intermediate_steps"] = data["intermediate_steps"].copy()
         data["intermediate_steps"].append([agent_action, observation])
         return data
 
@@ -2068,8 +2065,7 @@ def test_conditional_graph(
         ),
     }
 
-    # deepcopy because the nodes mutate the data
-    assert [deepcopy(c) for c in app.stream({"input": "what is weather in sf"})] == [
+    assert [c for c in app.stream({"input": "what is weather in sf"})] == [
         {
             "agent": {
                 "input": "what is weather in sf",
@@ -4826,7 +4822,7 @@ def test_message_graph(
             content="result for query",
             name="search_api",
             tool_call_id="tool_call123",
-            id="00000000-0000-4000-8000-000000000011",
+            id="00000000-0000-4000-8000-000000000010",
         ),
         AIMessage(
             content="",
@@ -4843,7 +4839,7 @@ def test_message_graph(
             content="result for another",
             name="search_api",
             tool_call_id="tool_call456",
-            id="00000000-0000-4000-8000-000000000020",
+            id="00000000-0000-4000-8000-000000000018",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -4868,7 +4864,7 @@ def test_message_graph(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000036",
+                    id="00000000-0000-4000-8000-000000000033",
                 )
             ]
         },
@@ -4891,7 +4887,7 @@ def test_message_graph(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000045",
+                    id="00000000-0000-4000-8000-000000000041",
                 )
             ]
         },
@@ -5560,7 +5556,7 @@ def test_root_graph(
             content="result for query",
             name="search_api",
             tool_call_id="tool_call123",
-            id="00000000-0000-4000-8000-000000000011",
+            id="00000000-0000-4000-8000-000000000010",
         ),
         AIMessage(
             content="",
@@ -5577,7 +5573,7 @@ def test_root_graph(
             content="result for another",
             name="search_api",
             tool_call_id="tool_call456",
-            id="00000000-0000-4000-8000-000000000020",
+            id="00000000-0000-4000-8000-000000000018",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -5602,7 +5598,7 @@ def test_root_graph(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000036",
+                    id="00000000-0000-4000-8000-000000000033",
                 )
             ]
         },
@@ -5625,7 +5621,7 @@ def test_root_graph(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000045",
+                    id="00000000-0000-4000-8000-000000000041",
                 )
             ]
         },
@@ -6225,7 +6221,7 @@ def test_root_graph(
         "__root__": [
             HumanMessage(
                 content="what is weather in sf",
-                id="00000000-0000-4000-8000-000000000077",
+                id="00000000-0000-4000-8000-000000000070",
             ),
             AIMessage(
                 content="",
@@ -6241,12 +6237,12 @@ def test_root_graph(
             ToolMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000091",
+                id="00000000-0000-4000-8000-000000000082",
                 tool_call_id="tool_call123",
             ),
             AIMessage(content="answer", id="ai2"),
             AIMessage(
-                content="an extra message", id="00000000-0000-4000-8000-000000000101"
+                content="an extra message", id="00000000-0000-4000-8000-000000000091"
             ),
             HumanMessage(content="what is weather in la"),
         ],
@@ -6339,11 +6335,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
                     "name": "rewrite_query",
-                    "input": {
-                        "query": "what is weather in sf",
-                        "answer": None,
-                        "docs": [],
-                    },
+                    "input": {"query": "what is weather in sf", "docs": []},
                     "triggers": ["start:rewrite_query"],
                 },
             },
@@ -6356,7 +6348,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
+                    "id": AnyStr(),
                     "name": "rewrite_query",
                     "result": [("query", "query: what is weather in sf")],
                     "error": None,
@@ -6374,11 +6366,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
                     "name": "retriever_one",
-                    "input": {
-                        "query": "query: what is weather in sf",
-                        "answer": None,
-                        "docs": [],
-                    },
+                    "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ["rewrite_query"],
                 },
             },
@@ -6392,11 +6380,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "payload": {
                     "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
                     "name": "retriever_two",
-                    "input": {
-                        "query": "query: what is weather in sf",
-                        "answer": None,
-                        "docs": [],
-                    },
+                    "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ["rewrite_query"],
                 },
             },
@@ -6412,7 +6396,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
+                    "id": AnyStr(),
                     "name": "retriever_two",
                     "result": [("docs", ["doc3", "doc4"])],
                     "error": None,
@@ -6431,7 +6415,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
+                    "id": AnyStr(),
                     "name": "retriever_one",
                     "result": [("docs", ["doc1", "doc2"])],
                     "error": None,
@@ -6457,7 +6441,6 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                     "name": "qa",
                     "input": {
                         "query": "query: what is weather in sf",
-                        "answer": None,
                         "docs": ["doc1", "doc2", "doc3", "doc4"],
                     },
                     "triggers": ["retriever_one", "retriever_two"],
@@ -6472,7 +6455,7 @@ def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
+                    "id": AnyStr(),
                     "name": "qa",
                     "result": [("answer", "doc1,doc2,doc3,doc4")],
                     "error": None,
@@ -6557,7 +6540,7 @@ def test_dynamic_interrupt(
             "parents": {},
             "source": "input",
             "step": -1,
-            "writes": {"my_key": "value ⛰️", "market": "DE"},
+            "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
         },
     ]
     assert tool_two.get_state(thread1) == StateSnapshot(
@@ -6654,7 +6637,7 @@ def test_start_branch_then(
             "parents": {},
             "source": "input",
             "step": -1,
-            "writes": {"my_key": "value ⛰️", "market": "DE"},
+            "writes": {"__start__": {"my_key": "value ⛰️", "market": "DE"}},
         },
     ]
     assert tool_two.get_state(thread1) == StateSnapshot(
@@ -6837,7 +6820,7 @@ def test_branch_then(
                     "parents": {},
                     "source": "input",
                     "step": -1,
-                    "writes": {"my_key": "value", "market": "DE"},
+                    "writes": {"__start__": {"my_key": "value", "market": "DE"}},
                 },
                 "next": ["__start__"],
                 "tasks": [{"id": AnyStr(), "name": "__start__", "interrupts": ()}],
@@ -6889,7 +6872,7 @@ def test_branch_then(
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
+                "id": AnyStr(),
                 "name": "prepare",
                 "result": [("my_key", " prepared")],
                 "error": None,
@@ -6942,7 +6925,7 @@ def test_branch_then(
             "timestamp": AnyStr(),
             "step": 2,
             "payload": {
-                "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
+                "id": AnyStr(),
                 "name": "tool_two_slow",
                 "result": [("my_key", " slow")],
                 "error": None,
@@ -6995,7 +6978,7 @@ def test_branch_then(
             "timestamp": AnyStr(),
             "step": 3,
             "payload": {
-                "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
+                "id": AnyStr(),
                 "name": "finish",
                 "result": [("my_key", " finished")],
                 "error": None,
@@ -8793,7 +8776,7 @@ def test_nested_graph_state(
             metadata={
                 "parents": {},
                 "source": "input",
-                "writes": {"my_key": "my value"},
+                "writes": {"__start__": {"my_key": "my value"}},
                 "step": -1,
             },
             created_at=AnyStr(),
@@ -8881,7 +8864,7 @@ def test_nested_graph_state(
             },
             metadata={
                 "source": "input",
-                "writes": {"my_key": "hi my value", "other_parent_key": None},
+                "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
                 "parents": {"": AnyStr()},
             },
@@ -9048,7 +9031,7 @@ def test_nested_graph_state(
             metadata={
                 "parents": {},
                 "source": "input",
-                "writes": {"my_key": "my value"},
+                "writes": {"__start__": {"my_key": "my value"}},
                 "step": -1,
             },
             created_at=AnyStr(),
@@ -9532,7 +9515,7 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "source": "input",
-                "writes": {"my_key": "my value"},
+                "writes": {"__start__": {"my_key": "my value"}},
                 "step": -1,
                 "parents": {},
             },
@@ -9628,7 +9611,7 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "source": "input",
-                "writes": {"my_key": "hi my value"},
+                "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
                 "parents": {"": AnyStr()},
             },
@@ -9773,7 +9756,7 @@ def test_doubly_nested_graph_state(
             },
             metadata={
                 "source": "input",
-                "writes": {"my_key": "hi my value"},
+                "writes": {"__start__": {"my_key": "hi my value"}},
                 "step": -1,
                 "parents": AnyDict(
                     {
@@ -9840,12 +9823,18 @@ def test_send_to_nested_graphs(
 
     graph = builder.compile(checkpointer=checkpointer)
     config = {"configurable": {"thread_id": "1"}}
+    tracer = FakeTracer()
 
     # invoke and pause at nested interrupt
-    assert graph.invoke({"subjects": ["cats", "dogs"]}, config=config) == {
+    assert graph.invoke(
+        {"subjects": ["cats", "dogs"]}, config={**config, "callbacks": [tracer]}
+    ) == {
         "subjects": ["cats", "dogs"],
         "jokes": [],
     }
+    assert len(tracer.runs) == 1, "Should produce exactly 1 root run"
+
+    # check state
     outer_state = graph.get_state(config)
     assert outer_state == StateSnapshot(
         values={"subjects": ["cats", "dogs"], "jokes": []},
@@ -9958,10 +9947,12 @@ def test_send_to_nested_graphs(
     graph.update_state(outer_state.tasks[1].state, {"subject": "turtles - hohoho"})
 
     # continue past interrupt
-    assert graph.invoke(None, config=config) == {
-        "subjects": ["cats", "dogs"],
-        "jokes": ["Joke about cats - hohoho", "Joke about turtles - hohoho"],
-    }
+    assert sorted(
+        graph.stream(None, config=config), key=lambda d: d["generate_joke"]["jokes"][0]
+    ) == [
+        {"generate_joke": {"jokes": ["Joke about cats - hohoho"]}},
+        {"generate_joke": {"jokes": ["Joke about turtles - hohoho"]}},
+    ]
 
     actual_snapshot = graph.get_state(config)
     expected_snapshot = StateSnapshot(
@@ -10095,7 +10086,7 @@ def test_send_to_nested_graphs(
             metadata={
                 "parents": {},
                 "source": "input",
-                "writes": {"subjects": ["cats", "dogs"]},
+                "writes": {"__start__": {"subjects": ["cats", "dogs"]}},
                 "step": -1,
             },
             created_at=AnyStr(),
@@ -10198,10 +10189,13 @@ def test_weather_subgraph(
         else:
             return "normal_llm_node"
 
+    def weather_graph(state: RouterState):
+        return subgraph.invoke(state)
+
     graph = StateGraph(RouterState)
     graph.add_node(router_node)
     graph.add_node(normal_llm_node)
-    graph.add_node("weather_graph", subgraph)
+    graph.add_node("weather_graph", weather_graph)
     graph.add_edge(START, "router_node")
     graph.add_conditional_edges("router_node", route_after_prediction)
     graph.add_edge("normal_llm_node", END)

@@ -197,6 +197,7 @@ nav:
           - Setup:
               - Setup App: "cloud/deployment/setup.md"
               - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
+              - Setup App (JavaScript): "cloud/deployment/setup_javascript.md"
               - Rebuild Graph at Runtime: "cloud/deployment/graph_rebuild.md"
               - Test App Locally: "cloud/deployment/test_locally.md"
           - Deployment:

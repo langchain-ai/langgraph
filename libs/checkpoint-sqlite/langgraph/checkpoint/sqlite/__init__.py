@@ -104,10 +104,12 @@ class SqliteSaver(BaseCheckpointSaver):
                 with SqliteSaver.from_conn_string("checkpoints.sqlite") as memory:
                     ...
         """
-        with sqlite3.connect(
-            conn_string,
-            # https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
-            check_same_thread=False,
+        with closing(
+            sqlite3.connect(
+                conn_string,
+                # https://ricardoanderegg.com/posts/python-sqlite-thread-safety/
+                check_same_thread=False,
+            )
         ) as conn:
             yield SqliteSaver(conn)
 
@@ -163,14 +165,15 @@ class SqliteSaver(BaseCheckpointSaver):
         Yields:
             sqlite3.Cursor: A cursor for the SQLite database.
         """
-        self.setup()
-        cur = self.conn.cursor()
-        try:
-            yield cur
-        finally:
-            if transaction:
-                self.conn.commit()
-            cur.close()
+        with self.lock:
+            self.setup()
+            cur = self.conn.cursor()
+            try:
+                yield cur
+            finally:
+                if transaction:
+                    self.conn.commit()
+                cur.close()
 
     def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
         """Get a checkpoint tuple from the database.
@@ -244,7 +247,7 @@ class SqliteSaver(BaseCheckpointSaver):
                     }
                 # find any pending writes
                 cur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
                     (
                         str(config["configurable"]["thread_id"]),
                         checkpoint_ns,
@@ -331,7 +334,7 @@ class SqliteSaver(BaseCheckpointSaver):
                 metadata,
             ) in cur:
                 wcur.execute(
-                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ?",
+                    "SELECT task_id, channel, type, value FROM writes WHERE thread_id = ? AND checkpoint_ns = ? AND checkpoint_id = ? ORDER BY task_id, idx",
                     (thread_id, checkpoint_ns, checkpoint_id),
                 )
                 yield CheckpointTuple(
@@ -396,7 +399,7 @@ class SqliteSaver(BaseCheckpointSaver):
         checkpoint_ns = config["configurable"]["checkpoint_ns"]
         type_, serialized_checkpoint = self.serde.dumps_typed(checkpoint)
         serialized_metadata = self.jsonplus_serde.dumps(metadata)
-        with self.lock, self.cursor() as cur:
+        with self.cursor() as cur:
             cur.execute(
                 "INSERT OR REPLACE INTO checkpoints (thread_id, checkpoint_ns, checkpoint_id, parent_checkpoint_id, type, checkpoint, metadata) VALUES (?, ?, ?, ?, ?, ?, ?)",
                 (
@@ -432,7 +435,7 @@ class SqliteSaver(BaseCheckpointSaver):
             writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
             task_id (str): Identifier for the task creating the writes.
         """
-        with self.lock, self.cursor() as cur:
+        with self.cursor() as cur:
             cur.executemany(
                 "INSERT OR IGNORE INTO writes (thread_id, checkpoint_ns, checkpoint_id, task_id, idx, channel, type, value) VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
                 [

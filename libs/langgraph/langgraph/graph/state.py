@@ -17,12 +17,10 @@ from typing import (
     overload,
 )
 
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
-from langchain_core.runnables.utils import (
-    create_model,
-)
+from langchain_core.runnables.utils import create_model
+from pydantic import BaseModel
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -33,14 +31,7 @@ from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.constants import NS_END, NS_SEP, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
-from langgraph.graph.graph import (
-    END,
-    START,
-    Branch,
-    CompiledGraph,
-    Graph,
-    Send,
-)
+from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -53,7 +44,8 @@ from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.utils import RunnableCallable, coerce_to_runnable
+from langgraph.utils.fields import get_field_default
+from langgraph.utils.runnable import coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
@@ -498,7 +490,16 @@ class CompiledStateGraph(CompiledGraph):
                 return create_model(  # type: ignore[call-overload]
                     self.get_name("Input"),
                     **{
-                        k: (self.channels[k].UpdateType, None)
+                        k: (
+                            self.channels[k].UpdateType,
+                            (
+                                get_field_default(
+                                    k,
+                                    self.channels[k].UpdateType,
+                                    self.builder.input,
+                                )
+                            ),
+                        )
                         for k in self.builder.schemas[self.builder.input]
                         if isinstance(self.channels[k], BaseChannel)
                     },
@@ -530,9 +531,7 @@ class CompiledStateGraph(CompiledGraph):
                 if is_writable_managed_value(v)
             ]
 
-        def _get_state_key(
-            input: Union[None, dict, Any], config: RunnableConfig, *, key: str
-        ) -> Any:
+        def _get_state_key(input: Union[None, dict, Any], *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
             elif isinstance(input, dict):
@@ -548,12 +547,7 @@ class CompiledStateGraph(CompiledGraph):
             [ChannelWriteEntry("__root__", skip_none=True)]
             if output_keys == ["__root__"]
             else [
-                ChannelWriteEntry(
-                    key,
-                    mapper=RunnableCallable(
-                        _get_state_key, key=key, trace=False, recurse=False
-                    ),
-                )
+                ChannelWriteEntry(key, mapper=partial(_get_state_key, key=key))
                 for key in output_keys
             ]
         )
@@ -596,7 +590,8 @@ class CompiledStateGraph(CompiledGraph):
                 ],
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
-            ).pipe(node.runnable)
+                bound=node.runnable,
+            )
 
     def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
         if isinstance(starts, str):
@@ -626,7 +621,9 @@ class CompiledStateGraph(CompiledGraph):
                 )
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
+        def branch_writer(
+            packets: list[Union[str, Send]], config: RunnableConfig
+        ) -> Optional[ChannelWrite]:
             if filtered := [p for p in packets if p != END]:
                 writes = [
                     (
@@ -645,7 +642,7 @@ class CompiledStateGraph(CompiledGraph):
                             ),
                         )
                     )
-                return ChannelWrite(writes, tags=[TAG_HIDDEN])
+                ChannelWrite.do_write(config, writes)
 
         # attach branch publisher
         schema = (

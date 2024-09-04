@@ -225,6 +225,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "left"
@@ -237,6 +238,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "right"
@@ -306,6 +308,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "left"
@@ -318,6 +321,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "right"
@@ -366,7 +370,7 @@
   '''
 # ---
 # name: test_conditional_entrypoint_to_multiple_state_graph
-  '{"title": "LangGraphInput", "type": "object", "properties": {"locations": {"title": "Locations", "type": "array", "items": {"type": "string"}}, "results": {"title": "Results", "type": "array", "items": {"type": "string"}}}}'
+  '{"title": "LangGraphInput", "type": "object", "properties": {"locations": {"title": "Locations", "type": "array", "items": {"type": "string"}}, "results": {"title": "Results", "type": "array", "items": {"type": "string"}}}, "required": ["locations", "results"]}'
 # ---
 # name: test_conditional_entrypoint_to_multiple_state_graph.1
   '{"title": "LangGraphOutput", "type": "object", "properties": {"locations": {"title": "Locations", "type": "array", "items": {"type": "string"}}, "results": {"title": "Results", "type": "array", "items": {"type": "string"}}}}'
@@ -387,6 +391,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "get_weather"
@@ -800,6 +805,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -949,6 +955,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1081,6 +1088,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -1151,6 +1159,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1300,6 +1309,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1432,6 +1442,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -1502,6 +1513,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1651,6 +1663,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1783,6 +1796,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -1853,6 +1867,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2002,6 +2017,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2134,6 +2150,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -2204,6 +2221,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2353,6 +2371,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2485,6 +2504,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -2642,6 +2662,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2723,6 +2744,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2804,6 +2826,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2885,6 +2908,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2966,6 +2990,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -3028,6 +3053,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "A"
@@ -3040,6 +3066,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "B"
@@ -3304,7 +3331,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3323,11 +3350,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
@@ -3374,7 +3397,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3393,11 +3416,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
@@ -3444,7 +3463,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3463,11 +3482,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
@@ -3514,7 +3529,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3533,11 +3548,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
@@ -3584,7 +3595,7 @@
       'query',
       'inner',
     ]),
-    'title': 'Input',
+    'title': 'LangGraphInput',
     'type': 'object',
   })
 # ---
@@ -3603,11 +3614,7 @@
         'type': 'array',
       }),
     }),
-    'required': list([
-      'answer',
-      'docs',
-    ]),
-    'title': 'Output',
+    'title': 'LangGraphOutput',
     'type': 'object',
   })
 # ---
@@ -4681,6 +4688,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_one',
@@ -4698,6 +4706,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_two:tool_two_slow',
@@ -4710,6 +4719,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_two:tool_two_fast',
@@ -4727,6 +4737,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_three',
@@ -4855,7 +4866,7 @@
   '''
 # ---
 # name: test_prebuilt_tool_chat
-  '{"title": "LangGraphInput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
+  '{"title": "LangGraphInput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "required": ["messages"], "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
 # ---
 # name: test_prebuilt_tool_chat.1
   '{"title": "LangGraphOutput", "type": "object", "properties": {"messages": {"title": "Messages", "type": "array", "items": {"$ref": "#/definitions/BaseMessage"}}}, "definitions": {"BaseMessage": {"title": "BaseMessage", "description": "Base abstract message class.\\n\\nMessages are the inputs and outputs of ChatModels.", "type": "object", "properties": {"content": {"title": "Content", "anyOf": [{"type": "string"}, {"type": "array", "items": {"anyOf": [{"type": "string"}, {"type": "object"}]}}]}, "additional_kwargs": {"title": "Additional Kwargs", "type": "object"}, "response_metadata": {"title": "Response Metadata", "type": "object"}, "type": {"title": "Type", "type": "string"}, "name": {"title": "Name", "type": "string"}, "id": {"title": "Id", "type": "string"}}, "required": ["content", "type"]}}}'
@@ -5094,7 +5105,7 @@
   '{"title": "LangGraphConfig", "type": "object", "properties": {"configurable": {"$ref": "#/definitions/Configurable"}}, "definitions": {"Configurable": {"title": "Configurable", "type": "object", "properties": {"tools": {"title": "Tools", "type": "array", "items": {"type": "string"}}}}}}'
 # ---
 # name: test_state_graph_w_config_inherited_state_keys.1
-  '{"title": "LangGraphInput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
+  '{"title": "LangGraphInput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "required": ["input"], "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
 # ---
 # name: test_state_graph_w_config_inherited_state_keys.2
   '{"title": "LangGraphOutput", "type": "object", "properties": {"input": {"title": "Input", "type": "string"}, "agent_outcome": {"title": "Agent Outcome", "anyOf": [{"$ref": "#/definitions/AgentAction"}, {"$ref": "#/definitions/AgentFinish"}]}, "intermediate_steps": {"title": "Intermediate Steps", "type": "array", "items": {"type": "array", "minItems": 2, "maxItems": 2, "items": [{"$ref": "#/definitions/AgentAction"}, {"type": "string"}]}}}, "definitions": {"AgentAction": {"title": "AgentAction", "description": "Represents a request to execute an action by an agent.\\n\\nThe action consists of the name of the tool to execute and the input to pass\\nto the tool. The log is used to pass along extra information about the action.", "type": "object", "properties": {"tool": {"title": "Tool", "type": "string"}, "tool_input": {"title": "Tool Input", "anyOf": [{"type": "string"}, {"type": "object"}]}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentAction", "enum": ["AgentAction"], "type": "string"}}, "required": ["tool", "tool_input", "log"]}, "AgentFinish": {"title": "AgentFinish", "description": "Final return value of an ActionAgent.\\n\\nAgents return an AgentFinish when they have reached a stopping condition.", "type": "object", "properties": {"return_values": {"title": "Return Values", "type": "object"}, "log": {"title": "Log", "type": "string"}, "type": {"title": "Type", "default": "AgentFinish", "enum": ["AgentFinish"], "type": "string"}}, "required": ["return_values", "log"]}}}'
@@ -5284,6 +5295,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'ask_question',
@@ -5296,6 +5308,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'answer_question',
@@ -5343,6 +5356,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_analysts',
@@ -5368,6 +5382,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_sections',
@@ -5433,6 +5448,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_analysts',
@@ -5450,6 +5466,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'conduct_interview:ask_question',
@@ -5462,6 +5479,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'conduct_interview:answer_question',
@@ -5479,6 +5497,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_sections',

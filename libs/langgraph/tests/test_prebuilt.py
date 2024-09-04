@@ -23,7 +23,14 @@ from pydantic import BaseModel as BaseModelV2
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState
+from tests.conftest import (
+    ALL_CHECKPOINTERS_ASYNC,
+    ALL_CHECKPOINTERS_SYNC,
+    awith_checkpointer,
+)
 from tests.messages import _AnyIdHumanMessage
+
+pytestmark = pytest.mark.anyio
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -53,10 +60,7 @@ class FakeToolCallingModel(BaseChatModel):
         return self
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         "checkpointer_" + checkpointer_name
@@ -89,43 +93,35 @@ def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> 
         assert saved.pending_writes == []
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe"],
-)
-async def test_no_modifier_async(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_no_modifier_async(checkpointer_name: str) -> None:
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        model = FakeToolCallingModel()
 
-    model = FakeToolCallingModel()
+        agent = create_react_agent(model, [], checkpointer=checkpointer)
+        inputs = [HumanMessage("hi?")]
+        thread = {"configurable": {"thread_id": "123"}}
+        response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
+        expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
+        assert response == expected_response
 
-    agent = create_react_agent(model, [], checkpointer=checkpointer)
-    inputs = [HumanMessage("hi?")]
-    thread = {"configurable": {"thread_id": "123"}}
-    response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
-    expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
-    assert response == expected_response
-
-    if checkpointer:
-        saved = await checkpointer.aget_tuple(thread)
-        assert saved is not None
-        assert saved.checkpoint["channel_values"] == {
-            "messages": [
-                _AnyIdHumanMessage(content="hi?"),
-                AIMessage(content="hi?", id="0"),
-            ],
-            "agent": "agent",
-        }
-        assert saved.metadata == {
-            "parents": {},
-            "source": "loop",
-            "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
-            "step": 1,
-        }
-        assert saved.pending_writes == []
+        if checkpointer:
+            saved = await checkpointer.aget_tuple(thread)
+            assert saved is not None
+            assert saved.checkpoint["channel_values"] == {
+                "messages": [
+                    _AnyIdHumanMessage(content="hi?"),
+                    AIMessage(content="hi?", id="0"),
+                ],
+                "agent": "agent",
+            }
+            assert saved.metadata == {
+                "parents": {},
+                "source": "loop",
+                "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
+                "step": 1,
+            }
+            assert saved.pending_writes == []
 
 
 def test_passing_two_modifiers():

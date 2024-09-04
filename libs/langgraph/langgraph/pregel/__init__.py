@@ -1,14 +1,11 @@
 from __future__ import annotations
 
 import asyncio
-import concurrent.futures
-import time
 from collections import deque
 from functools import partial
 from typing import (
     Any,
     AsyncIterator,
-    Awaitable,
     Callable,
     Dict,
     Iterator,
@@ -25,27 +22,26 @@ from uuid import UUID, uuid5
 
 from langchain_core.globals import get_debug
 from langchain_core.load.dump import dumpd
-from langchain_core.pydantic_v1 import BaseModel, Field, root_validator
 from langchain_core.runnables import (
     Runnable,
+    RunnableLambda,
     RunnableSequence,
-    RunnableSerializable,
 )
-from langchain_core.runnables.base import Input, Output, coerce_to_runnable
+from langchain_core.runnables.base import Input, Output
 from langchain_core.runnables.config import (
     RunnableConfig,
     ensure_config,
     get_async_callback_manager_for_config,
     get_callback_manager_for_config,
-    merge_configs,
-    patch_config,
 )
 from langchain_core.runnables.utils import (
     ConfigurableFieldSpec,
     create_model,
+    get_function_nonlocals,
     get_unique_config_specs,
 )
 from langchain_core.tracers._streaming import _StreamingCallbackHandler
+from pydantic import BaseModel
 from typing_extensions import Self
 
 from langgraph.channels.base import (
@@ -65,12 +61,11 @@ from langgraph.constants import (
     CONFIG_KEY_SEND,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
-    ERROR,
     INTERRUPT,
     NS_END,
     NS_SEP,
 )
-from langgraph.errors import GraphInterrupt, GraphRecursionError, InvalidUpdateError
+from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.algo import (
     apply_writes,
@@ -78,18 +73,13 @@ from langgraph.pregel.algo import (
     local_write,
     prepare_next_tasks,
 )
-from langgraph.pregel.config import patch_checkpoint_map, patch_configurable
-from langgraph.pregel.debug import (
-    print_step_checkpoint,
-    print_step_tasks,
-    print_step_writes,
-    tasks_w_writes,
-)
+from langgraph.pregel.debug import tasks_w_writes
 from langgraph.pregel.io import read_channels
 from langgraph.pregel.loop import AsyncPregelLoop, SyncPregelLoop
 from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
-from langgraph.pregel.retry import RetryPolicy, arun_with_retry, run_with_retry
+from langgraph.pregel.retry import RetryPolicy
+from langgraph.pregel.runner import PregelRunner
 from langgraph.pregel.types import (
     All,
     PregelExecutableTask,
@@ -102,13 +92,15 @@ from langgraph.pregel.utils import (
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
+from langgraph.utils.config import (
+    merge_configs,
+    patch_checkpoint_map,
+    patch_config,
+    patch_configurable,
+)
+from langgraph.utils.runnable import RunnableCallable
 
-WriteValue = Union[
-    Runnable[Input, Output],
-    Callable[[Input], Output],
-    Callable[[Input], Awaitable[Output]],
-    Any,
-]
+WriteValue = Union[Callable[[Input], Output], Any]
 
 
 class Channel:
@@ -173,26 +165,18 @@ class Channel:
         return ChannelWrite(
             [ChannelWriteEntry(c) for c in channels]
             + [
-                (
-                    ChannelWriteEntry(k, skip_none=True, mapper=coerce_to_runnable(v))
-                    if isinstance(v, Runnable) or callable(v)
-                    else ChannelWriteEntry(k, value=v)
-                )
+                ChannelWriteEntry(k, mapper=v)
+                if callable(v)
+                else ChannelWriteEntry(k, value=v)
                 for k, v in kwargs.items()
             ]
         )
 
 
-class Pregel(
-    RunnableSerializable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]
-):
+class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
     nodes: Mapping[str, PregelNode]
 
-    channels: Mapping[str, Union[BaseChannel, ManagedValueSpec]] = Field(
-        default_factory=dict
-    )
-
-    auto_validate: bool = True
+    channels: Mapping[str, Union[BaseChannel, ManagedValueSpec]]
 
     stream_mode: StreamMode = "values"
     """Mode to stream output, defaults to 'values'."""
@@ -202,16 +186,16 @@ class Pregel(
     stream_channels: Optional[Union[str, Sequence[str]]] = None
     """Channels to stream, defaults to all channels not in reserved channels"""
 
-    interrupt_after_nodes: Union[All, Sequence[str]] = Field(default_factory=list)
+    interrupt_after_nodes: Union[All, Sequence[str]]
 
-    interrupt_before_nodes: Union[All, Sequence[str]] = Field(default_factory=list)
+    interrupt_before_nodes: Union[All, Sequence[str]]
 
     input_channels: Union[str, Sequence[str]]
 
     step_timeout: Optional[float] = None
     """Maximum time to wait for a step to complete, in seconds. Defaults to None."""
 
-    debug: bool = Field(default_factory=get_debug)
+    debug: bool
     """Whether to print debug information during execution. Defaults to False."""
 
     checkpointer: Optional[BaseCheckpointSaver] = None
@@ -229,36 +213,50 @@ class Pregel(
 
     name: str = "LangGraph"
 
-    class Config:
-        arbitrary_types_allowed = True
+    def __init__(
+        self,
+        *,
+        nodes: Mapping[str, PregelNode],
+        channels: Mapping[str, Union[BaseChannel, ManagedValueSpec]] = None,
+        auto_validate: bool = True,
+        stream_mode: StreamMode = "values",
+        output_channels: Union[str, Sequence[str]],
+        stream_channels: Optional[Union[str, Sequence[str]]] = None,
+        interrupt_after_nodes: Union[All, Sequence[str]] = (),
+        interrupt_before_nodes: Union[All, Sequence[str]] = (),
+        input_channels: Union[str, Sequence[str]],
+        step_timeout: Optional[float] = None,
+        debug: Optional[bool] = None,
+        checkpointer: Optional[BaseCheckpointSaver] = None,
+        store: Optional[BaseStore] = None,
+        retry_policy: Optional[RetryPolicy] = None,
+        config_type: Optional[Type[Any]] = None,
+        config: Optional[RunnableConfig] = None,
+        name: str = "LangGraph",
+    ) -> None:
+        self.nodes = nodes
+        self.channels = channels or {}
+        self.stream_mode = stream_mode
+        self.output_channels = output_channels
+        self.stream_channels = stream_channels
+        self.interrupt_after_nodes = interrupt_after_nodes
+        self.interrupt_before_nodes = interrupt_before_nodes
+        self.input_channels = input_channels
+        self.step_timeout = step_timeout
+        self.debug = debug if debug is not None else get_debug()
+        self.checkpointer = checkpointer
+        self.store = store
+        self.retry_policy = retry_policy
+        self.config_type = config_type
+        self.config = config
+        self.name = name
+        if auto_validate:
+            self.validate()
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
-        return self.copy(
-            update={"config": cast(RunnableConfig, {**(config or {}), **kwargs})}
-        )
-
-    @classmethod
-    def is_lc_serializable(cls) -> bool:
-        """Return whether the graph can be serialized by Langchain."""
-        return True
-
-    @root_validator(skip_on_failure=True)
-    def validate_on_init(cls, values: dict[str, Any]) -> dict[str, Any]:
-        if not values["auto_validate"]:
-            return values
-        validate_graph(
-            values["nodes"],
-            values["channels"],
-            values["input_channels"],
-            values["output_channels"],
-            values["stream_channels"],
-            values["interrupt_after_nodes"],
-            values["interrupt_before_nodes"],
-        )
-        if values["interrupt_after_nodes"] or values["interrupt_before_nodes"]:
-            if not values["checkpointer"]:
-                raise ValueError("Interrupts require a checkpointer")
-        return values
+        attrs = {**self.__dict__}
+        attrs["config"] = merge_configs(self.config, config, kwargs)
+        return self.__class__(**attrs)
 
     def validate(self) -> Self:
         validate_graph(
@@ -356,13 +354,26 @@ class Pregel(
         for name, node in self.nodes.items():
             # find the subgraph, if any
             graph: Optional[Pregel] = None
-            if isinstance(node.bound, Pregel):
-                graph = node.bound
-            elif isinstance(node.bound, RunnableSequence):
-                for runnable in node.bound.steps:
-                    if isinstance(runnable, Pregel):
-                        graph = runnable
-                        break
+            candidates = [node.bound]
+            for candidate in candidates:
+                if isinstance(candidate, Pregel):
+                    graph = candidate
+                    break
+                elif isinstance(candidate, RunnableSequence):
+                    candidates.extend(candidate.steps)
+                elif isinstance(candidate, RunnableLambda):
+                    candidates.extend(candidate.deps)
+                elif isinstance(candidate, RunnableCallable):
+                    if candidate.func is not None:
+                        candidates.extend(
+                            nl.__self__ if hasattr(nl, "__self__") else nl
+                            for nl in get_function_nonlocals(candidate.func)
+                        )
+                    if candidate.afunc is not None:
+                        candidates.extend(
+                            nl.__self__ if hasattr(nl, "__self__") else nl
+                            for nl in get_function_nonlocals(candidate.afunc)
+                        )
             # if found, yield recursively
             if graph:
                 yield name, graph
@@ -793,7 +804,7 @@ class Pregel(
             managed,
         ):
             # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].get_writers()
+            writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
@@ -957,7 +968,7 @@ class Pregel(
             managed,
         ):
             # create task to run all writers of the chosen node
-            writers = self.nodes[as_node].get_writers()
+            writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
@@ -1147,9 +1158,11 @@ class Pregel(
             ```
         """
 
+        stream = deque()
+
         def output() -> Iterator:
-            while loop.stream:
-                ns, mode, payload = loop.stream.popleft()
+            while stream:
+                ns, mode, payload = stream.popleft()
                 if mode in stream_modes:
                     if subgraphs and isinstance(stream_mode, list):
                         yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
@@ -1194,6 +1207,7 @@ class Pregel(
 
             with SyncPregelLoop(
                 input,
+                stream=stream.append,
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1201,7 +1215,14 @@ class Pregel(
                 specs=self.channels,
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
+                debug=debug,
             ) as loop:
+                # create runner
+                runner = PregelRunner(
+                    submit=loop.submit,
+                    put_writes=loop.put_writes,
+                )
+                # enable subgraph streaming
                 if subgraphs:
                     loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
                 # Similarly to Bulk Synchronous Parallel / Pregel model
@@ -1215,85 +1236,14 @@ class Pregel(
                     interrupt_after=interrupt_after,
                     manager=run_manager,
                 ):
-                    # debug flag
-                    if debug:
-                        print_step_checkpoint(
-                            loop.checkpoint_metadata,
-                            loop.channels,
-                            self.stream_channels_list,
-                        )
-                    # emit output
-                    yield from output()
-                    # debug flag
-                    if debug:
-                        print_step_tasks(loop.step, loop.tasks)
-
-                    # execute tasks, and wait for one to fail or all to finish.
-                    # each task is independent from all other concurrent tasks
-                    # yield updates/debug output as each task finishes
-                    futures = {
-                        loop.submit(
-                            run_with_retry,
-                            task,
-                            self.retry_policy,
-                        ): task
-                        for task in loop.tasks
-                        if not task.writes
-                    }
-                    all_futures = futures.copy()
-                    end_time = (
-                        self.step_timeout + time.monotonic()
-                        if self.step_timeout
-                        else None
-                    )
-                    if not futures:
-                        done, inflight = set(), set()
-                    while futures:
-                        done, inflight = concurrent.futures.wait(
-                            futures,
-                            return_when=concurrent.futures.FIRST_COMPLETED,
-                            timeout=(
-                                max(0, end_time - time.monotonic())
-                                if end_time
-                                else None
-                            ),
-                        )
-                        if not done:
-                            break  # timed out
-                        for fut in done:
-                            task = futures.pop(fut)
-                            if exc := _exception(fut):
-                                # save error to checkpointer
-                                if isinstance(exc, GraphInterrupt):
-                                    loop.put_writes(
-                                        task.id, [(INTERRUPT, i) for i in exc.args[0]]
-                                    )
-                                else:
-                                    loop.put_writes(task.id, [(ERROR, exc)])
-
-                            else:
-                                # save task writes to checkpointer
-                                loop.put_writes(task.id, task.writes)
-                        else:
-                            # remove references to loop vars
-                            del fut, task
+                    for _ in runner.tick(
+                        loop.tasks,
+                        timeout=self.step_timeout,
+                        retry_policy=self.retry_policy,
+                    ):
                         # emit output
-                        yield from output()
-                        # maybe stop other tasks
-                        if _should_stop_others(done):
-                            break
-
-                    # panic on failure or timeout
-                    _panic_or_proceed(all_futures, loop.step)
-                    # don't keep futures around in memory longer than needed
-                    del done, inflight, futures
-                    # debug flag
-                    if debug:
-                        print_step_writes(
-                            loop.step,
-                            [w for t in loop.tasks for w in t.writes],
-                            self.stream_channels_list,
-                        )
+                        for o in output():
+                            yield o
             # emit output
             yield from output()
             # handle exit
@@ -1389,9 +1339,11 @@ class Pregel(
             ```
         """
 
+        stream = deque()
+
         def output() -> Iterator:
-            while loop.stream:
-                ns, mode, payload = loop.stream.popleft()
+            while stream:
+                ns, mode, payload = stream.popleft()
                 if mode in stream_modes:
                     if subgraphs and isinstance(stream_mode, list):
                         yield (tuple(ns.split(NS_SEP)) if ns else (), mode, payload)
@@ -1444,6 +1396,7 @@ class Pregel(
             )
             async with AsyncPregelLoop(
                 input,
+                stream=stream.append,
                 config=config,
                 store=self.store,
                 checkpointer=checkpointer,
@@ -1452,103 +1405,35 @@ class Pregel(
                 output_keys=output_keys,
                 stream_keys=self.stream_channels_asis,
             ) as loop:
+                # create runner
+                runner = PregelRunner(
+                    submit=loop.submit,
+                    put_writes=loop.put_writes,
+                    use_astream=do_stream is not None,
+                )
+                # enable subgraph streaming
                 if subgraphs:
                     loop.config["configurable"][CONFIG_KEY_STREAM] = loop.stream
-                aioloop = asyncio.get_event_loop()
                 # Similarly to Bulk Synchronous Parallel / Pregel model
                 # computation proceeds in steps, while there are channel updates
                 # channel updates from step N are only visible in step N+1
                 # channels are guaranteed to be immutable for the duration of the step,
                 # with channel updates applied only at the transition between steps
-                while loop.tick(
+                while await asyncio.to_thread(
+                    loop.tick,
                     input_keys=self.input_channels,
                     interrupt_before=interrupt_before,
                     interrupt_after=interrupt_after,
                     manager=run_manager,
                 ):
-                    # debug flag
-                    if debug:
-                        print_step_checkpoint(
-                            loop.checkpoint_metadata,
-                            loop.channels,
-                            self.stream_channels_list,
-                        )
-                    # emit output
-                    for o in output():
-                        yield o
-                    # debug flag
-                    if debug:
-                        print_step_tasks(loop.step, loop.tasks)
-
-                    # execute tasks, and wait for one to fail or all to finish.
-                    # each task is independent from all other concurrent tasks
-                    # yield updates/debug output as each task finishes
-                    futures = {
-                        loop.submit(
-                            arun_with_retry,
-                            task,
-                            self.retry_policy,
-                            stream=do_stream,
-                            __name__=task.name,
-                            __cancel_on_exit__=True,
-                        ): task
-                        for task in loop.tasks
-                        if not task.writes
-                    }
-                    all_futures = futures.copy()
-                    end_time = (
-                        self.step_timeout + aioloop.time()
-                        if self.step_timeout
-                        else None
-                    )
-                    if not futures:
-                        done, inflight = set(), set()
-                    while futures:
-                        done, inflight = await asyncio.wait(
-                            futures,
-                            return_when=asyncio.FIRST_COMPLETED,
-                            timeout=(
-                                max(0, end_time - aioloop.time()) if end_time else None
-                            ),
-                        )
-                        if not done:
-                            break  # timed out
-
-                        for fut in done:
-                            task = futures.pop(fut)
-                            if exc := _exception(fut):
-                                # save error to checkpointer
-                                if isinstance(exc, GraphInterrupt):
-                                    loop.put_writes(
-                                        task.id, [(INTERRUPT, i) for i in exc.args[0]]
-                                    )
-                                else:
-                                    loop.put_writes(task.id, [(ERROR, exc)])
-
-                            else:
-                                # save task writes to checkpointer
-                                loop.put_writes(task.id, task.writes)
-                        else:
-                            # remove references to loop vars
-                            del fut, task
+                    async for _ in runner.atick(
+                        loop.tasks,
+                        timeout=self.step_timeout,
+                        retry_policy=self.retry_policy,
+                    ):
                         # emit output
                         for o in output():
                             yield o
-                        # maybe stop other tasks
-                        if _should_stop_others(done):
-                            break
-
-                    # panic on failure or timeout
-                    _panic_or_proceed(all_futures, loop.step, asyncio.TimeoutError)
-                    # don't keep futures around in memory longer than needed
-                    del done, inflight, futures
-                    # debug flag
-                    if debug:
-                        print_step_writes(
-                            loop.step,
-                            [w for t in loop.tasks for w in t.writes],
-                            self.stream_channels_list,
-                        )
             # emit output
             for o in output():
                 yield o
@@ -1669,57 +1554,3 @@ class Pregel(
             return latest
         else:
             return chunks
-
-
-def _should_stop_others(
-    done: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
-) -> bool:
-    for fut in done:
-        if fut.cancelled():
-            return True
-        if exc := fut.exception():
-            return not isinstance(exc, GraphInterrupt)
-    else:
-        return False
-
-
-def _exception(
-    fut: Union[concurrent.futures.Future[Any], asyncio.Task[Any]],
-) -> Optional[BaseException]:
-    if fut.cancelled():
-        if isinstance(fut, asyncio.Task):
-            return asyncio.CancelledError()
-        else:
-            return concurrent.futures.CancelledError()
-    else:
-        return fut.exception()
-
-
-def _panic_or_proceed(
-    futs: Union[set[concurrent.futures.Future[Any]], set[asyncio.Task[Any]]],
-    step: int,
-    timeout_exc_cls: Type[Exception] = TimeoutError,
-) -> None:
-    done: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
-    inflight: set[Union[concurrent.futures.Future[Any], asyncio.Task[Any]]] = set()
-    for fut in futs:
-        if fut.done():
-            done.add(fut)
-        else:
-            inflight.add(fut)
-    while done:
-        # if any task failed
-        if exc := _exception(done.pop()):
-            # cancel all pending tasks
-            while inflight:
-                inflight.pop().cancel()
-            # raise the exception
-            raise exc
-
-    if inflight:
-        # if we got here means we timed out
-        while inflight:
-            # cancel all pending tasks
-            inflight.pop().cancel()
-        # raise timeout error
-        raise timeout_exc_cls(f"Timed out at step {step}")
