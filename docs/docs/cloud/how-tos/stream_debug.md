@@ -34,6 +34,14 @@ First let's set up our client and thread:
     console.log(thread);
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json'
+    ```
+
 
 Output:
 
@@ -103,6 +111,42 @@ Output:
       console.log("\n\n");
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"What's the weather in SF?\"}]},
+       \"stream_mode\": [
+         \"debug\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     ' 
+    ```
+
 
 Output:
 
