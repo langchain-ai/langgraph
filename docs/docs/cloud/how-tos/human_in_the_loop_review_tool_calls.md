@@ -159,7 +159,7 @@ If we check the state, we can see that it is finished
 
     ```bash
     curl --request GET \
-        --url http://localhost:8173/threads/1a3914ad-ccf8-4f76-af0e-16e3800b2543/state | jq -c '.next'
+        --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | jq -c '.next'
     ```
 
 Output:
@@ -264,7 +264,7 @@ If we now check, we can see that it is waiting on human review:
 
     ```bash
     curl --request GET \
-        --url http://localhost:8173/threads/1a3914ad-ccf8-4f76-af0e-16e3800b2543/state | jq -c '.next'
+        --url <DELPOYMENT_URL>/threads/<THREAD_ID>/state | jq -c '.next'
     ```
 
 Output:
