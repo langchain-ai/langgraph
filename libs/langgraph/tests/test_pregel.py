@@ -2005,6 +2005,8 @@ def test_conditional_graph(
         )
         if data.get("intermediate_steps") is None:
             data["intermediate_steps"] = []
+        else:
+            data["intermediate_steps"] = data["intermediate_steps"].copy()
         data["intermediate_steps"].append([agent_action, observation])
         return data
 
