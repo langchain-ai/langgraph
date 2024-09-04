@@ -30,13 +30,16 @@ from langchain_core.runnables import (
 from langchain_core.runnables.config import get_executor_for_config
 from langchain_core.tools import BaseTool, create_schema_from_function
 from pydantic import BaseModel, ValidationError
-from pydantic import ValidationError as ValidationErrorV2
+from pydantic.v1 import BaseModel as BaseModelV1
+from pydantic.v1 import ValidationError as ValidationErrorV1
 
 from langgraph.utils import RunnableCallable
 
 
 def _default_format_error(
-    error: BaseException, call: ToolCall, schema: Type[BaseModel]
+    error: BaseException,
+    call: ToolCall,
+    schema: Union[Type[BaseModel], Type[BaseModelV1]],
 ) -> str:
     """Default error formatting function."""
     return f"{repr(error)}\n\nRespond after fixing all validation errors."
@@ -174,7 +177,9 @@ class ValidationNode(RunnableCallable):
                         f"Tool {schema.name} does not have an args_schema defined."
                     )
                 self.schemas_by_name[schema.name] = schema.args_schema
-            elif isinstance(schema, type) and issubclass(schema, BaseModel):
+            elif isinstance(schema, type) and issubclass(
+                schema, (BaseModel, BaseModelV1)
+            ):
                 self.schemas_by_name[schema.__name__] = cast(Type[BaseModel], schema)
             elif callable(schema):
                 base_model = create_schema_from_function("Validation", schema)
@@ -215,7 +220,7 @@ class ValidationNode(RunnableCallable):
                     name=call["name"],
                     tool_call_id=cast(str, call["id"]),
                 )
-            except (ValidationError, ValidationErrorV2) as e:
+            except (ValidationError, ValidationErrorV1) as e:
                 return ToolMessage(
                     content=self._format_error(e, call, schema),
                     name=call["name"],
