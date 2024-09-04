@@ -1484,7 +1484,7 @@ class RunsClient:
 
         Example Usage:
 
-            await client.runs.join(
+            await client.runs.join_stream(
                 thread_id="thread_id_to_join",
                 run_id="run_id_to_join"
             )

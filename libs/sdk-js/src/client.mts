@@ -109,6 +109,65 @@ class BaseClient {
     }
     return response.json() as T;
   }
+
+  protected async *stream(
+    path: string,
+    method: string,
+    options?: RequestInit & {
+      json?: unknown;
+      params?: Record<string, unknown>;
+    }
+  ): AsyncGenerator<{ event: string; data: any }> {
+    const [url, init] = this.prepareFetchOptions(path, { ...options, method });
+    const response = await this.asyncCaller.fetch(url, init);
+
+    if (!response.ok) {
+      throw new Error(`HTTP error! status: ${response.status}`);
+    }
+
+    if (!response.body) {
+      throw new Error('ReadableStream not yet supported in this browser.');
+    }
+
+    const reader = response.body.getReader();
+    const decoder = new TextDecoder();
+    let buffer = '';
+
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) break;
+
+      buffer += decoder.decode(value, { stream: true });
+      const lines = buffer.split('\n');
+      buffer = lines.pop() || '';
+
+      for (const line of lines) {
+        if (line.trim() === '') continue;
+        if (line.startsWith('data:')) {
+          const data = line.slice(5).trim();
+          if (data === '[DONE]') {
+            return;
+          }
+          try {
+            yield { event: 'message', data: JSON.parse(data) };
+          } catch (error) {
+            console.error('Error parsing SSE data:', error);
+          }
+        } else if (line.startsWith('event:')) {
+          const event = line.slice(6).trim();
+          const nextLine = lines[lines.indexOf(line) + 1];
+          if (nextLine && nextLine.startsWith('data:')) {
+            const data = nextLine.slice(5).trim();
+            try {
+              yield { event, data: JSON.parse(data) };
+            } catch (error) {
+              console.error('Error parsing SSE data:', error);
+            }
+          }
+        }
+      }
+    }
+  }
 }
 
 export class CronsClient extends BaseClient {
