@@ -155,6 +155,7 @@ nav:
           - Stream events from within tools: how-tos/streaming-events-from-within-tools.ipynb
           - Stream events from within tools without LangChain models: how-tos/streaming-events-from-within-tools-without-langchain.ipynb
           - Stream events from the final node: how-tos/streaming-from-final-node.ipynb
+          - Stream from subgraphs: how-tos/streaming-subgraphs.ipynb
       - Tool calling:
           - Call tools using ToolNode: how-tos/tool-calling.ipynb
           - Handle tool calling errors: how-tos/tool-calling-errors.ipynb
