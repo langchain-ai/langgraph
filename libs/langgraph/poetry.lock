@@ -1255,7 +1255,7 @@ typing-extensions = ">=4.7"
 type = "git"
 url = "https://github.com/langchain-ai/langchain.git"
 reference = "v0.3rc"
-resolved_reference = "9a9ab65030ab091eccffbd11f4c5e26184d47bef"
+resolved_reference = "2888e34f53789681a762c7a352149d642b170483"
 subdirectory = "libs/core"
 
 [[package]]
@@ -1268,7 +1268,7 @@ files = []
 develop = true
 
 [package.dependencies]
-langchain-core = ">=0.2.0,<0.4"
+langchain-core = ">=0.2.22,<0.3"
 
 [package.source]
 type = "directory"
