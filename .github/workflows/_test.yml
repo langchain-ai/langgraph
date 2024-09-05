@@ -23,6 +23,7 @@ jobs:
           - "3.12"
         core-version:
           - "latest"
+        working-directory: ${{ inputs.working-directory }}
         include:
           - python-version: "3.9"
             working-directory: "libs/langgraph"
