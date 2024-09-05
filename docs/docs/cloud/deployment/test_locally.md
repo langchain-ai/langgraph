@@ -49,6 +49,7 @@ You can either initialize by passing authentication or by setting an environment
 
     # only pass the url argument to get_client() if you changed the default port when calling langgraph up
     client = get_client(url=<DEPLOYMENT_URL>,api_key=<LANGCHAIN_API_KEY>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -60,7 +61,8 @@ You can either initialize by passing authentication or by setting an environment
 
     // only set the apiUrl if you changed the default port when calling langgraph up
     const client = new Client({ apiUrl: <DEPLOYMENT_URL>, apiKey: <LANGCHAIN_API_KEY> });
-    const assistantId = "agent"
+    // Using the graph deployed with the name "agent"
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 
@@ -85,6 +87,7 @@ If you have a `LANGCHAIN_API_KEY` set in your environment, you do not need to ex
 
     # only pass the url argument to get_client() if you changed the default port when calling langgraph up
     client = get_client()
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -96,7 +99,8 @@ If you have a `LANGCHAIN_API_KEY` set in your environment, you do not need to ex
 
     // only set the apiUrl if you changed the default port when calling langgraph up
     const client = new Client();
-    const assistantId = "agent"
+    // Using the graph deployed with the name "agent"
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 

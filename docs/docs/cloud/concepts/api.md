@@ -39,7 +39,7 @@ It's often useful to run graphs on some schedule. LangGraph Cloud supports cron 
 - Create a new thread with the specified assistant
 - Send the specified input to that thread
 
-Note that this sends the same input to the thread every time. See the [how-to guide](../how-tos/cloud_examples/cron_jobs.ipynb) for creating cron jobs.
+Note that this sends the same input to the thread every time. See the [how-to guide](../how-tos/cron_jobs.md) for creating cron jobs.
 
 The LangGraph Cloud API provides several endpoints for creating and managing cron jobs. See the [API reference](../reference/api/api_ref.html#tag/runscreate/POST/threads/{thread_id}/runs/crons) for more details.
 
@@ -182,13 +182,13 @@ The only difference is in stateless background runs, if the task worker dies hal
 - whereas a stateful background run would retry from the last successful checkpoint
 - a stateless background run would retry from the beginning
 
-See the [how-to guide](../how-tos/cloud_examples/stateless_runs.ipynb) for creating stateless runs.
+See the [how-to guide](../how-tos/stateless_runs.md) for creating stateless runs.
 
 ### Webhooks
 
 For all types of runs, langgraph cloud supports completion webhooks. When you create the run you can pass a webhook URL to be called when the completes (successfully or not). This is especially useful for background runs and cron jobs, as the webhook can give you an indication the run has completed and you can perform further actions for your appilcation.
 
-See this [how-to guide](../how-tos/cloud_examples/webhooks.ipynb) to learn about how to use webhooks with LangGraph Cloud.
+See this [how-to guide](../how-tos/webhooks.md) to learn about how to use webhooks with LangGraph Cloud.
 
 ## Deployment
 

@@ -2,7 +2,7 @@ import asyncio
 from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
 from typing import AsyncIterator, Iterator, Mapping, Optional, Union
 
-from langchain_core.runnables import RunnableConfig, patch_config
+from langchain_core.runnables import RunnableConfig
 
 from langgraph.channels.base import BaseChannel
 from langgraph.checkpoint.base import Checkpoint
@@ -14,6 +14,7 @@ from langgraph.managed.base import (
 )
 from langgraph.managed.context import Context
 from langgraph.store.base import BaseStore
+from langgraph.utils.config import patch_configurable
 
 
 @contextmanager
@@ -26,7 +27,7 @@ def ChannelsManager(
     skip_context: bool = False,
 ) -> Iterator[tuple[Mapping[str, BaseChannel], ManagedValueMapping]]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
-    config_for_managed = patch_config(config, configurable={CONFIG_KEY_STORE: store})
+    config_for_managed = patch_configurable(config, {CONFIG_KEY_STORE: store})
     channel_specs: Mapping[str, BaseChannel] = {}
     managed_specs: Mapping[str, ManagedValueSpec] = {}
     for k, v in specs.items():
@@ -69,7 +70,7 @@ async def AsyncChannelsManager(
     skip_context: bool = False,
 ) -> AsyncIterator[Mapping[str, BaseChannel]]:
     """Manage channels for the lifetime of a Pregel invocation (multiple steps)."""
-    config_for_managed = patch_config(config, configurable={CONFIG_KEY_STORE: store})
+    config_for_managed = patch_configurable(config, {CONFIG_KEY_STORE: store})
     channel_specs: Mapping[str, BaseChannel] = {}
     managed_specs: Mapping[str, ManagedValueSpec] = {}
     for k, v in specs.items():

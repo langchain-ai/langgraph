@@ -33,7 +33,7 @@ from langchain_core.tools import BaseTool, create_schema_from_function
 from pydantic import BaseModel as BaseModelV2
 from pydantic import ValidationError as ValidationErrorV2
 
-from langgraph.utils import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable
 
 
 def _default_format_error(
