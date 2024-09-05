@@ -176,9 +176,7 @@ class ToolNode(RunnableCallable):
         elif isinstance(input, dict) and (messages := input.get("messages", [])):
             output_type = "dict"
             message = messages[-1]
-        elif hasattr(input, "messages") and (
-            messages := getattr(input, "messages", None)
-        ):
+        elif messages := getattr(input, "messages", None):
             output_type = "attr"
             message = messages[-1]
         else:
