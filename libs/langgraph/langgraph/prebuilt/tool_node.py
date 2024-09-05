@@ -14,9 +14,18 @@ from typing import (
     cast,
 )
 
-from langchain_core.messages import AIMessage, AnyMessage, ToolCall, ToolMessage
+from langchain_core.messages import (
+    AIMessage,
+    AnyMessage,
+    ToolCall,
+    ToolMessage,
+)
+from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import RunnableConfig
-from langchain_core.runnables.config import get_config_list, get_executor_for_config
+from langchain_core.runnables.config import (
+    get_config_list,
+    get_executor_for_config,
+)
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from typing_extensions import get_args
@@ -82,7 +91,13 @@ class ToolNode(RunnableCallable):
             self.tools_by_name[tool_.name] = tool_
 
     def _func(
-        self, input: Union[list[AnyMessage], dict[str, Any]], config: RunnableConfig
+        self,
+        input: Union[
+            list[AnyMessage],
+            dict[str, Any],
+            BaseModel,
+        ],
+        config: RunnableConfig,
     ) -> Any:
         tool_calls, output_type = self._parse_input(input)
         config_list = get_config_list(config, len(tool_calls))
@@ -91,7 +106,13 @@ class ToolNode(RunnableCallable):
         return outputs if output_type == "list" else {"messages": outputs}
 
     async def _afunc(
-        self, input: Union[list[AnyMessage], dict[str, Any]], config: RunnableConfig
+        self,
+        input: Union[
+            list[AnyMessage],
+            dict[str, Any],
+            BaseModel,
+        ],
+        config: RunnableConfig,
     ) -> Any:
         tool_calls, output_type = self._parse_input(input)
         outputs = await asyncio.gather(
@@ -135,13 +156,23 @@ class ToolNode(RunnableCallable):
             return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
 
     def _parse_input(
-        self, input: Union[list[AnyMessage], dict[str, Any]]
-    ) -> Tuple[List[ToolCall], Literal["list", "dict"]]:
+        self,
+        input: Union[
+            list[AnyMessage],
+            dict[str, Any],
+            BaseModel,
+        ],
+    ) -> Tuple[List[ToolCall], Literal["list", "dict", "pydantic"]]:
         if isinstance(input, list):
             output_type = "list"
             message: AnyMessage = input[-1]
-        elif messages := input.get("messages", []):
+        elif isinstance(input, dict) and (messages := input.get("messages", [])):
             output_type = "dict"
+            message = messages[-1]
+        elif isinstance(input, BaseModel) and (
+            messages := getattr(input, "messages", [])
+        ):
+            output_type = "pydantic"
             message = messages[-1]
         else:
             raise ValueError("No message found in input")
@@ -166,12 +197,18 @@ class ToolNode(RunnableCallable):
             return None
 
     def _inject_state(
-        self, tool_call: ToolCall, input: Union[list[AnyMessage], dict[str, Any]]
+        self,
+        tool_call: ToolCall,
+        input: Union[
+            list[AnyMessage],
+            dict[str, Any],
+            BaseModel,
+        ],
     ) -> ToolCall:
         if tool_call["name"] not in self.tools_by_name:
             return tool_call
         state_args = _get_state_args(self.tools_by_name[tool_call["name"]])
-        if state_args and not isinstance(input, dict):
+        if state_args and isinstance(input, list):
             required_fields = list(state_args.values())
             if (
                 len(required_fields) == 1
@@ -188,26 +225,33 @@ class ToolNode(RunnableCallable):
                     required_fields_str = ", ".join(f for f in required_fields if f)
                     err_msg += f" State should contain fields {required_fields_str}."
                 raise ValueError(err_msg)
+        if isinstance(input, BaseModel):
+            tool_state_args = {
+                tool_arg: getattr(input, state_field) if state_field else input
+                for tool_arg, state_field in state_args.items()
+            }
+        else:
+            tool_state_args = {
+                tool_arg: cast(dict, input)[state_field] if state_field else input
+                for tool_arg, state_field in state_args.items()
+            }
         tool_call_copy: ToolCall = copy(tool_call)
         tool_call_copy["args"] = {
             **tool_call_copy["args"],
-            **{
-                tool_arg: cast(dict, input)[state_field] if state_field else input
-                for tool_arg, state_field in state_args.items()
-            },
+            **tool_state_args,
         }
         return tool_call_copy
 
 
 def tools_condition(
-    state: Union[list[AnyMessage], dict[str, Any]],
+    state: Union[list[AnyMessage], dict[str, Any], BaseModel],
 ) -> Literal["tools", "__end__"]:
     """Use in the conditional_edge to route to the ToolNode if the last message
 
     has tool calls. Otherwise, route to the end.
 
     Args:
-        state (Union[list[AnyMessage], dict[str, Any]]): The state to check for
+        state (Union[list[AnyMessage], dict[str, Any], BaseModel]): The state to check for
             tool calls. Must have a list of messages (MessageGraph) or have the
             "messages" key (StateGraph).
 
@@ -253,7 +297,9 @@ def tools_condition(
     """
     if isinstance(state, list):
         ai_message = state[-1]
-    elif messages := state.get("messages", []):
+    elif isinstance(state, dict) and (messages := state.get("messages", [])):
+        ai_message = messages[-1]
+    elif isinstance(state, BaseModel) and (messages := getattr(state, "messages", [])):
         ai_message = messages[-1]
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
