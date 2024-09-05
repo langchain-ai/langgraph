@@ -31,6 +31,7 @@ _MANUAL = {
         "pass_private_state.ipynb",
         "memory/manage-conversation-history.ipynb",
         "subgraphs-manage-state.ipynb",
+        "subgraphs-transform-state.ipynb",
         "memory/delete-messages.ipynb",
         "memory/add-summary-conversation-history.ipynb",
         "persistence_postgres.ipynb",
