@@ -2,6 +2,7 @@ import asyncio
 import json
 from copy import copy
 from typing import (
+    TYPE_CHECKING,
     Any,
     Callable,
     Dict,
@@ -20,7 +21,6 @@ from langchain_core.messages import (
     ToolCall,
     ToolMessage,
 )
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import RunnableConfig
 from langchain_core.runnables.config import (
     get_config_list,
@@ -31,6 +31,9 @@ from langchain_core.tools import tool as create_tool
 from typing_extensions import get_args
 
 from langgraph.utils.runnable import RunnableCallable
+
+if TYPE_CHECKING:
+    from pydantic import BaseModel
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
@@ -103,6 +106,7 @@ class ToolNode(RunnableCallable):
         config_list = get_config_list(config, len(tool_calls))
         with get_executor_for_config(config) as executor:
             outputs = [*executor.map(self._run_one, tool_calls, config_list)]
+        # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {"messages": outputs}
 
     async def _afunc(
@@ -118,6 +122,7 @@ class ToolNode(RunnableCallable):
         outputs = await asyncio.gather(
             *(self._arun_one(call, config) for call in tool_calls)
         )
+        # TypedDict, pydantic, dataclass, etc. should all be able to load from dict
         return outputs if output_type == "list" else {"messages": outputs}
 
     def _run_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
@@ -162,17 +167,17 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-    ) -> Tuple[List[ToolCall], Literal["list", "dict", "pydantic"]]:
+    ) -> Tuple[List[ToolCall], Literal["list", "dict", "attr"]]:
         if isinstance(input, list):
             output_type = "list"
             message: AnyMessage = input[-1]
         elif isinstance(input, dict) and (messages := input.get("messages", [])):
             output_type = "dict"
             message = messages[-1]
-        elif isinstance(input, BaseModel) and (
+        elif hasattr(input, "messages") and (
             messages := getattr(input, "messages", [])
         ):
-            output_type = "pydantic"
+            output_type = "attr"
             message = messages[-1]
         else:
             raise ValueError("No message found in input")
@@ -225,16 +230,18 @@ class ToolNode(RunnableCallable):
                     required_fields_str = ", ".join(f for f in required_fields if f)
                     err_msg += f" State should contain fields {required_fields_str}."
                 raise ValueError(err_msg)
-        if isinstance(input, BaseModel):
+        elif isinstance(input, dict):
+            tool_state_args = {
+                tool_arg: input[state_field] if state_field else input
+                for tool_arg, state_field in state_args.items()
+            }
+
+        else:
             tool_state_args = {
                 tool_arg: getattr(input, state_field) if state_field else input
                 for tool_arg, state_field in state_args.items()
             }
-        else:
-            tool_state_args = {
-                tool_arg: cast(dict, input)[state_field] if state_field else input
-                for tool_arg, state_field in state_args.items()
-            }
+
         tool_call_copy: ToolCall = copy(tool_call)
         tool_call_copy["args"] = {
             **tool_call_copy["args"],
