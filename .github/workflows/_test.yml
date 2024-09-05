@@ -24,10 +24,20 @@ jobs:
         core-version:
           - "latest"
         include:
-          - working-directory: "libs/langgraph"
+          - python-version: "3.9"
+            working-directory: "libs/langgraph"
+            core-version: ">=0.2.0,<0.3.0"
+          - python-version: "3.10"
+            working-directory: "libs/langgraph"
+            core-version: ">=0.2.0,<0.3.0"
+          - python-version: "3.11"
+            working-directory: "libs/langgraph"
+            core-version: ">=0.2.0,<0.3.0"
+          - python-version: "3.12"
+            working-directory: "libs/langgraph"
             core-version: ">=0.2.0,<0.3.0"
 
-    name: "test #${{ matrix.python-version }} (langchain-core${{ matrix.core-version }})"
+    name: "test #${{ matrix.python-version }} (langchain-core: ${{ matrix.core-version }})"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
