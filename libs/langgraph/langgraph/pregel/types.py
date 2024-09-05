@@ -81,6 +81,7 @@ class PregelExecutableTask(NamedTuple):
     retry_policy: Optional[RetryPolicy]
     cache_policy: Optional[CachePolicy]
     id: str
+    legacy_id: str = ""
 
 
 class StateSnapshot(NamedTuple):
