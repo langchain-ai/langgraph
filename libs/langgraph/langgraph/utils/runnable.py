@@ -72,8 +72,6 @@ class RunnableCallable(Runnable):
                     self.name = afunc.__name__
                 except AttributeError:
                     pass
-        if self.name is None:
-            self.name = "RunnableCallable"
         self.func = func
         if func is not None:
             self.func_accepts_config = accepts_config(func)
