@@ -21,7 +21,13 @@ jobs:
           - "3.10"
           - "3.11"
           - "3.12"
-    name: "test #${{ matrix.python-version }}"
+        core-version:
+          - "latest"
+        include:
+          - working-directory: "libs/langgraph"
+            core-version: ">=0.2.0,<0.3.0"
+
+    name: "test #${{ matrix.python-version }} (langchain-core${{ matrix.core-version }})"
     steps:
       - uses: actions/checkout@v4
       - name: Set up Python ${{ matrix.python-version }} + Poetry ${{ env.POETRY_VERSION }}
@@ -35,7 +41,11 @@ jobs:
       - name: Install dependencies
         shell: bash
         working-directory: ${{ inputs.working-directory }}
-        run: poetry install --with dev
+        run: |
+          poetry install --with dev
+          if [ "${{ matrix.core-version }}" != "latest" ]; then
+            poetry run pip install "langchain-core${{ matrix.core-version }}"
+          fi
 
       - name: Run core tests
         shell: bash
