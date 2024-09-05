@@ -21,12 +21,8 @@ from typing_extensions import Annotated, NotRequired, Required
 
 from langgraph.graph import END, StateGraph
 from langgraph.graph.graph import CompiledGraph
-from langgraph.utils import (
-    _is_optional_type,
-    get_field_default,
-    is_async_callable,
-    is_async_generator,
-)
+from langgraph.utils.fields import _is_optional_type, get_field_default
+from langgraph.utils.runnable import is_async_callable, is_async_generator
 
 pytestmark = pytest.mark.anyio
 

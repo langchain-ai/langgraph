@@ -22,10 +22,10 @@ E.g., the state should look something like:
     import { Annotation, messagesStateReducer } from "@langchain/langgraph";
 
     export const StateAnnotation = Annotation.Root({
-    messages: Annotation<BaseMessage[]>({
+      messages: Annotation<BaseMessage[]>({
         reducer: messagesStateReducer,
         default: () => [],
-    }),
+      }),
     });
     ```
 
@@ -46,6 +46,8 @@ First let's set up our client and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -57,9 +59,11 @@ First let's set up our client and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
     ```
 
 === "CURL"
@@ -72,12 +76,15 @@ First let's set up our client and thread:
 
 Output:
 
-    {'thread_id': 'e1431c95-e241-4d1d-a252-27eceb1e5c86',
-     'created_at': '2024-06-21T15:48:59.808924+00:00',
-     'updated_at': '2024-06-21T15:48:59.808924+00:00',
-     'metadata': {},
-     'status': 'idle',
-     'config': {}}
+    {
+        'thread_id': 'e1431c95-e241-4d1d-a252-27eceb1e5c86',
+        'created_at': '2024-06-21T15:48:59.808924+00:00',
+        'updated_at': '2024-06-21T15:48:59.808924+00:00',
+        'metadata': {},
+        'status': 'idle',
+        'config': {},
+        'values': None
+    }
 
 Let's also define a helper function for better formatting of the tool calls in messages (for CURL we will define a helper script called `process_stream.sh`)
 
@@ -182,7 +189,7 @@ Now we can stream by messages, which will return complete messages (at the end o
 
     async for event in client.runs.stream(
         thread["thread_id"],
-        assistant_id="agent",
+        assistant_id=assistant_id,
         input=input,
         config=config,
         stream_mode="messages",
@@ -221,24 +228,25 @@ Now we can stream by messages, which will return complete messages (at the end o
 
     ```js
     const input = {
-      "messages": [
+      messages: [
         {
-          "role": "human",
-          "content": "What's the weather in sf",
+          role: "human",
+          content: "What's the weather in sf",
         }
       ]
-    }
-    const config = {"configurable": {"model_name": "openai"}}
+    };
+    const config = { configurable: { model_name: "openai" } };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      "agent",
+      assistantID,
       {
         input,
         config,
         streamMode: "messages"
       }
     );
+
     for await (const event of streamResponse) {
       if (event.event === "metadata") {
         console.log(`Metadata: Run ID - ${event.data.run_id}`);

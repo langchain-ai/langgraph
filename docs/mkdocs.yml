@@ -126,7 +126,6 @@ nav:
   - "How-to Guides":
       - "how-tos/index.md"
       - Controllability:
-          - Create subgraphs: how-tos/subgraph.ipynb
           - Create branches for parallel execution: how-tos/branching.ipynb
           - Create map-reduce branches for parallel execution: how-tos/map-reduce.ipynb
           - Control graph recursion limit: how-tos/recursion-limit.ipynb
@@ -161,6 +160,9 @@ nav:
           - Pass graph state to tools: how-tos/pass-run-time-values-to-tools.ipynb
           - Pass config to tools: how-tos/pass-config-to-tools.ipynb
           - Handle many tools: how-tos/many-tools.ipynb
+      - Subgraphs:
+          - Create subgraphs: how-tos/subgraph.ipynb
+          - Manage state in subgraphs: how-tos/subgraphs-manage-state.ipynb
       - State Management:
           - Use Pydantic model as state: how-tos/state-model.ipynb
           - Use a context object in state: how-tos/state-context-key.ipynb
@@ -227,14 +229,14 @@ nav:
               - Invoke graph in LangGraph Studio: "cloud/how-tos/invoke_studio.md"
               - Interact with threads in LangGraph Studio: "cloud/how-tos/threads_studio.md"
           - Different Types of Runs:
-              - Run an Agent in the Background: "cloud/how-tos/cloud_examples/background_run.ipynb"
-              - Run Multiple Agents in Same Thread: "cloud/how-tos/cloud_examples/same-thread.ipynb"
-              - Create Cron Jobs: "cloud/how-tos/cloud_examples/cron_jobs.ipynb"
-              - Create Stateless Runs: "cloud/how-tos/cloud_examples/stateless_runs.ipynb"
+              - Run an Agent in the Background: "cloud/how-tos/background_run.md"
+              - Run Multiple Agents in Same Thread: "cloud/how-tos/same-thread.md"
+              - Create Cron Jobs: "cloud/how-tos/cron_jobs.md"
+              - Create Stateless Runs: "cloud/how-tos/stateless_runs.md"
           - Other:
-              - Configure Agents: "cloud/how-tos/cloud_examples/configuration_cloud.ipynb"
+              - Configure Agents: "cloud/how-tos/configuration_cloud.md"
               - Convert LangGraph calls to LangGraph Cloud calls: "cloud/how-tos/cloud_examples/langgraph_to_langgraph_cloud.ipynb"
-              - Integrate Webhooks: 'cloud/how-tos/cloud_examples/webhooks.ipynb'
+              - Integrate Webhooks: 'cloud/how-tos/webhooks.md'
               - Copy Threads: 'cloud/how-tos/copy_threads.md'
               - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
       - Conceptual Guides:

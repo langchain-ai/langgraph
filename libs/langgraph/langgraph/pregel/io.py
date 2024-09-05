@@ -107,26 +107,27 @@ def map_output_updates(
         (t, ww)
         for t, ww in tasks
         if (not t.config or TAG_HIDDEN not in t.config.get("tags"))
-        and all(k not in (ERROR, INTERRUPT) for k, _ in ww)
+        and ww[0][0] != ERROR
+        and ww[0][0] != INTERRUPT
     ]
     if not output_tasks:
         return
     if isinstance(output_channels, str):
-        updated = [
+        updated = (
             (task.name, value)
             for task, writes in output_tasks
             for chan, value in writes
             if chan == output_channels
-        ]
+        )
     else:
-        updated = [
+        updated = (
             (
                 task.name,
                 {chan: value for chan, value in task.writes if chan in output_channels},
             )
             for task, writes in output_tasks
             if any(chan in output_channels for chan, _ in writes)
-        ]
+        )
     grouped = {t.name: [] for t, _ in output_tasks}
     for node, value in updated:
         grouped[node].append(value)

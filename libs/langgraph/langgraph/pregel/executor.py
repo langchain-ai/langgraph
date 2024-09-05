@@ -99,6 +99,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         self.context_not_supported = sys.version_info < (3, 11)
         self.tasks: dict[asyncio.Task, bool] = {}
         self.sentinel = object()
+        self.loop = asyncio.get_running_loop()
 
     def submit(
         self,
@@ -110,9 +111,9 @@ class AsyncBackgroundExecutor(AsyncContextManager):
     ) -> asyncio.Task[T]:
         coro = fn(*args, **kwargs)
         if self.context_not_supported:
-            task = asyncio.create_task(coro, name=__name__)
+            task = self.loop.create_task(coro, name=__name__)
         else:
-            task = asyncio.create_task(coro, name=__name__, context=copy_context())
+            task = self.loop.create_task(coro, name=__name__, context=copy_context())
         self.tasks[task] = __cancel_on_exit__
         task.add_done_callback(self.done)
         return task

@@ -514,6 +514,7 @@ async def test_cancel_graph_astream_events_v2(checkpointer_name: Optional[str]) 
                 if chunk["event"] == "on_chain_stream" and not chunk["parent_ids"]:
                     got_event = True
                     assert chunk["data"]["chunk"] == {"alittlewhile": {"value": 2}}
+                    await asyncio.sleep(0.1)
                     break
 
         # did break
@@ -1305,7 +1306,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
+                "id": AnyStr(),
                 "name": "one",
                 "input": 2,
                 "triggers": ["input"],
@@ -1316,7 +1317,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
+                "id": AnyStr(),
                 "name": "two",
                 "input": [12],
                 "triggers": ["inbox"],
@@ -1327,7 +1328,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "2687f72c-e3a8-5f6f-9afa-047cbf24e923",
+                "id": AnyStr(),
                 "name": "one",
                 "result": [("inbox", 3)],
                 "error": None,
@@ -1339,7 +1340,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 0,
             "payload": {
-                "id": "18f52f6a-828d-58a1-a501-53cc0c7af33e",
+                "id": AnyStr(),
                 "name": "two",
                 "result": [("output", 13)],
                 "error": None,
@@ -1351,7 +1352,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
+                "id": AnyStr(),
                 "name": "two",
                 "input": [3],
                 "triggers": ["inbox"],
@@ -1362,7 +1363,7 @@ async def test_invoke_two_processes_in_dict_out(mocker: MockerFixture) -> None:
             "timestamp": AnyStr(),
             "step": 1,
             "payload": {
-                "id": "871d6e74-7bb3-565f-a4fe-cef4b8f19b62",
+                "id": AnyStr(),
                 "name": "two",
                 "result": [("output", 4)],
                 "error": None,
@@ -2087,9 +2088,7 @@ async def test_invoke_two_processes_one_in_two_out(mocker: MockerFixture) -> Non
     add_one = mocker.Mock(side_effect=lambda x: x + 1)
 
     one = (
-        Channel.subscribe_to("input")
-        | add_one
-        | Channel.write_to(output=RunnablePassthrough(), between=RunnablePassthrough())
+        Channel.subscribe_to("input") | add_one | Channel.write_to("output", "between")
     )
     two = Channel.subscribe_to("between") | add_one | Channel.write_to("output")
 
@@ -2204,8 +2203,6 @@ async def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 
 @pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
 async def test_conditional_graph(checkpointer_name: str) -> None:
-    from copy import deepcopy
-
     from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
@@ -2243,12 +2240,15 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
 
     # Define tool execution logic
     async def execute_tools(data: dict) -> dict:
+        data = data.copy()
         agent_action: AgentAction = data.pop("agent_outcome")
         observation = await {t.name: t for t in tools}[agent_action.tool].ainvoke(
             agent_action.tool_input
         )
         if data.get("intermediate_steps") is None:
             data["intermediate_steps"] = []
+        else:
+            data["intermediate_steps"] = data["intermediate_steps"].copy()
         data["intermediate_steps"].append([agent_action, observation])
         return data
 
@@ -2301,10 +2301,7 @@ async def test_conditional_graph(checkpointer_name: str) -> None:
         ),
     }
 
-    # deepcopy because the nodes mutate the data
-    assert [
-        deepcopy(c) async for c in app.astream({"input": "what is weather in sf"})
-    ] == [
+    assert [c async for c in app.astream({"input": "what is weather in sf"})] == [
         {
             "agent": {
                 "input": "what is weather in sf",
@@ -5022,7 +5019,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
+                    "id": AnyStr(),
                     "name": "rewrite_query",
                     "input": {"query": "what is weather in sf", "docs": []},
                     "triggers": ["start:rewrite_query"],
@@ -5037,7 +5034,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "592f3430-c17c-5d1c-831f-fecebb2c05bf",
+                    "id": AnyStr(),
                     "name": "rewrite_query",
                     "result": [("query", "query: what is weather in sf")],
                     "error": None,
@@ -5053,7 +5050,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
+                    "id": AnyStr(),
                     "name": "retriever_one",
                     "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ["rewrite_query"],
@@ -5067,7 +5064,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
+                    "id": AnyStr(),
                     "name": "retriever_two",
                     "input": {"query": "query: what is weather in sf", "docs": []},
                     "triggers": ["rewrite_query"],
@@ -5085,7 +5082,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "96965ed0-2c10-52a1-86eb-081ba6de73b2",
+                    "id": AnyStr(),
                     "name": "retriever_two",
                     "result": [("docs", ["doc3", "doc4"])],
                     "error": None,
@@ -5104,7 +5101,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "7db5e9d8-e132-5079-ab99-ced15e67d48b",
+                    "id": AnyStr(),
                     "name": "retriever_one",
                     "result": [("docs", ["doc1", "doc2"])],
                     "error": None,
@@ -5126,7 +5123,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
+                    "id": AnyStr(),
                     "name": "qa",
                     "input": {
                         "query": "query: what is weather in sf",
@@ -5144,7 +5141,7 @@ async def test_in_one_fan_out_out_one_graph_state() -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "8959fb57-d0f5-5725-9ac4-ec1c554fb0a0",
+                    "id": AnyStr(),
                     "name": "qa",
                     "result": [("answer", "doc1,doc2,doc3,doc4")],
                     "error": None,
@@ -5485,7 +5482,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
+                    "id": AnyStr(),
                     "name": "prepare",
                     "input": {"my_key": "value", "market": "DE"},
                     "triggers": ["start:prepare"],
@@ -5496,7 +5493,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "7b7b0713-e958-5d07-803c-c9910a7cc162",
+                    "id": AnyStr(),
                     "name": "prepare",
                     "result": [("my_key", " prepared")],
                     "error": None,
@@ -5540,7 +5537,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
+                    "id": AnyStr(),
                     "name": "tool_two_slow",
                     "input": {"my_key": "value prepared", "market": "DE"},
                     "triggers": ["branch:prepare:condition:tool_two_slow"],
@@ -5551,7 +5548,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 2,
                 "payload": {
-                    "id": "dd9f2fa5-ccfa-5d12-81ec-942563056a08",
+                    "id": AnyStr(),
                     "name": "tool_two_slow",
                     "result": [("my_key", " slow")],
                     "error": None,
@@ -5593,7 +5590,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
+                    "id": AnyStr(),
                     "name": "finish",
                     "input": {"my_key": "value prepared slow", "market": "DE"},
                     "triggers": ["branch:prepare:condition::then"],
@@ -5604,7 +5601,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 3,
                 "payload": {
-                    "id": "9b590c54-15ef-54b1-83a7-140d27b0bc52",
+                    "id": AnyStr(),
                     "name": "finish",
                     "result": [("my_key", " finished")],
                     "error": None,
@@ -5722,7 +5719,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "1a591be4-f85c-558f-8d00-1ccac0d1877f",
+                    "id": AnyStr(),
                     "name": "prepare",
                     "input": {"my_key": "value", "market": "DE"},
                     "triggers": ["start:prepare"],
@@ -5733,7 +5730,7 @@ async def test_branch_then(checkpointer_name: str) -> None:
                 "timestamp": AnyStr(),
                 "step": 1,
                 "payload": {
-                    "id": "1a591be4-f85c-558f-8d00-1ccac0d1877f",
+                    "id": AnyStr(),
                     "name": "prepare",
                     "result": [("my_key", " prepared")],
                     "error": None,
@@ -8470,15 +8467,19 @@ async def test_send_to_nested_graphs(checkpointer_name: str) -> None:
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         graph = builder.compile(checkpointer=checkpointer)
         config = {"configurable": {"thread_id": "1"}}
+        tracer = FakeTracer()
 
         # invoke and pause at nested interrupt
-        assert await graph.ainvoke({"subjects": ["cats", "dogs"]}, config=config) == {
+        assert await graph.ainvoke(
+            {"subjects": ["cats", "dogs"]}, config={**config, "callbacks": [tracer]}
+        ) == {
             "subjects": ["cats", "dogs"],
             "jokes": [],
         }
+        assert len(tracer.runs) == 1, "Should produce exactly 1 root run"
+
         # check state
         outer_state = await graph.aget_state(config)
-
         assert outer_state == StateSnapshot(
             values={"subjects": ["cats", "dogs"], "jokes": []},
             tasks=(

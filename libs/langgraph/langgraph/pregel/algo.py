@@ -1,4 +1,3 @@
-import json
 from collections import defaultdict, deque
 from functools import partial
 from typing import (
@@ -17,19 +16,10 @@ from typing import (
 from uuid import UUID, uuid5
 
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
-from langchain_core.runnables.config import (
-    RunnableConfig,
-    merge_configs,
-    patch_config,
-)
+from langchain_core.runnables.config import RunnableConfig
 
 from langgraph.channels.base import BaseChannel
-from langgraph.checkpoint.base import (
-    BaseCheckpointSaver,
-    Checkpoint,
-    copy_checkpoint,
-    create_checkpoint,
-)
+from langgraph.checkpoint.base import BaseCheckpointSaver, Checkpoint, copy_checkpoint
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINTER,
@@ -51,6 +41,7 @@ from langgraph.pregel.log import logger
 from langgraph.pregel.manager import ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.types import All, PregelExecutableTask, PregelTask
+from langgraph.utils.config import merge_configs, patch_config
 
 
 class WritesProtocol(Protocol):
@@ -106,17 +97,25 @@ def local_read(
 ) -> Union[dict[str, Any], Any]:
     if isinstance(select, str):
         managed_keys = []
+        for c, _ in task.writes:
+            if c == select:
+                updated = {c}
+                break
+        else:
+            updated = set()
     else:
         managed_keys = [k for k in select if k in managed]
         select = [k for k in select if k not in managed]
-    if fresh:
-        new_checkpoint = create_checkpoint(copy_checkpoint(checkpoint), channels, -1)
-        with ChannelsManager(channels, new_checkpoint, config, skip_context=True) as (
-            channels,
-            _,
-        ):
-            apply_writes(new_checkpoint, channels, [task], None)
-            values = read_channels(channels, select)
+        updated = set(select).intersection(c for c, _ in task.writes)
+    if fresh and updated:
+        with ChannelsManager(
+            {k: v for k, v in channels.items() if k in updated},
+            checkpoint,
+            config,
+            skip_context=True,
+        ) as (local_channels, _):
+            apply_writes(copy_checkpoint(checkpoint), local_channels, [task], None)
+            values = read_channels({**channels, **local_channels}, select)
     else:
         values = read_channels(channels, select)
     if managed_keys:
@@ -175,7 +174,10 @@ def apply_writes(
 
     # Consume all channels that were read
     for chan in {
-        chan for task in tasks for chan in task.triggers if chan not in RESERVED
+        chan
+        for task in tasks
+        for chan in task.triggers
+        if chan not in RESERVED and chan in channels
     }:
         if channels[chan].consume():
             if get_next_version is not None:
@@ -273,16 +275,19 @@ def prepare_next_tasks(
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[list[PregelTask], list[PregelExecutableTask]]:
+    checkpoint_id = UUID(checkpoint["id"])
     configurable = config.get("configurable", {})
     parent_ns = configurable.get("checkpoint_ns", "")
     tasks: Union[list[PregelTask], list[PregelExecutableTask]] = []
     # Consume pending packets
     for packet in checkpoint["pending_sends"]:
         if not isinstance(packet, Send):
-            logger.warn(f"Ignoring invalid packet type {type(packet)} in pending sends")
+            logger.warning(
+                f"Ignoring invalid packet type {type(packet)} in pending sends"
+            )
             continue
         if packet.node not in processes:
-            logger.warn(f"Ignoring unknown node name {packet.node} in pending sends")
+            logger.warning(f"Ignoring unknown node name {packet.node} in pending sends")
             continue
         # create task id
         triggers = [TASKS]
@@ -296,11 +301,16 @@ def prepare_next_tasks(
             f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
         task_id = str(
-            uuid5(UUID(checkpoint["id"]), json.dumps((checkpoint_ns, metadata)))
+            uuid5(
+                checkpoint_id,
+                "".join(
+                    (checkpoint_ns, str(step), packet.node, *triggers, str(len(tasks)))
+                ),
+            )
         )
         if for_execution:
             proc = processes[packet.node]
-            if node := proc.get_node():
+            if node := proc.node:
                 managed.replace_runtime_placeholders(step, packet.arg)
                 writes = deque()
                 task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
@@ -400,13 +410,15 @@ def prepare_next_tasks(
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
             task_id = str(
                 uuid5(
-                    UUID(checkpoint["id"]),
-                    json.dumps((checkpoint_ns, metadata)),
+                    checkpoint_id,
+                    "".join(
+                        (checkpoint_ns, str(step), name, *triggers, str(len(tasks)))
+                    ),
                 )
             )
 
             if for_execution:
-                if node := proc.get_node():
+                if node := proc.node:
                     writes = deque()
                     task_checkpoint_ns = f"{checkpoint_ns}:{task_id}"
                     tasks.append(
