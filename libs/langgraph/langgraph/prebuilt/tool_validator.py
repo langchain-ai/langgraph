@@ -214,9 +214,18 @@ class ValidationNode(RunnableCallable):
         def run_one(call: ToolCall):
             schema = self.schemas_by_name[call["name"]]
             try:
-                output = schema.validate(call["args"])
+                if issubclass(schema, BaseModel):
+                    output = schema.model_validate(call["args"])
+                    content = output.model_dump_json()
+                elif issubclass(schema, BaseModelV1):
+                    output = schema.validate(call["args"])
+                    content = output.json()
+                else:
+                    raise ValueError(
+                        f"Unsupported schema type: {type(schema)}. Expected BaseModel or BaseModelV1."
+                    )
                 return ToolMessage(
-                    content=output.json(),
+                    content=content,
                     name=call["name"],
                     tool_call_id=cast(str, call["id"]),
                 )

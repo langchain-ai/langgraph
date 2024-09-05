@@ -21,6 +21,7 @@ from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
 from langchain_core.runnables.utils import create_model
 from pydantic import BaseModel
+from pydantic.v1 import BaseModel as BaseModelV1
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
@@ -473,7 +474,9 @@ class CompiledStateGraph(CompiledGraph):
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> type[BaseModel]:
-        if isclass(self.builder.input) and issubclass(self.builder.input, BaseModel):
+        if isclass(self.builder.input) and issubclass(
+            self.builder.input, (BaseModel, BaseModelV1)
+        ):
             return self.builder.input
         else:
             keys = list(self.builder.schemas[self.builder.input].keys())
@@ -504,7 +507,9 @@ class CompiledStateGraph(CompiledGraph):
     def get_output_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> type[BaseModel]:
-        if isclass(self.builder.output) and issubclass(self.builder.output, BaseModel):
+        if isclass(self.builder.output) and issubclass(
+            self.builder.output, (BaseModel, BaseModelV1)
+        ):
             return self.builder.output
 
         return super().get_output_schema(config)

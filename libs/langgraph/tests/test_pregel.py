@@ -7663,6 +7663,11 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
 
     app = workflow.compile()
 
+    # because it's a v1 pydantic, we're using .schema() here instead of the new methods
+    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    assert app.get_input_schema().schema() == snapshot
+    assert app.get_output_schema().schema() == snapshot
+
     with pytest.raises(ValidationError), assert_ctx_once():
         app.invoke({"query": {}})
 
