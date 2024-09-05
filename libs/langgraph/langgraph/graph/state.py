@@ -6,6 +6,7 @@ from functools import partial
 from inspect import isclass, isfunction, signature
 from typing import (
     Any,
+    Callable,
     NamedTuple,
     Optional,
     Sequence,
@@ -16,31 +17,21 @@ from typing import (
     overload,
 )
 
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableConfig
 from langchain_core.runnables.base import RunnableLike
-from langchain_core.runnables.utils import (
-    create_model,
-)
+from langchain_core.runnables.utils import create_model
+from pydantic import BaseModel
 
 from langgraph.channels.base import BaseChannel
 from langgraph.channels.binop import BinaryOperatorAggregate
-from langgraph.channels.context import Context
 from langgraph.channels.dynamic_barrier_value import DynamicBarrierValue, WaitForNames
 from langgraph.channels.ephemeral_value import EphemeralValue
 from langgraph.channels.last_value import LastValue
 from langgraph.channels.named_barrier_value import NamedBarrierValue
 from langgraph.checkpoint.base import BaseCheckpointSaver
-from langgraph.constants import CHECKPOINT_NAMESPACE_SEPARATOR, TAG_HIDDEN
+from langgraph.constants import NS_END, NS_SEP, TAG_HIDDEN
 from langgraph.errors import InvalidUpdateError
-from langgraph.graph.graph import (
-    END,
-    START,
-    Branch,
-    CompiledGraph,
-    Graph,
-    Send,
-)
+from langgraph.graph.graph import END, START, Branch, CompiledGraph, Graph, Send
 from langgraph.managed.base import (
     ChannelKeyPlaceholder,
     ChannelTypePlaceholder,
@@ -53,7 +44,8 @@ from langgraph.pregel.read import ChannelRead, PregelNode
 from langgraph.pregel.types import All, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
-from langgraph.utils import RunnableCallable, coerce_to_runnable
+from langgraph.utils.fields import get_field_default
+from langgraph.utils.runnable import coerce_to_runnable
 
 logger = logging.getLogger(__name__)
 
@@ -317,10 +309,11 @@ class StateGraph(Graph):
         if node == END or node == START:
             raise ValueError(f"Node `{node}` is reserved.")
 
-        if CHECKPOINT_NAMESPACE_SEPARATOR in node:
-            raise ValueError(
-                f"'{CHECKPOINT_NAMESPACE_SEPARATOR}' is a reserved character and is not allowed in the node names."
-            )
+        for character in (NS_SEP, NS_END):
+            if character in node:
+                raise ValueError(
+                    f"'{character}' is a reserved character and is not allowed in the node names."
+                )
 
         try:
             if isfunction(action) and (
@@ -374,7 +367,7 @@ class StateGraph(Graph):
                 raise ValueError(f"Need to add_node `{start}` first")
         if end_key == START:
             raise ValueError("START cannot be an end node")
-        if end_key not in self.nodes:
+        if end_key != END and end_key not in self.nodes:
             raise ValueError(f"Need to add_node `{end_key}` first")
 
         self.waiting_edges.add((tuple(start_key), end_key))
@@ -425,16 +418,14 @@ class StateGraph(Graph):
             else [
                 key
                 for key, val in self.schemas[self.output].items()
-                if not isinstance(val, Context) and not is_managed_value(val)
+                if not is_managed_value(val)
             ]
         )
         stream_channels = (
             "__root__"
             if len(self.channels) == 1 and "__root__" in self.channels
             else [
-                key
-                for key, val in self.channels.items()
-                if not isinstance(val, Context) and not is_managed_value(val)
+                key for key, val in self.channels.items() if not is_managed_value(val)
             ]
         )
 
@@ -499,10 +490,18 @@ class CompiledStateGraph(CompiledGraph):
                 return create_model(  # type: ignore[call-overload]
                     self.get_name("Input"),
                     **{
-                        k: (self.channels[k].UpdateType, None)
+                        k: (
+                            self.channels[k].UpdateType,
+                            (
+                                get_field_default(
+                                    k,
+                                    self.channels[k].UpdateType,
+                                    self.builder.input,
+                                )
+                            ),
+                        )
                         for k in self.builder.schemas[self.builder.input]
                         if isinstance(self.channels[k], BaseChannel)
-                        and not isinstance(self.channels[k], Context)
                     },
                 )
 
@@ -523,7 +522,7 @@ class CompiledStateGraph(CompiledGraph):
             output_keys = [
                 k
                 for k, v in self.builder.schemas[self.builder.input].items()
-                if not isinstance(v, Context) and not is_managed_value(v)
+                if not is_managed_value(v)
             ]
         else:
             output_keys = list(self.builder.channels) + [
@@ -532,9 +531,7 @@ class CompiledStateGraph(CompiledGraph):
                 if is_writable_managed_value(v)
             ]
 
-        def _get_state_key(
-            input: Union[None, dict, Any], config: RunnableConfig, *, key: str
-        ) -> Any:
+        def _get_state_key(input: Union[None, dict, Any], *, key: str) -> Any:
             if input is None:
                 return SKIP_WRITE
             elif isinstance(input, dict):
@@ -550,12 +547,7 @@ class CompiledStateGraph(CompiledGraph):
             [ChannelWriteEntry("__root__", skip_none=True)]
             if output_keys == ["__root__"]
             else [
-                ChannelWriteEntry(
-                    key,
-                    mapper=RunnableCallable(
-                        _get_state_key, key=key, trace=False, recurse=False
-                    ),
-                )
+                ChannelWriteEntry(key, mapper=partial(_get_state_key, key=key))
                 for key in output_keys
             ]
         )
@@ -598,7 +590,8 @@ class CompiledStateGraph(CompiledGraph):
                 ],
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
-            ).pipe(node.runnable)
+                bound=node.runnable,
+            )
 
     def attach_edge(self, starts: Union[str, Sequence[str]], end: str) -> None:
         if isinstance(starts, str):
@@ -628,7 +621,9 @@ class CompiledStateGraph(CompiledGraph):
                 )
 
     def attach_branch(self, start: str, name: str, branch: Branch) -> None:
-        def branch_writer(packets: list[Union[str, Send]]) -> Optional[ChannelWrite]:
+        def branch_writer(
+            packets: list[Union[str, Send]], config: RunnableConfig
+        ) -> Optional[ChannelWrite]:
             if filtered := [p for p in packets if p != END]:
                 writes = [
                     (
@@ -647,10 +642,17 @@ class CompiledStateGraph(CompiledGraph):
                             ),
                         )
                     )
-                return ChannelWrite(writes, tags=[TAG_HIDDEN])
+                ChannelWrite.do_write(config, writes)
 
         # attach branch publisher
-        self.nodes[start] |= branch.run(branch_writer, _get_state_reader(self.builder))
+        schema = (
+            self.builder.nodes[start].input
+            if start in self.builder.nodes
+            else self.builder.schema
+        )
+        self.nodes[start] |= branch.run(
+            branch_writer, _get_state_reader(self.builder, schema)
+        )
 
         # attach branch subscribers
         ends = (
@@ -676,16 +678,17 @@ class CompiledStateGraph(CompiledGraph):
                     )
 
 
-def _get_state_reader(graph: StateGraph) -> ChannelRead:
-    state_keys = list(graph.channels)
+def _get_state_reader(
+    builder: StateGraph, schema: Type[Any]
+) -> Callable[[RunnableConfig], Any]:
+    state_keys = list(builder.channels)
+    select = list(builder.schemas[schema])
     return partial(
         ChannelRead.do_read,
-        channel=state_keys[0] if state_keys == ["__root__"] else state_keys,
+        select=select[0] if select == ["__root__"] else select,
         fresh=True,
         # coerce state dict to schema class (eg. pydantic model)
-        mapper=(
-            None if state_keys == ["__root__"] else partial(_coerce_state, graph.schema)
-        ),
+        mapper=(None if state_keys == ["__root__"] else partial(_coerce_state, schema)),
     )
 
 

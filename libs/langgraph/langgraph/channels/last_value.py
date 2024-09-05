@@ -27,12 +27,6 @@ class LastValue(Generic[Value], BaseChannel[Value, Value, Value]):
         """The type of the update received by the channel."""
         return self.typ
 
-    def checkpoint(self) -> Value:
-        try:
-            return self.value
-        except AttributeError:
-            raise EmptyChannelError()
-
     @contextmanager
     def from_checkpoint(
         self, checkpoint: Optional[Value], config: RunnableConfig

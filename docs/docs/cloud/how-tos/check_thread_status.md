@@ -13,6 +13,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```python
     from langgraph_sdk import get_client
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -23,7 +24,8 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    const assistantId = agent;
+    // Using the graph deployed with the name "agent"
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 
@@ -48,7 +50,7 @@ We can use the following commands to find threads that are idle, which means tha
 === "Javascript"
 
     ```js
-    console.log(await client.threads.search({status: "idle",limit:1}));
+    console.log(await client.threads.search({ status: "idle", limit: 1 }));
     ```
 
 === "CURL"
@@ -83,7 +85,7 @@ We can use the following commands to find threads that have been interrupted in 
 === "Javascript"
 
     ```js
-    console.log(await client.threads.search({status: "interrupted",limit:1}));
+    console.log(await client.threads.search({ status: "interrupted", limit: 1 }));
     ```
 
 === "CURL"
@@ -117,7 +119,7 @@ We can use the following commands to find threads that are busy, meaning they ar
 === "Javascript"
 
     ```js
-    console.log(await client.threads.search({status: "busy",limit: 1}));
+    console.log(await client.threads.search({ status: "busy", limit: 1 }));
     ```
 
 === "CURL"
@@ -183,7 +185,7 @@ The search endpoint for threads also allows you to filter on metadata, which can
 === "Javascript"
 
     ```js
-    console.log((await client.threads.search({metadata: {"foo":"bar"},limit: 1}))[0].status);
+    console.log((await client.threads.search({ metadata: { "foo": "bar" }, limit: 1 }))[0].status);
     ```
 
 === "CURL"

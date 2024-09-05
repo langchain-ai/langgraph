@@ -1,6 +1,6 @@
 [tool.poetry]
 name = "langgraph-checkpoint-postgres"
-version = "1.0.3"
+version = "1.0.6"
 description = "Library with a Postgres implementation of LangGraph checkpoint saver."
 authors = []
 license = "MIT"
@@ -10,12 +10,13 @@ packages = [{ include = "langgraph" }]
 
 [tool.poetry.dependencies]
 python = "^3.9.0,<4.0"
-langgraph-checkpoint = "^1.0.1"
+langgraph-checkpoint = "^1.0.8"
 orjson = ">=3.10.1"
-psycopg = {extras = ["binary"], version = ">=3.1.19"}
+psycopg = "^3.0.0"
+psycopg-pool = "^3.0.0"
 
 [tool.poetry.group.dev.dependencies]
-ruff = "^0.1.4"
+ruff = "^0.6.2"
 codespell = "^2.2.0"
 pytest = "^7.2.1"
 anyio = "^4.4.0"
@@ -23,7 +24,7 @@ pytest-asyncio = "^0.21.1"
 pytest-mock = "^3.11.1"
 pytest-watch = "^4.2.0"
 mypy = "^1.10.0"
-psycopg-pool = "^3.2.2"
+psycopg = {extras = ["binary"], version = ">=3.0.0"}
 langgraph-checkpoint = {path = "../checkpoint", develop = true}
 
 [tool.pytest.ini_options]

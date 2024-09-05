@@ -27,8 +27,9 @@ from langgraph_sdk.schema import (
     Cron,
     DisconnectMode,
     GraphSchema,
-    Metadata,
+    Json,
     MultitaskStrategy,
+    OnCompletionBehavior,
     OnConflictBehavior,
     Run,
     RunCreate,
@@ -413,7 +414,7 @@ class AssistantsClient:
         graph_id: Optional[str],
         config: Optional[Config] = None,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Assistant:
@@ -461,7 +462,7 @@ class AssistantsClient:
         *,
         graph_id: Optional[str] = None,
         config: Optional[Config] = None,
-        metadata: Metadata = None,
+        metadata: Json = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -523,7 +524,7 @@ class AssistantsClient:
     async def search(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         graph_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
@@ -599,7 +600,7 @@ class ThreadsClient:
     async def create(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         thread_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Thread:
@@ -674,7 +675,8 @@ class ThreadsClient:
     async def search(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
+        values: Json = None,
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
@@ -707,6 +709,8 @@ class ThreadsClient:
         }
         if metadata:
             payload["metadata"] = metadata
+        if values:
+            payload["values"] = values
         if status:
             payload["status"] = status
         return await self.http.post(
@@ -852,15 +856,14 @@ class ThreadsClient:
             thread_id: The ID of the thread to update.
             values: The values to update to the state.
             as_node: Update the state as if this node had just executed.
-
-            checkpoint_id: The ID of the checkpoint to get the state of.
+            checkpoint_id: The ID of the checkpoint to update the state of.
 
         Returns:
             None
 
         Example Usage:
 
-            await client.threads.get_state(
+            await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
@@ -967,8 +970,7 @@ class RunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-    ) -> AsyncIterator[StreamPart]:
-        ...
+    ) -> AsyncIterator[StreamPart]: ...
 
     @overload
     def stream(
@@ -985,8 +987,8 @@ class RunsClient:
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
-    ) -> AsyncIterator[StreamPart]:
-        ...
+        on_completion: Optional[OnCompletionBehavior] = None,
+    ) -> AsyncIterator[StreamPart]: ...
 
     def stream(
         self,
@@ -1004,6 +1006,7 @@ class RunsClient:
         on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1070,6 +1073,7 @@ class RunsClient:
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
             "on_disconnect": on_disconnect,
+            "on_completion": on_completion,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1092,8 +1096,8 @@ class RunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
-    ) -> Run:
-        ...
+        on_completion: Optional[OnCompletionBehavior] = None,
+    ) -> Run: ...
 
     @overload
     async def create(
@@ -1109,8 +1113,7 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-    ) -> Run:
-        ...
+    ) -> Run: ...
 
     async def create(
         self,
@@ -1125,6 +1128,7 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Run:
         """Create a background run.
 
@@ -1221,6 +1225,7 @@ class RunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_completion": on_completion,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         if thread_id:
@@ -1252,8 +1257,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     @overload
     async def wait(
@@ -1268,8 +1272,8 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
-    ) -> Union[list[dict], dict[str, Any]]:
-        ...
+        on_completion: Optional[OnCompletionBehavior] = None,
+    ) -> Union[list[dict], dict[str, Any]]: ...
 
     async def wait(
         self,
@@ -1285,6 +1289,7 @@ class RunsClient:
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1364,6 +1369,7 @@ class RunsClient:
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
             "on_disconnect": on_disconnect,
+            "on_completion": on_completion,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
@@ -1444,8 +1450,8 @@ class RunsClient:
             json=None,
         )
 
-    async def join(self, thread_id: str, run_id: str) -> None:
-        """Block until a run is done.
+    async def join(self, thread_id: str, run_id: str) -> dict:
+        """Block until a run is done. Returns the final state of the thread.
 
         Args:
             thread_id: The thread ID to join.
@@ -1456,7 +1462,7 @@ class RunsClient:
 
         Example Usage:
 
-            await client.runs.join(
+            result =await client.runs.join(
                 thread_id="thread_id_to_join",
                 run_id="run_id_to_join"
             )

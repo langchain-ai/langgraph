@@ -1,12 +1,13 @@
 import asyncio
 from contextlib import asynccontextmanager
-from typing import Any, AsyncIterator, Optional
+from typing import Any, AsyncIterator, Iterator, List, Optional, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import AsyncConnection, AsyncCursor, AsyncPipeline
 from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
+from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.base import (
     ChannelVersions,
@@ -19,19 +20,38 @@ from langgraph.checkpoint.postgres.base import BasePostgresSaver
 from langgraph.checkpoint.serde.base import SerializerProtocol
 
 
+@asynccontextmanager
+async def _get_connection(
+    conn: Union[AsyncConnection, AsyncConnectionPool],
+) -> AsyncIterator[AsyncConnection]:
+    if isinstance(conn, AsyncConnection):
+        yield conn
+    elif isinstance(conn, AsyncConnectionPool):
+        async with conn.connection() as conn:
+            yield conn
+    else:
+        raise TypeError(f"Invalid connection type: {type(conn)}")
+
+
 class AsyncPostgresSaver(BasePostgresSaver):
     lock: asyncio.Lock
 
     def __init__(
         self,
-        conn: AsyncConnection,
+        conn: Union[AsyncConnection, AsyncConnectionPool],
         pipe: Optional[AsyncPipeline] = None,
         serde: Optional[SerializerProtocol] = None,
     ) -> None:
         super().__init__(serde=serde)
+        if isinstance(conn, AsyncConnectionPool) and pipe is not None:
+            raise ValueError(
+                "Pipeline should be used only with a single AsyncConnection, not AsyncConnectionPool."
+            )
+
         self.conn = conn
         self.pipe = pipe
         self.lock = asyncio.Lock()
+        self.loop = asyncio.get_running_loop()
 
     @classmethod
     @asynccontextmanager
@@ -45,7 +65,7 @@ class AsyncPostgresSaver(BasePostgresSaver):
             pipeline (bool): whether to use AsyncPipeline
 
         Returns:
-            PostgresSaver: A new PostgresSaver instance.
+            AsyncPostgresSaver: A new AsyncPostgresSaver instance.
         """
         async with await AsyncConnection.connect(
             conn_string, autocommit=True, prepare_threshold=0, row_factory=dict_row
@@ -63,25 +83,22 @@ class AsyncPostgresSaver(BasePostgresSaver):
         already exist and runs database migrations. It MUST be called directly by the user
         the first time checkpointer is used.
         """
-        async with self.lock:
-            async with self.conn.cursor(binary=True, row_factory=dict_row) as cur:
-                try:
-                    results = await cur.execute(
-                        "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
-                    )
-                    version = (await results.fetchone())["v"]
-                except UndefinedTable:
-                    version = -1
-                for v, migration in zip(
-                    range(version + 1, len(self.MIGRATIONS)),
-                    self.MIGRATIONS[version + 1 :],
-                ):
-                    await cur.execute(migration)
-                    await cur.execute(
-                        f"INSERT INTO checkpoint_migrations (v) VALUES ({v})"
-                    )
-            if self.pipe:
-                await self.pipe.sync()
+        async with self._cursor() as cur:
+            try:
+                results = await cur.execute(
+                    "SELECT v FROM checkpoint_migrations ORDER BY v DESC LIMIT 1"
+                )
+                version = (await results.fetchone())["v"]
+            except UndefinedTable:
+                version = -1
+            for v, migration in zip(
+                range(version + 1, len(self.MIGRATIONS)),
+                self.MIGRATIONS[version + 1 :],
+            ):
+                await cur.execute(migration)
+                await cur.execute(f"INSERT INTO checkpoint_migrations (v) VALUES ({v})")
+        if self.pipe:
+            await self.pipe.sync()
 
     async def alist(
         self,
@@ -121,12 +138,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             "checkpoint_id": value["checkpoint_id"],
                         }
                     },
-                    {
-                        **self._load_checkpoint(value["checkpoint"]),
-                        "channel_values": await asyncio.to_thread(
-                            self._load_blobs, value["channel_values"]
-                        ),
-                    },
+                    await asyncio.to_thread(
+                        self._load_checkpoint,
+                        value["checkpoint"],
+                        value["channel_values"],
+                        value["pending_sends"],
+                    ),
                     self._load_metadata(value["metadata"]),
                     {
                         "configurable": {
@@ -180,12 +197,12 @@ class AsyncPostgresSaver(BasePostgresSaver):
                             "checkpoint_id": value["checkpoint_id"],
                         }
                     },
-                    {
-                        **self._load_checkpoint(value["checkpoint"]),
-                        "channel_values": await asyncio.to_thread(
-                            self._load_blobs, value["channel_values"]
-                        ),
-                    },
+                    await asyncio.to_thread(
+                        self._load_checkpoint,
+                        value["checkpoint"],
+                        value["channel_values"],
+                        value["pending_sends"],
+                    ),
                     self._load_metadata(value["metadata"]),
                     {
                         "configurable": {
@@ -290,25 +307,119 @@ class AsyncPostgresSaver(BasePostgresSaver):
 
     @asynccontextmanager
     async def _cursor(self, *, pipeline: bool = False) -> AsyncIterator[AsyncCursor]:
-        if self.pipe:
-            # a connection in pipeline mode can be used concurrently
-            # in multiple threads/coroutines, but only one cursor can be
-            # used at a time
-            try:
-                async with self.conn.cursor(binary=True, row_factory=dict_row) as cur:
+        async with _get_connection(self.conn) as conn:
+            if self.pipe:
+                # a connection in pipeline mode can be used concurrently
+                # in multiple threads/coroutines, but only one cursor can be
+                # used at a time
+                try:
+                    async with conn.cursor(binary=True, row_factory=dict_row) as cur:
+                        yield cur
+                finally:
+                    if pipeline:
+                        await self.pipe.sync()
+            elif pipeline:
+                # a connection not in pipeline mode can only be used by one
+                # thread/coroutine at a time, so we acquire a lock
+                async with self.lock, conn.pipeline(), conn.cursor(
+                    binary=True, row_factory=dict_row
+                ) as cur:
                     yield cur
-            finally:
-                if pipeline:
-                    await self.pipe.sync()
-        elif pipeline:
-            # a connection not in pipeline mode can only be used by one
-            # thread/coroutine at a time, so we acquire a lock
-            async with self.lock, self.conn.pipeline(), self.conn.cursor(
-                binary=True, row_factory=dict_row
-            ) as cur:
-                yield cur
-        else:
-            async with self.lock, self.conn.cursor(
-                binary=True, row_factory=dict_row
-            ) as cur:
-                yield cur
+            else:
+                async with self.lock, conn.cursor(
+                    binary=True, row_factory=dict_row
+                ) as cur:
+                    yield cur
+
+    def list(
+        self,
+        config: Optional[RunnableConfig],
+        *,
+        filter: Optional[dict[str, Any]] = None,
+        before: Optional[RunnableConfig] = None,
+        limit: Optional[int] = None,
+    ) -> Iterator[CheckpointTuple]:
+        """List checkpoints from the database.
+
+        This method retrieves a list of checkpoint tuples from the Postgres database based
+        on the provided config. The checkpoints are ordered by checkpoint ID in descending order (newest first).
+
+        Args:
+            config (Optional[RunnableConfig]): Base configuration for filtering checkpoints.
+            filter (Optional[Dict[str, Any]]): Additional filtering criteria for metadata.
+            before (Optional[RunnableConfig]): If provided, only checkpoints before the specified checkpoint ID are returned. Defaults to None.
+            limit (Optional[int]): Maximum number of checkpoints to return.
+
+        Yields:
+            Iterator[CheckpointTuple]: An iterator of matching checkpoint tuples.
+        """
+        aiter_ = self.alist(config, filter=filter, before=before, limit=limit)
+        while True:
+            try:
+                yield asyncio.run_coroutine_threadsafe(
+                    anext(aiter_), self.loop
+                ).result()
+            except StopAsyncIteration:
+                break
+
+    def get_tuple(self, config: RunnableConfig) -> Optional[CheckpointTuple]:
+        """Get a checkpoint tuple from the database.
+
+        This method retrieves a checkpoint tuple from the Postgres database based on the
+        provided config. If the config contains a "checkpoint_id" key, the checkpoint with
+        the matching thread ID and "checkpoint_id" is retrieved. Otherwise, the latest checkpoint
+        for the given thread ID is retrieved.
+
+        Args:
+            config (RunnableConfig): The config to use for retrieving the checkpoint.
+
+        Returns:
+            Optional[CheckpointTuple]: The retrieved checkpoint tuple, or None if no matching checkpoint was found.
+        """
+        return asyncio.run_coroutine_threadsafe(
+            self.aget_tuple(config), self.loop
+        ).result()
+
+    def put(
+        self,
+        config: RunnableConfig,
+        checkpoint: Checkpoint,
+        metadata: CheckpointMetadata,
+        new_versions: ChannelVersions,
+    ) -> RunnableConfig:
+        """Save a checkpoint to the database.
+
+        This method saves a checkpoint to the Postgres database. The checkpoint is associated
+        with the provided config and its parent config (if any).
+
+        Args:
+            config (RunnableConfig): The config to associate with the checkpoint.
+            checkpoint (Checkpoint): The checkpoint to save.
+            metadata (CheckpointMetadata): Additional metadata to save with the checkpoint.
+            new_versions (ChannelVersions): New channel versions as of this write.
+
+        Returns:
+            RunnableConfig: Updated configuration after storing the checkpoint.
+        """
+        return asyncio.run_coroutine_threadsafe(
+            self.aput(config, checkpoint, metadata, new_versions), self.loop
+        ).result()
+
+    def put_writes(
+        self,
+        config: RunnableConfig,
+        writes: List[tuple[str, Any]],
+        task_id: str,
+    ) -> None:
+        """Store intermediate writes linked to a checkpoint.
+
+        This method saves intermediate writes associated with a checkpoint to the database.
+
+        Args:
+            config (RunnableConfig): Configuration of the related checkpoint.
+            writes (Sequence[Tuple[str, Any]]): List of writes to store, each as (channel, value) pair.
+            task_id (str): Identifier for the task creating the writes.
+        """
+        return asyncio.run_coroutine_threadsafe(
+            self.aput_writes(config, writes, task_id), self.loop
+        ).result()

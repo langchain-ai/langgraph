@@ -7,6 +7,7 @@ import re
 from collections import deque
 from datetime import date, datetime, time, timedelta, timezone
 from enum import Enum
+from inspect import isclass
 from ipaddress import (
     IPv4Address,
     IPv4Interface,
@@ -50,9 +51,13 @@ class JsonPlusSerializer(SerializerProtocol):
         if isinstance(obj, Serializable):
             return obj.to_json()
         elif hasattr(obj, "model_dump") and callable(obj.model_dump):
-            return self._encode_constructor_args(obj.__class__, kwargs=obj.model_dump())
+            return self._encode_constructor_args(
+                obj.__class__, method=[None, "model_construct"], kwargs=obj.model_dump()
+            )
         elif hasattr(obj, "dict") and callable(obj.dict):
-            return self._encode_constructor_args(obj.__class__, kwargs=obj.dict())
+            return self._encode_constructor_args(
+                obj.__class__, method=[None, "construct"], kwargs=obj.dict()
+            )
         elif isinstance(obj, pathlib.Path):
             return self._encode_constructor_args(pathlib.Path, args=obj.parts)
         elif isinstance(obj, re.Pattern):
@@ -111,7 +116,7 @@ class JsonPlusSerializer(SerializerProtocol):
                 obj.__class__, method="fromhex", args=[obj.hex()]
             )
         elif isinstance(obj, BaseException):
-            return self._encode_constructor_args(obj.__class__, args=obj.args)
+            return repr(obj)
         else:
             raise TypeError(
                 f"Object of type {obj.__class__.__name__} is not JSON serializable"
@@ -131,19 +136,30 @@ class JsonPlusSerializer(SerializerProtocol):
                 # Import class
                 cls = getattr(mod, name)
                 # Instantiate class
-                if value["method"] is not None:
-                    method = getattr(cls, value["method"])
+                if isinstance(value["method"], str):
+                    methods = [getattr(cls, value["method"])]
+                elif isinstance(value["method"], list):
+                    methods = [
+                        cls if method is None else getattr(cls, method)
+                        for method in value["method"]
+                    ]
                 else:
-                    method = cls
-                if value["args"] and value["kwargs"]:
-                    return method(*value["args"], **value["kwargs"])
-                elif value["args"]:
-                    return method(*value["args"])
-                elif value["kwargs"]:
-                    return method(**value["kwargs"])
-                else:
-                    return method()
-            except (ImportError, AttributeError):
+                    methods = [cls]
+                for method in methods:
+                    try:
+                        if isclass(method) and issubclass(method, BaseException):
+                            return None
+                        if value["args"] and value["kwargs"]:
+                            return method(*value["args"], **value["kwargs"])
+                        elif value["args"]:
+                            return method(*value["args"])
+                        elif value["kwargs"]:
+                            return method(**value["kwargs"])
+                        else:
+                            return method()
+                    except Exception:
+                        continue
+            except Exception:
                 return None
 
         return LC_REVIVER(value)

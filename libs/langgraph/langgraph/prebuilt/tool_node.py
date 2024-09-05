@@ -21,7 +21,7 @@ from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
 from typing_extensions import get_args
 
-from langgraph.utils import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable
 
 INVALID_TOOL_NAME_ERROR_TEMPLATE = (
     "Error: {requested_tool} is not a valid tool, try one of [{available_tools}]."
@@ -34,7 +34,7 @@ def str_output(output: Any) -> str:
         return output
     else:
         try:
-            return json.dumps(output)
+            return json.dumps(output, ensure_ascii=False)
         except Exception:
             return str(output)
 

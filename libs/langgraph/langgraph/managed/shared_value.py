@@ -81,7 +81,6 @@ class SharedValue(WritableManagedValue[Value, Update]):
             ):
                 raise ValueError("SharedValue must be a dict")
         self.scope = scope
-        self.config = config
         self.value: Value = {}
         self.store: BaseStore = config["configurable"].get(CONFIG_KEY_STORE)
         if self.store is None:
