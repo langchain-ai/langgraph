@@ -2022,8 +2022,6 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 def test_conditional_graph(
     snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    from copy import deepcopy
-
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
