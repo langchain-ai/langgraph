@@ -308,7 +308,7 @@ def tools_condition(
         ai_message = state[-1]
     elif isinstance(state, dict) and (messages := state.get("messages", [])):
         ai_message = messages[-1]
-    elif isinstance(state, BaseModel) and (messages := getattr(state, "messages", [])):
+    elif messages := getattr(state, "messages", []):
         ai_message = messages[-1]
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
