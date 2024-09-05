@@ -10,7 +10,6 @@ from typing import (
     Optional,
     Sequence,
     Tuple,
-    Type,
     Union,
     cast,
 )
@@ -96,7 +95,7 @@ class ToolNode(RunnableCallable):
         input: Union[
             list[AnyMessage],
             dict[str, Any],
-            Type[BaseModel],
+            BaseModel,
         ],
         config: RunnableConfig,
     ) -> Any:
@@ -111,7 +110,7 @@ class ToolNode(RunnableCallable):
         input: Union[
             list[AnyMessage],
             dict[str, Any],
-            Type[BaseModel],
+            BaseModel,
         ],
         config: RunnableConfig,
     ) -> Any:
@@ -161,7 +160,7 @@ class ToolNode(RunnableCallable):
         input: Union[
             list[AnyMessage],
             dict[str, Any],
-            Type[BaseModel],
+            BaseModel,
         ],
     ) -> Tuple[List[ToolCall], Literal["list", "dict", "pydantic"]]:
         if isinstance(input, list):
@@ -203,7 +202,7 @@ class ToolNode(RunnableCallable):
         input: Union[
             list[AnyMessage],
             dict[str, Any],
-            Type[BaseModel],
+            BaseModel,
         ],
     ) -> ToolCall:
         if tool_call["name"] not in self.tools_by_name:
