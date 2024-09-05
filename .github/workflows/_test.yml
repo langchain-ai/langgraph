@@ -42,7 +42,7 @@ jobs:
         run: |
           poetry install --with dev
           if [ "${{ matrix.core-version }}" != "latest" ]; then
-            poetry run pip install "langchain-core${{ matrix.core-version }}" --force-reinstall
+            poetry run pip install "langchain-core${{ matrix.core-version }}"
           fi
 
       - name: Run core tests
