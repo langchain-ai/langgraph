@@ -18,7 +18,8 @@ from langgraph.checkpoint.sqlite.aio import AsyncSqliteSaver
 from tests.memory_assert import MemorySaverAssertImmutable
 
 DEFAULT_POSTGRES_URI = "postgres://postgres:postgres@localhost:5442/"
-SHOULD_CHECK_SNAPSHOTS = version.parse(core_version) >= version.parse("0.3.0")
+# TODO: fix this once core is released
+SHOULD_CHECK_SNAPSHOTS = version.parse(core_version) >= version.parse("0.3.0.dev0")
 
 
 @pytest.fixture
