@@ -56,21 +56,21 @@ class RunnableCallable(Runnable):
         recurse: bool = True,
         **kwargs: Any,
     ) -> None:
-        runnable_name = None
-        if name is not None:
-            runnable_name = name
-        elif func:
-            try:
-                if func.__name__ != "<lambda>":
-                    runnable_name = func.__name__
-            except AttributeError:
-                pass
-        elif afunc:
-            try:
-                runnable_name = afunc.__name__
-            except AttributeError:
-                pass
-        self.name = runnable_name
+        self.name = name
+        if self.name is None:
+            if func:
+                try:
+                    if func.__name__ != "<lambda>":
+                        self.name = func.__name__
+                except AttributeError:
+                    pass
+            elif afunc:
+                try:
+                    self.name = afunc.__name__
+                except AttributeError:
+                    pass
+        if self.name is None:
+            self.name = "RunnableCallable"
         self.func = func
         self.afunc = afunc
         self.config: Optional[RunnableConfig] = {"tags": tags} if tags else None
