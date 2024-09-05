@@ -6,10 +6,10 @@ import numexpr
 from langchain.chains.openai_functions import create_structured_output_runnable
 from langchain_core.messages import SystemMessage
 from langchain_core.prompts import ChatPromptTemplate, MessagesPlaceholder
-from langchain_core.pydantic_v1 import BaseModel, Field
 from langchain_core.runnables import RunnableConfig
 from langchain_core.tools import StructuredTool
 from langchain_openai import ChatOpenAI
+from pydantic import BaseModel, Field
 
 _MATH_DESCRIPTION = (
     "math(problem: str, context: Optional[list[str]]) -> float:\n"

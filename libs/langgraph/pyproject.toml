@@ -9,7 +9,7 @@ repository = "https://www.github.com/langchain-ai/langgraph"
 
 [tool.poetry.dependencies]
 python = ">=3.9.0,<4.0"
-langchain-core = ">=0.2.27,<0.3"
+langchain-core = ">=0.2.38,<0.4"
 langgraph-checkpoint = "^1.0.2"
 
 
@@ -21,23 +21,16 @@ pytest-mock  = "^3.10.0"
 syrupy = "^4.0.2"
 httpx = "^0.26.0"
 pytest-watcher = "^0.4.1"
-langchain = ">=0.1.0"
 grandalf = "^0.8"
 mypy = "^1.6.0"
 ruff = "^0.6.2"
 jupyter = "^1.0.0"
-langchainhub = "^0.1.14"
-langchain-openai = ">=0.1.2"
-langchain-anthropic = ">=0.1.8"
 pytest-xdist = {extras = ["psutil"], version = "^3.6.1"}
 pytest-repeat = "^0.9.3"
 langgraph-checkpoint = {path = "../checkpoint", develop = true}
 langgraph-checkpoint-sqlite = {path = "../checkpoint-sqlite", develop = true}
 langgraph-checkpoint-postgres = {path = "../checkpoint-postgres", develop = true}
 psycopg = {extras = ["binary"], version = ">=3.0.0"}
-
-[tool.poetry.group.dev]
-optional = true
 
 [tool.ruff]
 lint.select = [ "E", "F", "I" ]

@@ -10,9 +10,9 @@ from enum import Enum
 from ipaddress import IPv4Address
 
 import dataclasses_json
-from langchain_core.pydantic_v1 import BaseModel as LcBaseModel
 from langchain_core.runnables import RunnableMap
 from pydantic import BaseModel
+from pydantic.v1 import BaseModel as BaseModelV1
 from zoneinfo import ZoneInfo
 
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
@@ -23,7 +23,7 @@ class MyPydantic(BaseModel):
     bar: int
 
 
-class MyFunnyPydantic(LcBaseModel):
+class MyFunnyPydantic(BaseModelV1):
     foo: str
     bar: int
 
