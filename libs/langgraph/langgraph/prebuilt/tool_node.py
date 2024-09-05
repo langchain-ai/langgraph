@@ -244,14 +244,14 @@ class ToolNode(RunnableCallable):
 
 
 def tools_condition(
-    state: Union[list[AnyMessage], dict[str, Any]],
+    state: Union[list[AnyMessage], dict[str, Any], BaseModel],
 ) -> Literal["tools", "__end__"]:
     """Use in the conditional_edge to route to the ToolNode if the last message
 
     has tool calls. Otherwise, route to the end.
 
     Args:
-        state (Union[list[AnyMessage], dict[str, Any]]): The state to check for
+        state (Union[list[AnyMessage], dict[str, Any], BaseModel]): The state to check for
             tool calls. Must have a list of messages (MessageGraph) or have the
             "messages" key (StateGraph).
 
@@ -297,7 +297,9 @@ def tools_condition(
     """
     if isinstance(state, list):
         ai_message = state[-1]
-    elif messages := state.get("messages", []):
+    elif isinstance(state, dict) and (messages := state.get("messages", [])):
+        ai_message = messages[-1]
+    elif isinstance(state, BaseModel) and (messages := getattr(state, "messages", [])):
         ai_message = messages[-1]
     else:
         raise ValueError(f"No messages found in input state to tool_edge: {state}")
