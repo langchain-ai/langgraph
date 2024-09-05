@@ -1232,23 +1232,20 @@ files = [
 
 [[package]]
 name = "langchain-core"
-version = "0.2.38"
+version = "0.3.0.dev1"
 description = "Building applications with LLMs through composability"
 optional = false
-python-versions = "<4.0,>=3.8.1"
+python-versions = "<4.0,>=3.9"
 files = [
-    {file = "langchain_core-0.2.38-py3-none-any.whl", hash = "sha256:8a5729bc7e68b4af089af20eff44fe4e7ca21d0e0c87ec21cef7621981fd1a4a"},
-    {file = "langchain_core-0.2.38.tar.gz", hash = "sha256:eb69dbedd344f2ee1f15bcea6c71a05884b867588fadc42d04632e727c1238f3"},
+    {file = "langchain_core-0.3.0.dev1-py3-none-any.whl", hash = "sha256:d0c901a43a9a11815cc0c779e3b934b7f7f4456a866d762b5541fd7d2736dfe1"},
+    {file = "langchain_core-0.3.0.dev1.tar.gz", hash = "sha256:8e3b070592434b86676efcdcee0070e4297df756998964315e0cc591ef463ffc"},
 ]
 
 [package.dependencies]
 jsonpatch = ">=1.33,<2.0"
 langsmith = ">=0.1.75,<0.2.0"
 packaging = ">=23.2,<25"
-pydantic = [
-    {version = ">=1,<3", markers = "python_full_version < \"3.12.4\""},
-    {version = ">=2.7.4,<3.0.0", markers = "python_full_version >= \"3.12.4\""},
-]
+pydantic = ">=2,<3"
 PyYAML = ">=5.3"
 tenacity = ">=8.1.0,<8.4.0 || >8.4.0,<9.0.0"
 typing-extensions = ">=4.7"
@@ -1263,7 +1260,7 @@ files = []
 develop = true
 
 [package.dependencies]
-langchain-core = ">=0.2.22,<0.3"
+langchain-core = ">=0.3.0.dev1,<0.4"
 
 [package.source]
 type = "directory"
@@ -3067,4 +3064,4 @@ test = ["big-O", "importlib-resources", "jaraco.functools", "jaraco.itertools", 
 [metadata]
 lock-version = "2.0"
 python-versions = ">=3.9.0,<4.0"
-content-hash = "2a7a60fee5f183618dd40ae337f29ca650ec9054354be87804f1f99c609df4ac"
+content-hash = "9e06b917b3613f04b9c371e7cefbd35dbd7664fcf51a8a1e7def8f87dec855a2"
