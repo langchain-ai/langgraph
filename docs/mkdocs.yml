@@ -205,7 +205,6 @@ nav:
               - Test App Locally: "cloud/deployment/test_locally.md"
           - Deployment:
               - Deploy to Cloud: "cloud/deployment/cloud.md"
-              - Self-Host: "cloud/deployment/self_hosted.md"
           - Streaming:
               - Stream Values: "cloud/how-tos/stream_values.md"
               - Stream Updates: "cloud/how-tos/stream_updates.md"
