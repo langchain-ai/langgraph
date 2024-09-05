@@ -68,6 +68,7 @@ These guides show how to use different streaming modes.
 
 - [How to create subgraphs](subgraph.ipynb)
 - [How to manage state in subgraphs](subgraphs-manage-state.ipynb)
+- [How to transform inputs and outputs of a subgraph](subgraph-transform-state.ipynb)
 
 ## State Management
 
