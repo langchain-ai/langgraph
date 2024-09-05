@@ -306,8 +306,6 @@ class PregelLoop:
             self.config,
             self.step,
             for_execution=True,
-            manager=manager,
-            checkpointer=self.checkpointer,
             is_resuming=self.input is INPUT_RESUMING,
         )
 
@@ -407,7 +405,6 @@ class PregelLoop:
                 self.config,
                 self.step,
                 for_execution=True,
-                manager=None,
             )
             # apply input writes
             assert not apply_writes(

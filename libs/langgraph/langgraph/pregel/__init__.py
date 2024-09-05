@@ -808,18 +808,17 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
+                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
                 as_node,
+                [INTERRUPT],
                 values,
-                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
+                None,
                 deque(),
                 None,
-                [INTERRUPT],
-                None,
-                None,
-                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
+            run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
             # execute task
-            task.proc.invoke(
+            run.invoke(
                 task.input,
                 patch_config(
                     config,
@@ -972,18 +971,17 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
             task = PregelExecutableTask(
+                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
                 as_node,
+                [INTERRUPT],
                 values,
-                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
+                None,
                 deque(),
                 None,
-                [INTERRUPT],
-                None,
-                None,
-                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
             )
+            run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
             # execute task
-            await task.proc.ainvoke(
+            await run.ainvoke(
                 task.input,
                 patch_config(
                     config,
@@ -1219,6 +1217,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ) as loop:
                 # create runner
                 runner = PregelRunner(
+                    self.nodes,
+                    managed=loop.managed,
+                    channels=loop.channels,
+                    run_manager=run_manager,
+                    checkpointer=checkpointer,
                     submit=loop.submit,
                     put_writes=loop.put_writes,
                 )
@@ -1238,6 +1241,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 ):
                     for _ in runner.tick(
                         loop.tasks,
+                        step=loop.step,
+                        checkpoint=loop.checkpoint,
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
                     ):
@@ -1407,6 +1412,11 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             ) as loop:
                 # create runner
                 runner = PregelRunner(
+                    self.nodes,
+                    managed=loop.managed,
+                    channels=loop.channels,
+                    run_manager=run_manager,
+                    checkpointer=checkpointer,
                     submit=loop.submit,
                     put_writes=loop.put_writes,
                     use_astream=do_stream is not None,
@@ -1428,6 +1438,8 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                 ):
                     async for _ in runner.atick(
                         loop.tasks,
+                        step=loop.step,
+                        checkpoint=loop.checkpoint,
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
                     ):

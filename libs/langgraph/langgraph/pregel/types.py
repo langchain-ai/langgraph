@@ -1,7 +1,7 @@
 from collections import deque
 from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
 
-from langchain_core.runnables import Runnable, RunnableConfig
+from langchain_core.runnables import RunnableConfig
 
 from langgraph.checkpoint.base import CheckpointMetadata
 from langgraph.constants import Interrupt
@@ -72,15 +72,13 @@ class PregelTask(NamedTuple):
 
 
 class PregelExecutableTask(NamedTuple):
-    name: str
-    input: Any
-    proc: Runnable
-    writes: deque[tuple[str, Any]]
-    config: RunnableConfig
-    triggers: list[str]
-    retry_policy: Optional[RetryPolicy]
-    cache_policy: Optional[CachePolicy]
     id: str
+    name: str
+    triggers: list[str]
+    input: Any
+    config: RunnableConfig
+    writes: deque[tuple[str, Any]]
+    cache_policy: Optional[CachePolicy]
 
 
 class StateSnapshot(NamedTuple):

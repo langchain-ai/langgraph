@@ -4,6 +4,8 @@ import random
 import time
 from typing import Optional
 
+from langchain_core.runnables import Runnable, RunnableConfig
+
 from langgraph.errors import GraphInterrupt
 from langgraph.pregel.types import PregelExecutableTask, RetryPolicy
 
@@ -11,11 +13,12 @@ logger = logging.getLogger(__name__)
 
 
 def run_with_retry(
+    run: Runnable,
+    config: RunnableConfig,
     task: PregelExecutableTask,
     retry_policy: Optional[RetryPolicy],
 ) -> None:
     """Run a task with retries."""
-    retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     while True:
@@ -23,7 +26,7 @@ def run_with_retry(
             # clear any writes from previous attempts
             task.writes.clear()
             # run the task
-            task.proc.invoke(task.input, task.config)
+            run.invoke(task.input, config)
             # if successful, end
             break
         except GraphInterrupt:
@@ -59,12 +62,13 @@ def run_with_retry(
 
 
 async def arun_with_retry(
+    run: Runnable,
+    config: RunnableConfig,
     task: PregelExecutableTask,
     retry_policy: Optional[RetryPolicy],
     stream: bool = False,
 ) -> None:
     """Run a task asynchronously with retries."""
-    retry_policy = task.retry_policy or retry_policy
     interval = retry_policy.initial_interval if retry_policy else 0
     attempts = 0
     while True:
@@ -73,10 +77,10 @@ async def arun_with_retry(
             task.writes.clear()
             # run the task
             if stream:
-                async for _ in task.proc.astream(task.input, task.config):
+                async for _ in run.astream(task.input, config):
                     pass
             else:
-                await task.proc.ainvoke(task.input, task.config)
+                await run.ainvoke(task.input, config)
             # if successful, end
             break
         except GraphInterrupt:
