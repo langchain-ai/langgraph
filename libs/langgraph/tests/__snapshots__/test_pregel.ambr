@@ -225,6 +225,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "left"
@@ -237,6 +238,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "right"
@@ -306,6 +308,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "left"
@@ -318,6 +321,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "right"
@@ -387,6 +391,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "get_weather"
@@ -800,6 +805,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -949,6 +955,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1081,6 +1088,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -1151,6 +1159,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1300,6 +1309,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1432,6 +1442,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -1502,6 +1513,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1651,6 +1663,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -1783,6 +1796,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -1853,6 +1867,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2002,6 +2017,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2134,6 +2150,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -2204,6 +2221,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2353,6 +2371,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2485,6 +2504,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tools',
@@ -2639,6 +2659,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2720,6 +2741,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2801,6 +2823,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2882,6 +2905,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -2963,6 +2987,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "tools"
@@ -3025,6 +3050,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "A"
@@ -3037,6 +3063,7 @@
           "id": [
             "langgraph",
             "utils",
+            "runnable",
             "RunnableCallable"
           ],
           "name": "B"
@@ -4255,6 +4282,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_one',
@@ -4272,6 +4300,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_two:tool_two_slow',
@@ -4284,6 +4313,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_two:tool_two_fast',
@@ -4301,6 +4331,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'tool_three',
@@ -4858,6 +4889,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'ask_question',
@@ -4870,6 +4902,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'answer_question',
@@ -4917,6 +4950,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_analysts',
@@ -4942,6 +4976,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_sections',
@@ -5007,6 +5042,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_analysts',
@@ -5024,6 +5060,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'conduct_interview:ask_question',
@@ -5036,6 +5073,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'conduct_interview:answer_question',
@@ -5053,6 +5091,7 @@
           'id': list([
             'langgraph',
             'utils',
+            'runnable',
             'RunnableCallable',
           ]),
           'name': 'generate_sections',

@@ -62,17 +62,17 @@ LangGraph Studio is a built-in UI for visualizing, testing, and debugging your a
 
 LangGraph Cloud supports multiple types of runs besides streaming runs.
 
-- [How to run an agent in the background](cloud_examples/background_run.ipynb)
-- [How to run multiple agents in the same thread](cloud_examples/same-thread.ipynb)
-- [How to create cron jobs](cloud_examples/cron_jobs.ipynb)
-- [How to create stateless runs](cloud_examples/stateless_runs.ipynb)
+- [How to run an agent in the background](./background_run.md)
+- [How to run multiple agents in the same thread](./same-thread.md)
+- [How to create cron jobs](./cron_jobs.md)
+- [How to create stateless runs](./stateless_runs.md)
 
 ## Other 
 
 Other guides that may prove helpful!
 
-- [How to configure agents](cloud_examples/configuration_cloud.ipynb)
+- [How to configure agents](./configuration_cloud.md)
 - [How to convert LangGraph calls to LangGraph cloud calls](cloud_examples/langgraph_to_langgraph_cloud.ipynb)
-- [How to integrate webhooks](cloud_examples/webhooks.ipynb)
+- [How to integrate webhooks](./webhooks.md)
 - [How to copy threads](./copy_threads.md)
 - [How to check status of your threads](./check_thread_status.md)

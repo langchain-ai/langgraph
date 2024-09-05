@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+from functools import cached_property
 from typing import (
     Any,
     AsyncIterator,
@@ -15,17 +16,16 @@ from langchain_core.runnables import (
     Runnable,
     RunnableConfig,
     RunnablePassthrough,
-    RunnableSequence,
     RunnableSerializable,
 )
 from langchain_core.runnables.base import Input, Other, Output, coerce_to_runnable
-from langchain_core.runnables.config import merge_configs
 from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.write import ChannelWrite
-from langgraph.utils import RunnableCallable
+from langgraph.utils.config import merge_configs
+from langgraph.utils.runnable import RunnableCallable, RunnableSeq
 
 READ_TYPE = Callable[[str, bool], Union[Any, dict[str, Any]]]
 
@@ -149,7 +149,8 @@ class PregelNode(Runnable):
         attrs = {**self.__dict__, **update}
         return PregelNode(**attrs)
 
-    def get_writers(self) -> list[Runnable]:
+    @cached_property
+    def flat_writers(self) -> list[Runnable]:
         """Get writers with optimizations applied."""
         writers = self.writers.copy()
         while (
@@ -167,16 +168,17 @@ class PregelNode(Runnable):
             writers.pop()
         return writers
 
-    def get_node(self) -> Optional[Runnable[Any, Any]]:
-        writers = self.get_writers()
+    @cached_property
+    def node(self) -> Optional[Runnable[Any, Any]]:
+        writers = self.flat_writers
         if self.bound is DEFAULT_BOUND and not writers:
             return None
         elif self.bound is DEFAULT_BOUND and len(writers) == 1:
             return writers[0]
         elif self.bound is DEFAULT_BOUND:
-            return RunnableSequence(*writers)
+            return RunnableSeq(*writers)
         elif writers:
-            return RunnableSequence(self.bound, *writers)
+            return RunnableSeq(self.bound, *writers)
         else:
             return self.bound
 
@@ -209,7 +211,7 @@ class PregelNode(Runnable):
         elif self.bound is DEFAULT_BOUND:
             return self.copy(update=dict(bound=coerce_to_runnable(other)))
         else:
-            return self.copy(update=dict(bound=self.bound | other))
+            return self.copy(update=dict(bound=RunnableSeq(self.bound, other)))
 
     def pipe(
         self,

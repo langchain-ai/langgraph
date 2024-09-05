@@ -29,6 +29,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```python
     from langgraph_sdk import get_client
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -39,8 +40,17 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json'
     ```
 
 ## Example with no review
@@ -66,7 +76,7 @@ Let's look at an example when no review is required (because no tools are called
 === "Javascript"
 
     ```js
-    const input = {"messages": [{ "role": "human", "content": "hi!"}] }
+    const input = { "messages": [{ "role": "human", "content": "hi!" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -77,11 +87,48 @@ Let's look at an example when no review is required (because no tools are called
         interruptBefore: ["action"],
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"hi!\"}]},
+       \"stream_mode\": [
+         \"updates\"
+       ],
+       \"interrupt_before\": [\"action\"]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -108,6 +155,13 @@ If we check the state, we can see that it is finished
     console.log(state.next);
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request GET \
+        --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | jq -c '.next'
+    ```
+
 Output:
 
     []
@@ -125,7 +179,6 @@ Let's now look at what it looks like to approve a tool call. Note that we don't 
         thread["thread_id"],
         "agent",
         input=input,
-        stream_mode="values",
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -134,21 +187,53 @@ Let's now look at what it looks like to approve a tool call. Note that we don't 
 === "Javascript"
 
     ```js
-    const input = {"messages": [{"role": "user", "content": "what's the weather in sf?"}]}
+    const input = { "messages": [{ "role": "user", "content": "what's the weather in sf?" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
       assistantId,
       {
         input: input,
-        streamMode: "values",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf?\"}]}
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -173,6 +258,13 @@ If we now check, we can see that it is waiting on human review:
     const state = await client.threads.getState(thread["thread_id"]);
 
     console.log(state.next);
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request GET \
+        --url <DELPOYMENT_URL>/threads/<THREAD_ID>/state | jq -c '.next'
     ```
 
 Output:
@@ -201,15 +293,47 @@ To approve the tool call, we can just continue the thread with no edits. To do t
       thread["thread_id"],
       assistantId,
       {
-        input: undefined,
+        input: null,
         streamMode: "values",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\"
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -239,7 +363,7 @@ Let's now say we want to edit the tool call. E.g. change some of the parameters 
 === "Javascript"
 
     ```js
-    const input = {"messages": [{"role": "user", "content": "what's the weather in sf?"}]}
+    const input = { "messages": [{ "role": "user", "content": "what's the weather in sf?" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -249,11 +373,44 @@ Let's now say we want to edit the tool call. E.g. change some of the parameters 
         streamMode: "values",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf?\"}]}
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -310,7 +467,6 @@ To do this, we first need to update the state. We can do this by passing a messa
         thread["thread_id"],
         "agent",
         input=None,
-        stream_mode="values",
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -332,43 +488,93 @@ To do this, we first need to update the state. We can do this by passing a messa
 
     // Construct a replacement tool call
     const newMessage = {
-        role: "assistant",
-        content: currentContent,
-        tool_calls: [
-            {
-                id: toolCallId,
-                name: "weather_search",
-                args: { city: "San Francisco, USA" }
-            }
-        ],
-        // Ensure the ID is the same as the message you're replacing
-        id: currentId
+      role: "assistant",
+      content: currentContent,
+      tool_calls: [
+        {
+          id: toolCallId,
+          name: "weather_search",
+          args: { city: "San Francisco, USA" }
+        }
+      ],
+      // Ensure the ID is the same as the message you're replacing
+      id: currentId
     };
 
     await client.threads.updateState(
-        thread.thread_id,  // Thread ID
-        {
+      thread.thread_id,  // Thread ID
+      {
         values: { "messages": [newMessage] },  // Updated message
         asNode: "human_review_node"
-        }  // Acting as human_review_node
+      }  // Acting as human_review_node
     );
 
     console.log("\nResuming Execution");
     // Continue executing from here
     const streamResponseResumed = client.runs.stream(
-    thread["thread_id"],
-    assistantId,
-    {
-        input: undefined,
-        streamMode: "values",
-        interruptBefore: ["action"],
-    }
+      thread["thread_id"],
+      assistantId,
+      {
+        input: null,
+      }
     );
+
     for await (const chunk of streamResponseResumed) {
-    if (chunk.data && chunk.event !== "metadata") {
+      if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
+      }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+    --header 'Content-Type: application/json' \
+    --data "{
+        \"values\": { \"messages\": [$(curl --request GET \
+            --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state |
+            jq -c '{
+            role: "assistant",
+            content: .values.messages[-1].content,
+            tool_calls: [
+                {
+                id: .values.messages[-1].tool_calls[0].id,
+                name: "weather_search",
+                args: { city: "San Francisco, USA" }
+                }
+            ],
+            id: .values.messages[-1].id
+            }')
+        ]},
+        \"as_node\": \"human_review_node\"
+    }" && echo "Resuming Execution" && curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "assistant_id": "agent"
+    }' | \
+    sed 's/\r$//' | \
+    awk '
+    /^event:/ {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+        sub(/^event: /, "", $0)
+        event_type = $0
+        data_content = ""
     }
+    /^data:/ {
+        sub(/^data: /, "", $0)
+        data_content = $0
+    }
+    END {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+    }
+    '
     ```
 
 Output:
@@ -404,7 +610,6 @@ For this example we will just add a single tool call representing the feedback. 
         thread["thread_id"],
         "agent",
         input=input,
-        stream_mode="values",
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -413,21 +618,53 @@ For this example we will just add a single tool call representing the feedback. 
 === "Javascript"
 
     ```js
-    const input = {"messages": [{"role": "user", "content": "what's the weather in sf?"}]}
+    const input = { "messages": [{ "role": "user", "content": "what's the weather in sf?" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
       assistantId,
       {
         input: input,
-        streamMode: "values",
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what's the weather in sf?\"}]}
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:
@@ -493,37 +730,84 @@ To do this, we first need to update the state. We can do this by passing a messa
 
     // Construct a replacement tool call
     const newMessage = {
-        role: "tool",
-        content: "User requested changes: pass in the country as well",
-        name: "weather_search",
-        tool_call_id: toolCallId,
+      role: "tool",
+      content: "User requested changes: pass in the country as well",
+      name: "weather_search",
+      tool_call_id: toolCallId,
     };
 
     await client.threads.updateState(
-        thread.thread_id,  // Thread ID
-        {
+      thread.thread_id,  // Thread ID
+      {
         values: { "messages": [newMessage] },  // Updated message
         asNode: "human_review_node"
-        }  // Acting as human_review_node
+      }  // Acting as human_review_node
     );
 
     console.log("\nResuming Execution");
     // Continue executing from here
     const streamResponseEdited = client.runs.stream(
-    thread["thread_id"],
-    assistantId,
-    {
-        input: undefined,
+      thread["thread_id"],
+      assistantId,
+      {
+        input: null,
         streamMode: "values",
         interruptBefore: ["action"],
-    }
+      }
     );
+
     for await (const chunk of streamResponseEdited) {
-    if (chunk.data && chunk.event !== "metadata") {
+      if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
-    }
+      }
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state \
+    --header 'Content-Type: application/json' \
+    --data "{
+        \"values\": { \"messages\": [$(curl --request GET \
+            --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state |
+            jq -c '{
+            role: "tool",
+            content: "User requested changes: pass in the country as well",
+            name: "get_weather",
+            tool_call_id: .values.messages[-1].id.tool_calls[0].id
+            }')
+        ]},
+        \"as_node\": \"human_review_node\"
+    }" && echo "Resuming Execution" && curl --request POST \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+    --header 'Content-Type: application/json' \
+    --data '{
+    "assistant_id": "agent"
+    }' | \
+    sed 's/\r$//' | \
+    awk '
+    /^event:/ {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+        sub(/^event: /, "", $0)
+        event_type = $0
+        data_content = ""
+    }
+    /^data:/ {
+        sub(/^data: /, "", $0)
+        data_content = $0
+    }
+    END {
+        if (data_content != "" && event_type != "metadata") {
+            print data_content "\n"
+        }
+    }
+    '
+    ```
+
 
 Output:
 
@@ -545,7 +829,6 @@ We can see that we now get to another breakpoint - because it went back to the m
         thread["thread_id"],
         "agent",
         input=None,
-        stream_mode="values",
     ):
         if chunk.data and chunk.event != "metadata": 
             print(chunk.data)
@@ -558,15 +841,46 @@ We can see that we now get to another breakpoint - because it went back to the m
       thread["thread_id"],
       assistantId,
       {
-        input: undefined,
-        streamMode: "values",
+        input: null,
       }
     );
+
     for await (const chunk of streamResponseResumed) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
       }
     }
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\"
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "", $0)
+         event_type = $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "" && event_type != "metadata") {
+             print data_content "\n"
+         }
+     }
+     '
     ```
 
 Output:

@@ -33,7 +33,7 @@ from pydantic import BaseModel, ValidationError
 from pydantic.v1 import BaseModel as BaseModelV1
 from pydantic.v1 import ValidationError as ValidationErrorV1
 
-from langgraph.utils import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable
 
 
 def _default_format_error(
