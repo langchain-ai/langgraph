@@ -1,3 +1,5 @@
+from __future__ import annotations
+
 import asyncio
 import json
 from copy import copy
@@ -28,7 +30,7 @@ from langchain_core.runnables.config import (
 )
 from langchain_core.tools import BaseTool, InjectedToolArg
 from langchain_core.tools import tool as create_tool
-from typing_extensions import get_args
+from typing_extensions import Annotated, get_args, get_origin
 
 from langgraph.utils.runnable import RunnableCallable
 
@@ -175,7 +177,7 @@ class ToolNode(RunnableCallable):
             output_type = "dict"
             message = messages[-1]
         elif hasattr(input, "messages") and (
-            messages := getattr(input, "messages", [])
+            messages := getattr(input, "messages", None)
         ):
             output_type = "attr"
             message = messages[-1]
@@ -230,7 +232,7 @@ class ToolNode(RunnableCallable):
                     required_fields_str = ", ".join(f for f in required_fields if f)
                     err_msg += f" State should contain fields {required_fields_str}."
                 raise ValueError(err_msg)
-        elif isinstance(input, dict):
+        if isinstance(input, dict):
             tool_state_args = {
                 tool_arg: input[state_field] if state_field else input
                 for tool_arg, state_field in state_args.items()
@@ -381,12 +383,20 @@ class InjectedState(InjectedToolArg):
 def _get_state_args(tool: BaseTool) -> Dict[str, Optional[str]]:
     full_schema = tool.get_input_schema()
     tool_args_to_state_fields: Dict = {}
+
+    def _is_injection(type_arg: Any):
+        if isinstance(type_arg, InjectedState) or (
+            isinstance(type_arg, type) and issubclass(type_arg, InjectedState)
+        ):
+            return True
+        origin_ = get_origin(type_arg)
+        if origin_ is Union or origin_ is Annotated:
+            return any(_is_injection(ta) for ta in get_args(type_arg))
+        return False
+
     for name, type_ in full_schema.__annotations__.items():
         injections = [
-            type_arg
-            for type_arg in get_args(type_)
-            if isinstance(type_arg, InjectedState)
-            or (isinstance(type_arg, type) and issubclass(type_arg, InjectedState))
+            type_arg for type_arg in get_args(type_) if _is_injection(type_arg)
         ]
         if len(injections) > 1:
             raise ValueError(

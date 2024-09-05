@@ -1,3 +1,4 @@
+import dataclasses
 import json
 from typing import (
     Annotated,
@@ -8,6 +9,7 @@ from typing import (
     Optional,
     Sequence,
     Type,
+    TypeVar,
     Union,
 )
 
@@ -29,6 +31,7 @@ from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
+from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
@@ -450,14 +453,53 @@ async def test_validation_node(tool_schema: Any, use_message_key: bool):
     check_results(result_sync)
 
 
-def test_tool_node_inject_state() -> None:
-    def tool1(some_val: int, state: Annotated[dict, InjectedState]) -> str:
-        """Tool 1 docstring."""
-        return state["foo"]
+class _InjectStateSchema(TypedDict):
+    messages: list
+    foo: str
 
-    def tool2(some_val: int, state: Annotated[dict, InjectedState()]) -> str:
+
+class _InjectedStatePydanticSchema(BaseModel):
+    messages: list
+    foo: str
+
+
+class _InjectedStatePydanticV2Schema(BaseModelV2):
+    messages: list
+    foo: str
+
+
+@dataclasses.dataclass
+class _InjectedStateDataclassSchema:
+    messages: list
+    foo: str
+
+
+T = TypeVar("T")
+
+
+@pytest.mark.parametrize(
+    "schema_",
+    [
+        _InjectStateSchema,
+        _InjectedStatePydanticSchema,
+        _InjectedStatePydanticV2Schema,
+        _InjectedStateDataclassSchema,
+    ],
+)
+def test_tool_node_inject_state(schema_: Type[T]) -> None:
+    def tool1(some_val: int, state: Annotated[T, InjectedState]) -> str:
         """Tool 1 docstring."""
-        return state["foo"]
+        if isinstance(state, dict):
+            return state["foo"]
+        else:
+            return getattr(state, "foo")
+
+    def tool2(some_val: int, state: Annotated[T, InjectedState()]) -> str:
+        """Tool 2 docstring."""
+        if isinstance(state, dict):
+            return state["foo"]
+        else:
+            return getattr(state, "foo")
 
     def tool3(
         some_val: int,
@@ -473,10 +515,6 @@ def test_tool_node_inject_state() -> None:
         """Tool 1 docstring."""
         return msgs[0].content
 
-    class AgentState(BaseModel):
-        messages: List[AnyMessage]
-        foo: str
-
     node = ToolNode([tool1, tool2, tool3, tool4])
     for tool_name in ("tool1", "tool2", "tool3"):
         tool_call = {
@@ -486,29 +524,36 @@ def test_tool_node_inject_state() -> None:
             "type": "tool_call",
         }
         msg = AIMessage("hi?", tool_calls=[tool_call])
-        result = node.invoke({"messages": [msg], "foo": "bar"})
+        result = node.invoke(schema_(**{"messages": [msg], "foo": "bar"}))
         tool_message = result["messages"][-1]
-        assert tool_message.content == "bar"
-
-        # test pydantic v1 state
-        state_v1 = AgentState(messages=[msg], foo="bar")
-        result = node.invoke(state_v1)
-        tool_message = result["messages"][-1]
-        assert tool_message.content == "bar"
+        assert tool_message.content == "bar", f"Failed for tool={tool_name}"
 
         if tool_name == "tool3":
-            with pytest.raises(KeyError):
-                node.invoke({"messages": [msg], "notfoo": "bar"})
+            failure_input = None
+            try:
+                failure_input = schema_(**{"messages": [msg], "notfoo": "bar"})
+            except Exception:
+                pass
+            if failure_input is not None:
+                with pytest.raises(KeyError):
+                    node.invoke(failure_input)
 
-            with pytest.raises(ValueError):
-                node.invoke([msg])
+                with pytest.raises(ValueError):
+                    node.invoke([msg])
         else:
-            tool_message = node.invoke({"messages": [msg], "notfoo": "bar"})[
-                "messages"
-            ][-1]
-            assert "KeyError" in tool_message.content
-            tool_message = node.invoke([msg])[-1]
-            assert "KeyError" in tool_message.content
+            failure_input = None
+            try:
+                failure_input = schema_(**{"messages": [msg], "notfoo": "bar"})
+            except Exception:
+                # We'd get a validation error from pydantic state and wouldn't make it to the node
+                # anyway
+                pass
+            if failure_input is not None:
+                messages_ = node.invoke(failure_input)
+                tool_message = messages_["messages"][-1]
+                assert "KeyError" in tool_message.content
+                tool_message = node.invoke([msg])[-1]
+                assert "KeyError" in tool_message.content
 
     tool_call = {
         "name": "tool4",
@@ -517,7 +562,7 @@ def test_tool_node_inject_state() -> None:
         "type": "tool_call",
     }
     msg = AIMessage("hi?", tool_calls=[tool_call])
-    result = node.invoke({"messages": [msg]})
+    result = node.invoke(schema_(**{"messages": [msg], "foo": ""}))
     tool_message = result["messages"][-1]
     assert tool_message.content == "hi?"
 
