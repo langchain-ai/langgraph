@@ -1,5 +1,6 @@
 from collections import defaultdict, deque
 from functools import partial
+from hashlib import sha1
 from typing import (
     Any,
     Callable,
@@ -13,7 +14,7 @@ from typing import (
     Union,
     overload,
 )
-from uuid import UUID, uuid5
+from uuid import UUID
 
 from langchain_core.callbacks.manager import AsyncParentRunManager, ParentRunManager
 from langchain_core.runnables.config import RunnableConfig
@@ -292,7 +293,6 @@ def prepare_next_tasks(
             is_resuming=is_resuming,
             checkpointer=checkpointer,
             manager=manager,
-            current_len=len(tasks),
         ):
             tasks.append(task)
     # Check if any processes should be run in next step
@@ -311,7 +311,6 @@ def prepare_next_tasks(
             is_resuming=is_resuming,
             checkpointer=checkpointer,
             manager=manager,
-            current_len=len(tasks),
         ):
             tasks.append(task)
     return tasks
@@ -331,9 +330,8 @@ def prepare_single_task(
     is_resuming: bool = False,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-    current_len: int,
 ) -> Union[None, PregelTask, PregelExecutableTask]:
-    checkpoint_id = UUID(checkpoint["id"])
+    checkpoint_id = UUID(checkpoint["id"]).bytes
     configurable = config.get("configurable", {})
     parent_ns = configurable.get("checkpoint_ns", "")
 
@@ -359,24 +357,16 @@ def prepare_single_task(
         checkpoint_ns = (
             f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
-        task_id = str(
-            uuid5(
-                checkpoint_id,
-                "".join(
-                    (checkpoint_ns, str(step), packet.node, *triggers, TASKS, str(idx))
-                ),
-            )
+        task_id = _uuid5_str(
+            checkpoint_id,
+            checkpoint_ns,
+            str(step),
+            packet.node,
+            TASKS,
+            str(idx),
         )
         if task_id_checksum is not None:
             assert task_id == task_id_checksum
-        legacy_id = str(
-            uuid5(
-                checkpoint_id,
-                "".join(
-                    (checkpoint_ns, str(step), packet.node, *triggers, str(current_len))
-                ),
-            )
-        )
         if for_execution:
             proc = processes[packet.node]
             if node := proc.node:
@@ -435,7 +425,6 @@ def prepare_single_task(
                     proc.retry_policy,
                     None,
                     task_id,
-                    legacy_id,
                 )
 
         else:
@@ -475,24 +464,16 @@ def prepare_single_task(
                 "langgraph_path": task_path,
             }
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-            task_id = str(
-                uuid5(
-                    checkpoint_id,
-                    "".join(
-                        (checkpoint_ns, str(step), name, *triggers, SUBSCRIPTIONS, name)
-                    ),
-                )
+            task_id = _uuid5_str(
+                checkpoint_id,
+                checkpoint_ns,
+                str(step),
+                name,
+                SUBSCRIPTIONS,
+                *triggers,
             )
             if task_id_checksum is not None:
                 assert task_id == task_id_checksum
-            legacy_id = str(
-                uuid5(
-                    checkpoint_id,
-                    "".join(
-                        (checkpoint_ns, str(step), name, *triggers, str(current_len))
-                    ),
-                )
-            )
 
             if for_execution:
                 if node := proc.node:
@@ -551,7 +532,6 @@ def prepare_single_task(
                         proc.retry_policy,
                         None,
                         task_id,
-                        legacy_id,
                     )
             else:
                 return PregelTask(task_id, name)
@@ -601,3 +581,12 @@ def _proc_input(
         val = proc.mapper(val)
 
     yield val
+
+
+def _uuid5_str(namespace: bytes, *parts: str) -> str:
+    """Generate a UUID from the SHA-1 hash of a namespace UUID and a name."""
+
+    sha = sha1(namespace, usedforsecurity=False)
+    sha.update(b"".join(p.encode() for p in parts))
+    hex = sha.hexdigest()
+    return f"{hex[:8]}-{hex[8:12]}-{hex[12:16]}-{hex[16:20]}-{hex[20:32]}"
