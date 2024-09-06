@@ -109,65 +109,6 @@ class BaseClient {
     }
     return response.json() as T;
   }
-
-  protected async *stream(
-    path: string,
-    method: string,
-    options?: RequestInit & {
-      json?: unknown;
-      params?: Record<string, unknown>;
-    },
-  ): AsyncGenerator<{ event: string; data: any }> {
-    const [url, init] = this.prepareFetchOptions(path, { ...options, method });
-    const response = await this.asyncCaller.fetch(url, init);
-
-    if (!response.ok) {
-      throw new Error(`HTTP error! status: ${response.status}`);
-    }
-
-    if (!response.body) {
-      throw new Error("ReadableStream not yet supported in this browser.");
-    }
-
-    const reader = response.body.getReader();
-    const decoder = new TextDecoder();
-    let buffer = "";
-
-    while (true) {
-      const { done, value } = await reader.read();
-      if (done) break;
-
-      buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split("\n");
-      buffer = lines.pop() || "";
-
-      for (const line of lines) {
-        if (line.trim() === "") continue;
-        if (line.startsWith("data:")) {
-          const data = line.slice(5).trim();
-          if (data === "[DONE]") {
-            return;
-          }
-          try {
-            yield { event: "message", data: JSON.parse(data) };
-          } catch (error) {
-            console.error("Error parsing SSE data:", error);
-          }
-        } else if (line.startsWith("event:")) {
-          const event = line.slice(6).trim();
-          const nextLine = lines[lines.indexOf(line) + 1];
-          if (nextLine && nextLine.startsWith("data:")) {
-            const data = nextLine.slice(5).trim();
-            try {
-              yield { event, data: JSON.parse(data) };
-            } catch (error) {
-              console.error("Error parsing SSE data:", error);
-            }
-          }
-        }
-      }
-    }
-  }
 }
 
 export class CronsClient extends BaseClient {
@@ -855,6 +796,71 @@ export class RunsClient extends BaseClient {
    */
   async join(threadId: string, runId: string): Promise<void> {
     return this.fetch<void>(`/threads/${threadId}/runs/${runId}/join`);
+  }
+
+  /**
+   * Stream output from a run in real-time, until the run is done.
+   * Output is not buffered, so any output produced before this call will
+   * not be received here.
+   *
+   * @param threadId The ID of the thread.
+   * @param runId The ID of the run.
+   * @param signal An optional abort signal.
+   * @returns An async generator yielding stream parts.
+   */
+  async *joinStream(
+    threadId: string,
+    runId: string,
+    signal?: AbortSignal,
+  ): AsyncGenerator<{ event: StreamEvent; data: any }> {
+    const response = await this.asyncCaller.fetch(
+      ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
+        method: "GET",
+        signal,
+      }),
+    );
+
+    let parser: EventSourceParser;
+    let onEndEvent: () => void;
+    const textDecoder = new TextDecoder();
+
+    const stream: ReadableStream<{ event: string; data: any }> = (
+      response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
+    ).pipeThrough(
+      new TransformStream({
+        async start(ctrl) {
+          parser = createParser((event) => {
+            if (
+              (signal && signal.aborted) ||
+              (event.type === "event" && event.data === "[DONE]")
+            ) {
+              ctrl.terminate();
+              return;
+            }
+
+            if ("data" in event) {
+              ctrl.enqueue({
+                event: event.event ?? "message",
+                data: JSON.parse(event.data),
+              });
+            }
+          });
+          onEndEvent = () => {
+            ctrl.enqueue({ event: "end", data: undefined });
+          };
+        },
+        async transform(chunk) {
+          const payload = textDecoder.decode(chunk);
+          parser.feed(payload);
+
+          // eventsource-parser will ignore events
+          // that are not terminated by a newline
+          if (payload.trim() === "event: end") onEndEvent();
+        },
+      }),
+    );
+
+    yield* IterableReadableStream.fromReadableStream(stream);
   }
 
   /**
