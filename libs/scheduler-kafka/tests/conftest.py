@@ -21,18 +21,20 @@ def anyio_backend():
 def topics() -> Iterator[Topics]:
     o = f"test_{uuid4().hex[:16]}"
     e = f"test_{uuid4().hex[:16]}"
+    z = f"test_{uuid4().hex[:16]}"
     admin = kafka.admin.KafkaAdminClient()
     # create topics
     admin.create_topics(
         [
             kafka.admin.NewTopic(name=o, num_partitions=1, replication_factor=1),
             kafka.admin.NewTopic(name=e, num_partitions=1, replication_factor=1),
+            kafka.admin.NewTopic(name=z, num_partitions=1, replication_factor=1),
         ]
     )
     # yield topics
-    yield Topics(orchestrator=o, executor=e)
+    yield Topics(orchestrator=o, executor=e, error=z)
     # delete topics
-    admin.delete_topics([o, e])
+    admin.delete_topics([o, e, z])
     admin.close()
 
 

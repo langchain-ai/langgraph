@@ -1,7 +1,7 @@
 import asyncio
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
 from functools import partial
-from typing import Any, Self, Sequence
+from typing import Any, Optional, Self, Sequence
 
 import aiokafka
 from langchain_core.runnables import RunnableConfig
@@ -14,7 +14,10 @@ from langgraph.pregel.algo import prepare_single_task
 from langgraph.pregel.executor import AsyncBackgroundExecutor, Submit
 from langgraph.pregel.manager import AsyncChannelsManager
 from langgraph.pregel.runner import PregelRunner
+from langgraph.pregel.types import RetryPolicy
+from langgraph.scheduler.kafka.retry import aretry
 from langgraph.scheduler.kafka.types import (
+    ErrorMessage,
     MessageToExecutor,
     MessageToOrchestrator,
     Topics,
@@ -30,6 +33,7 @@ class KafkaExecutor(AbstractAsyncContextManager):
         group_id: str = "executor",
         batch_max_n: int = 10,
         batch_max_ms: int = 1000,
+        retry_policy: Optional[RetryPolicy] = None,
         **kwargs: Any,
     ) -> None:
         self.graph = graph
@@ -39,6 +43,7 @@ class KafkaExecutor(AbstractAsyncContextManager):
         self.group_id = group_id
         self.batch_max_n = batch_max_n
         self.batch_max_ms = batch_max_ms
+        self.retry_policy = retry_policy
 
     async def __aenter__(self) -> Self:
         self.consumer = await self.stack.enter_async_context(
@@ -84,6 +89,19 @@ class KafkaExecutor(AbstractAsyncContextManager):
         return msgs
 
     async def each(self, msg: MessageToExecutor) -> None:
+        try:
+            await aretry(self.retry_policy, self.attempt, msg)
+        except Exception as exc:
+            await self.producer.send_and_wait(
+                self.topics.error,
+                value=ErrorMessage(
+                    topic=self.topics.executor,
+                    msg=msg,
+                    error=repr(exc),
+                ),
+            )
+
+    async def attempt(self, msg: MessageToExecutor) -> None:
         # process message
         saved = await self.graph.checkpointer.aget_tuple(msg["config"])
         if saved is None:

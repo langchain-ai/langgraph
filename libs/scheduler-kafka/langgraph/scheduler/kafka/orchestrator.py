@@ -1,6 +1,6 @@
 import asyncio
 from contextlib import AbstractAsyncContextManager, AsyncExitStack
-from typing import Any, Self
+from typing import Any, Optional, Self
 
 import aiokafka
 from langchain_core.runnables import ensure_config
@@ -9,7 +9,10 @@ import langgraph.scheduler.kafka.serde as serde
 from langgraph.constants import CONFIG_KEY_DEDUPE_TASKS, SCHEDULED
 from langgraph.pregel import Pregel
 from langgraph.pregel.loop import INPUT_RESUMING, AsyncPregelLoop
+from langgraph.pregel.types import RetryPolicy
+from langgraph.scheduler.kafka.retry import aretry
 from langgraph.scheduler.kafka.types import (
+    ErrorMessage,
     ExecutorTask,
     MessageToExecutor,
     MessageToOrchestrator,
@@ -26,6 +29,7 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
         group_id: str = "orchestrator",
         batch_max_n: int = 10,
         batch_max_ms: int = 1000,
+        retry_policy: Optional[RetryPolicy] = None,
         **kwargs: Any,
     ) -> None:
         self.graph = graph
@@ -35,6 +39,7 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
         self.group_id = group_id
         self.batch_max_n = batch_max_n
         self.batch_max_ms = batch_max_ms
+        self.retry_policy = retry_policy
 
     async def __aenter__(self) -> Self:
         self.consumer = await self.stack.enter_async_context(
@@ -77,6 +82,19 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
         return msgs
 
     async def each(self, msg: MessageToOrchestrator) -> None:
+        try:
+            await aretry(self.retry_policy, self.attempt, msg)
+        except Exception as exc:
+            await self.producer.send_and_wait(
+                self.topics.error,
+                value=ErrorMessage(
+                    topic=self.topics.orchestrator,
+                    msg=msg,
+                    error=repr(exc),
+                ),
+            )
+
+    async def attempt(self, msg: MessageToOrchestrator) -> None:
         # process message
         async with AsyncPregelLoop(
             msg["input"],
