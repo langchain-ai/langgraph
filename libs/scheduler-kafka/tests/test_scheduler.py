@@ -5,7 +5,7 @@ from typing import Annotated, Callable, ParamSpec, Sequence, TypedDict, TypeVar,
 
 import anyio
 import pytest
-from aiokafka import AIOKafkaProducer
+from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import StateGraph
@@ -97,7 +97,7 @@ def mk_fanout_graph(
     return builder.compile(checkpointer, interrupt_before=interrupt_before)
 
 
-@timeout(5)
+@timeout(10)
 async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -> None:
     input = {"query": "what is weather in sf"}
     config = {"configurable": {"thread_id": "1"}}
@@ -135,6 +135,12 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
         tg.start_soon(orchestrator, 13, name="orchestrator")
         tg.start_soon(executor, 12, name="executor")
 
+    # check no errors
+    async with AIOKafkaConsumer(topics.error) as consumer:
+        assert len(consumer.assignment()) > 0
+        for tp in consumer.assignment():
+            assert await consumer.position(tp) == 0
+
     state = await graph.aget_state(config)
     assert n_orch_msgs == 13
     assert n_exec_msgs == 12
@@ -145,5 +151,97 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
             "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
             "query": "analyzed: query: analyzed: query: what is weather in sf",
             "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
+        }
+    )
+
+
+@timeout(10)
+async def test_fanout_graph_w_interrupt(
+    topics: Topics, checkpointer: BaseCheckpointSaver
+) -> None:
+    input = {"query": "what is weather in sf"}
+    config = {"configurable": {"thread_id": "1"}}
+    graph = mk_fanout_graph(checkpointer, interrupt_before=["qa"])
+    n_orch_msgs = 0
+    n_exec_msgs = 0
+
+    async def orchestrator(expected: int) -> None:
+        nonlocal n_orch_msgs
+        async with KafkaOrchestrator(graph, topics) as orch:
+            async for msgs in orch:
+                print("orch", msgs)
+                n_orch_msgs += len(msgs)
+                if n_orch_msgs == expected:
+                    break
+
+    async def executor(expected: int) -> None:
+        nonlocal n_exec_msgs
+        async with KafkaExecutor(graph, topics) as exec:
+            async for msgs in exec:
+                print("exec", msgs)
+                n_exec_msgs += len(msgs)
+                if n_exec_msgs == expected:
+                    break
+
+    # start a new run
+    async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
+        await producer.send_and_wait(
+            topics.orchestrator,
+            MessageToOrchestrator(input=input, config=config),
+        )
+
+    # run the orchestrator and executor
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(orchestrator, 12, name="orchestrator")
+        tg.start_soon(executor, 11, name="executor")
+
+    # check no errors
+    async with AIOKafkaConsumer(topics.error) as consumer:
+        assert len(consumer.assignment()) > 0
+        for tp in consumer.assignment():
+            assert await consumer.position(tp) == 0
+
+    state = await graph.aget_state(config)
+    assert n_orch_msgs == 12
+    assert n_exec_msgs == 11
+    assert state.next == ("qa",)
+    assert (
+        state.values
+        == await graph.ainvoke(input, {"configurable": {"thread_id": "2"}})
+        == {
+            "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
+            "query": "analyzed: query: analyzed: query: what is weather in sf",
+        }
+    )
+
+    # resume the thread
+    async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
+        await producer.send_and_wait(
+            topics.orchestrator,
+            MessageToOrchestrator(input=None, config=config),
+        )
+
+    # run the orchestrator and executor
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(orchestrator, 14, name="orchestrator")
+        tg.start_soon(executor, 12, name="executor")
+
+    # check no errors
+    async with AIOKafkaConsumer(topics.error) as consumer:
+        assert len(consumer.assignment()) > 0
+        for tp in consumer.assignment():
+            assert await consumer.position(tp) == 0
+
+    state = await graph.aget_state(config)
+    assert n_orch_msgs == 14
+    assert n_exec_msgs == 12
+    assert state.next == ()
+    assert (
+        state.values
+        == await graph.ainvoke(None, {"configurable": {"thread_id": "2"}})
+        == {
+            "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
+            "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
+            "query": "analyzed: query: analyzed: query: what is weather in sf",
         }
     )

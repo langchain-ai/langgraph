@@ -107,7 +107,11 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
             output_keys=self.graph.output_channels,
             stream_keys=self.graph.stream_channels,
         ) as loop:
-            if loop.tick(input_keys=self.graph.input_channels):
+            if loop.tick(
+                input_keys=self.graph.input_channels,
+                interrupt_after=self.graph.interrupt_after_nodes,
+                interrupt_before=self.graph.interrupt_before_nodes,
+            ):
                 # wait for checkpoint to be saved
                 if hasattr(loop, "_put_checkpoint_fut"):
                     await loop._put_checkpoint_fut
