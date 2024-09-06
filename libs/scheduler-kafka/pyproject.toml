@@ -53,5 +53,5 @@ lint.ignore = ["E501", "B008", "UP007", "UP006"]
 [tool.pytest-watcher]
 now = true
 delay = 0.1
-runner_args = ["-s", "--ff", "-v", "--tb", "short"]
+runner_args = ["--ff", "-v", "--tb", "short"]
 patterns = ["*.py"]

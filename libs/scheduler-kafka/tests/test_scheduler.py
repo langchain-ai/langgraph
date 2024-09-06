@@ -1,6 +1,7 @@
 import asyncio
+import functools
 import operator
-from typing import Annotated, TypedDict, Union
+from typing import Annotated, Callable, ParamSpec, TypedDict, TypeVar, Union
 
 import pytest
 from aiokafka import AIOKafkaProducer
@@ -14,6 +15,20 @@ from langgraph.scheduler.kafka.orchestrator import KafkaOrchestrator
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
 
 pytestmark = pytest.mark.anyio
+C = ParamSpec("C")
+R = TypeVar("R")
+
+
+def timeout(delay: int):
+    def decorator(func: Callable[C, R]) -> Callable[C, R]:
+        @functools.wraps(func)
+        async def new_func(*args: C.args, **kwargs: C.kwargs) -> R:
+            async with asyncio.timeout(delay):
+                return await func(*args, **kwargs)
+
+        return new_func
+
+    return decorator
 
 
 def mk_fanout_graph(checkpointer: BaseCheckpointSaver) -> Pregel:
@@ -80,32 +95,32 @@ def mk_fanout_graph(checkpointer: BaseCheckpointSaver) -> Pregel:
     return builder.compile(checkpointer)
 
 
+@timeout(5)
 async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -> None:
     graph = mk_fanout_graph(checkpointer)
     n_orch_msgs = 0
     n_exec_msgs = 0
 
-    async def orchestrator() -> None:
+    async def orchestrator(expected: int) -> None:
         nonlocal n_orch_msgs
         async with KafkaOrchestrator(graph, topics) as orch:
-            async for msg in orch:
-                n_orch_msgs += 1
-                print("orch", msg)
+            async for msgs in orch:
+                n_orch_msgs += len(msgs)
+                print("orch", msgs)
+                if n_orch_msgs == expected:
+                    break
 
-    async def executor() -> None:
+    async def executor(expected: int) -> None:
         nonlocal n_exec_msgs
         async with KafkaExecutor(graph, topics) as exec:
-            async for msg in exec:
-                n_exec_msgs += 1
-                print("exec", msg)
+            async for msgs in exec:
+                n_exec_msgs += len(msgs)
+                print("exec", msgs)
+                if n_exec_msgs == expected:
+                    break
 
-    async with asyncio.TaskGroup() as tg:
-        o = tg.create_task(orchestrator(), name="orchestrator")
-        e = tg.create_task(executor(), name="executor")
-
-        # start a new run
-        producer = AIOKafkaProducer(value_serializer=serde.dumps)
-        await producer.start()
+    # start a new run
+    async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
         await producer.send_and_wait(
             topics.orchestrator,
             MessageToOrchestrator(
@@ -113,12 +128,11 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
                 config={"configurable": {"thread_id": "1"}},
             ),
         )
-        await producer.stop()
 
-        # wait for the run to finish
-        await asyncio.sleep(5)
-        o.cancel()
-        e.cancel()
+    # run the orchestrator and executor
+    async with asyncio.TaskGroup() as tg:
+        tg.create_task(orchestrator(13), name="orchestrator")
+        tg.create_task(executor(12), name="executor")
 
     assert n_orch_msgs == 13
     assert n_exec_msgs == 12
