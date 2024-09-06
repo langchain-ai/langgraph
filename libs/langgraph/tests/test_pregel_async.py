@@ -1635,23 +1635,23 @@ async def test_pending_writes_resume(
         def reset(self):
             self.calls = 0
 
-    one = AwhileMaker(0.2, {"value": 2})
-    two = AwhileMaker(0.6, ValueError("I'm not good"))
+    one = AwhileMaker(0.1, {"value": 2})
+    two = AwhileMaker(0.3, ConnectionError("I'm not good"))
     builder = StateGraph(State)
     builder.add_node("one", one)
-    builder.add_node("two", two)
+    builder.add_node("two", two, retry=RetryPolicy(max_attempts=2))
     builder.add_edge(START, "one")
     builder.add_edge(START, "two")
     async with awith_checkpointer(checkpointer_name) as checkpointer:
         graph = builder.compile(checkpointer=checkpointer)
 
         thread1: RunnableConfig = {"configurable": {"thread_id": "1"}}
-        with pytest.raises(ValueError, match="I'm not good"):
+        with pytest.raises(ConnectionError, match="I'm not good"):
             await graph.ainvoke({"value": 1}, thread1)
 
         # both nodes should have been called once
         assert one.calls == 1
-        assert two.calls == 1
+        assert two.calls == 2
 
         # latest checkpoint should be before nodes "one", "two"
         state = await graph.aget_state(thread1)
@@ -1660,7 +1660,7 @@ async def test_pending_writes_resume(
         assert state.next == ("one", "two")
         assert state.tasks == (
             PregelTask(AnyStr(), "one"),
-            PregelTask(AnyStr(), "two", 'ValueError("I\'m not good")'),
+            PregelTask(AnyStr(), "two", 'ConnectionError("I\'m not good")'),
         )
         assert state.metadata == {
             "parents": {},
@@ -1675,7 +1675,7 @@ async def test_pending_writes_resume(
         expected_writes = [
             (AnyStr(), "one", "one"),
             (AnyStr(), "value", 2),
-            (AnyStr(), ERROR, 'ValueError("I\'m not good")'),
+            (AnyStr(), ERROR, 'ConnectionError("I\'m not good")'),
         ]
         assert len(checkpoint.pending_writes) == 3
         assert all(w in expected_writes for w in checkpoint.pending_writes)
@@ -1686,18 +1686,14 @@ async def test_pending_writes_resume(
         error_write = next(w for w in checkpoint.pending_writes if w[1] == ERROR)
         assert error_write[0] != non_error_writes[0][0]
 
-        # TODO arguably this shouldn't even run the failed task again,
-        # and should require empty update_state (ie new checkpoint_id)
-        # in order to try again
-
         # resume execution
-        with pytest.raises(ValueError, match="I'm not good"):
+        with pytest.raises(ConnectionError, match="I'm not good"):
             await graph.ainvoke(None, thread1)
 
         # node "one" succeeded previously, so shouldn't be called again
         assert one.calls == 1
         # node "two" should have been called once again
-        assert two.calls == 2
+        assert two.calls == 4
 
         # confirm no new checkpoints saved
         state_two = await graph.aget_state(thread1)
@@ -1818,7 +1814,7 @@ async def test_pending_writes_resume(
             pending_writes=UnsortedSequence(
                 (AnyStr(), "one", "one"),
                 (AnyStr(), "value", 2),
-                (AnyStr(), "__error__", 'ValueError("I\'m not good")'),
+                (AnyStr(), "__error__", 'ConnectionError("I\'m not good")'),
                 (AnyStr(), "two", "two"),
                 (AnyStr(), "value", 3),
             ),

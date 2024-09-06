@@ -68,6 +68,7 @@ from langgraph.constants import (
 from langgraph.errors import GraphRecursionError, InvalidUpdateError
 from langgraph.managed.base import ManagedValueSpec
 from langgraph.pregel.algo import (
+    PregelTaskWrites,
     apply_writes,
     local_read,
     local_write,
@@ -80,15 +81,8 @@ from langgraph.pregel.manager import AsyncChannelsManager, ChannelsManager
 from langgraph.pregel.read import PregelNode
 from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.runner import PregelRunner
-from langgraph.pregel.types import (
-    All,
-    PregelExecutableTask,
-    StateSnapshot,
-    StreamMode,
-)
-from langgraph.pregel.utils import (
-    get_new_channel_versions,
-)
+from langgraph.pregel.types import All, StateSnapshot, StreamMode
+from langgraph.pregel.utils import get_new_channel_versions
 from langgraph.pregel.validate import validate_graph, validate_keys
 from langgraph.pregel.write import ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
@@ -425,7 +419,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             subgraphs = dict(self.get_subgraphs())
             parent_ns = saved.config["configurable"].get("checkpoint_ns", "")
             task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
-            for task in next_tasks:
+            for task in next_tasks.values():
                 if task.name not in subgraphs:
                     continue
                 # assemble checkpoint_ns for this task
@@ -456,12 +450,12 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             # assemble the state snapshot
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
-                tuple(t.name for t in next_tasks),
+                tuple(t.name for t in next_tasks.values()),
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
                 saved.parent_config,
-                tasks_w_writes(next_tasks, saved.pending_writes, task_states),
+                tasks_w_writes(next_tasks.values(), saved.pending_writes, task_states),
             )
 
     async def _aprepare_state_snapshot(
@@ -501,7 +495,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             subgraphs = {n: g async for n, g in self.aget_subgraphs()}
             parent_ns = saved.config["configurable"].get("checkpoint_ns", "")
             task_states: dict[str, Union[RunnableConfig, StateSnapshot]] = {}
-            for task in next_tasks:
+            for task in next_tasks.values():
                 if task.name not in subgraphs:
                     continue
                 # assemble checkpoint_ns for this task
@@ -532,12 +526,12 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             # assemble the state snapshot
             return StateSnapshot(
                 read_channels(channels, self.stream_channels_asis),
-                tuple(t.name for t in next_tasks),
+                tuple(t.name for t in next_tasks.values()),
                 patch_checkpoint_map(saved.config, saved.metadata),
                 saved.metadata,
                 saved.checkpoint["ts"],
                 saved.parent_config,
-                tasks_w_writes(next_tasks, saved.pending_writes, task_states),
+                tasks_w_writes(next_tasks.values(), saved.pending_writes, task_states),
             )
 
     def get_state(
@@ -809,20 +803,13 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
-            task = PregelExecutableTask(
-                as_node,
-                values,
-                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
-                deque(),
-                None,
-                [INTERRUPT],
-                None,
-                None,
-                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
-            )
+            writes = deque()
+            task = PregelTaskWrites(as_node, writes, [INTERRUPT])
+            task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+            run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
             # execute task
-            task.proc.invoke(
-                task.input,
+            run.invoke(
+                values,
                 patch_config(
                     config,
                     run_name=self.name + "UpdateState",
@@ -831,7 +818,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         CONFIG_KEY_SEND: partial(
                             local_write,
                             step + 1,
-                            task.writes.extend,
+                            writes.extend,
                             self.nodes,
                             channels,
                             managed,
@@ -850,7 +837,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
             # save task writes
             if saved:
-                checkpointer.put_writes(checkpoint_config, task.writes, task.id)
+                checkpointer.put_writes(checkpoint_config, task.writes, task_id)
             # apply to checkpoint and save
             assert not apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
@@ -973,20 +960,13 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             writers = self.nodes[as_node].flat_writers
             if not writers:
                 raise InvalidUpdateError(f"Node {as_node} has no writers")
-            task = PregelExecutableTask(
-                as_node,
-                values,
-                RunnableSequence(*writers) if len(writers) > 1 else writers[0],
-                deque(),
-                None,
-                [INTERRUPT],
-                None,
-                None,
-                str(uuid5(UUID(checkpoint["id"]), INTERRUPT)),
-            )
+            writes = deque()
+            task = PregelTaskWrites(as_node, writes, [INTERRUPT])
+            task_id = str(uuid5(UUID(checkpoint["id"]), INTERRUPT))
+            run = RunnableSequence(*writers) if len(writers) > 1 else writers[0]
             # execute task
-            await task.proc.ainvoke(
-                task.input,
+            await run.ainvoke(
+                values,
                 patch_config(
                     config,
                     run_name=self.name + "UpdateState",
@@ -995,7 +975,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                         CONFIG_KEY_SEND: partial(
                             local_write,
                             step + 1,
-                            task.writes.extend,
+                            writes.extend,
                             self.nodes,
                             channels,
                             managed,
@@ -1014,7 +994,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             )
             # save task writes
             if saved:
-                await checkpointer.aput_writes(checkpoint_config, task.writes, task.id)
+                await checkpointer.aput_writes(checkpoint_config, writes, task_id)
             # apply to checkpoint and save
             assert not apply_writes(
                 checkpoint, channels, [task], checkpointer.get_next_version
@@ -1239,7 +1219,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     manager=run_manager,
                 ):
                     for _ in runner.tick(
-                        loop.tasks,
+                        loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
                     ):
@@ -1429,7 +1409,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
                     manager=run_manager,
                 ):
                     async for _ in runner.atick(
-                        loop.tasks,
+                        loop.tasks.values(),
                         timeout=self.step_timeout,
                         retry_policy=self.retry_policy,
                     ):
