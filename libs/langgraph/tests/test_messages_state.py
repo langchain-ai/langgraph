@@ -1,14 +1,22 @@
+from typing import Annotated
 from uuid import UUID
 
 import pytest
 from langchain_core.messages import (
     AIMessage,
+    AnyMessage,
     HumanMessage,
     RemoveMessage,
     SystemMessage,
 )
+from pydantic import BaseModel
+from pydantic.v1 import BaseModel as BaseModelV1
 
 from langgraph.graph import add_messages
+from langgraph.graph.message import MessagesState
+from langgraph.graph.state import END, START, StateGraph
+from tests.conftest import IS_LANGCHAIN_CORE_030_OR_GREATER
+from tests.messages import _AnyIdHumanMessage
 
 
 def test_add_single_message():
@@ -135,3 +143,36 @@ def test_delete_all():
     result = add_messages(left, right)
     expected_result = []
     assert result == expected_result
+
+
+class MessagesStatePydanticV1(BaseModelV1):
+    messages: Annotated[list[AnyMessage], add_messages]
+
+
+class MessagesStatePydantic(BaseModel):
+    messages: Annotated[list[AnyMessage], add_messages]
+
+
+MESSAGES_STATE_SCHEMAS = [MessagesState, MessagesStatePydanticV1]
+if IS_LANGCHAIN_CORE_030_OR_GREATER:
+    MESSAGES_STATE_SCHEMAS.append(MessagesStatePydantic)
+
+
+@pytest.mark.parametrize("state_schema", MESSAGES_STATE_SCHEMAS)
+def test_messages_state(state_schema):
+    def foo(state):
+        return {"messages": [HumanMessage("foo")]}
+
+    graph = StateGraph(state_schema)
+    graph.add_edge(START, "foo")
+    graph.add_edge("foo", END)
+    graph.add_node(foo)
+
+    app = graph.compile()
+
+    assert app.invoke({"messages": [("user", "meow")]}) == {
+        "messages": [
+            _AnyIdHumanMessage(content="meow"),
+            _AnyIdHumanMessage(content="foo"),
+        ]
+    }
