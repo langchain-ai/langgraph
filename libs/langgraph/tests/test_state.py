@@ -10,6 +10,7 @@ from pydantic.v1 import BaseModel
 from typing_extensions import Annotated, NotRequired, Required, TypedDict
 
 from langgraph.graph.state import StateGraph, _warn_invalid_state_schema
+from langgraph.managed.shared_value import SharedValue
 
 
 class State(BaseModel):
@@ -116,6 +117,9 @@ def test_state_schema_optional_values(total_: bool):
 
     class State(InputState):  # this would be ignored
         val4: dict
+        some_shared_channel: Annotated[str, SharedValue.on("assistant_id")] = field(
+            default="foo"
+        )
 
     builder = StateGraph(State, input=InputState, output=OutputState)
     builder.add_node("n", lambda x: x)
@@ -179,6 +183,9 @@ def test_state_schema_default_values(kw_only_: bool):
         val10: str = "default"
         val11: Annotated[list[str], "annotated list"] = field(
             default_factory=lambda: ["a", "b"]
+        )
+        some_shared_channel: Annotated[str, SharedValue.on("assistant_id")] = field(
+            default="foo"
         )
 
     builder = StateGraph(InputState)

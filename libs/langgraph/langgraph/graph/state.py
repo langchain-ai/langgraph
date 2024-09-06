@@ -781,6 +781,6 @@ def _get_schema(
                         ),
                     )
                     for k in schemas[typ]
-                    if isinstance(channels[k], BaseChannel)
+                    if k in channels and isinstance(channels[k], BaseChannel)
                 },
             )
