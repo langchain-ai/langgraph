@@ -169,7 +169,7 @@ class ToolNode(RunnableCallable):
             dict[str, Any],
             BaseModel,
         ],
-    ) -> Tuple[List[ToolCall], Literal["list", "dict", "attr"]]:
+    ) -> Tuple[List[ToolCall], Literal["list", "dict"]]:
         if isinstance(input, list):
             output_type = "list"
             message: AnyMessage = input[-1]
@@ -177,7 +177,8 @@ class ToolNode(RunnableCallable):
             output_type = "dict"
             message = messages[-1]
         elif messages := getattr(input, "messages", None):
-            output_type = "attr"
+            # Assume dataclass-like state that can coerce from dict
+            output_type = "dict"
             message = messages[-1]
         else:
             raise ValueError("No message found in input")
