@@ -3,6 +3,7 @@ import functools
 import operator
 from typing import Annotated, Callable, ParamSpec, TypedDict, TypeVar, Union
 
+import anyio
 import pytest
 from aiokafka import AIOKafkaProducer
 
@@ -48,7 +49,6 @@ def mk_fanout_graph(checkpointer: BaseCheckpointSaver) -> Pregel:
         docs: Annotated[list[str], sorted_add]
 
     async def rewrite_query(data: State) -> State:
-        print("rewrite_query", data)
         return {"query": f'query: {data["query"]}'}
 
     async def retriever_picker(data: State) -> list[str]:
@@ -105,8 +105,8 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
         nonlocal n_orch_msgs
         async with KafkaOrchestrator(graph, topics) as orch:
             async for msgs in orch:
-                n_orch_msgs += len(msgs)
                 print("orch", msgs)
+                n_orch_msgs += len(msgs)
                 if n_orch_msgs == expected:
                     break
 
@@ -114,8 +114,8 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
         nonlocal n_exec_msgs
         async with KafkaExecutor(graph, topics) as exec:
             async for msgs in exec:
-                n_exec_msgs += len(msgs)
                 print("exec", msgs)
+                n_exec_msgs += len(msgs)
                 if n_exec_msgs == expected:
                     break
 
@@ -130,9 +130,9 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
         )
 
     # run the orchestrator and executor
-    async with asyncio.TaskGroup() as tg:
-        tg.create_task(orchestrator(13), name="orchestrator")
-        tg.create_task(executor(12), name="executor")
+    async with anyio.create_task_group() as tg:
+        tg.start_soon(orchestrator, 13, name="orchestrator")
+        tg.start_soon(executor, 12, name="executor")
 
     assert n_orch_msgs == 13
     assert n_exec_msgs == 12

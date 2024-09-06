@@ -60,7 +60,7 @@ class KafkaExecutor(AbstractAsyncContextManager):
         return self
 
     async def __aexit__(self, *args: Any) -> None:
-        await self.stack.__aexit__(*args)
+        return await self.stack.__aexit__(*args)
 
     def __aiter__(self) -> Self:
         return self
@@ -109,7 +109,7 @@ class KafkaExecutor(AbstractAsyncContextManager):
                     submit=submit,
                     put_writes=partial(self._put_writes, submit, msg["config"]),
                 )
-                async for _ in runner.atick([task]):
+                async for _ in runner.atick([task], reraise=False):
                     pass
             else:
                 # task was not found

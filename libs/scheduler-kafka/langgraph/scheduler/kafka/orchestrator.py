@@ -53,7 +53,7 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
         return self
 
     async def __aexit__(self, *args: Any) -> None:
-        await self.stack.__aexit__(*args)
+        return await self.stack.__aexit__(*args)
 
     def __aiter__(self) -> Self:
         return self
