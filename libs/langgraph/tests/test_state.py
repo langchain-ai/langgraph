@@ -10,6 +10,7 @@ from pydantic.v1 import BaseModel
 from typing_extensions import Annotated, NotRequired, Required, TypedDict
 
 from langgraph.graph.state import StateGraph, _warn_invalid_state_schema
+from langgraph.managed.shared_value import SharedValue
 
 
 class State(BaseModel):
@@ -180,3 +181,57 @@ def test_state_schema_default_values(kw_only_: bool):
     assert (
         set(json_schema["properties"].keys()) == expected_required | expected_optional
     )
+
+
+def test_raises_invalid_managed():
+    class BadInputState(TypedDict):
+        some_thing: str
+        some_input_channel: Annotated[str, SharedValue.on("assistant_id")]
+
+    class InputState(TypedDict):
+        some_thing: str
+        some_input_channel: str
+
+    class BadOutputState(TypedDict):
+        some_thing: str
+        some_output_channel: Annotated[str, SharedValue.on("assistant_id")]
+
+    class OutputState(TypedDict):
+        some_thing: str
+        some_output_channel: str
+
+    class State(TypedDict):
+        some_thing: str
+        some_channel: Annotated[str, SharedValue.on("assistant_id")]
+
+    # All OK
+    StateGraph(State, input=InputState, output=OutputState)
+    StateGraph(State)
+    StateGraph(State, input=State, output=State)
+    StateGraph(State, input=InputState)
+    StateGraph(State, input=InputState)
+
+    bad_input_examples = [
+        (State, BadInputState, OutputState),
+        (State, BadInputState, BadOutputState),
+        (State, BadInputState, State),
+        (State, BadInputState, None),
+    ]
+    for _state, _inp, _outp in bad_input_examples:
+        with pytest.raises(
+            ValueError,
+            match="Invalid managed channels detected in BadInputState: some_input_channel. Managed channels are not permitted in Input/Output schema.",
+        ):
+            StateGraph(_state, input=_inp, output=_outp)
+    bad_output_examples = [
+        (State, InputState, BadOutputState),
+        (None, InputState, BadOutputState),
+        (None, State, BadOutputState),
+        (State, None, BadOutputState),
+    ]
+    for _state, _inp, _outp in bad_output_examples:
+        with pytest.raises(
+            ValueError,
+            match="Invalid managed channels detected in BadOutputState: some_output_channel. Managed channels are not permitted in Input/Output schema.",
+        ):
+            StateGraph(_state, input=_inp, output=_outp)
