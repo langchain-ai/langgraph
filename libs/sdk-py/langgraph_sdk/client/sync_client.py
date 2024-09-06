@@ -41,7 +41,7 @@ logger = logging.getLogger(__name__)
 
 def get_client(
     *, url: Optional[str] = None, api_key: Optional[str] = None
-) -> LangGraphClient:
+) -> SyncLangGraphClient:
     """Get a LangGraphClient instance.
 
     Args:
@@ -56,6 +56,7 @@ def get_client(
 
     if url is None:
         url = "http://localhost:8123"
+
     transport = httpx.HTTPTransport(retries=5)
     headers = {
         "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
@@ -66,19 +67,19 @@ def get_client(
         timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
         headers=get_headers(api_key, headers),
     )
-    return LangGraphClient(client)
+    return SyncLangGraphClient(client)
 
 
-class LangGraphClient:
+class SyncLangGraphClient:
     def __init__(self, client: httpx.Client) -> None:
-        self.http = HttpClient(client)
-        self.assistants = AssistantsClient(self.http)
-        self.threads = ThreadsClient(self.http)
-        self.runs = RunsClient(self.http)
+        self.http = SyncHttpClient(client)
+        self.assistants = SyncAssistantsClient(self.http)
+        self.threads = SyncThreadsClient(self.http)
+        self.runs = SyncRunsClient(self.http)
         self.crons = CronClient(self.http)
 
 
-class HttpClient:
+class SyncHttpClient:
     def __init__(self, client: httpx.Client) -> None:
         self.client = client
 
@@ -197,8 +198,8 @@ def decode_json(r: httpx.Response) -> Any:
     return orjson.loads(body if body else None)
 
 
-class AssistantsClient:
-    def __init__(self, http: HttpClient) -> None:
+class SyncAssistantsClient:
+    def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
     def get(self, assistant_id: str) -> Assistant:
@@ -527,8 +528,8 @@ class AssistantsClient:
         )
 
 
-class ThreadsClient:
-    def __init__(self, http: HttpClient) -> None:
+class SyncThreadsClient:
+    def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
     def get(self, thread_id: str) -> Thread:
@@ -908,8 +909,8 @@ class ThreadsClient:
         return self.http.post(f"/threads/{thread_id}/history", json=payload)
 
 
-class RunsClient:
-    def __init__(self, http: HttpClient) -> None:
+class SyncRunsClient:
+    def __init__(self, http: SyncHttpClient) -> None:
         self.http = http
 
     @overload
@@ -1432,7 +1433,7 @@ class RunsClient:
 
 
 class CronClient:
-    def __init__(self, http_client: HttpClient) -> None:
+    def __init__(self, http_client: SyncHttpClient) -> None:
         self.http = http_client
 
     def create_for_thread(

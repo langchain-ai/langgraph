@@ -46,7 +46,7 @@ def get_client(
     url: Optional[str] = None,
     api_key: Optional[str] = None,
     headers: Optional[dict[str, str]] = None,
-) -> AsyncLangGraphClient:
+) -> LangGraphClient:
     """Get a LangGraphClient instance.
 
     Args:
@@ -68,27 +68,29 @@ def get_client(
             transport = httpx.ASGITransport(app, root_path="/noauth")
         except Exception:
             url = "http://localhost:8123"
+
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
+
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
         timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
         headers=get_headers(api_key, headers),
     )
-    return AsyncLangGraphClient(client)
+    return LangGraphClient(client)
 
 
-class AsyncLangGraphClient:
+class LangGraphClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
-        self.http = AsyncHttpClient(client)
-        self.assistants = AsyncAssistantsClient(self.http)
-        self.threads = AsyncThreadsClient(self.http)
-        self.runs = AsyncRunsClient(self.http)
-        self.crons = AsyncCronClient(self.http)
+        self.http = HttpClient(client)
+        self.assistants = AssistantsClient(self.http)
+        self.threads = ThreadsClient(self.http)
+        self.runs = RunsClient(self.http)
+        self.crons = CronClient(self.http)
 
 
-class AsyncHttpClient:
+class HttpClient:
     def __init__(self, client: httpx.AsyncClient) -> None:
         self.client = client
 
@@ -213,8 +215,8 @@ async def decode_json(r: httpx.Response) -> Any:
     )
 
 
-class AsyncAssistantsClient:
-    def __init__(self, http: AsyncHttpClient) -> None:
+class AssistantsClient:
+    def __init__(self, http: HttpClient) -> None:
         self.http = http
 
     async def get(self, assistant_id: str) -> Assistant:
@@ -543,8 +545,8 @@ class AsyncAssistantsClient:
         )
 
 
-class AsyncThreadsClient:
-    def __init__(self, http: AsyncHttpClient) -> None:
+class ThreadsClient:
+    def __init__(self, http: HttpClient) -> None:
         self.http = http
 
     async def get(self, thread_id: str) -> Thread:
@@ -928,8 +930,8 @@ class AsyncThreadsClient:
         return await self.http.post(f"/threads/{thread_id}/history", json=payload)
 
 
-class AsyncRunsClient:
-    def __init__(self, http: AsyncHttpClient) -> None:
+class RunsClient:
+    def __init__(self, http: HttpClient) -> None:
         self.http = http
 
     @overload
@@ -1498,8 +1500,8 @@ class AsyncRunsClient:
         await self.http.delete(f"/threads/{thread_id}/runs/{run_id}")
 
 
-class AsyncCronClient:
-    def __init__(self, http_client: AsyncHttpClient) -> None:
+class CronClient:
+    def __init__(self, http_client: HttpClient) -> None:
         self.http = http_client
 
     async def create_for_thread(
