@@ -26,12 +26,13 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
 from pydantic import BaseModel as BaseModelV2
 from typing_extensions import TypedDict
+from pydantic import BaseModel
+from pydantic.v1 import BaseModel as BaseModelV1
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
@@ -392,7 +393,7 @@ class MyModel(BaseModel):
     some_other_val: str
 
 
-class MyModelV2(BaseModelV2):
+class MyModelV1(BaseModelV1):
     some_val: int
     some_other_val: str
 
@@ -408,7 +409,7 @@ def my_tool(some_val: int, some_other_val: str) -> str:
     [
         my_function,
         MyModel,
-        MyModelV2,
+        MyModelV1,
         my_tool,
     ],
 )
@@ -458,12 +459,12 @@ class _InjectStateSchema(TypedDict):
     foo: str
 
 
-class _InjectedStatePydanticSchema(BaseModel):
+class _InjectedStatePydanticSchema(BaseModelV1):
     messages: list
     foo: str
 
 
-class _InjectedStatePydanticV2Schema(BaseModelV2):
+class _InjectedStatePydanticV2Schema(BaseModel):
     messages: list
     foo: str
 

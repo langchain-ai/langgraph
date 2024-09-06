@@ -245,7 +245,7 @@ def prepare_next_tasks(
     is_resuming: bool = False,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
-) -> list[PregelTask]: ...
+) -> dict[str, PregelTask]: ...
 
 
 @overload
@@ -261,7 +261,7 @@ def prepare_next_tasks(
     is_resuming: bool,
     checkpointer: Optional[BaseCheckpointSaver],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
-) -> list[PregelExecutableTask]: ...
+) -> dict[str, PregelExecutableTask]: ...
 
 
 def prepare_next_tasks(
@@ -276,8 +276,8 @@ def prepare_next_tasks(
     is_resuming: bool = False,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
-) -> Union[list[PregelTask], list[PregelExecutableTask]]:
-    tasks: Union[list[PregelTask], list[PregelExecutableTask]] = []
+) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
+    tasks: Union[dict[str, PregelTask], dict[str, PregelExecutableTask]] = {}
     # Consume pending packets
     for idx, _ in enumerate(checkpoint["pending_sends"]):
         if task := prepare_single_task(
@@ -294,7 +294,7 @@ def prepare_next_tasks(
             checkpointer=checkpointer,
             manager=manager,
         ):
-            tasks.append(task)
+            tasks[task.id] = task
     # Check if any processes should be run in next step
     # If so, prepare the values to be passed to them
     for name in processes:
@@ -312,7 +312,7 @@ def prepare_next_tasks(
             checkpointer=checkpointer,
             manager=manager,
         ):
-            tasks.append(task)
+            tasks[task.id] = task
     return tasks
 
 
@@ -425,6 +425,7 @@ def prepare_single_task(
                     proc.retry_policy,
                     None,
                     task_id,
+                    task_path,
                 )
 
         else:
@@ -532,6 +533,7 @@ def prepare_single_task(
                         proc.retry_policy,
                         None,
                         task_id,
+                        task_path,
                     )
             else:
                 return PregelTask(task_id, name)

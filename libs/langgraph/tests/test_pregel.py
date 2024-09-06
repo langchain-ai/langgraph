@@ -34,6 +34,7 @@ from langchain_core.runnables import (
     RunnablePick,
 )
 from langsmith import traceable
+from pydantic import BaseModel
 from pytest_mock import MockerFixture
 from syrupy import SnapshotAssertion
 
@@ -72,10 +73,50 @@ from langgraph.pregel.retry import RetryPolicy
 from langgraph.pregel.types import PregelTask
 from langgraph.store.memory import MemoryStore
 from tests.any_str import AnyDict, AnyStr, AnyVersion, UnsortedSequence
-from tests.conftest import ALL_CHECKPOINTERS_SYNC
+from tests.conftest import ALL_CHECKPOINTERS_SYNC, SHOULD_CHECK_SNAPSHOTS
 from tests.fake_tracer import FakeTracer
 from tests.memory_assert import MemorySaverAssertCheckpointMetadata
-from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage
+from tests.messages import _AnyIdAIMessage, _AnyIdHumanMessage, _AnyIdToolMessage
+
+
+# define these objects to avoid importing langchain_core.agents
+# and therefore avoid relying on core Pydantic version
+class AgentAction(BaseModel):
+    tool: str
+    tool_input: Union[str, dict]
+    log: str
+    type: Literal["AgentAction"] = "AgentAction"
+
+    model_config = {
+        "json_schema_extra": {
+            "description": (
+                """Represents a request to execute an action by an agent.
+
+The action consists of the name of the tool to execute and the input to pass
+to the tool. The log is used to pass along extra information about the action."""
+            )
+        }
+    }
+
+
+class AgentFinish(BaseModel):
+    """Final return value of an ActionAgent.
+
+    Agents return an AgentFinish when they have reached a stopping condition.
+    """
+
+    return_values: dict
+    log: str
+    type: Literal["AgentFinish"] = "AgentFinish"
+    model_config = {
+        "json_schema_extra": {
+            "description": (
+                """Final return value of an ActionAgent.
+
+Agents return an AgentFinish when they have reached a stopping condition."""
+            )
+        }
+    }
 
 
 def test_graph_validation() -> None:
@@ -440,15 +481,23 @@ def test_invoke_single_process_in_out(mocker: MockerFixture) -> None:
     graph.set_finish_point("add_one")
     gapp = graph.compile()
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {"title": "LangGraphOutput", "type": "integer"}
-    with warnings.catch_warnings():
-        warnings.simplefilter("error")  # raise warnings as errors
-        assert app.config_schema().schema() == {
-            "properties": {},
-            "title": "LangGraphConfig",
-            "type": "object",
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "integer",
         }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "integer",
+        }
+        with warnings.catch_warnings():
+            warnings.simplefilter("error")  # raise warnings as errors
+            assert app.config_schema().model_json_schema() == {
+                "properties": {},
+                "title": "LangGraphConfig",
+                "type": "object",
+            }
+
     assert app.invoke(2) == 3
     assert app.invoke(2, output_keys=["output"]) == {"output": 3}
     assert repr(app), "does not raise recursion error"
@@ -489,16 +538,24 @@ def test_invoke_single_process_in_write_kwargs(mocker: MockerFixture) -> None:
         input_channels="input",
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
-        "title": "LangGraphOutput",
-        "type": "object",
-        "properties": {
-            "output": {"title": "Output", "type": "integer"},
-            "fixed": {"title": "Fixed", "type": "integer"},
-            "output_plus_one": {"title": "Output Plus One", "type": "integer"},
-        },
-    }
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "integer",
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "object",
+            "properties": {
+                "output": {"title": "Output", "type": "integer", "default": None},
+                "fixed": {"title": "Fixed", "type": "integer", "default": None},
+                "output_plus_one": {
+                    "title": "Output Plus One",
+                    "type": "integer",
+                    "default": None,
+                },
+            },
+        }
     assert app.invoke(2) == {"output": 3, "fixed": 5, "output_plus_one": 4}
 
 
@@ -513,12 +570,18 @@ def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
-    assert app.input_schema.schema() == {"title": "LangGraphInput", "type": "integer"}
-    assert app.output_schema.schema() == {
-        "title": "LangGraphOutput",
-        "type": "object",
-        "properties": {"output": {"title": "Output", "type": "integer"}},
-    }
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "integer",
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "object",
+            "properties": {
+                "output": {"title": "Output", "type": "integer", "default": None}
+            },
+        }
     assert app.invoke(2) == {"output": 3}
 
 
@@ -532,17 +595,21 @@ def test_invoke_single_process_in_dict_out_dict(mocker: MockerFixture) -> None:
         input_channels=["input"],
         output_channels=["output"],
     )
-
-    assert app.input_schema.schema() == {
-        "title": "LangGraphInput",
-        "type": "object",
-        "properties": {"input": {"title": "Input", "type": "integer"}},
-    }
-    assert app.output_schema.schema() == {
-        "title": "LangGraphOutput",
-        "type": "object",
-        "properties": {"output": {"title": "Output", "type": "integer"}},
-    }
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.input_schema.model_json_schema() == {
+            "title": "LangGraphInput",
+            "type": "object",
+            "properties": {
+                "input": {"title": "Input", "type": "integer", "default": None}
+            },
+        }
+        assert app.output_schema.model_json_schema() == {
+            "title": "LangGraphOutput",
+            "type": "object",
+            "properties": {
+                "output": {"title": "Output", "type": "integer", "default": None}
+            },
+        }
     assert app.invoke({"input": 2}) == {"output": 3}
 
 
@@ -1384,8 +1451,8 @@ def test_pending_writes_resume(
         def reset(self):
             self.calls = 0
 
-    one = AwhileMaker(0.2, {"value": 2})
-    two = AwhileMaker(0.6, ConnectionError("I'm not good"))
+    one = AwhileMaker(0.1, {"value": 2})
+    two = AwhileMaker(0.3, ConnectionError("I'm not good"))
     builder = StateGraph(State)
     builder.add_node("one", one)
     builder.add_node("two", two, retry=RetryPolicy(max_attempts=2))
@@ -1955,7 +2022,6 @@ def test_channel_enter_exit_timing(mocker: MockerFixture) -> None:
 def test_conditional_graph(
     snapshot: SnapshotAssertion, request: pytest.FixtureRequest, checkpointer_name: str
 ) -> None:
-    from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.runnables import RunnablePassthrough
@@ -2034,11 +2100,12 @@ def test_conditional_graph(
 
     app = workflow.compile()
 
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_graph().draw_mermaid() == snapshot
-    assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
-    assert app.get_graph(xray=True).draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+        assert app.get_graph().draw_mermaid() == snapshot
+        assert json.dumps(app.get_graph(xray=True).to_json(), indent=2) == snapshot
+        assert app.get_graph(xray=True).draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -2168,8 +2235,9 @@ def test_conditional_graph(
     )
     config = {"configurable": {"thread_id": "1"}}
 
-    assert app_w_interrupt.get_graph().to_json() == snapshot
-    assert app_w_interrupt.get_graph().draw_mermaid() == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app_w_interrupt.get_graph().to_json() == snapshot
+        assert app_w_interrupt.get_graph().draw_mermaid() == snapshot
 
     assert [
         c for c in app_w_interrupt.stream({"input": "what is weather in sf"}, config)
@@ -2811,10 +2879,11 @@ def test_conditional_entrypoint_graph(snapshot: SnapshotAssertion) -> None:
 
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert (
         app.invoke("what is weather in sf", debug=True)
@@ -2852,10 +2921,11 @@ def test_conditional_entrypoint_to_multiple_state_graph(
 
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"locations": ["sf", "nyc"]}, debug=True) == {
         "locations": ["sf", "nyc"],
@@ -2875,7 +2945,6 @@ def test_conditional_state_graph(
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
@@ -2993,10 +3062,11 @@ def test_conditional_state_graph(
 
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     with assert_ctx_once():
         assert app.invoke({"input": "what is weather in sf"}) == {
@@ -3687,7 +3757,6 @@ def test_conditional_state_graph_with_list_edge_inputs(snapshot: SnapshotAsserti
 
 
 def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) -> None:
-    from langchain_core.agents import AgentAction, AgentFinish
     from langchain_core.language_models.fake import FakeStreamingListLLM
     from langchain_core.prompts import PromptTemplate
     from langchain_core.tools import tool
@@ -3777,9 +3846,10 @@ def test_state_graph_w_config_inherited_state_keys(snapshot: SnapshotAssertion) 
 
     app = builder.compile()
 
-    assert app.config_schema().schema_json() == snapshot
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.config_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
 
     assert builder.channels.keys() == {"input", "agent_outcome", "intermediate_steps"}
 
@@ -3842,10 +3912,11 @@ def test_conditional_entrypoint_graph_state(snapshot: SnapshotAssertion) -> None
 
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke({"input": "what is weather in sf"}) == {
         "input": "what is weather in sf",
@@ -3862,7 +3933,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
+    from langchain_core.messages import AIMessage, HumanMessage
     from langchain_core.tools import tool
 
     class FakeFuntionChatModel(FakeMessagesListChatModel):
@@ -3909,18 +3980,18 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
 
     app = create_tool_calling_executor(model, tools)
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(
         {"messages": [HumanMessage(content="what is weather in sf")]}
     ) == {
         "messages": [
             _AnyIdHumanMessage(content="what is weather in sf"),
-            AIMessage(
-                id=AnyStr(),
+            _AnyIdAIMessage(
                 content="",
                 tool_calls=[
                     {
@@ -3930,14 +4001,12 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
-            AIMessage(
-                id=AnyStr(),
+            _AnyIdAIMessage(
                 content="",
                 tool_calls=[
                     {
@@ -3952,13 +4021,12 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for another",
                 name="search_api",
                 tool_call_id="tool_call234",
-                id=AnyStr(),
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a third one",
                 name="search_api",
                 tool_call_id="tool_call567",
@@ -3988,7 +4056,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -3997,7 +4065,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                                 "args": {"query": "query"},
                             },
                         ],
-                        id=AnyStr(),
                     )
                 ]
             }
@@ -4005,11 +4072,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for query",
                         name="search_api",
                         tool_call_id="tool_call123",
-                        id=AnyStr(),
                     )
                 ]
             }
@@ -4017,7 +4083,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -4031,7 +4097,6 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
                                 "args": {"query": "a third one"},
                             },
                         ],
-                        id=AnyStr(),
                     )
                 ]
             }
@@ -4039,17 +4104,15 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for another",
                         name="search_api",
                         tool_call_id="tool_call234",
-                        id=AnyStr(),
                     ),
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for a third one",
                         name="search_api",
                         tool_call_id="tool_call567",
-                        id=AnyStr(),
                     ),
                 ]
             }
@@ -4063,8 +4126,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
-                        id=AnyStr(),
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -4080,11 +4142,10 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for query",
                         name="search_api",
                         tool_call_id="tool_call123",
-                        id=AnyStr(),
                     )
                 ]
             }
@@ -4092,8 +4153,7 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "agent": {
                 "messages": [
-                    AIMessage(
-                        id=AnyStr(),
+                    _AnyIdAIMessage(
                         content="",
                         tool_calls=[
                             {
@@ -4114,17 +4174,15 @@ def test_prebuilt_tool_chat(snapshot: SnapshotAssertion) -> None:
         {
             "tools": {
                 "messages": [
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for another",
                         name="search_api",
                         tool_call_id="tool_call234",
-                        id=AnyStr(),
                     ),
-                    ToolMessage(
+                    _AnyIdToolMessage(
                         content="result for a third one",
                         name="search_api",
                         tool_call_id="tool_call567",
-                        id=AnyStr(),
                     ),
                 ]
             }
@@ -4272,10 +4330,9 @@ def test_state_graph_packets(
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for query",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
             AIMessage(
@@ -4294,16 +4351,14 @@ def test_state_graph_packets(
                     },
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for another",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call234",
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a third one",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call567",
             ),
             AIMessage(content="answer", id="ai3"),
@@ -4333,10 +4388,9 @@ def test_state_graph_packets(
         },
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for query",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call123",
                 )
             }
@@ -4363,20 +4417,18 @@ def test_state_graph_packets(
         },
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for another",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call234",
                 )
             },
         },
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for a third one",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call567",
                 ),
             },
@@ -4513,10 +4565,9 @@ def test_state_graph_packets(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": {
-                "messages": ToolMessage(
+                "messages": _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call123",
                 )
             }
@@ -4558,10 +4609,9 @@ def test_state_graph_packets(
                         },
                     ],
                 ),
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call123",
                 ),
                 AIMessage(
@@ -4638,10 +4688,9 @@ def test_state_graph_packets(
                         },
                     ],
                 ),
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
-                    id=AnyStr(),
                     tool_call_id="tool_call123",
                 ),
                 AIMessage(content="answer", id="ai2"),
@@ -4683,7 +4732,6 @@ def test_message_graph(
         AIMessage,
         BaseMessage,
         HumanMessage,
-        ToolMessage,
     )
     from langchain_core.outputs import ChatGeneration, ChatResult
     from langchain_core.tools import tool
@@ -4797,15 +4845,15 @@ def test_message_graph(
     # meaning you can use it as you would any other runnable
     app = workflow.compile()
 
-    assert app.get_input_schema().schema_json() == snapshot
-    assert app.get_output_schema().schema_json() == snapshot
-    assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert json.dumps(app.get_input_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_output_schema().model_json_schema()) == snapshot
+        assert json.dumps(app.get_graph().to_json(), indent=2) == snapshot
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
-        HumanMessage(
+        _AnyIdHumanMessage(
             content="what is weather in sf",
-            id="00000000-0000-4000-8000-000000000002",  # adds missing ids
         ),
         AIMessage(
             content="",
@@ -4818,11 +4866,10 @@ def test_message_graph(
             ],
             id="ai1",  # respects ids passed in
         ),
-        ToolMessage(
+        _AnyIdToolMessage(
             content="result for query",
             name="search_api",
             tool_call_id="tool_call123",
-            id="00000000-0000-4000-8000-000000000010",
         ),
         AIMessage(
             content="",
@@ -4835,11 +4882,10 @@ def test_message_graph(
             ],
             id="ai2",
         ),
-        ToolMessage(
+        _AnyIdToolMessage(
             content="result for another",
             name="search_api",
             tool_call_id="tool_call456",
-            id="00000000-0000-4000-8000-000000000018",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -4860,11 +4906,10 @@ def test_message_graph(
         },
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id="00000000-0000-4000-8000-000000000033",
                 )
             ]
         },
@@ -4883,11 +4928,10 @@ def test_message_graph(
         },
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for another",
                     name="search_api",
                     tool_call_id="tool_call456",
-                    id="00000000-0000-4000-8000-000000000041",
                 )
             ]
         },
@@ -5007,11 +5051,10 @@ def test_message_graph(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 )
             ]
         },
@@ -5044,11 +5087,10 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -5107,11 +5149,10 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
         ],
@@ -5240,11 +5281,10 @@ def test_message_graph(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 )
             ]
         },
@@ -5277,11 +5317,10 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
             AIMessage(
                 content="",
@@ -5340,7 +5379,7 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -5380,7 +5419,7 @@ def test_message_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -5537,9 +5576,8 @@ def test_root_graph(
     app = workflow.compile()
 
     assert app.invoke(HumanMessage(content="what is weather in sf")) == [
-        HumanMessage(
+        _AnyIdHumanMessage(
             content="what is weather in sf",
-            id="00000000-0000-4000-8000-000000000002",  # adds missing ids
         ),
         AIMessage(
             content="",
@@ -5552,11 +5590,10 @@ def test_root_graph(
             ],
             id="ai1",  # respects ids passed in
         ),
-        ToolMessage(
+        _AnyIdToolMessage(
             content="result for query",
             name="search_api",
             tool_call_id="tool_call123",
-            id="00000000-0000-4000-8000-000000000010",
         ),
         AIMessage(
             content="",
@@ -5569,11 +5606,10 @@ def test_root_graph(
             ],
             id="ai2",
         ),
-        ToolMessage(
+        _AnyIdToolMessage(
             content="result for another",
             name="search_api",
             tool_call_id="tool_call456",
-            id="00000000-0000-4000-8000-000000000018",
         ),
         AIMessage(content="answer", id="ai3"),
     ]
@@ -5741,11 +5777,10 @@ def test_root_graph(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 )
             ]
         },
@@ -5778,7 +5813,7 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -5841,7 +5876,7 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -5974,11 +6009,10 @@ def test_root_graph(
     assert [c for c in app_w_interrupt.stream(None, config)] == [
         {
             "tools": [
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 )
             ]
         },
@@ -6011,7 +6045,7 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -6074,11 +6108,10 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
-                id=AnyStr(),
             ),
             AIMessage(content="answer", id="ai2"),
         ],
@@ -6114,7 +6147,7 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
                 tool_call_id="tool_call123",
@@ -6186,11 +6219,10 @@ def test_root_graph(
                         }
                     ],
                 ),
-                ToolMessage(
+                _AnyIdToolMessage(
                     content="result for a different query",
                     name="search_api",
                     tool_call_id="tool_call123",
-                    id=AnyStr(),
                 ),
                 AIMessage(content="answer", id="ai2"),
                 _AnyIdAIMessage(content="an extra message"),
@@ -6234,10 +6266,9 @@ def test_root_graph(
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for a different query",
                 name="search_api",
-                id="00000000-0000-4000-8000-000000000082",
                 tool_call_id="tool_call123",
             ),
             AIMessage(content="answer", id="ai2"),
@@ -7531,7 +7562,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
     request: pytest.FixtureRequest,
     checkpointer_name: str,
 ) -> None:
-    from langchain_core.pydantic_v1 import BaseModel, ValidationError
+    from pydantic.v1 import BaseModel, ValidationError
 
     checkpointer = request.getfixturevalue(f"checkpointer_{checkpointer_name}")
     setup = mocker.Mock()
@@ -7632,6 +7663,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic1(
 
     app = workflow.compile()
 
+    # because it's a v1 pydantic, we're using .schema() here instead of the new methods
     assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
     assert app.get_input_schema().schema() == snapshot
     assert app.get_output_schema().schema() == snapshot
@@ -7799,9 +7831,10 @@ def test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2(
 
     app = workflow.compile()
 
-    assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
-    assert app.get_input_schema().schema() == snapshot
-    assert app.get_output_schema().schema() == snapshot
+    if SHOULD_CHECK_SNAPSHOTS:
+        assert app.get_graph().draw_mermaid(with_styles=False) == snapshot
+        assert app.get_input_schema().model_json_schema() == snapshot
+        assert app.get_output_schema().model_json_schema() == snapshot
 
     with pytest.raises(ValidationError), assert_ctx_once():
         app.invoke({"query": {}})
@@ -10103,7 +10136,7 @@ def test_weather_subgraph(
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, HumanMessage, ToolCall
+    from langchain_core.messages import AIMessage, ToolCall
     from langchain_core.tools import tool
 
     from langgraph.graph import MessagesState
@@ -10222,7 +10255,7 @@ def test_weather_subgraph(
     state = graph.get_state(config)
     assert state == StateSnapshot(
         values={
-            "messages": [HumanMessage(content="what's the weather in sf", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
             "route": "weather",
         },
         next=("weather_graph",),
@@ -10284,8 +10317,8 @@ def test_weather_subgraph(
             {
                 "weather_graph": {
                     "messages": [
-                        HumanMessage(content="what's the weather in sf", id=AnyStr()),
-                        AIMessage(content="I'ts sunny in la!", id=AnyStr()),
+                        _AnyIdHumanMessage(content="what's the weather in sf"),
+                        _AnyIdAIMessage(content="I'ts sunny in la!"),
                     ]
                 }
             },
@@ -10307,7 +10340,7 @@ def test_weather_subgraph(
     state = graph.get_state(config, subgraphs=True)
     assert state == StateSnapshot(
         values={
-            "messages": [HumanMessage(content="what's the weather in sf", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
             "route": "weather",
         },
         next=("weather_graph",),
@@ -10339,9 +10372,7 @@ def test_weather_subgraph(
                 state=StateSnapshot(
                     values={
                         "messages": [
-                            HumanMessage(
-                                content="what's the weather in sf", id=AnyStr()
-                            )
+                            _AnyIdHumanMessage(content="what's the weather in sf")
                         ],
                         "city": "San Francisco",
                     },
@@ -10386,7 +10417,7 @@ def test_weather_subgraph(
     state = graph.get_state(config, subgraphs=True)
     assert state == StateSnapshot(
         values={
-            "messages": [HumanMessage(content="what's the weather in sf", id=AnyStr())],
+            "messages": [_AnyIdHumanMessage(content="what's the weather in sf")],
             "route": "weather",
         },
         next=("weather_graph",),
@@ -10418,10 +10449,8 @@ def test_weather_subgraph(
                 state=StateSnapshot(
                     values={
                         "messages": [
-                            HumanMessage(
-                                content="what's the weather in sf", id=AnyStr()
-                            ),
-                            AIMessage(content="rainy", id=AnyStr()),
+                            _AnyIdHumanMessage(content="what's the weather in sf"),
+                            _AnyIdAIMessage(content="rainy"),
                         ],
                         "city": "San Francisco",
                     },
@@ -10473,8 +10502,8 @@ def test_weather_subgraph(
             {
                 "weather_graph": {
                     "messages": [
-                        HumanMessage(content="what's the weather in sf", id=AnyStr()),
-                        AIMessage(content="rainy", id=AnyStr()),
+                        _AnyIdHumanMessage(content="what's the weather in sf"),
+                        _AnyIdAIMessage(content="rainy"),
                     ]
                 }
             },
@@ -10534,7 +10563,7 @@ def test_checkpoint_metadata() -> None:
     from langchain_core.language_models.fake_chat_models import (
         FakeMessagesListChatModel,
     )
-    from langchain_core.messages import AIMessage, AnyMessage, ToolMessage
+    from langchain_core.messages import AIMessage, AnyMessage
     from langchain_core.prompts import ChatPromptTemplate
     from langchain_core.tools import tool
 
@@ -10621,9 +10650,8 @@ def test_checkpoint_metadata() -> None:
     ) == {
         "messages": [
             _AnyIdHumanMessage(content="what is weather in sf"),
-            AIMessage(
+            _AnyIdAIMessage(
                 content="",
-                id=AnyStr(),
                 tool_calls=[
                     {
                         "name": "search_api",
@@ -10633,10 +10661,9 @@ def test_checkpoint_metadata() -> None:
                     }
                 ],
             ),
-            ToolMessage(
+            _AnyIdToolMessage(
                 content="result for query",
                 name="search_api",
-                id=AnyStr(),
                 tool_call_id="tool_call123",
             ),
             _AnyIdAIMessage(content="answer"),
@@ -10767,7 +10794,7 @@ def test_remove_message_from_node():
 
 def test_xray_lance(snapshot: SnapshotAssertion):
     from langchain_core.messages import AnyMessage, HumanMessage
-    from langchain_core.pydantic_v1 import BaseModel, Field
+    from pydantic import BaseModel, Field
 
     class Analyst(BaseModel):
         affiliation: str = Field(

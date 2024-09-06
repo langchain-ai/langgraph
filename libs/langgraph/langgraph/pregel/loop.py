@@ -45,6 +45,7 @@ from langgraph.constants import (
     ERROR,
     INPUT,
     INTERRUPT,
+    SCHEDULED,
     TAG_HIDDEN,
 )
 from langgraph.errors import EmptyInputError, GraphInterrupt
@@ -149,7 +150,7 @@ class PregelLoop:
     status: Literal[
         "pending", "done", "interrupt_before", "interrupt_after", "out_of_steps"
     ]
-    tasks: Sequence[PregelExecutableTask]
+    tasks: dict[str, PregelExecutableTask]
     output: Union[None, dict[str, Any], Any] = None
 
     # public
@@ -243,8 +244,8 @@ class PregelLoop:
 
         if self.input not in (INPUT_DONE, INPUT_RESUMING):
             self._first(input_keys=input_keys)
-        elif all(task.writes for task in self.tasks):
-            writes = [w for t in self.tasks for w in t.writes]
+        elif all(task.writes for task in self.tasks.values()):
+            writes = [w for t in self.tasks.values() for w in t.writes]
             # debug flag
             if self.debug:
                 print_step_writes(
@@ -258,7 +259,7 @@ class PregelLoop:
             mv_writes = apply_writes(
                 self.checkpoint,
                 self.channels,
-                self.tasks,
+                self.tasks.values(),
                 self.checkpointer_get_next_version,
             )
             # apply writes to managed values
@@ -277,13 +278,14 @@ class PregelLoop:
                     "source": "loop",
                     "writes": single(
                         map_output_updates(
-                            self.output_keys, [(t, t.writes) for t in self.tasks]
+                            self.output_keys,
+                            [(t, t.writes) for t in self.tasks.values()],
                         )
                     ),
                 }
             )
             # after execution, check if we should interrupt
-            if should_interrupt(self.checkpoint, interrupt_after, self.tasks):
+            if should_interrupt(self.checkpoint, interrupt_after, self.tasks.values()):
                 self.status = "interrupt_after"
                 if self.is_nested:
                     raise GraphInterrupt()
@@ -322,7 +324,7 @@ class PregelLoop:
                     self.stream_keys,
                     self.checkpoint_metadata,
                     self.checkpoint,
-                    self.tasks,
+                    self.tasks.values(),
                     self.checkpoint_pending_writes,
                 )
             )
@@ -337,15 +339,18 @@ class PregelLoop:
             for tid, k, v in self.checkpoint_pending_writes:
                 if k in (ERROR, INTERRUPT):
                     continue
-                if task := next((t for t in self.tasks if t.id == tid), None):
-                    task.writes.append((k, v))
+                if task := self.tasks.get(tid):
+                    if k == SCHEDULED:
+                        self.tasks[tid] = task._replace(scheduled=True)
+                    else:
+                        task.writes.append((k, v))
             # print output for any tasks we applied previous writes to
-            for task in self.tasks:
+            for task in self.tasks.values():
                 if task.writes:
                     self._output_writes(task.id, task.writes, cached=True)
 
         # if all tasks have finished, re-tick
-        if all(task.writes for task in self.tasks):
+        if all(task.writes for task in self.tasks.values()):
             return self.tick(
                 input_keys=input_keys,
                 interrupt_after=interrupt_after,
@@ -354,7 +359,7 @@ class PregelLoop:
             )
 
         # before execution, check if we should interrupt
-        if should_interrupt(self.checkpoint, interrupt_before, self.tasks):
+        if should_interrupt(self.checkpoint, interrupt_before, self.tasks.values()):
             self.status = "interrupt_before"
             if self.is_nested:
                 raise GraphInterrupt()
@@ -364,12 +369,12 @@ class PregelLoop:
         # produce debug output
         self._emit(
             (self.config["configurable"].get("checkpoint_ns", ""), "debug", v)
-            for v in map_debug_tasks(self.step, self.tasks)
+            for v in map_debug_tasks(self.step, self.tasks.values())
         )
 
         # debug flag
         if self.debug:
-            print_step_tasks(self.step, self.tasks)
+            print_step_tasks(self.step, self.tasks.values())
 
         return True
 
@@ -413,7 +418,7 @@ class PregelLoop:
             assert not apply_writes(
                 self.checkpoint,
                 self.channels,
-                discard_tasks + [PregelTaskWrites(INPUT, input_writes, [])],
+                [*discard_tasks.values(), PregelTaskWrites(INPUT, input_writes, [])],
                 self.checkpointer_get_next_version,
             ), "Can't write to SharedValues in graph input"
             # save input checkpoint
@@ -506,7 +511,7 @@ class PregelLoop:
     def _output_writes(
         self, task_id: str, writes: Sequence[tuple[str, Any]], *, cached: bool = False
     ) -> None:
-        if task := next((t for t in self.tasks if t.id == task_id), None):
+        if task := self.tasks.get(task_id):
             if task.config is not None and TAG_HIDDEN in task.config.get("tags"):
                 return
             if writes[0][0] != ERROR and writes[0][0] != INTERRUPT:
@@ -596,7 +601,11 @@ class SyncPregelLoop(PregelLoop, ContextManager):
         }
         self.checkpoint = copy_checkpoint(saved.checkpoint)
         self.checkpoint_metadata = saved.metadata
-        self.checkpoint_pending_writes = saved.pending_writes or []
+        self.checkpoint_pending_writes = (
+            [(str(tid), k, v) for tid, k, v in saved.pending_writes]
+            if saved.pending_writes is not None
+            else []
+        )
 
         self.submit = self.stack.enter_context(BackgroundExecutor(self.config))
         self.channels, self.managed = self.stack.enter_context(
@@ -694,7 +703,11 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
         }
         self.checkpoint = copy_checkpoint(saved.checkpoint)
         self.checkpoint_metadata = saved.metadata
-        self.checkpoint_pending_writes = saved.pending_writes or []
+        self.checkpoint_pending_writes = (
+            [(str(tid), k, v) for tid, k, v in saved.pending_writes]
+            if saved.pending_writes is not None
+            else []
+        )
 
         self.submit = await self.stack.enter_async_context(AsyncBackgroundExecutor())
         self.channels, self.managed = await self.stack.enter_async_context(
