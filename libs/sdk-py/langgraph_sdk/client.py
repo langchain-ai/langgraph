@@ -1234,7 +1234,7 @@ class RunsClient:
             return await self.http.post("/runs", json=payload)
 
     async def create_batch(self, payloads: list[RunCreate]) -> list[Run]:
-        """Create a batch of background runs."""
+        """Create a batch of stateless background runs."""
 
         def filter_payload(payload: RunCreate):
             return {k: v for k, v in payload.items() if v is not None}

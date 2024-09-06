@@ -116,7 +116,7 @@ class BaseClient {
     options?: RequestInit & {
       json?: unknown;
       params?: Record<string, unknown>;
-    }
+    },
   ): AsyncGenerator<{ event: string; data: any }> {
     const [url, init] = this.prepareFetchOptions(path, { ...options, method });
     const response = await this.asyncCaller.fetch(url, init);
@@ -126,42 +126,42 @@ class BaseClient {
     }
 
     if (!response.body) {
-      throw new Error('ReadableStream not yet supported in this browser.');
+      throw new Error("ReadableStream not yet supported in this browser.");
     }
 
     const reader = response.body.getReader();
     const decoder = new TextDecoder();
-    let buffer = '';
+    let buffer = "";
 
     while (true) {
       const { done, value } = await reader.read();
       if (done) break;
 
       buffer += decoder.decode(value, { stream: true });
-      const lines = buffer.split('\n');
-      buffer = lines.pop() || '';
+      const lines = buffer.split("\n");
+      buffer = lines.pop() || "";
 
       for (const line of lines) {
-        if (line.trim() === '') continue;
-        if (line.startsWith('data:')) {
+        if (line.trim() === "") continue;
+        if (line.startsWith("data:")) {
           const data = line.slice(5).trim();
-          if (data === '[DONE]') {
+          if (data === "[DONE]") {
             return;
           }
           try {
-            yield { event: 'message', data: JSON.parse(data) };
+            yield { event: "message", data: JSON.parse(data) };
           } catch (error) {
-            console.error('Error parsing SSE data:', error);
+            console.error("Error parsing SSE data:", error);
           }
-        } else if (line.startsWith('event:')) {
+        } else if (line.startsWith("event:")) {
           const event = line.slice(6).trim();
           const nextLine = lines[lines.indexOf(line) + 1];
-          if (nextLine && nextLine.startsWith('data:')) {
+          if (nextLine && nextLine.startsWith("data:")) {
             const data = nextLine.slice(5).trim();
             try {
               yield { event, data: JSON.parse(data) };
             } catch (error) {
-              console.error('Error parsing SSE data:', error);
+              console.error("Error parsing SSE data:", error);
             }
           }
         }
@@ -714,17 +714,21 @@ export class RunsClient extends BaseClient {
   }
 
   /**
-   * Create a batch of background runs.
+   * Create a batch of stateless background runs.
    *
    * @param payloads An array of payloads for creating runs.
    * @returns An array of created runs.
    */
-  async createBatch(payloads: RunsCreatePayload[]): Promise<Run[]> {
-    const filteredPayloads = payloads.map(payload => {
-      return Object.fromEntries(
-        Object.entries(payload).filter(([_, v]) => v !== undefined)
-      );
-    });
+  async createBatch(
+    payloads: (RunsCreatePayload & { assistantId: string })[],
+  ): Promise<Run[]> {
+    const filteredPayloads = payloads
+      .map((payload) => ({ ...payload, assistant_id: payload.assistantId }))
+      .map((payload) => {
+        return Object.fromEntries(
+          Object.entries(payload).filter(([_, v]) => v !== undefined),
+        );
+      });
 
     return this.fetch<Run[]>("/runs/batch", {
       method: "POST",
