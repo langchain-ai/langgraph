@@ -5,10 +5,10 @@ A LangGraph application must be configured with a [LangGraph API configuration f
 This walkthrough is based on [this repository](https://github.com/langchain-ai/langgraph-example), which you can play around with to learn more about how to setup your LangGraph application for deployment.
 
 !!! tip "Setup with pyproject.toml"
-If you prefer using poetry for dependency management, check out [this how-to guide](./setup_pyproject.md) on using `pyproject.toml` for LangGraph Cloud.
+    If you prefer using poetry for dependency management, check out [this how-to guide](./setup_pyproject.md) on using `pyproject.toml` for LangGraph Cloud.
 
 !!! tip "Setup with a Monorepo"
-If you are interested in deploying a graph located inside a monorepo, take a look at [this](https://github.com/langchain-ai/langgraph-example-monorepo) repository for an example of how to do so.
+    If you are interested in deploying a graph located inside a monorepo, take a look at [this](https://github.com/langchain-ai/langgraph-example-monorepo) repository for an example of how to do so.
 
 The final repo structure will look something like this:
 
@@ -129,7 +129,7 @@ graph = workflow.compile()
 ```
 
 !!! warning "Assign `CompiledGraph` to Variable"
-The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module (alternatively, you can provide [a function that creates a graph](./graph_rebuild.md)).
+    The build process for LangGraph Cloud requires that the `CompiledGraph` object be assigned to a variable at the top-level of a Python module (alternatively, you can provide [a function that creates a graph](./graph_rebuild.md)).
 
 Example file directory:
 
@@ -166,7 +166,7 @@ Example `langgraph.json` file:
 Note that the variable name of the `CompiledGraph` appears at the end of the value of each subkey in the top-level `graphs` key (i.e. `:<variable_name>`).
 
 !!! warning "Configuration Location"
-The LangGraph API configuration file must be placed in a directory that is at the same level or higher than the Python files that contain compiled graphs and associated dependencies.
+    The LangGraph API configuration file must be placed in a directory that is at the same level or higher than the Python files that contain compiled graphs and associated dependencies.
 
 Example file directory:
 
