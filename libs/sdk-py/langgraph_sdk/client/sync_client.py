@@ -17,14 +17,15 @@ import httpx_sse
 import orjson
 from httpx._types import QueryParamTypes
 
-import langgraph_sdk
 from langgraph_sdk.schema import (
     Assistant,
     Config,
     Cron,
+    DisconnectMode,
     GraphSchema,
-    Metadata,
+    Json,
     MultitaskStrategy,
+    OnCompletionBehavior,
     OnConflictBehavior,
     Run,
     RunCreate,
@@ -40,7 +41,10 @@ logger = logging.getLogger(__name__)
 
 
 def get_client(
-    *, url: Optional[str] = None, api_key: Optional[str] = None
+    *,
+    url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    headers: Optional[dict[str, str]] = None,
 ) -> SyncLangGraphClient:
     """Get a LangGraphClient instance.
 
@@ -52,15 +56,13 @@ def get_client(
                 2. LANGGRAPH_API_KEY
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
+        headers: Optional custom headers
     """
 
     if url is None:
         url = "http://localhost:8123"
 
     transport = httpx.HTTPTransport(retries=5)
-    headers = {
-        "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
-    }
     client = httpx.Client(
         base_url=url,
         transport=transport,
@@ -89,7 +91,7 @@ class SyncHttpClient:
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
-            body = (r.read()).decode()
+            body = r.read().decode()
             if sys.version_info >= (3, 11):
                 e.add_note(body)
             else:
@@ -107,7 +109,7 @@ class SyncHttpClient:
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
-            body = (r.read()).decode()
+            body = r.read().decode()
             if sys.version_info >= (3, 11):
                 e.add_note(body)
             else:
@@ -122,7 +124,7 @@ class SyncHttpClient:
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
-            body = (r.read()).decode()
+            body = r.read().decode()
             if sys.version_info >= (3, 11):
                 e.add_note(body)
             else:
@@ -137,7 +139,7 @@ class SyncHttpClient:
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
-            body = (r.read()).decode()
+            body = r.read().decode()
             if sys.version_info >= (3, 11):
                 e.add_note(body)
             else:
@@ -151,7 +153,7 @@ class SyncHttpClient:
         try:
             r.raise_for_status()
         except httpx.HTTPStatusError as e:
-            body = (r.read()).decode()
+            body = r.read().decode()
             if sys.version_info >= (3, 11):
                 e.add_note(body)
             else:
@@ -169,7 +171,7 @@ class SyncHttpClient:
             try:
                 sse.response.raise_for_status()
             except httpx.HTTPStatusError as e:
-                body = (sse.response.read()).decode()
+                body = sse.response.read().decode()
                 if sys.version_info >= (3, 11):
                     e.add_note(body)
                 else:
@@ -378,7 +380,7 @@ class SyncAssistantsClient:
         graph_id: Optional[str],
         config: Optional[Config] = None,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Assistant:
@@ -426,7 +428,7 @@ class SyncAssistantsClient:
         *,
         graph_id: Optional[str] = None,
         config: Optional[Config] = None,
-        metadata: Metadata = None,
+        metadata: Json = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -488,7 +490,7 @@ class SyncAssistantsClient:
     def search(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         graph_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
@@ -564,7 +566,7 @@ class SyncThreadsClient:
     def create(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         thread_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Thread:
@@ -637,7 +639,8 @@ class SyncThreadsClient:
     def search(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
+        values: Json = None,
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
@@ -646,6 +649,7 @@ class SyncThreadsClient:
 
         Args:
             metadata: Thread metadata to search for.
+            values: Thread values to search for.
             status: Status to search for.
                 Must be one of 'idle', 'busy', or 'interrupted'.
             limit: Limit on number of threads to return.
@@ -670,6 +674,8 @@ class SyncThreadsClient:
         }
         if metadata:
             payload["metadata"] = metadata
+        if values:
+            payload["values"] = values
         if status:
             payload["status"] = status
         return self.http.post(
@@ -816,14 +822,14 @@ class SyncThreadsClient:
             values: The values to update to the state.
             as_node: Update the state as if this node had just executed.
 
-            checkpoint_id: The ID of the checkpoint to get the state of.
+            checkpoint_id: The ID of the checkpoint to update the state of.
 
         Returns:
             None
 
         Example Usage:
 
-            client.threads.get_state(
+            client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
@@ -927,6 +933,8 @@ class SyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Iterator[StreamPart]:
         ...
@@ -944,6 +952,9 @@ class SyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
+        webhook: Optional[str] = None,
     ) -> Iterator[StreamPart]:
         ...
 
@@ -960,6 +971,8 @@ class SyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Iterator[StreamPart]:
@@ -980,6 +993,10 @@ class SyncRunsClient:
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
 
             feedback_keys: Feedback keys to assign to run.
+            on_disconnect: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
+            on_completion: Whether to delete or keep the thread created for a stateless run.
+                Must be one of 'delete' or 'keep'.
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
@@ -1025,6 +1042,8 @@ class SyncRunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_disconnect": on_disconnect,
+            "on_completion": on_completion,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1047,6 +1066,7 @@ class SyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Run:
         ...
 
@@ -1080,6 +1100,7 @@ class SyncRunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Run:
         """Create a background run.
 
@@ -1099,6 +1120,8 @@ class SyncRunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            on_completion: Whether to delete or keep the thread created for a stateless run.
+                Must be one of 'delete' or 'keep'.
 
         Returns:
             Run: The created background run.
@@ -1178,6 +1201,7 @@ class SyncRunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_completion": on_completion,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         if thread_id:
@@ -1206,6 +1230,8 @@ class SyncRunsClient:
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         ...
@@ -1221,6 +1247,9 @@ class SyncRunsClient:
         config: Optional[Config] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         ...
 
@@ -1236,6 +1265,8 @@ class SyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
@@ -1250,10 +1281,14 @@ class SyncRunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
+            multitask_strategy: Multitask strategy to use.
+                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            on_disconnect: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
+            on_completion: Whether to delete or keep the thread created for a stateless run.
+                Must be one of 'delete' or 'keep'.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
 
@@ -1315,6 +1350,8 @@ class SyncRunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_disconnect": on_disconnect,
+            "on_completion": on_completion,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
@@ -1391,8 +1428,8 @@ class SyncRunsClient:
             json=None,
         )
 
-    def join(self, thread_id: str, run_id: str) -> None:
-        """Block until a run is done.
+    def join(self, thread_id: str, run_id: str) -> dict:
+        """Block until a run is done. Returns the final state of the thread.
 
         Args:
             thread_id: The thread ID to join.
@@ -1410,6 +1447,28 @@ class SyncRunsClient:
 
         """  # noqa: E501
         return self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
+
+    def join_stream(self, thread_id: str, run_id: str) -> Iterator[StreamPart]:
+        """Stream output from a run in real-time, until the run is done.
+        Output is not buffered, so any output produced before this call will
+        not be received here.
+
+        Args:
+            thread_id: The thread ID to join.
+            run_id: The run ID to join.
+
+        Returns:
+            None
+
+        Example Usage:
+
+            await client.runs.join(
+                thread_id="thread_id_to_join",
+                run_id="run_id_to_join"
+            )
+
+        """  # noqa: E501
+        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
 
     def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.

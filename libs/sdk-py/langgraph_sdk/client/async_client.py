@@ -666,6 +666,7 @@ class ThreadsClient:
 
         Args:
             metadata: Thread metadata to search for.
+            values: Thread values to search for.
             status: Status to search for.
                 Must be one of 'idle', 'busy', or 'interrupted'.
             limit: Limit on number of threads to return.
@@ -968,8 +969,8 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
-        webhook: Optional[str] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        webhook: Optional[str] = None,
     ) -> AsyncIterator[StreamPart]:
         ...
 
@@ -987,9 +988,9 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
         on_disconnect: Optional[DisconnectMode] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
-        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1008,11 +1009,13 @@ class RunsClient:
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
 
             feedback_keys: Feedback keys to assign to run.
+            on_disconnect: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
+            on_completion: Whether to delete or keep the thread created for a stateless run.
+                Must be one of 'delete' or 'keep'.
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
-            on_disconnect: The disconnect mode to use.
-                Must be one of 'cancel' or 'continue'.
 
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
@@ -1131,6 +1134,8 @@ class RunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            on_completion: Whether to delete or keep the thread created for a stateless run.
+                Must be one of 'delete' or 'keep'.
 
         Returns:
             Run: The created background run.
@@ -1275,8 +1280,8 @@ class RunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         on_disconnect: Optional[DisconnectMode] = None,
-        multitask_strategy: Optional[MultitaskStrategy] = None,
         on_completion: Optional[OnCompletionBehavior] = None,
+        multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1292,10 +1297,12 @@ class RunsClient:
             interrupt_before: Nodes to interrupt immediately before they get executed.
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
             webhook: Webhook to call after LangGraph API call is done.
-            multitask_strategy: Multitask strategy to use.
-                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
             on_disconnect: The disconnect mode to use.
                 Must be one of 'cancel' or 'continue'.
+            on_completion: Whether to delete or keep the thread created for a stateless run.
+                Must be one of 'delete' or 'keep'.
+            multitask_strategy: Multitask strategy to use.
+                Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
