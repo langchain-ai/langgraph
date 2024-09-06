@@ -75,7 +75,8 @@ Now, let's import our required packages and instantiate our client, assistant, a
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 Now we can start our two runs and join the second on euntil it has completed:

@@ -74,7 +74,8 @@ Now, let's import our required packages and instantiate our client, assistant, a
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 Now we can run a thread and try to run a second one with the "reject" option, which should fail since we have already started a run:

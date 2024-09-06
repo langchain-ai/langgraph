@@ -10,6 +10,8 @@ First let's set up our client and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -21,6 +23,8 @@ First let's set up our client and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
     // create thread
     const thread = await client.threads.create();
     console.log(thread);
@@ -31,7 +35,8 @@ First let's set up our client and thread:
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 Output:
@@ -56,7 +61,7 @@ Now we can stream by values, which streams the full state of the graph after eac
     # stream values
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        "agent", 
+        assistant_id, 
         input=input,
         stream_mode="values"
     ):
@@ -72,7 +77,7 @@ Now we can stream by values, which streams the full state of the graph after eac
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      "agent",
+      assistantID,
       {
         input,
         streamMode: "values"
@@ -164,7 +169,7 @@ If we want to just get the final result, we can use this endpoint and just keep 
     final_answer = None
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        "agent",
+        assistant_id,
         input=input,
         stream_mode="values"
     ):
@@ -178,7 +183,7 @@ If we want to just get the final result, we can use this endpoint and just keep 
     let finalAnswer;
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      "agent",
+      assistantID,
       {
         input,
         streamMode: "values"

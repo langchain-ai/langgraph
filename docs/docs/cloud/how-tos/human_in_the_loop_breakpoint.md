@@ -43,7 +43,8 @@ In this how-to we use a simple ReAct style hosted graph (you can see the full co
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 ## Adding a breakpoint
