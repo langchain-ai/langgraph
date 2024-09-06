@@ -33,7 +33,8 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 Output:

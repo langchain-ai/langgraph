@@ -49,6 +49,12 @@ class EmptyInputError(Exception):
     pass
 
 
+class TaskNotFound(Exception):
+    """Raised when the executor is unable to find a task."""
+
+    pass
+
+
 __all__ = [
     "GraphRecursionError",
     "InvalidUpdateError",

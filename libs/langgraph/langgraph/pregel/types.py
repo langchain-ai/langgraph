@@ -81,6 +81,8 @@ class PregelExecutableTask(NamedTuple):
     retry_policy: Optional[RetryPolicy]
     cache_policy: Optional[CachePolicy]
     id: str
+    path: tuple[str, ...]
+    scheduled: bool = False
 
 
 class StateSnapshot(NamedTuple):

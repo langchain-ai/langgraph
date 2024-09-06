@@ -1451,8 +1451,8 @@ def test_pending_writes_resume(
         def reset(self):
             self.calls = 0
 
-    one = AwhileMaker(0.2, {"value": 2})
-    two = AwhileMaker(0.6, ConnectionError("I'm not good"))
+    one = AwhileMaker(0.1, {"value": 2})
+    two = AwhileMaker(0.3, ConnectionError("I'm not good"))
     builder = StateGraph(State)
     builder.add_node("one", one)
     builder.add_node("two", two, retry=RetryPolicy(max_attempts=2))

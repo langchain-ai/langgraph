@@ -31,6 +31,7 @@ _MANUAL = {
         "input_output_schema.ipynb",
         "pass_private_state.ipynb",
         "memory/manage-conversation-history.ipynb",
+        "memory/shared-state.ipynb",
         "subgraphs-manage-state.ipynb",
         "subgraph-transform-state.ipynb",
         "memory/delete-messages.ipynb",

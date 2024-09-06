@@ -137,6 +137,7 @@ nav:
           - Use Postgres checkpointer for persistence: how-tos/persistence_postgres.ipynb
           - Create custom checkpointer using MongoDB: how-tos/persistence_mongodb.ipynb
           - Create custom checkpointer using Redis: how-tos/persistence_redis.ipynb
+          - Share state between threads: how-tos/memory/shared-state.ipynb
       - Human-in-the-loop:
           - Add breakpoints: how-tos/human_in_the_loop/breakpoints.ipynb
           - Add dynamic breakpoints: how-tos/human_in_the_loop/dynamic_breakpoints.ipynb
@@ -240,6 +241,7 @@ nav:
               - Integrate Webhooks: 'cloud/how-tos/webhooks.md'
               - Copy Threads: 'cloud/how-tos/copy_threads.md'
               - Check Status of Threads: "cloud/how-tos/check_thread_status.md"
+              - Share State Between Threads: "cloud/how-tos/shared_state.md"
       - Conceptual Guides:
           - API Concepts: "cloud/concepts/api.md"
           - Cloud Concepts: "cloud/concepts/cloud.md"
