@@ -1,7 +1,7 @@
 import asyncio
 import functools
 import operator
-from typing import Annotated, Callable, ParamSpec, TypedDict, TypeVar, Union
+from typing import Annotated, Callable, ParamSpec, Sequence, TypedDict, TypeVar, Union
 
 import anyio
 import pytest
@@ -32,7 +32,9 @@ def timeout(delay: int):
     return decorator
 
 
-def mk_fanout_graph(checkpointer: BaseCheckpointSaver) -> Pregel:
+def mk_fanout_graph(
+    checkpointer: BaseCheckpointSaver, interrupt_before: Sequence[str] = ()
+) -> Pregel:
     # copied from test_in_one_fan_out_state_graph_waiting_edge_multiple_cond_edge
     def sorted_add(
         x: list[str], y: Union[list[str], list[tuple[str, str]]]
@@ -92,11 +94,13 @@ def mk_fanout_graph(checkpointer: BaseCheckpointSaver) -> Pregel:
     builder.add_conditional_edges("decider", decider_cond)
     builder.set_finish_point("qa")
 
-    return builder.compile(checkpointer)
+    return builder.compile(checkpointer, interrupt_before=interrupt_before)
 
 
 @timeout(5)
 async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -> None:
+    input = {"query": "what is weather in sf"}
+    config = {"configurable": {"thread_id": "1"}}
     graph = mk_fanout_graph(checkpointer)
     n_orch_msgs = 0
     n_exec_msgs = 0
@@ -123,10 +127,7 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
     async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
         await producer.send_and_wait(
             topics.orchestrator,
-            MessageToOrchestrator(
-                input={"query": "what is weather in sf"},
-                config={"configurable": {"thread_id": "1"}},
-            ),
+            MessageToOrchestrator(input=input, config=config),
         )
 
     # run the orchestrator and executor
@@ -134,5 +135,15 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
         tg.start_soon(orchestrator, 13, name="orchestrator")
         tg.start_soon(executor, 12, name="executor")
 
+    state = await graph.aget_state(config)
     assert n_orch_msgs == 13
     assert n_exec_msgs == 12
+    assert (
+        state.values
+        == await graph.ainvoke(input, {"configurable": {"thread_id": "2"}})
+        == {
+            "docs": ["doc1", "doc1", "doc2", "doc2", "doc3", "doc3", "doc4", "doc4"],
+            "query": "analyzed: query: analyzed: query: what is weather in sf",
+            "answer": "doc1,doc1,doc2,doc2,doc3,doc3,doc4,doc4",
+        }
+    )
