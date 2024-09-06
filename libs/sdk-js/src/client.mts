@@ -654,6 +654,29 @@ export class RunsClient extends BaseClient {
     });
   }
 
+  /**
+   * Create a batch of stateless background runs.
+   *
+   * @param payloads An array of payloads for creating runs.
+   * @returns An array of created runs.
+   */
+  async createBatch(
+    payloads: (RunsCreatePayload & { assistantId: string })[],
+  ): Promise<Run[]> {
+    const filteredPayloads = payloads
+      .map((payload) => ({ ...payload, assistant_id: payload.assistantId }))
+      .map((payload) => {
+        return Object.fromEntries(
+          Object.entries(payload).filter(([_, v]) => v !== undefined),
+        );
+      });
+
+    return this.fetch<Run[]>("/runs/batch", {
+      method: "POST",
+      json: filteredPayloads,
+    });
+  }
+
   async wait(
     threadId: null,
     assistantId: string,
@@ -773,6 +796,71 @@ export class RunsClient extends BaseClient {
    */
   async join(threadId: string, runId: string): Promise<void> {
     return this.fetch<void>(`/threads/${threadId}/runs/${runId}/join`);
+  }
+
+  /**
+   * Stream output from a run in real-time, until the run is done.
+   * Output is not buffered, so any output produced before this call will
+   * not be received here.
+   *
+   * @param threadId The ID of the thread.
+   * @param runId The ID of the run.
+   * @param signal An optional abort signal.
+   * @returns An async generator yielding stream parts.
+   */
+  async *joinStream(
+    threadId: string,
+    runId: string,
+    signal?: AbortSignal,
+  ): AsyncGenerator<{ event: StreamEvent; data: any }> {
+    const response = await this.asyncCaller.fetch(
+      ...this.prepareFetchOptions(`/threads/${threadId}/runs/${runId}/stream`, {
+        method: "GET",
+        signal,
+      }),
+    );
+
+    let parser: EventSourceParser;
+    let onEndEvent: () => void;
+    const textDecoder = new TextDecoder();
+
+    const stream: ReadableStream<{ event: string; data: any }> = (
+      response.body || new ReadableStream({ start: (ctrl) => ctrl.close() })
+    ).pipeThrough(
+      new TransformStream({
+        async start(ctrl) {
+          parser = createParser((event) => {
+            if (
+              (signal && signal.aborted) ||
+              (event.type === "event" && event.data === "[DONE]")
+            ) {
+              ctrl.terminate();
+              return;
+            }
+
+            if ("data" in event) {
+              ctrl.enqueue({
+                event: event.event ?? "message",
+                data: JSON.parse(event.data),
+              });
+            }
+          });
+          onEndEvent = () => {
+            ctrl.enqueue({ event: "end", data: undefined });
+          };
+        },
+        async transform(chunk) {
+          const payload = textDecoder.decode(chunk);
+          parser.feed(payload);
+
+          // eventsource-parser will ignore events
+          // that are not terminated by a newline
+          if (payload.trim() === "event: end") onEndEvent();
+        },
+      }),
+    );
+
+    yield* IterableReadableStream.fromReadableStream(stream);
   }
 
   /**
