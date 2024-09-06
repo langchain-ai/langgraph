@@ -15,7 +15,12 @@ from langchain_core.messages import (
     BaseMessage,
     SystemMessage,
 )
-from langchain_core.runnables import Runnable, RunnableBinding, RunnableConfig, RunnableLambda
+from langchain_core.runnables import (
+    Runnable,
+    RunnableBinding,
+    RunnableConfig,
+    RunnableLambda,
+)
 from langchain_core.tools import BaseTool
 
 from langgraph._api.deprecation import deprecated_parameter
@@ -131,12 +136,14 @@ def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> b
     if not isinstance(model, RunnableBinding):
         return False
 
-    if not "tools" in model.kwargs:
+    if "tools" not in model.kwargs:
         return False
 
     bound_tools = model.kwargs["tools"]
     if len(tools) != len(bound_tools):
-        raise ValueError("Number of tools in the model.bind_tools() and tools passed to create_react_agent must match")
+        raise ValueError(
+            "Number of tools in the model.bind_tools() and tools passed to create_react_agent must match"
+        )
 
     tool_names = set(tool.name for tool in tools)
     bound_tool_names = set()
