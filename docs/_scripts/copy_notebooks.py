@@ -26,6 +26,7 @@ _MANUAL = {
         "streaming-events-from-within-tools.ipynb",
         "streaming-events-from-within-tools-without-langchain.ipynb",
         "streaming-from-final-node.ipynb",
+        "streaming-subgraphs.ipynb",
         "persistence.ipynb",
         "input_output_schema.ipynb",
         "pass_private_state.ipynb",

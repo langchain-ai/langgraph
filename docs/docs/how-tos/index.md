@@ -55,6 +55,7 @@ These guides show how to use different streaming modes.
 - [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
 - [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
 - [How to stream events from the final node](streaming-from-final-node.ipynb)
+- [How to stream from subgraphs](streaming-subgraphs.ipynb)
 
 ## Tool calling
 

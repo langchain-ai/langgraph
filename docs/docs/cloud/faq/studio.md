@@ -54,7 +54,7 @@ The first way to solve this is to add path maps to your conditional edges. A pat
 === "Javascript"
 
     ```ts
-    graph.addConditionalEdges("node_a", routingFunction, ["node_b", "node_c"]);
+    graph.addConditionalEdges("node_a", routingFunction, { true: "node_b", false: "node_c" });
     ```
 
 In this case, the routing function returns either True or False, which map to `node_b` and `node_c` respectively.
@@ -66,8 +66,8 @@ Instead of passing a path map, you can also be explicit about the typing of your
 ```python
 def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
     if state['some_condition'] == True:
-        return "node_a"
-    else:
         return "node_b"
+    else:
+        return "node_c"
 ```
 
