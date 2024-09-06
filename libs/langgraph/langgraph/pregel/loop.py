@@ -39,6 +39,7 @@ from langgraph.checkpoint.base import (
 )
 from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
+    CONFIG_KEY_DEDUPE_TASKS,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_STREAM,
     CONFIG_KEY_TASK_ID,
@@ -179,7 +180,10 @@ class PregelLoop:
         self.output_keys = output_keys
         self.stream_keys = stream_keys
         self.is_nested = CONFIG_KEY_TASK_ID in self.config.get("configurable", {})
-        self.skip_done_tasks = "checkpoint_id" not in config["configurable"]
+        self.skip_done_tasks = (
+            "checkpoint_id" not in config["configurable"]
+            or CONFIG_KEY_DEDUPE_TASKS in config["configurable"]
+        )
         self.debug = debug
         if CONFIG_KEY_STREAM in config["configurable"]:
             self.stream = DuplexStream(
@@ -595,6 +599,7 @@ class SyncPregelLoop(PregelLoop, ContextManager):
             **self.config,
             **saved.config,
             "configurable": {
+                "checkpoint_ns": "",
                 **self.config.get("configurable", {}),
                 **saved.config.get("configurable", {}),
             },
@@ -697,6 +702,7 @@ class AsyncPregelLoop(PregelLoop, AsyncContextManager):
             **self.config,
             **saved.config,
             "configurable": {
+                "checkpoint_ns": "",
                 **self.config.get("configurable", {}),
                 **saved.config.get("configurable", {}),
             },

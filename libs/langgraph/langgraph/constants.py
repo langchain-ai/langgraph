@@ -9,6 +9,7 @@ CONFIG_KEY_STREAM = "__pregel_stream"
 CONFIG_KEY_STORE = "__pregel_store"
 CONFIG_KEY_RESUMING = "__pregel_resuming"
 CONFIG_KEY_TASK_ID = "__pregel_task_id"
+CONFIG_KEY_DEDUPE_TASKS = "__pregel_dedupe_tasks"
 # this one part of public API so more readable
 CONFIG_KEY_CHECKPOINT_MAP = "checkpoint_map"
 INTERRUPT = "__interrupt__"
@@ -30,6 +31,7 @@ RESERVED = {
     CONFIG_KEY_STORE,
     CONFIG_KEY_RESUMING,
     CONFIG_KEY_TASK_ID,
+    CONFIG_KEY_DEDUPE_TASKS,
     INPUT,
     RUNTIME_PLACEHOLDER,
 }
