@@ -249,7 +249,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
 
     def copy(self, update: dict[str, Any]) -> Self:
         attrs = {**self.__dict__, **update}
-        return Pregel(**attrs)
+        return self.__class__(**attrs)
 
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
         return self.copy({"config": merge_configs(self.config, config, kwargs)})
