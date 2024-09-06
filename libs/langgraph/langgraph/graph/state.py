@@ -151,8 +151,8 @@ class StateGraph(Graph):
         self.input = input
         self.output = output
         self._add_schema(state_schema)
-        self._add_schema(input)
-        self._add_schema(output)
+        self._add_schema(input, allow_managed=False)
+        self._add_schema(output, allow_managed=False)
         self.config_schema = config_schema
         self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
 
@@ -162,10 +162,17 @@ class StateGraph(Graph):
             (start, end) for starts, end in self.waiting_edges for start in starts
         }
 
-    def _add_schema(self, schema: Type[Any]) -> None:
+    def _add_schema(self, schema: Type[Any], /, allow_managed: bool = True) -> None:
         if schema not in self.schemas:
             _warn_invalid_state_schema(schema)
             channels, managed = _get_channels(schema)
+            if managed and not allow_managed:
+                names = ", ".join(managed)
+                schema_name = getattr(schema, "__name__", "")
+                raise ValueError(
+                    f"Invalid managed channels detected in {schema_name}: {names}."
+                    " Managed channels are not permitted in Input/Output schema."
+                )
             self.schemas[schema] = {**channels, **managed}
             for key, channel in channels.items():
                 if key in self.channels:
@@ -474,45 +481,22 @@ class CompiledStateGraph(CompiledGraph):
     def get_input_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> type[BaseModel]:
-        if isclass(self.builder.input) and issubclass(
-            self.builder.input, (BaseModel, BaseModelV1)
-        ):
-            return self.builder.input
-        else:
-            keys = list(self.builder.schemas[self.builder.input].keys())
-            if len(keys) == 1 and keys[0] == "__root__":
-                return create_model(  # type: ignore[call-overload]
-                    self.get_name("Input"),
-                    __root__=(self.channels[keys[0]].UpdateType, None),
-                )
-            else:
-                return create_model(  # type: ignore[call-overload]
-                    self.get_name("Input"),
-                    **{
-                        k: (
-                            self.channels[k].UpdateType,
-                            (
-                                get_field_default(
-                                    k,
-                                    self.channels[k].UpdateType,
-                                    self.builder.input,
-                                )
-                            ),
-                        )
-                        for k in self.builder.schemas[self.builder.input]
-                        if isinstance(self.channels[k], BaseChannel)
-                    },
-                )
+        return _get_schema(
+            typ=self.builder.input,
+            schemas=self.builder.schemas,
+            channels=self.builder.channels,
+            name=self.get_name("Input"),
+        )
 
     def get_output_schema(
         self, config: Optional[RunnableConfig] = None
     ) -> type[BaseModel]:
-        if isclass(self.builder.output) and issubclass(
-            self.builder.output, (BaseModel, BaseModelV1)
-        ):
-            return self.builder.output
-
-        return super().get_output_schema(config)
+        return _get_schema(
+            typ=self.builder.output,
+            schemas=self.builder.schemas,
+            channels=self.builder.channels,
+            name=self.get_name("Output"),
+        )
 
     def attach_node(self, key: str, node: Optional[StateNodeSpec]) -> None:
         if key == START:
@@ -772,3 +756,38 @@ def _is_field_managed_value(name: str, typ: Type[Any]) -> Optional[ManagedValueS
                 return decoration
 
     return None
+
+
+def _get_schema(
+    typ: Type,
+    schemas: dict,
+    channels: dict,
+    name: str,
+) -> type[BaseModel]:
+    if isclass(typ) and issubclass(typ, (BaseModel, BaseModelV1)):
+        return typ
+    else:
+        keys = list(schemas[typ].keys())
+        if len(keys) == 1 and keys[0] == "__root__":
+            return create_model(  # type: ignore[call-overload]
+                name,
+                __root__=(channels[keys[0]].UpdateType, None),
+            )
+        else:
+            return create_model(  # type: ignore[call-overload]
+                name,
+                **{
+                    k: (
+                        channels[k].UpdateType,
+                        (
+                            get_field_default(
+                                k,
+                                channels[k].UpdateType,
+                                typ,
+                            )
+                        ),
+                    )
+                    for k in schemas[typ]
+                    if k in channels and isinstance(channels[k], BaseChannel)
+                },
+            )
