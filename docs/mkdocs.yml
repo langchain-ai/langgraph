@@ -204,6 +204,7 @@ nav:
               - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
               - Setup App (JavaScript): "cloud/deployment/setup_javascript.md"
               - Rebuild Graph at Runtime: "cloud/deployment/graph_rebuild.md"
+              - Add custom Dockerfile lines: "cloud/deployment/custom_docker.md"
               - Test App Locally: "cloud/deployment/test_locally.md"
           - Deployment:
               - Deploy to Cloud: "cloud/deployment/cloud.md"
