@@ -1,12 +1,5 @@
 # How to stream debug events
-
-<div class="admonition tip">
-    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for LangGraph development</p>
-    <p style="padding-top: 5px;">
-        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how LangSmith can help you <a href="https://docs.smith.langchain.com
-        ">here</a>. 
-    </p>
-</div>    
+ 
 
 This guide covers how to stream debug events from your graph (`stream_mode="debug"`). Streaming debug events produces responses containing `type` and `timestamp` keys. Debug events correspond to different steps in the graph's execution, and there are three different types of steps that will get streamed back to you:
 

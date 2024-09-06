@@ -1,12 +1,5 @@
 # Interrupt
-
-<div class="admonition tip">
-    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for LangGraph development</p>
-    <p style="padding-top: 5px;">
-        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how LangSmith can help you <a href="https://docs.smith.langchain.com
-        ">here</a>. 
-    </p>
-</div>    
+ 
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](../concepts/api.md#double-texting).
 

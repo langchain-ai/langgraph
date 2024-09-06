@@ -1,12 +1,5 @@
 # How to stream full state of your graph
-
-<div class="admonition tip">
-    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for LangGraph development</p>
-    <p style="padding-top: 5px;">
-        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how LangSmith can help you <a href="https://docs.smith.langchain.com
-        ">here</a>. 
-    </p>
-</div>    
+ 
 
 This guide covers how to use `stream_mode="values"`, which streams the value of the state at each superstep. This differs from using `stream_mode="updates"`: instead of streaming just the updates to the state from each node, it streams the entire graph state at that superstep. Read [this conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#stream-and-astream) to learn more.
 

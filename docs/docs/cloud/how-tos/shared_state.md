@@ -1,12 +1,5 @@
 # How to share state between threads
-
-<div class="admonition tip">
-    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for LangGraph development</p>
-    <p style="padding-top: 5px;">
-        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM apps built with LangGraph — read more about how LangSmith can help you <a href="https://docs.smith.langchain.com
-        ">here</a>. 
-    </p>
-</div>    
+ 
 
 By default, state in a graph is scoped to a specific thread. LangGraph also allows you to specify a "scope" for a given key/value pair that exists between threads. This can be useful for storing information that is shared between threads. For instance, you may want to store information about a user's preferences expressed in one thread, and then use that information in another thread.
 
