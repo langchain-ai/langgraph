@@ -30,23 +30,15 @@ class Topic(
         accumulate: Whether to accumulate values across steps. If False, the channel will be emptied after each step.
     """
 
-    def __init__(
-        self, typ: Type[Value], unique: bool = False, accumulate: bool = False
-    ) -> None:
+    def __init__(self, typ: Type[Value], accumulate: bool = False) -> None:
         # attrs
         self.typ = typ
-        self.unique = unique
         self.accumulate = accumulate
         # state
-        self.seen = set[Value]()
         self.values = list[Value]()
 
     def __eq__(self, value: object) -> bool:
-        return (
-            isinstance(value, Topic)
-            and value.unique == self.unique
-            and value.accumulate == self.accumulate
-        )
+        return isinstance(value, Topic) and value.accumulate == self.accumulate
 
     @property
     def ValueType(self) -> Any:
@@ -59,18 +51,20 @@ class Topic(
         return Union[self.typ, list[self.typ]]  # type: ignore[name-defined]
 
     def checkpoint(self) -> tuple[set[Value], list[Value]]:
-        return (self.seen, self.values)
+        return self.values
 
     @contextmanager
     def from_checkpoint(
         self,
-        checkpoint: Optional[tuple[set[Value], list[Value]]],
+        checkpoint: Optional[list[Value]],
         config: RunnableConfig,
     ) -> Generator[Self, None, None]:
-        empty = self.__class__(self.typ, self.unique, self.accumulate)
+        empty = self.__class__(self.typ, self.accumulate)
         if checkpoint is not None:
-            empty.seen = checkpoint[0].copy()
-            empty.values = checkpoint[1].copy()
+            if isinstance(checkpoint, tuple):
+                empty.values = checkpoint[1].copy()
+            else:
+                empty.values = checkpoint.copy()
         try:
             yield empty
         finally:
@@ -81,13 +75,7 @@ class Topic(
         if not self.accumulate:
             self.values = list[Value]()
         if flat_values := flatten(values):
-            if self.unique:
-                for value in flat_values:
-                    if value not in self.seen:
-                        self.seen.add(value)
-                        self.values.append(value)
-            else:
-                self.values.extend(flat_values)
+            self.values.extend(flat_values)
         return self.values != current
 
     def get(self) -> Sequence[Value]:

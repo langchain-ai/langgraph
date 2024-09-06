@@ -25,6 +25,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```python
     from langgraph_sdk import get_client
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -35,6 +36,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
     ```
@@ -44,7 +46,8 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 ## Waiting for user input
@@ -56,7 +59,14 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
 === "Python"
 
     ```python
-    input = { 'messages':[{ "role":"user", "content":"Use the search tool to ask the user where they are, then look up the weather there" }] }
+    input = {
+        "messages": [
+            {
+                "role": "human",
+                "content": "Use the search tool to ask the user where they are, then look up the weather there",
+            }
+        ]
+    }
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
@@ -71,7 +81,14 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
 === "Javascript"
 
     ```js
-    const input = { "messages":[{ "role":"human", "content": "Use the search tool to ask the user where they are, then look up the weather there"}] }
+    const input = {
+      messages: [
+        {
+          role: "human",
+          content: "Use the search tool to ask the user where they are, then look up the weather there"
+        }
+      ]
+    };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],
@@ -79,9 +96,10 @@ Now, let's invoke our graph by interrupting before `ask_human` node:
       {
         input: input,
         streamMode: "updates",
-        interruptBefore: ["ask_human"],
+        interruptBefore: ["ask_human"]
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);
@@ -152,13 +170,23 @@ Because we are treating this as a tool call, we will need to update the state as
 === "Javascript"
 
     ```js
-    const state = await client.threads.getState(thread['thread_id']);
-    const toolCallId = state['values']['messages'][-1]['tool_calls'][0]['id'];
+    const state = await client.threads.getState(thread["thread_id"]);
+    const toolCallId = state.values.messages[state.values.messages.length - 1].tool_calls[0].id;
 
-    # We now create the tool call with the id and the response we want
-    const toolMessage = [{"tool_call_id": toolCallId, "type": "tool", "content": "san francisco"}];
+    // We now create the tool call with the id and the response we want
+    const toolMessage = [
+      {
+        tool_call_id: toolCallId,
+        type: "tool",
+        content: "san francisco"
+      }
+    ];
 
-    await client.threads.updateState(thread['thread_id'], {values: {"messages": toolMessage}, asNode:"ask_human"})
+    await client.threads.updateState(
+      thread["thread_id"],
+      { values: { messages: toolMessage } },
+      { asNode: "ask_human" }
+    );
     ```
 
 === "CURL"
@@ -212,9 +240,10 @@ We can now tell the agent to continue. We can just pass in None as the input to 
       assistantId,
       {
         input: null,
-        streamMode: "updates",
+        streamMode: "updates"
       }
     );
+
     for await (const chunk of streamResponse) {
       if (chunk.data && chunk.event !== "metadata") {
         console.log(chunk.data);

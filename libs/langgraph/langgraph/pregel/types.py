@@ -4,6 +4,7 @@ from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
 from langchain_core.runnables import Runnable, RunnableConfig
 
 from langgraph.checkpoint.base import CheckpointMetadata
+from langgraph.constants import Interrupt
 
 
 def default_retry_on(exc: Exception) -> bool:
@@ -56,10 +57,18 @@ class RetryPolicy(NamedTuple):
     """List of exception classes that should trigger a retry, or a callable that returns True for exceptions that should trigger a retry."""
 
 
+class CachePolicy(NamedTuple):
+    """Configuration for caching nodes."""
+
+    pass
+
+
 class PregelTask(NamedTuple):
     id: str
     name: str
     error: Optional[Exception] = None
+    interrupts: tuple[Interrupt, ...] = ()
+    state: Union[None, RunnableConfig, "StateSnapshot"] = None
 
 
 class PregelExecutableTask(NamedTuple):
@@ -70,7 +79,10 @@ class PregelExecutableTask(NamedTuple):
     config: RunnableConfig
     triggers: list[str]
     retry_policy: Optional[RetryPolicy]
+    cache_policy: Optional[CachePolicy]
     id: str
+    path: tuple[str, ...]
+    scheduled: bool = False
 
 
 class StateSnapshot(NamedTuple):

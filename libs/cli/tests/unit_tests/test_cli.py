@@ -45,6 +45,13 @@ def test_prepare_args_and_stdin():
     langgraph-data:
         driver: local
 services:
+    langgraph-redis:
+        image: redis:6
+        healthcheck:
+            test: redis-cli ping
+            interval: 5s
+            timeout: 1s
+            retries: 5
     langgraph-postgres:
         image: postgres:16
         ports:
@@ -76,9 +83,12 @@ services:
         ports:
             - "8000:8000"
         depends_on:
+            langgraph-redis:
+                condition: service_healthy
             langgraph-postgres:
                 condition: service_healthy
         environment:
+            REDIS_URI: redis://langgraph-redis:6379
             POSTGRES_URI: {DEFAULT_POSTGRES_URI}
         healthcheck:
             test: python /api/healthcheck.py

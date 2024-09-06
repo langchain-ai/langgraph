@@ -1,4 +1,3 @@
-from abc import ABC
 from datetime import datetime, timezone
 from typing import (
     Any,
@@ -22,6 +21,8 @@ from langgraph.checkpoint.base.id import uuid6
 from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_methods
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
+    ERROR,
+    SCHEDULED,
     ChannelProtocol,
     SendProtocol,
 )
@@ -51,10 +52,10 @@ class CheckpointMetadata(TypedDict, total=False):
 
     Mapping from node name to writes emitted by that node.
     """
-    score: Optional[int]
-    """The score of the checkpoint.
+    parents: dict[str, str]
+    """The IDs of the parent checkpoints.
 
-    The score can be used to mark a checkpoint as "good".
+    Mapping from checkpoint namespace to checkpoint ID.
     """
 
 
@@ -96,8 +97,6 @@ class Checkpoint(TypedDict):
     pending_sends: List[SendProtocol]
     """List of packets sent to nodes but not yet processed.
     Cleared by the next checkpoint."""
-    current_tasks: Dict[str, TaskInfo]
-    """Map from task ID to task info."""
 
 
 def empty_checkpoint() -> Checkpoint:
@@ -109,7 +108,6 @@ def empty_checkpoint() -> Checkpoint:
         channel_versions={},
         versions_seen={},
         pending_sends=[],
-        current_tasks={},
     )
 
 
@@ -122,7 +120,6 @@ def copy_checkpoint(checkpoint: Checkpoint) -> Checkpoint:
         channel_versions=checkpoint["channel_versions"].copy(),
         versions_seen={k: v.copy() for k, v in checkpoint["versions_seen"].items()},
         pending_sends=checkpoint.get("pending_sends", []).copy(),
-        current_tasks=checkpoint.get("current_tasks", {}).copy(),
     )
 
 
@@ -140,6 +137,8 @@ def create_checkpoint(
     else:
         values: dict[str, Any] = {}
         for k, v in channels.items():
+            if k not in checkpoint["channel_versions"]:
+                continue
             try:
                 values[k] = v.checkpoint()
             except EmptyChannelError:
@@ -152,7 +151,6 @@ def create_checkpoint(
         channel_versions=checkpoint["channel_versions"],
         versions_seen=checkpoint["versions_seen"],
         pending_sends=checkpoint.get("pending_sends", []),
-        current_tasks={},
     )
 
 
@@ -194,7 +192,7 @@ CheckpointId = ConfigurableFieldSpec(
 )
 
 
-class BaseCheckpointSaver(ABC):
+class BaseCheckpointSaver:
     """Base class for creating a graph checkpointer.
 
     Checkpointers allow LangGraph agents to persist their state
@@ -437,3 +435,13 @@ def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
     return config["configurable"].get(
         "checkpoint_id", config["configurable"].get("thread_ts")
     )
+
+
+"""
+Mapping from error type to error index.
+Regular writes just map to their index in the list of writes being saved.
+Special writes (e.g. errors) map to negative indices, to avoid those writes from
+conflicting with regular writes.
+Each Checkpointer implementation should use this mapping in put_writes.
+"""
+WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2}

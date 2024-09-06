@@ -12,10 +12,9 @@ Welcome to the LangGraph how-to guides! These guides provide practical, step-by-
 LangGraph is known for being a highly controllable agent framework.
 These how-to guides show how to achieve that controllability.
 
-- [How to create subgraphs](subgraph.ipynb)
 - [How to create branches for parallel execution](branching.ipynb)
 - [How to create map-reduce branches for parallel execution](map-reduce.ipynb)
-
+- [How to control graph recursion limit](recursion-limit.ipynb)
 
 ## Persistence
 
@@ -28,6 +27,7 @@ LangGraph makes it easy to persist state across graph runs. The guide below show
 - [How to use Postgres checkpointer for persistence](persistence_postgres.ipynb)
 - [How to create a custom checkpointer using MongoDB](persistence_mongodb.ipynb)
 - [How to create a custom checkpointer using Redis](persistence_redis.ipynb)
+- [How to share state between threads](memory/shared-state.ipynb)
 
 ## Human in the Loop
 
@@ -35,6 +35,7 @@ One of LangGraph's main benefits is that it makes human-in-the-loop workflows ea
 These guides cover common examples of that.
 
 - [How to add breakpoints](human_in_the_loop/breakpoints.ipynb)
+- [How to add dynamic breakpoints](human_in_the_loop/dynamic_breakpoints.ipynb)
 - [How to edit graph state](human_in_the_loop/edit-graph-state.ipynb)
 - [How to wait for user input](human_in_the_loop/wait-user-input.ipynb)
 - [How to view and update past graph state](human_in_the_loop/time-travel.ipynb)
@@ -54,6 +55,7 @@ These guides show how to use different streaming modes.
 - [How to stream events from within a tool](streaming-events-from-within-tools.ipynb)
 - [How to stream events from within a tool without LangChain models](streaming-events-from-within-tools-without-langchain.ipynb)
 - [How to stream events from the final node](streaming-from-final-node.ipynb)
+- [How to stream from subgraphs](streaming-subgraphs.ipynb)
 
 ## Tool calling
 
@@ -62,6 +64,12 @@ These guides show how to use different streaming modes.
 - [How to pass graph state to tools](pass-run-time-values-to-tools.ipynb)
 - [How to pass config to tools](pass-config-to-tools.ipynb)
 - [How to handle large numbers of tools](many-tools.ipynb)
+
+## Subgraphs
+
+- [How to create subgraphs](subgraph.ipynb)
+- [How to manage state in subgraphs](subgraphs-manage-state.ipynb)
+- [How to transform inputs and outputs of a subgraph](subgraph-transform-state.ipynb)
 
 ## State Management
 
@@ -78,6 +86,7 @@ These guides show how to use different streaming modes.
 - [How to use a Pydantic model as your state](state-model.ipynb)
 - [How to use a context object in state](state-context-key.ipynb)
 - [How to add node retries](node-retries.ipynb)
+- [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
 
 ## Prebuilt ReAct Agent
 

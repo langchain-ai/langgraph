@@ -1,5 +1,6 @@
 # How to stream events
-This guide covers how to stream events from your graph (`stream_mode="events"`). Depending on the use case and user experience of your LangGraph application, your application may process event types differently.
+
+This guide covers how to stream events from your graph (`stream_mode="events"`). Depending on the use case and user experience of your LangGraph application, your application may process event types differently. Read more about events in this [conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#astream_events-for-streaming-tokens-of-llm-calls).
 
 === "Python"
 
@@ -7,6 +8,8 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -18,9 +21,11 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
     ```
 
 === "CURL"
@@ -28,18 +33,22 @@ This guide covers how to stream events from your graph (`stream_mode="events"`).
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 Output:
 
 
-    {'thread_id': '3f4c64e0-f792-4a5e-aa07-a4404e06e0bd',
-     'created_at': '2024-06-24T22:16:29.301522+00:00',
-     'updated_at': '2024-06-24T22:16:29.301522+00:00',
-     'metadata': {},
-     'status': 'idle',
-     'config': {}}
+    {
+        'thread_id': '3f4c64e0-f792-4a5e-aa07-a4404e06e0bd',
+        'created_at': '2024-06-24T22:16:29.301522+00:00',
+        'updated_at': '2024-06-24T22:16:29.301522+00:00',
+        'metadata': {},
+        'status': 'idle',
+        'config': {},
+        'values': None
+    }
 
 
 
@@ -62,7 +71,7 @@ Streaming events produces responses containing an `event` key (in addition to ot
     # stream events
     async for chunk in client.runs.stream(
         thread_id=thread["thread_id"],
-        assistant_id="agent",
+        assistant_id=assistant_id,
         input=input,
         stream_mode="events",
     ):
@@ -76,27 +85,27 @@ Streaming events produces responses containing an `event` key (in addition to ot
     ```js
     // create input
     const input = {
-        "messages": [
-            {
-                "role": "human",
-                "content": "What's the weather in SF?",
-            }
-        ]
+      "messages": [
+        {
+          "role": "human",
+          "content": "What's the weather in SF?",
+        }
+      ]
     }
 
     // stream events
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      "agent",
+      assistantID,
       {
         input,
         streamMode: "events"
       }
     );
     for await (const chunk of streamResponse) {
-      console.log(f"Receiving new event of type: {chunk.event}...")
-      console.log(chunk.data)
-      console.log("\n\n")
+      console.log(`Receiving new event of type: ${chunk.event}...`);
+      console.log(chunk.data);
+      console.log("\n\n");
     }
     ```
 
@@ -279,9 +288,6 @@ Output:
     
     Receiving new event of type: end...
     None
-    
-    
-    
 
 
 ## Token-by-Token Streaming
@@ -296,7 +302,7 @@ Token-by-token streaming can be implemented with the `events` streaming mode. Th
     # stream token-by-token
     async for chunk in client.runs.stream(
         thread_id=thread["thread_id"],
-        assistant_id="agent",
+        assistant_id=assistant_id,
         input=input,
         stream_mode="events",
     ):
@@ -317,7 +323,7 @@ Token-by-token streaming can be implemented with the `events` streaming mode. Th
     // stream events
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      "agent",
+      assistantID,
       {
         input,
         streamMode: "events"

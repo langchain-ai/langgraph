@@ -2,6 +2,10 @@
 
 Implementation of LangGraph CheckpointSaver that uses Postgres.
 
+## Dependencies
+
+By default `langgraph-checkpoint-postgres` installs `psycopg` (Psycopg 3) without any extras. However, you can choose a specific installation that best suits your needs [here](https://www.psycopg.org/psycopg3/docs/basic/install.html) (for example, `psycopg[binary]`).
+
 ## Usage
 
 > [!IMPORTANT]
@@ -44,7 +48,6 @@ with PostgresSaver.from_conn_string(DB_URI) as checkpointer:
             }
         },
         "pending_sends": [],
-        "current_tasks": {}
     }
 
     # store checkpoint
@@ -87,7 +90,6 @@ async with AsyncPostgresSaver.from_conn_string(DB_URI) as checkpointer:
             }
         },
         "pending_sends": [],
-        "current_tasks": {}
     }
 
     # store checkpoint

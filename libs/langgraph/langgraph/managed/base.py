@@ -1,13 +1,13 @@
-import asyncio
 from abc import ABC, abstractmethod
-from contextlib import AsyncExitStack, ExitStack, asynccontextmanager, contextmanager
+from contextlib import asynccontextmanager, contextmanager
 from inspect import isclass
 from typing import (
     Any,
-    AsyncGenerator,
-    Generator,
+    AsyncIterator,
     Generic,
+    Iterator,
     NamedTuple,
+    Sequence,
     Type,
     TypeVar,
     Union,
@@ -16,18 +16,22 @@ from typing import (
 from langchain_core.runnables import RunnableConfig
 from typing_extensions import Self, TypeGuard
 
+from langgraph.constants import RUNTIME_PLACEHOLDER
+
 V = TypeVar("V")
+U = TypeVar("U")
 
 
 class ManagedValue(ABC, Generic[V]):
+    runtime: bool = False
+    """Whether the managed value is always created at runtime, ie. never stored."""
+
     def __init__(self, config: RunnableConfig) -> None:
         self.config = config
 
     @classmethod
     @contextmanager
-    def enter(
-        cls, config: RunnableConfig, **kwargs: Any
-    ) -> Generator[Self, None, None]:
+    def enter(cls, config: RunnableConfig, **kwargs: Any) -> Iterator[Self]:
         try:
             value = cls(config, **kwargs)
             yield value
@@ -41,9 +45,7 @@ class ManagedValue(ABC, Generic[V]):
 
     @classmethod
     @asynccontextmanager
-    async def aenter(
-        cls, config: RunnableConfig, **kwargs: Any
-    ) -> AsyncGenerator[Self, None]:
+    async def aenter(cls, config: RunnableConfig, **kwargs: Any) -> AsyncIterator[Self]:
         try:
             value = cls(config, **kwargs)
             yield value
@@ -56,8 +58,15 @@ class ManagedValue(ABC, Generic[V]):
                 pass
 
     @abstractmethod
-    def __call__(self, step: int) -> V:
-        ...
+    def __call__(self, step: int) -> V: ...
+
+
+class WritableManagedValue(Generic[V, U], ManagedValue[V], ABC):
+    @abstractmethod
+    def update(self, writes: Sequence[U]) -> None: ...
+
+    @abstractmethod
+    async def aupdate(self, writes: Sequence[U]) -> None: ...
 
 
 class ConfiguredManagedValue(NamedTuple):
@@ -67,8 +76,6 @@ class ConfiguredManagedValue(NamedTuple):
 
 ManagedValueSpec = Union[Type[ManagedValue], ConfiguredManagedValue]
 
-ManagedValueMapping = dict[str, ManagedValue]
-
 
 def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
     return (isclass(value) and issubclass(value, ManagedValue)) or isinstance(
@@ -76,46 +83,65 @@ def is_managed_value(value: Any) -> TypeGuard[ManagedValueSpec]:
     )
 
 
-@contextmanager
-def ManagedValuesManager(
-    values: dict[str, ManagedValueSpec],
-    config: RunnableConfig,
-) -> Generator[ManagedValueMapping, None, None]:
-    if values:
-        with ExitStack() as stack:
-            yield {
-                key: stack.enter_context(
-                    value.cls.enter(config, **value.kwargs)
-                    if isinstance(value, ConfiguredManagedValue)
-                    else value.enter(config)
-                )
-                for key, value in values.items()
-            }
-    else:
-        yield {}
+def is_readonly_managed_value(value: Any) -> TypeGuard[Type[ManagedValue]]:
+    return (
+        isclass(value)
+        and issubclass(value, ManagedValue)
+        and not issubclass(value, WritableManagedValue)
+    ) or (
+        isinstance(value, ConfiguredManagedValue)
+        and not issubclass(value.cls, WritableManagedValue)
+    )
 
 
-@asynccontextmanager
-async def AsyncManagedValuesManager(
-    values: dict[str, ManagedValueSpec],
-    config: RunnableConfig,
-) -> AsyncGenerator[ManagedValueMapping, None]:
-    if values:
-        async with AsyncExitStack() as stack:
-            # create enter tasks with reference to spec
-            tasks = {
-                asyncio.create_task(
-                    stack.enter_async_context(
-                        value.cls.aenter(config, **value.kwargs)
-                        if isinstance(value, ConfiguredManagedValue)
-                        else value.aenter(config)
-                    )
-                ): key
-                for key, value in values.items()
-            }
-            # wait for all enter tasks
-            done, _ = await asyncio.wait(tasks, return_when=asyncio.ALL_COMPLETED)
-            # build mapping from spec to result
-            yield {tasks[task]: task.result() for task in done}
-    else:
-        yield {}
+def is_writable_managed_value(value: Any) -> TypeGuard[Type[WritableManagedValue]]:
+    return (isclass(value) and issubclass(value, WritableManagedValue)) or (
+        isinstance(value, ConfiguredManagedValue)
+        and issubclass(value.cls, WritableManagedValue)
+    )
+
+
+ChannelKeyPlaceholder = object()
+ChannelTypePlaceholder = object()
+
+
+class ManagedValueMapping(dict[str, ManagedValue]):
+    def replace_runtime_values(self, step: int, values: Union[dict[str, Any], Any]):
+        if not self or not values:
+            return
+        if all(not mv.runtime for mv in self.values()):
+            return
+        if isinstance(values, dict):
+            for key, value in values.items():
+                for chan, mv in self.items():
+                    if mv.runtime and mv(step) is value:
+                        values[key] = {RUNTIME_PLACEHOLDER: chan}
+        elif hasattr(values, "__dir__") and callable(values.__dir__):
+            for key in dir(values):
+                try:
+                    value = getattr(values, key)
+                    for chan, mv in self.items():
+                        if mv.runtime and mv(step) is value:
+                            setattr(values, key, {RUNTIME_PLACEHOLDER: chan})
+                except AttributeError:
+                    pass
+
+    def replace_runtime_placeholders(
+        self, step: int, values: Union[dict[str, Any], Any]
+    ):
+        if not self or not values:
+            return
+        if all(not mv.runtime for mv in self.values()):
+            return
+        if isinstance(values, dict):
+            for key, value in values.items():
+                if isinstance(value, dict) and RUNTIME_PLACEHOLDER in value:
+                    values[key] = self[value[RUNTIME_PLACEHOLDER]](step)
+        elif hasattr(values, "__dir__") and callable(values.__dir__):
+            for key in dir(values):
+                try:
+                    value = getattr(values, key)
+                    if isinstance(value, dict) and RUNTIME_PLACEHOLDER in value:
+                        setattr(values, key, self[value[RUNTIME_PLACEHOLDER]](step))
+                except AttributeError:
+                    pass

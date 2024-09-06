@@ -32,8 +32,7 @@ class Submit(Protocol[P, T]):
         __name__: Optional[str] = None,
         __cancel_on_exit__: bool = False,
         **kwargs: P.kwargs,
-    ) -> concurrent.futures.Future[T]:
-        ...
+    ) -> concurrent.futures.Future[T]: ...
 
 
 class BackgroundExecutor(ContextManager):
@@ -100,6 +99,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         self.context_not_supported = sys.version_info < (3, 11)
         self.tasks: dict[asyncio.Task, bool] = {}
         self.sentinel = object()
+        self.loop = asyncio.get_running_loop()
 
     def submit(
         self,
@@ -111,23 +111,23 @@ class AsyncBackgroundExecutor(AsyncContextManager):
     ) -> asyncio.Task[T]:
         coro = fn(*args, **kwargs)
         if self.context_not_supported:
-            task = asyncio.create_task(coro, name=__name__)
+            task = self.loop.create_task(coro, name=__name__)
         else:
-            task = asyncio.create_task(coro, name=__name__, context=copy_context())
+            task = self.loop.create_task(coro, name=__name__, context=copy_context())
         self.tasks[task] = __cancel_on_exit__
         task.add_done_callback(self.done)
         return task
 
     def done(self, task: asyncio.Task) -> None:
         try:
-            task.result()
-        except GraphInterrupt:
-            # This exception is an interruption signal, not an error
-            # so we don't want to re-raise it on exit
-            self.tasks.pop(task)
-        except BaseException:
-            pass
-        else:
+            if exc := task.exception():
+                # This exception is an interruption signal, not an error
+                # so we don't want to re-raise it on exit
+                if isinstance(exc, GraphInterrupt):
+                    self.tasks.pop(task)
+            else:
+                self.tasks.pop(task)
+        except asyncio.CancelledError:
             self.tasks.pop(task)
 
     async def __aenter__(self) -> Submit:
@@ -146,12 +146,13 @@ class AsyncBackgroundExecutor(AsyncContextManager):
         # wait for all tasks to finish
         if self.tasks:
             await asyncio.wait(self.tasks)
-        # re-raise the first exception that occurred in a task
+        # if there's already an exception being raised, don't raise another one
         if exc_type is None:
-            # if there's already an exception being raised, don't raise another one
+            # re-raise the first exception that occurred in a task
             for task in self.tasks:
                 try:
-                    task.result()
+                    if exc := task.exception():
+                        raise exc
                 except asyncio.CancelledError:
                     pass
 

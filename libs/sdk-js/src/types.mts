@@ -3,6 +3,8 @@ import { Config, Metadata } from "./schema.js";
 export type StreamMode = "values" | "messages" | "updates" | "events" | "debug";
 export type MultitaskStrategy = "reject" | "interrupt" | "rollback" | "enqueue";
 export type OnConflictBehavior = "raise" | "do_nothing";
+export type OnCompletionBehavior = "complete" | "continue";
+export type DisconnectMode = "cancel" | "continue";
 export type StreamEvent =
   | "events"
   | "metadata"
@@ -31,6 +33,11 @@ interface RunsInvokePayload {
   config?: Config;
 
   /**
+   * Checkpoint ID for when creating a new run.
+   */
+  checkpointId?: string;
+
+  /**
    * Interrupt execution before entering these nodes.
    */
   interruptBefore?: string[];
@@ -56,6 +63,27 @@ interface RunsInvokePayload {
    * Abort controller signal to cancel the run.
    */
   signal?: AbortController["signal"];
+
+  /**
+   * Behavior to handle run completion. Only relevant if
+   * there is a pending/inflight run on the same thread. One of:
+   * - "complete": Complete the run.
+   * - "continue": Continue the run.
+   */
+  onCompletion?: OnCompletionBehavior;
+
+  /**
+   * Webhook to call when the run is complete.
+   */
+  webhook?: string;
+
+  /**
+   * Behavior to handle disconnection. Only relevant if
+   * there is a pending/inflight run on the same thread. One of:
+   * - "cancel": Cancel the run.
+   * - "continue": Continue the run.
+   */
+  onDisconnect?: DisconnectMode;
 }
 
 export interface RunsStreamPayload extends RunsInvokePayload {
@@ -77,12 +105,7 @@ export interface RunsStreamPayload extends RunsInvokePayload {
   feedbackKeys?: string[];
 }
 
-export interface RunsCreatePayload extends RunsInvokePayload {
-  /**
-   * Webhook to call when the run is complete.
-   */
-  webhook?: string;
-}
+export interface RunsCreatePayload extends RunsInvokePayload {}
 
 export interface CronsCreatePayload extends RunsCreatePayload {
   /**

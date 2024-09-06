@@ -35,7 +35,6 @@ with SqliteSaver.from_conn_string(":memory:") as checkpointer:
             }
         },
         "pending_sends": [],
-        "current_tasks": {}
     }
 
     # store checkpoint
@@ -78,7 +77,6 @@ async with AsyncSqliteSaver.from_conn_string(":memory:") as checkpointer:
             }
         },
         "pending_sends": [],
-        "current_tasks": {}
     }
 
     # store checkpoint

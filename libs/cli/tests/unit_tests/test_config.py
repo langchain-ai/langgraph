@@ -232,6 +232,31 @@ ENV LANGSERVE_GRAPHS='{"agent": "/deps/__outer_graphs/src/agent.py:graph"}'"""
     assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
 
 
+# node.js build used for LangGraph Cloud
+def test_config_to_docker_nodejs():
+    graphs = {"agent": "./graphs/agent.js:graph"}
+    actual_docker_stdin = config_to_docker(
+        PATH_TO_CONFIG,
+        validate_config(
+            {
+                "node_version": "20",
+                "graphs": graphs,
+                "dockerfile_lines": ["ARG meow", "ARG foo"],
+            }
+        ),
+        "langchain/langgraphjs-api",
+    )
+    expected_docker_stdin = """FROM langchain/langgraphjs-api:20
+ARG meow
+ARG foo
+ADD . /deps/unit_tests
+RUN cd /deps/unit_tests && yarn install --frozen-lockfile
+ENV LANGSERVE_GRAPHS='{"agent": "./graphs/agent.js:graph"}'
+WORKDIR /deps/unit_tests"""
+
+    assert clean_empty_lines(actual_docker_stdin) == expected_docker_stdin
+
+
 # config_to_compose
 def test_config_to_compose_simple_config():
     graphs = {"agent": "./agent.py:graph"}

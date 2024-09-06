@@ -4,11 +4,9 @@ import asyncio
 from typing import (
     Any,
     Callable,
-    List,
     NamedTuple,
     Optional,
     Sequence,
-    Tuple,
     TypeVar,
     Union,
 )
@@ -18,7 +16,7 @@ from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_SEND, TASKS, Send
 from langgraph.errors import InvalidUpdateError
-from langgraph.utils import RunnableCallable
+from langgraph.utils.runnable import RunnableCallable
 
 TYPE_SEND = Callable[[Sequence[tuple[str, Any]]], None]
 R = TypeVar("R", bound=Runnable)
@@ -32,7 +30,7 @@ class ChannelWriteEntry(NamedTuple):
     channel: str
     value: Any = PASSTHROUGH
     skip_none: bool = False
-    mapper: Optional[Runnable] = None
+    mapper: Optional[Callable] = None
 
 
 class ChannelWrite(RunnableCallable):
@@ -59,9 +57,6 @@ class ChannelWrite(RunnableCallable):
         self.writes = writes
         self.require_at_least_one_of = require_at_least_one_of
 
-    def __repr_args__(self) -> Any:
-        return [("writes", self.writes)]
-
     def get_name(
         self, suffix: Optional[str] = None, *, name: Optional[str] = None
     ) -> str:
@@ -82,65 +77,29 @@ class ChannelWrite(RunnableCallable):
         ]
 
     def _write(self, input: Any, config: RunnableConfig) -> None:
-        # split packets and entries
-        writes = [(TASKS, packet) for packet in self.writes if isinstance(packet, Send)]
-        entries = [
-            write for write in self.writes if isinstance(write, ChannelWriteEntry)
+        writes = [
+            ChannelWriteEntry(write.channel, input, write.skip_none, write.mapper)
+            if isinstance(write, ChannelWriteEntry) and write.value is PASSTHROUGH
+            else write
+            for write in self.writes
         ]
-        for entry in entries:
-            if entry.channel == TASKS:
-                raise InvalidUpdateError("Cannot write to the reserved channel TASKS")
-        # process entries into values
-        values = [
-            input if write.value is PASSTHROUGH else write.value for write in entries
-        ]
-        values = [
-            val if write.mapper is None else write.mapper.invoke(val, config)
-            for val, write in zip(values, entries)
-        ]
-        values = [
-            (write.channel, val)
-            for val, write in zip(values, entries)
-            if not write.skip_none or val is not None
-        ]
-        # write packets and values
         self.do_write(
             config,
-            writes + values,
+            writes,
             self.require_at_least_one_of if input is not None else None,
         )
         return input
 
     async def _awrite(self, input: Any, config: RunnableConfig) -> None:
-        # split packets and entries
-        writes = [(TASKS, packet) for packet in self.writes if isinstance(packet, Send)]
-        entries = [
-            write for write in self.writes if isinstance(write, ChannelWriteEntry)
+        writes = [
+            ChannelWriteEntry(write.channel, input, write.skip_none, write.mapper)
+            if isinstance(write, ChannelWriteEntry) and write.value is PASSTHROUGH
+            else write
+            for write in self.writes
         ]
-        for entry in entries:
-            if entry.channel == TASKS:
-                raise InvalidUpdateError("Cannot write to the reserved channel TASKS")
-        # process entries into values
-        values = [
-            input if write.value is PASSTHROUGH else write.value for write in entries
-        ]
-        values = await asyncio.gather(
-            *(
-                _mk_future(val)
-                if write.mapper is None
-                else write.mapper.ainvoke(val, config)
-                for val, write in zip(values, entries)
-            )
-        )
-        values = [
-            (write.channel, val)
-            for val, write in zip(values, entries)
-            if not write.skip_none or val is not None
-        ]
-        # write packets and values
         self.do_write(
             config,
-            writes + values,
+            writes,
             self.require_at_least_one_of if input is not None else None,
         )
         return input
@@ -148,9 +107,32 @@ class ChannelWrite(RunnableCallable):
     @staticmethod
     def do_write(
         config: RunnableConfig,
-        values: List[Tuple[str, Any]],
+        writes: Sequence[Union[ChannelWriteEntry, Send]],
         require_at_least_one_of: Optional[Sequence[str]] = None,
     ) -> None:
+        # validate
+        for w in writes:
+            if isinstance(w, ChannelWriteEntry):
+                if w.channel == TASKS:
+                    raise InvalidUpdateError(
+                        "Cannot write to the reserved channel TASKS"
+                    )
+                if w.value is PASSTHROUGH:
+                    raise InvalidUpdateError("PASSTHROUGH value must be replaced")
+        # split packets and entries
+        sends = [(TASKS, packet) for packet in writes if isinstance(packet, Send)]
+        entries = [write for write in writes if isinstance(write, ChannelWriteEntry)]
+        # process entries into values
+        values = [
+            write.mapper(write.value) if write.mapper is not None else write.value
+            for write in entries
+        ]
+        values = [
+            (write.channel, val)
+            for val, write in zip(values, entries)
+            if not write.skip_none or val is not None
+        ]
+        # filter out SKIP_WRITE values
         filtered = [(chan, val) for chan, val in values if val is not SKIP_WRITE]
         if require_at_least_one_of is not None:
             if not {chan for chan, _ in filtered} & set(require_at_least_one_of):
@@ -158,7 +140,7 @@ class ChannelWrite(RunnableCallable):
                     f"Must write to at least one of {require_at_least_one_of}"
                 )
         write: TYPE_SEND = config["configurable"][CONFIG_KEY_SEND]
-        write(filtered)
+        write(sends + filtered)
 
     @staticmethod
     def is_writer(runnable: Runnable) -> bool:

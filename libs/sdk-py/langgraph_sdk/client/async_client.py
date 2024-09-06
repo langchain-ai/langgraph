@@ -18,14 +18,15 @@ import httpx_sse
 import orjson
 from httpx._types import QueryParamTypes
 
-import langgraph_sdk
 from langgraph_sdk.schema import (
     Assistant,
     Config,
     Cron,
+    DisconnectMode,
     GraphSchema,
-    Metadata,
+    Json,
     MultitaskStrategy,
+    OnCompletionBehavior,
     OnConflictBehavior,
     Run,
     RunCreate,
@@ -35,13 +36,16 @@ from langgraph_sdk.schema import (
     ThreadState,
     ThreadStatus,
 )
-from langgraph_sdk.utils import get_api_key
+from langgraph_sdk.utils import get_headers, orjson_default
 
 logger = logging.getLogger(__name__)
 
 
 def get_client(
-    *, url: Optional[str] = None, api_key: Optional[str] = None
+    *,
+    url: Optional[str] = None,
+    api_key: Optional[str] = None,
+    headers: Optional[dict[str, str]] = None,
 ) -> AsyncLangGraphClient:
     """Get a LangGraphClient instance.
 
@@ -53,6 +57,7 @@ def get_client(
                 2. LANGGRAPH_API_KEY
                 3. LANGSMITH_API_KEY
                 4. LANGCHAIN_API_KEY
+        headers: Optional custom headers
     """
     transport: Optional[httpx.AsyncBaseTransport] = None
     if url is None:
@@ -65,17 +70,11 @@ def get_client(
             url = "http://localhost:8123"
     if transport is None:
         transport = httpx.AsyncHTTPTransport(retries=5)
-    headers = {
-        "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
-    }
-    api_key = get_api_key(api_key)
-    if api_key:
-        headers["x-api-key"] = api_key
     client = httpx.AsyncClient(
         base_url=url,
         transport=transport,
         timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
-        headers=headers,
+        headers=get_headers(api_key, headers),
     )
     return AsyncLangGraphClient(client)
 
@@ -191,23 +190,12 @@ class AsyncHttpClient:
                 )
 
 
-def _orjson_default(obj: Any) -> Any:
-    if hasattr(obj, "model_dump") and callable(obj.model_dump):
-        return obj.model_dump()
-    elif hasattr(obj, "dict") and callable(obj.dict):
-        return obj.dict()
-    elif isinstance(obj, (set, frozenset)):
-        return list(obj)
-    else:
-        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-
-
 async def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
     body = await asyncio.get_running_loop().run_in_executor(
         None,
         orjson.dumps,
         json,
-        _orjson_default,
+        orjson_default,
         orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS,
     )
     content_length = str(len(body))
@@ -405,7 +393,7 @@ class AsyncAssistantsClient:
         graph_id: Optional[str],
         config: Optional[Config] = None,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         assistant_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Assistant:
@@ -453,7 +441,7 @@ class AsyncAssistantsClient:
         *,
         graph_id: Optional[str] = None,
         config: Optional[Config] = None,
-        metadata: Metadata = None,
+        metadata: Json = None,
     ) -> Assistant:
         """Update an assistant.
 
@@ -515,7 +503,7 @@ class AsyncAssistantsClient:
     async def search(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         graph_id: Optional[str] = None,
         limit: int = 10,
         offset: int = 0,
@@ -591,7 +579,7 @@ class AsyncThreadsClient:
     async def create(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
         thread_id: Optional[str] = None,
         if_exists: Optional[OnConflictBehavior] = None,
     ) -> Thread:
@@ -666,7 +654,8 @@ class AsyncThreadsClient:
     async def search(
         self,
         *,
-        metadata: Metadata = None,
+        metadata: Json = None,
+        values: Json = None,
         status: Optional[ThreadStatus] = None,
         limit: int = 10,
         offset: int = 0,
@@ -699,6 +688,8 @@ class AsyncThreadsClient:
         }
         if metadata:
             payload["metadata"] = metadata
+        if values:
+            payload["values"] = values
         if status:
             payload["status"] = status
         return await self.http.post(
@@ -844,15 +835,14 @@ class AsyncThreadsClient:
             thread_id: The ID of the thread to update.
             values: The values to update to the state.
             as_node: Update the state as if this node had just executed.
-
-            checkpoint_id: The ID of the checkpoint to get the state of.
+            checkpoint_id: The ID of the checkpoint to update the state of.
 
         Returns:
             None
 
         Example Usage:
 
-            await client.threads.get_state(
+            await client.threads.update_state(
                 thread_id="my_thread_id",
                 values={"messages":[{"role": "user", "content": "hello!"}]},
                 as_node="my_node",
@@ -956,6 +946,8 @@ class AsyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> AsyncIterator[StreamPart]:
         ...
@@ -973,6 +965,9 @@ class AsyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        webhook: Optional[str] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> AsyncIterator[StreamPart]:
         ...
 
@@ -989,8 +984,10 @@ class AsyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         feedback_keys: Optional[list[str]] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> AsyncIterator[StreamPart]:
         """Create a run and stream the results.
 
@@ -1012,6 +1009,8 @@ class AsyncRunsClient:
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            on_disconnect: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
 
         Returns:
             AsyncIterator[StreamPart]: Asynchronous iterator of stream results.
@@ -1054,6 +1053,8 @@ class AsyncRunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_disconnect": on_disconnect,
+            "on_completion": on_completion,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/stream"
@@ -1076,6 +1077,7 @@ class AsyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Run:
         ...
 
@@ -1109,6 +1111,7 @@ class AsyncRunsClient:
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Run:
         """Create a background run.
 
@@ -1122,9 +1125,7 @@ class AsyncRunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
@@ -1207,6 +1208,7 @@ class AsyncRunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_completion": on_completion,
         }
         payload = {k: v for k, v in payload.items() if v is not None}
         if thread_id:
@@ -1235,6 +1237,8 @@ class AsyncRunsClient:
         checkpoint_id: Optional[str] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         ...
@@ -1250,6 +1254,9 @@ class AsyncRunsClient:
         config: Optional[Config] = None,
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
+        webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         ...
 
@@ -1265,7 +1272,9 @@ class AsyncRunsClient:
         interrupt_before: Optional[list[str]] = None,
         interrupt_after: Optional[list[str]] = None,
         webhook: Optional[str] = None,
+        on_disconnect: Optional[DisconnectMode] = None,
         multitask_strategy: Optional[MultitaskStrategy] = None,
+        on_completion: Optional[OnCompletionBehavior] = None,
     ) -> Union[list[dict], dict[str, Any]]:
         """Create a run, wait until it finishes and return the final state.
 
@@ -1279,12 +1288,12 @@ class AsyncRunsClient:
             config: The configuration for the assistant.
             checkpoint_id: The checkpoint to start streaming from.
             interrupt_before: Nodes to interrupt immediately before they get executed.
-
             interrupt_after: Nodes to Nodes to interrupt immediately after they get executed.
-
             webhook: Webhook to call after LangGraph API call is done.
             multitask_strategy: Multitask strategy to use.
                 Must be one of 'reject', 'interrupt', 'rollback', or 'enqueue'.
+            on_disconnect: The disconnect mode to use.
+                Must be one of 'cancel' or 'continue'.
 
         Returns:
             Union[list[dict], dict[str, Any]]: The output of the run.
@@ -1344,6 +1353,8 @@ class AsyncRunsClient:
             "webhook": webhook,
             "checkpoint_id": checkpoint_id,
             "multitask_strategy": multitask_strategy,
+            "on_disconnect": on_disconnect,
+            "on_completion": on_completion,
         }
         endpoint = (
             f"/threads/{thread_id}/runs/wait" if thread_id is not None else "/runs/wait"
@@ -1424,8 +1435,30 @@ class AsyncRunsClient:
             json=None,
         )
 
-    async def join(self, thread_id: str, run_id: str) -> None:
-        """Block until a run is done.
+    async def join(self, thread_id: str, run_id: str) -> dict:
+        """Block until a run is done. Returns the final state of the thread.
+
+        Args:
+            thread_id: The thread ID to join.
+            run_id: The run ID to join.
+
+        Returns:
+            None
+
+        Example Usage:
+
+            result =await client.runs.join(
+                thread_id="thread_id_to_join",
+                run_id="run_id_to_join"
+            )
+
+        """  # noqa: E501
+        return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
+
+    def join_stream(self, thread_id: str, run_id: str) -> AsyncIterator[StreamPart]:
+        """Stream output from a run in real-time, until the run is done.
+        Output is not buffered, so any output produced before this call will
+        not be received here.
 
         Args:
             thread_id: The thread ID to join.
@@ -1442,7 +1475,7 @@ class AsyncRunsClient:
             )
 
         """  # noqa: E501
-        return await self.http.get(f"/threads/{thread_id}/runs/{run_id}/join")
+        return self.http.stream(f"/threads/{thread_id}/runs/{run_id}/stream", "GET")
 
     async def delete(self, thread_id: str, run_id: str) -> None:
         """Delete a run.

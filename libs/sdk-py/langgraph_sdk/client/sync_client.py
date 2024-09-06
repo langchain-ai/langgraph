@@ -34,7 +34,7 @@ from langgraph_sdk.schema import (
     ThreadState,
     ThreadStatus,
 )
-from langgraph_sdk.utils import get_api_key
+from langgraph_sdk.utils import get_headers, orjson_default
 
 logger = logging.getLogger(__name__)
 
@@ -60,14 +60,11 @@ def get_client(
     headers = {
         "User-Agent": f"langgraph-sdk-py/{langgraph_sdk.__version__}",
     }
-    api_key = get_api_key(api_key)
-    if api_key:
-        headers["x-api-key"] = api_key
     client = httpx.Client(
         base_url=url,
         transport=transport,
         timeout=httpx.Timeout(connect=5, read=60, write=60, pool=5),
-        headers=headers,
+        headers=get_headers(api_key, headers),
     )
     return LangGraphClient(client)
 
@@ -183,21 +180,10 @@ class HttpClient:
                 )
 
 
-def _orjson_default(obj: Any) -> Any:
-    if hasattr(obj, "model_dump") and callable(obj.model_dump):
-        return obj.model_dump()
-    elif hasattr(obj, "dict") and callable(obj.dict):
-        return obj.dict()
-    elif isinstance(obj, (set, frozenset)):
-        return list(obj)
-    else:
-        raise TypeError(f"Object of type {type(obj)} is not JSON serializable")
-
-
 def encode_json(json: Any) -> tuple[dict[str, str], bytes]:
     body = orjson.dumps(
         json,
-        _orjson_default,
+        orjson_default,
         orjson.OPT_SERIALIZE_NUMPY | orjson.OPT_NON_STR_KEYS,
     )
     content_length = str(len(body))
