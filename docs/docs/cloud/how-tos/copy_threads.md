@@ -1,5 +1,4 @@
 # Copying Threads
- 
 
 You may wish to copy (i.e. "fork") an existing thread in order to keep the existing thread's history and create independent runs that do not affect the original thread. This guide shows how you can do that.
 

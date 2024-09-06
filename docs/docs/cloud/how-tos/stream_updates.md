@@ -1,5 +1,4 @@
 # How to stream state updates of your graph
- 
 
 This guide covers how to use `stream_mode="updates"` for your graph, which will stream the updates to the graph state that are made after each node is executed. This differs from using `stream_mode="values"`: instead of streaming the entire value of the state at each superstep, it only streams the updates from each of the nodes that made an update to the state at that superstep. Read [this conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#stream-and-astream) to learn more.
 

@@ -1,5 +1,4 @@
 # Reject
- 
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide][double-texting].
 

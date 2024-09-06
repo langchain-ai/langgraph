@@ -1,7 +1,5 @@
 # How to Edit State of a Deployed Graph
 
- 
-
 When creating LangGraph agents, it is often nice to add a human-in-the-loop component. This can be helpful when giving them access to tools. Often in these situations you may want to edit the graph state before continuing (for example, to edit what tool is being called, or how it is being called).
 
 This can be in several ways, but the primary supported way is to add an "interrupt" before a node is executed. This interrupts execution at that node. You can then use update_state to update the state, and then resume from that spot to continue.

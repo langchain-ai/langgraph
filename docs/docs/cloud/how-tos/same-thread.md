@@ -1,5 +1,4 @@
 # How to run multiple agents on the same thread
- 
 
 In LangGraph Cloud, a thread is not explicitly associated with a particular agent.
 This means that you can run multiple agents on the same thread, which allows a different agent to continue from an initial agent's progress.

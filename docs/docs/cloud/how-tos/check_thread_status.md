@@ -1,5 +1,4 @@
 # Check the Status of your Threads
- 
 
 ## Setup
 

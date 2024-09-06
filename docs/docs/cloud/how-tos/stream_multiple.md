@@ -1,5 +1,4 @@
 # How to configure multiple streaming modes at the same time
- 
 
 This guide covers how to configure multiple streaming modes at the same time.
 

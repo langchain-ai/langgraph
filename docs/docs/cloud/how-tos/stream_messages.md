@@ -1,5 +1,4 @@
 # How to stream messages from your graph
- 
 
 This guide covers how to stream messages from your graph. In order to use this mode, the state of the graph you are interacting with MUST have a `messages` key that is a list of messages.
 
