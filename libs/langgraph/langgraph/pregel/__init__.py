@@ -253,10 +253,12 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
         if auto_validate:
             self.validate()
 
+    def copy(self, update: dict[str, Any]) -> Self:
+        attrs = {**self.__dict__, **update}
+        return Pregel(**attrs)
+
     def with_config(self, config: RunnableConfig | None = None, **kwargs: Any) -> Self:
-        attrs = {**self.__dict__}
-        attrs["config"] = merge_configs(self.config, config, kwargs)
-        return self.__class__(**attrs)
+        return self.copy({"config": merge_configs(self.config, config, kwargs)})
 
     def validate(self) -> Self:
         validate_graph(
