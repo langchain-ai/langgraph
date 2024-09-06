@@ -220,7 +220,7 @@ def test_raises_invalid_managed():
     for _state, _inp, _outp in bad_input_examples:
         with pytest.raises(
             ValueError,
-            match="Invalid managed channels detected in BadInputState: some_input_channel. Managed channels are not permited in Input/Output schema.",
+            match="Invalid managed channels detected in BadInputState: some_input_channel. Managed channels are not permitted in Input/Output schema.",
         ):
             StateGraph(_state, input=_inp, output=_outp)
     bad_output_examples = [
@@ -232,6 +232,6 @@ def test_raises_invalid_managed():
     for _state, _inp, _outp in bad_output_examples:
         with pytest.raises(
             ValueError,
-            match="Invalid managed channels detected in BadOutputState: some_output_channel. Managed channels are not permited in Input/Output schema.",
+            match="Invalid managed channels detected in BadOutputState: some_output_channel. Managed channels are not permitted in Input/Output schema.",
         ):
             StateGraph(_state, input=_inp, output=_outp)

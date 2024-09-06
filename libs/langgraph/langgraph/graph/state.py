@@ -171,7 +171,7 @@ class StateGraph(Graph):
                 schema_name = getattr(schema, "__name__", "")
                 raise ValueError(
                     f"Invalid managed channels detected in {schema_name}: {names}."
-                    " Managed channels are not permited in Input/Output schema."
+                    " Managed channels are not permitted in Input/Output schema."
                 )
             self.schemas[schema] = {**channels, **managed}
             for key, channel in channels.items():
