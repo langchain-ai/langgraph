@@ -22,10 +22,10 @@ from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
     ERROR,
+    SCHEDULED,
     ChannelProtocol,
     SendProtocol,
 )
-from langgraph.constants import SCHEDULED
 
 V = TypeVar("V", int, float, str)
 PendingWrite = Tuple[str, str, Any]
