@@ -1,9 +1,18 @@
-## Enqueue
+# Enqueue
+
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](../concepts/api.md#double-texting).
 
 The guide covers the `enqueue` option for double texting, which adds the interruptions to a queue and executes them in the order they are received by the client. Below is a quick example of using the `enqueue` option.
 
+## Setup
 
 First, we will define a quick helper function for printing out JS and CURL model outputs (you can skip this if using Python):
 
@@ -82,6 +91,8 @@ Then, let's import our required packages and instantiate our client, assistant, 
       --data '{}'
     ```
 
+## Create runs
+
 Now let's start two runs, with the second interrupting the first one with a multitask strategy of "enqueue":
 
 === "Python"
@@ -90,12 +101,12 @@ Now let's start two runs, with the second interrupting the first one with a mult
     first_run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
+        input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     )
     second_run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
+        input={"messages": [{"role": "user", "content": "what's the weather in nyc?"}]},
         multitask_strategy="enqueue",
     )
     ```
@@ -106,13 +117,13 @@ Now let's start two runs, with the second interrupting the first one with a mult
     const firstRun = await client.runs.create(
       thread["thread_id"],
       assistantId,
-      input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
+      input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     )
 
     const secondRun = await client.runs.create(
       thread["thread_id"],
       assistantId,
-      input={"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
+      input={"messages": [{"role": "user", "content": "what's the weather in nyc?"}]},
       multitask_strategy="enqueue",
     )
     ```
@@ -135,6 +146,8 @@ Now let's start two runs, with the second interrupting the first one with a mult
       \"multitask_strategy\": \"enqueue\"
     }"
     ```
+
+## Check run status
 
 Verify that the thread has data from both runs:
 

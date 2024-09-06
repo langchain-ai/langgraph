@@ -1,6 +1,16 @@
 # How to stream full state of your graph
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 This guide covers how to use `stream_mode="values"`, which streams the value of the state at each superstep. This differs from using `stream_mode="updates"`: instead of streaming just the updates to the state from each node, it streams the entire graph state at that superstep. Read [this conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#stream-and-astream) to learn more.
+
+## Setup
 
 First let's set up our client and thread:
 
@@ -51,12 +61,14 @@ Output:
       'values': None
     }
 
+## Stream graph in values mode
+
 Now we can stream by values, which streams the full state of the graph after each node has finished executing:
 
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
+    input = {"messages": [{"role": "user", "content": "what's the weather in la"}]}
 
     # stream values
     async for chunk in client.runs.stream(
@@ -73,7 +85,7 @@ Now we can stream by values, which streams the full state of the graph after eac
 === "Javascript"
 
     ```js
-    const input = {"messages": [{"role": "human", "content": "what's the weather in la"}]}
+    const input = {"messages": [{"role": "user", "content": "what's the weather in la"}]}
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],

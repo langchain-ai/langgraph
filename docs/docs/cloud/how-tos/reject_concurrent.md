@@ -1,8 +1,18 @@
-## Reject
+# Reject
+
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide][double-texting].
 
 The guide covers the `reject` option for double texting, which rejects the new run of the graph by throwing an error and continues with the original run until completion. Below is a quick example of using the `reject` option.
+
+## Setup
 
 First, we will define a quick helper function for printing out JS and CURL model outputs (you can skip this if using Python):
 
@@ -78,6 +88,8 @@ Now, let's import our required packages and instantiate our client, assistant, a
       --data '{}'
     ```
 
+## Create runs
+
 Now we can run a thread and try to run a second one with the "reject" option, which should fail since we have already started a run:
 
 
@@ -87,14 +99,14 @@ Now we can run a thread and try to run a second one with the "reject" option, wh
     run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
+        input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     )
     try:
         await client.runs.create(
             thread["thread_id"],
             assistant_id,
             input={
-                "messages": [{"role": "human", "content": "what's the weather in nyc?"}]
+                "messages": [{"role": "user", "content": "what's the weather in nyc?"}]
             },
             multitask_strategy="reject",
         )
@@ -108,7 +120,7 @@ Now we can run a thread and try to run a second one with the "reject" option, wh
     const run = await client.runs.create(
       thread["thread_id"],
       assistantId,
-      input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
+      input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     );
     
     try {
@@ -116,7 +128,7 @@ Now we can run a thread and try to run a second one with the "reject" option, wh
         thread["thread_id"],
         assistantId,
         { 
-          input: {"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
+          input: {"messages": [{"role": "user", "content": "what's the weather in nyc?"}]},
           multitask_strategy:"reject"
         },
       );
@@ -149,6 +161,7 @@ Output:
     Failed to start concurrent run Client error '409 Conflict' for url 'http://localhost:8123/threads/f9e7088b-8028-4e5c-88d2-9cc9a2870e50/runs'
     For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/409
 
+## Check run status
 
 We can verify that the original thread finished executing:
 

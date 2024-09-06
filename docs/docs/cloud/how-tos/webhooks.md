@@ -1,5 +1,13 @@
 # Use Webhooks
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 You may wish to use webhooks in your client, especially when using async streams in case you want to update something in your service once the API call to LangGraph Cloud has finished running. To do so, you will need to expose an endpoint that can accept POST requests, and then pass it to your API request in the "webhook" parameter.
 
 Currently, the SDK has not exposed this endpoint but you can access it through curl commands as follows.
@@ -14,7 +22,11 @@ The following endpoints accept `webhook` as a parameter:
 - Stream Run Stateless -> POST /runs/stream
 - Wait Run Stateless -> POST /runs/wait
 
-In this example, we will show calling a webhook after streaming a run. First, let's setup our assistant and thread:
+In this example, we will show calling a webhook after streaming a run. 
+
+## Setup
+
+First, let's setup our assistant and thread:
 
 === "Python"
 
@@ -70,13 +82,15 @@ Output:
         'values': None
     }
 
+## Use graph with a webhook
+
 Now we can invoke a run with a webhook:
 
 === "Python"
 
     ```python
     # create input
-    input = { "messages": [{ "role": "human", "content": "Hello!" }] }
+    input = { "messages": [{ "role": "user", "content": "Hello!" }] }
 
     async for chunk in client.runs.stream(
         thread_id=thread["thread_id"],

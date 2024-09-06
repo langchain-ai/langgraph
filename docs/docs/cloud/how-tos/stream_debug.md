@@ -1,10 +1,20 @@
 # How to stream debug events
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 This guide covers how to stream debug events from your graph (`stream_mode="debug"`). Streaming debug events produces responses containing `type` and `timestamp` keys. Debug events correspond to different steps in the graph's execution, and there are three different types of steps that will get streamed back to you:
 
 - `checkpoint`: These events will get streamed anytime the graph saves its state, which occurs after every super-step. Read more about checkpoints [here](https://langchain-ai.github.io/langgraph/concepts/low_level/#checkpointer)
 - `task`: These events will get streamed before each super-step, and will contain information about a single task. Each super-step works by executing a list of tasks, where each task is scoped to a specific node and input. Below we will discuss the format of these tasks in more detail. 
 - `task_result`: After each `task` event, you will see a corresponding `task_result` event which as the name suggests contains information on the results of the task executed in the super-step. Scroll more to learn about the exact structure of these events.
+
+## Setup
 
 First let's set up our client and thread:
 
@@ -56,7 +66,7 @@ Output:
         'values': None
     }
 
-
+## Stream graph in debug mode
 
 === "Python"
 
@@ -65,7 +75,7 @@ Output:
     input = {
         "messages": [
             {
-                "role": "human",
+                "role": "user",
                 "content": "What's the weather in SF?",
             }
         ]

@@ -1,10 +1,20 @@
 # How to run multiple agents on the same thread
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 In LangGraph Cloud, a thread is not explicitly associated with a particular agent.
 This means that you can run multiple agents on the same thread, which allows a different agent to continue from an initial agent's progress.
 
 In this example, we will create two agents and then call them both on the same thread.
 You'll see that the second agent will respond using information from the [checkpoint](https://langchain-ai.github.io/langgraph/concepts/low_level/#checkpointer-state) generated in the thread by the first agent as context.
+
+## Setup
 
 === "Python"
 
@@ -124,6 +134,10 @@ Output:
         }
     }
 
+## Run assistants on thread
+
+### Run OpenAI assistant
+
 We can now run the OpenAI assistant on the thread first.
 
 === "Python"
@@ -178,7 +192,7 @@ We can now run the OpenAI assistant on the thread first.
             "input": {
                 "messages": [
                     {
-                        "role": "human",
+                        "role": "user",
                         "content": "who made you?"
                     }
                 ]
@@ -217,6 +231,8 @@ Output:
 
     Receiving event of type: updates
     {'agent': {'messages': [{'content': 'I was created by OpenAI, a research organization focused on developing and advancing artificial intelligence technology.', 'additional_kwargs': {}, 'response_metadata': {'finish_reason': 'stop', 'model_name': 'gpt-4o-2024-05-13', 'system_fingerprint': 'fp_157b3831f5'}, 'type': 'ai', 'name': None, 'id': 'run-f5735b86-b80d-4c71-8dc3-4782b5a9c7c8', 'example': False, 'tool_calls': [], 'invalid_tool_calls': [], 'usage_metadata': None}]}}
+
+### Run default assistant
 
 Now, we can run it on the default assistant and see that this second assistant is aware of the initial question, and can answer the question, "and you?":
 
@@ -266,7 +282,7 @@ Now, we can run it on the default assistant and see that this second assistant i
             "input": {
                 "messages": [
                     {
-                        "role": "human",
+                        "role": "user",
                         "content": "and you?"
                     }
                 ]

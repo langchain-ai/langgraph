@@ -1,5 +1,13 @@
 # How to Replay and Branch from Prior States
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 With LangGraph Cloud you have the ability to return to any of your prior states and either re-run the graph to reproduce issues noticed during testing, or branch out in a different way from what was originally done in the prior states. In this guide we will show a quick example of how to rerun past states and how to branch off from previous states as well.
 
 ## Setup
@@ -64,7 +72,7 @@ Before replaying a state - we need to create states to replay from! In order to 
 === "Javascript"
 
     ```js
-    const input = { "messages": [{ "role": "human", "content": "Please search the weather in SF" }] }
+    const input = { "messages": [{ "role": "user", "content": "Please search the weather in SF" }] }
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],

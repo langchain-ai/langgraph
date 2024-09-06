@@ -1,5 +1,13 @@
 # How to stream messages from your graph
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 This guide covers how to stream messages from your graph. In order to use this mode, the state of the graph you are interacting with MUST have a `messages` key that is a list of messages.
 
 E.g., the state should look something like:
@@ -37,6 +45,8 @@ With `stream_mode="messages"` two things will be streamed back:
 - It outputs messages returned from nodes (to allow for nodes to return `ToolMessages` and the like)
 
 Read more about how the `messages` streaming mode works [here](https://langchain-ai.github.io/langgraph/cloud/concepts/api/#modemessages)
+
+## Setup
 
 First let's set up our client and thread:
 
@@ -179,6 +189,7 @@ Let's also define a helper function for better formatting of the tool calls in m
     done
     ```
 
+## Stream graph in messages mode
 
 Now we can stream by messages, which will return complete messages (at the end of node execution) as well as tokens for any messages generated inside a node:
 

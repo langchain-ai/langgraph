@@ -117,7 +117,7 @@ Now we can invoke our graph to ensure it is working. Make sure to change the inp
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "what's the weather in sf"}]}
+    input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
     async for chunk in client.runs.stream(
         thread["thread_id"],
         assistant_id,
@@ -131,7 +131,7 @@ Now we can invoke our graph to ensure it is working. Make sure to change the inp
 === "Javascript"
 
     ```js
-    const input = { "messages": [{ "role": "human", "content": "what's the weather in sf"}] }
+    const input = { "messages": [{ "role": "user", "content": "what's the weather in sf"}] }
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],

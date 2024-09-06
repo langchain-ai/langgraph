@@ -1,5 +1,13 @@
 # How to share state between threads
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 By default, state in a graph is scoped to a specific thread. LangGraph also allows you to specify a "scope" for a given key/value pair that exists between threads. This can be useful for storing information that is shared between threads. For instance, you may want to store information about a user's preferences expressed in one thread, and then use that information in another thread.
 
 In this notebook we will go through an example of how to use a graph that has been deployed with shared state.
@@ -59,7 +67,7 @@ Now, let's run the graph on the first thread, and provide it some information ab
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "i like pepperoni pizza"}]}
+    input = {"messages": [{"role": "user", "content": "i like pepperoni pizza"}]}
     config = {"configurable": {"user_id": "123"}}
     # stream values
     async for chunk in client.runs.stream(
@@ -162,7 +170,7 @@ Let's stay on the same thread and provide some additional information. Note that
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "i also just moved to SF"}]}
+    input = {"messages": [{"role": "user", "content": "i also just moved to SF"}]}
     # stream values
     async for chunk in client.runs.stream(
         thread["thread_id"],
@@ -270,7 +278,7 @@ Now, let's run the graph on a completely different thread, and see that it remem
     ```python
     # new thread for new conversation
     thread = await client.threads.create()
-    input = {"messages": [{"role": "human", "content": "where and what should i eat for dinner? Can you list some restaurants?"}]}
+    input = {"messages": [{"role": "user", "content": "where and what should i eat for dinner? Can you list some restaurants?"}]}
     # stream values
     async for chunk in client.runs.stream(
         thread["thread_id"],
@@ -330,7 +338,7 @@ Now, let's run the graph on a completely different thread, and see that it remem
         "assistant_id": "agent",
         "input": {
             "messages": [{
-            "role": "human", 
+            "role": "user", 
             "content": "where and what should i eat for dinner? Can you list some restaurants?"
             }]
         },
@@ -389,7 +397,7 @@ Let's now run the graph for another user to verify that the preferences of the f
     # new thread for new conversation
     thread = await client.threads.create()
     # create input
-    input = {"messages": [{"role": "human", "content": "where do I live? what do I like to eat?"}]}
+    input = {"messages": [{"role": "user", "content": "where do I live? what do I like to eat?"}]}
     config = {"configurable": {"user_id": "321"}}
     # stream values
     async for chunk in client.runs.stream(

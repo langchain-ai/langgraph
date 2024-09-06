@@ -1,8 +1,18 @@
-## Rollback
+# Rollback
+
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide][double-texting].
 
 The guide covers the `rollback` option for double texting, which interrupts the prior run of the graph and starts a new one with the double-text. This option is very similar to the `interrupt` option, but in this case the first run is completely deleted from the database and cannot be restarted. Below is a quick example of using the `rollback` option.
+
+## Setup
 
 First, we will define a quick helper function for printing out JS and CURL model outputs (you can skip this if using Python):
 
@@ -80,6 +90,8 @@ Now, let's import our required packages and instantiate our client, assistant, a
       --data '{}'
     ```
 
+## Create runs
+
 Now let's run a thread with the multitask parameter set to "rollback":
 
 === "Python"
@@ -89,13 +101,13 @@ Now let's run a thread with the multitask parameter set to "rollback":
     rolled_back_run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
+        input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     )
     await asyncio.sleep(2)
     run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
+        input={"messages": [{"role": "user", "content": "what's the weather in nyc?"}]},
         multitask_strategy="rollback",
     )
     # wait until the second run completes
@@ -145,6 +157,8 @@ Now let's run a thread with the multitask parameter set to "rollback":
     }" && curl --request GET \
     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/<RUN_ID>/join
     ```
+
+## Check run status
 
 We can see that the thread has data only from the second run
 

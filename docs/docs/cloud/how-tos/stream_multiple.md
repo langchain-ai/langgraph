@@ -1,6 +1,16 @@
 # How to configure multiple streaming modes at the same time
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 This guide covers how to configure multiple streaming modes at the same time.
+
+## Setup
 
 First let's set up our client and thread:
 
@@ -51,6 +61,8 @@ Output:
         'values': None
     }
 
+## Stream graph with multiple modes
+
 When configuring multiple streaming modes for a run, responses for each respective mode will be produced. In the following example, note that a `list` of modes (`messages`, `events`, `debug`) is passed to the `stream_mode` parameter and the response contains `events`, `debug`, `messages/complete`, `messages/metadata`, and `messages/partial` event types.
 
 === "Python"
@@ -60,7 +72,7 @@ When configuring multiple streaming modes for a run, responses for each respecti
     input = {
         "messages": [
             {
-                "role": "human",
+                "role": "user",
                 "content": "What's the weather in SF?",
             }
         ]

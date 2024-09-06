@@ -1,5 +1,13 @@
 # How to Add Breakpoints
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 When creating LangGraph agents, it is often nice to add a human-in-the-loop component.
 This can be helpful when giving them access to tools.
 Often in these situations you may want to manually approve an action before taking.
@@ -61,7 +69,7 @@ And, now let's compile it with a breakpoint before the tool node:
 === "Python"
 
     ```python
-    input = {"messages": [{"role": "human", "content": "what's the weather in sf"}]}
+    input = {"messages": [{"role": "user", "content": "what's the weather in sf"}]}
     async for chunk in client.runs.stream(
         thread["thread_id"],
         assistant_id,

@@ -1,5 +1,13 @@
 # Review Tool Calls
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 Human-in-the-loop (HIL) interactions are crucial for [agentic systems](https://langchain-ai.github.io/langgraph/concepts/agentic_concepts/#human-in-the-loop). A common pattern is to add some human in the loop step after certain tool calls. These tool calls often lead to either a function call or saving of some information. Examples include:
 
 - A tool call to execute SQL, which will then be run by the tool
@@ -77,7 +85,7 @@ Let's look at an example when no review is required (because no tools are called
 === "Javascript"
 
     ```js
-    const input = { "messages": [{ "role": "human", "content": "hi!" }] };
+    const input = { "messages": [{ "role": "user", "content": "hi!" }] };
 
     const streamResponse = client.runs.stream(
       thread["thread_id"],

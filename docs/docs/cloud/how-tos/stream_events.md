@@ -1,6 +1,16 @@
 # How to stream events
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 This guide covers how to stream events from your graph (`stream_mode="events"`). Depending on the use case and user experience of your LangGraph application, your application may process event types differently. Read more about events in this [conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#astream_events-for-streaming-tokens-of-llm-calls).
+
+## Setup
 
 === "Python"
 
@@ -50,7 +60,7 @@ Output:
         'values': None
     }
 
-
+## Stream graph in events mode
 
 Streaming events produces responses containing an `event` key (in addition to other keys such as `data`). See the LangChain [`Runnable.astream_events()` reference](https://api.python.langchain.com/en/latest/runnables/langchain_core.runnables.base.Runnable.html#langchain_core.runnables.base.Runnable.astream_events) for all event types.
 
@@ -62,7 +72,7 @@ Streaming events produces responses containing an `event` key (in addition to ot
     input = {
         "messages": [
             {
-                "role": "human",
+                "role": "user",
                 "content": "What's the weather in SF?",
             }
         ]
@@ -87,7 +97,7 @@ Streaming events produces responses containing an `event` key (in addition to ot
     const input = {
       "messages": [
         {
-          "role": "human",
+          "role": "user",
           "content": "What's the weather in SF?",
         }
       ]

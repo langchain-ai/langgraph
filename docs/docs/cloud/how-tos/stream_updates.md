@@ -1,6 +1,16 @@
 # How to stream state updates of your graph
 
+<div class="admonition tip">
+    <p class="admonition-title">Setup <a href="https://smith.langchain.com">LangSmith</a> for better debugging</p>
+    <p style="padding-top: 5px;">
+        Sign up for LangSmith to quickly spot issues and improve the performance of your LangGraph projects. LangSmith lets you use trace data to debug, test, and monitor your LLM aps built with LangGraph — read more about how LangSmith can help you in the <a href="https://docs.smith.langchain.com
+        ">docs</a>. 
+    </p>
+</div>    
+
 This guide covers how to use `stream_mode="updates"` for your graph, which will stream the updates to the graph state that are made after each node is executed. This differs from using `stream_mode="values"`: instead of streaming the entire value of the state at each superstep, it only streams the updates from each of the nodes that made an update to the state at that superstep. Read [this conceptual guide](https://langchain-ai.github.io/langgraph/concepts/low_level/#stream-and-astream) to learn more.
+
+## Setup
 
 First let's set up our client and thread:
 
@@ -51,6 +61,8 @@ Output:
       'values': None 
     }
 
+## Stream graph in updates mode
+
 Now we can stream by updates, which outputs updates made to the state by each node after it has executed:
 
 
@@ -60,7 +72,7 @@ Now we can stream by updates, which outputs updates made to the state by each no
     input = {
         "messages": [
             {
-                "role": "human",
+                "role": "user",
                 "content": "what's the weather in la"
             }
         ]
