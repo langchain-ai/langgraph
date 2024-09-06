@@ -7,14 +7,20 @@ hide:
 
 Welcome to the LangGraph Cloud how-to guides! These guides provide practical, step-by-step instructions for accomplishing key tasks in LangGraph Cloud.
 
-## Deployment
+## Setup
 
-LangGraph Cloud gives you best in class observability, testing, and hosting services. Read more about them in these how to guides:
+LangGraph Cloud gives you best in class observability, testing, and hosting services. Learn how to setup your app for deployment to LangGraph Cloud in these how-to guides 
 
 - [How to set up app for deployment (requirements.txt)](../deployment/setup.md)
 - [How to set up app for deployment (pyproject.toml)](../deployment/setup_pyproject.md)
 - [How to set up app for deployment (JavaScript)](../deployment/setup_javascript.md)
+- [How to customize Dockerfile](../deployment/custom_docker.md)
 - [How to test locally](../deployment/test_locally.md)
+
+## Deploy
+
+Learn how to deploy your app to LangGraph Cloud in these how to guides:
+
 - [How to deploy to LangGraph cloud](../deployment/cloud.md)
 
 
