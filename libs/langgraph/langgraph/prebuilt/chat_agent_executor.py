@@ -15,7 +15,7 @@ from langchain_core.messages import (
     BaseMessage,
     SystemMessage,
 )
-from langchain_core.runnables import Runnable, RunnableConfig, RunnableLambda
+from langchain_core.runnables import Runnable, RunnableBinding, RunnableConfig, RunnableLambda
 from langchain_core.tools import BaseTool
 
 from langgraph._api.deprecation import deprecated_parameter
@@ -125,6 +125,38 @@ def _get_model_preprocessing_runnable(
         state_modifier = _convert_messages_modifier_to_state_modifier(messages_modifier)
 
     return _get_state_modifier_runnable(state_modifier)
+
+
+def _should_bind_tools(model: LanguageModelLike, tools: Sequence[BaseTool]) -> bool:
+    if not isinstance(model, RunnableBinding):
+        return False
+
+    if not "tools" in model.kwargs:
+        return False
+
+    bound_tools = model.kwargs["tools"]
+    if len(tools) != len(bound_tools):
+        raise ValueError("Number of tools in the model.bind_tools() and tools passed to create_react_agent must match")
+
+    tool_names = set(tool.name for tool in tools)
+    bound_tool_names = set()
+    for bound_tool in bound_tools:
+        # OpenAI-style tool
+        if bound_tool.get("type") == "function":
+            bound_tool_name = bound_tool["function"]["name"]
+        # Anthropic-style tool
+        elif bound_tool.get("name"):
+            bound_tool_name = bound_tool["name"]
+        else:
+            # unknown tool type so we'll ignore it
+            continue
+
+        bound_tool_names.add(bound_tool_name)
+
+    if missing_tools := tool_names - bound_tool_names:
+        raise ValueError(f"Missing tools '{missing_tools}' in the model.bind_tools()")
+
+    return True
 
 
 @deprecated_parameter("messages_modifier", "0.1.9", "state_modifier", removal="0.3.0")
@@ -426,7 +458,9 @@ def create_react_agent(
     else:
         tool_classes = tools
         tool_node = ToolNode(tool_classes)
-    model = model.bind_tools(tool_classes)
+
+    if _should_bind_tools(model, tool_classes):
+        model = model.bind_tools(tool_classes)
 
     # Define the function that determines whether to continue or not
     def should_continue(state: AgentState):
