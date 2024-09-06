@@ -151,8 +151,8 @@ class StateGraph(Graph):
         self.input = input
         self.output = output
         self._add_schema(state_schema)
-        self._add_schema(input)
-        self._add_schema(output)
+        self._add_schema(input, allow_managed=False)
+        self._add_schema(output, allow_managed=False)
         self.config_schema = config_schema
         self.waiting_edges: set[tuple[tuple[str, ...], str]] = set()
 
@@ -162,10 +162,17 @@ class StateGraph(Graph):
             (start, end) for starts, end in self.waiting_edges for start in starts
         }
 
-    def _add_schema(self, schema: Type[Any]) -> None:
+    def _add_schema(self, schema: Type[Any], /, allow_managed: bool = True) -> None:
         if schema not in self.schemas:
             _warn_invalid_state_schema(schema)
             channels, managed = _get_channels(schema)
+            if managed and not allow_managed:
+                names = ", ".join(managed)
+                schema_name = getattr(schema, "__name__", "")
+                raise ValueError(
+                    f"Invalid managed channels detected in {schema_name}: {names}."
+                    " Managed channels are not permited in Input/Output schema."
+                )
             self.schemas[schema] = {**channels, **managed}
             for key, channel in channels.items():
                 if key in self.channels:
