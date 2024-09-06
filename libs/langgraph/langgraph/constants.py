@@ -13,12 +13,16 @@ CONFIG_KEY_TASK_ID = "__pregel_task_id"
 CONFIG_KEY_CHECKPOINT_MAP = "checkpoint_map"
 INTERRUPT = "__interrupt__"
 ERROR = "__error__"
+SCHEDULED = "__scheduled__"
 TASKS = "__pregel_tasks"
+SUBSCRIPTIONS = "__pregel_subscriptions"
 RUNTIME_PLACEHOLDER = "__pregel_runtime_placeholder__"
 RESERVED = {
+    SCHEDULED,
     INTERRUPT,
     ERROR,
     TASKS,
+    SUBSCRIPTIONS,
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,
     CONFIG_KEY_CHECKPOINTER,

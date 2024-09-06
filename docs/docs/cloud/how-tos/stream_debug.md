@@ -14,6 +14,8 @@ First let's set up our client and thread:
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
+    assistant_id = "agent"
     # create thread
     thread = await client.threads.create()
     print(thread)
@@ -25,18 +27,34 @@ First let's set up our client and thread:
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
+    const assistantID = "agent";
     // create thread
     const thread = await client.threads.create();
-    console.log(thread)
+    console.log(thread);
+    ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 
 Output:
 
-    {'thread_id': 'd0cbe9ad-f11c-443a-9f6f-dca0ae5a0dd3',
-     'created_at': '2024-06-21T22:10:27.696862+00:00',
-     'updated_at': '2024-06-21T22:10:27.696862+00:00',
-     'metadata': {}}
+    {
+        'thread_id': 'd0cbe9ad-f11c-443a-9f6f-dca0ae5a0dd3',
+        'created_at': '2024-06-21T22:10:27.696862+00:00',
+        'updated_at': '2024-06-21T22:10:27.696862+00:00',
+        'metadata': {},
+        'status': 'idle',
+        'config': {},
+        'values': None
+    }
 
 
 
@@ -56,7 +74,7 @@ Output:
     # stream debug
     async for chunk in client.runs.stream(
         thread_id=thread["thread_id"],
-        assistant_id="agent",
+        assistant_id=assistant_id,
         input=input,
         stream_mode="debug",
     ):
@@ -70,29 +88,66 @@ Output:
     ```js
     // create input
     const input = {
-        "messages": [
-            {
-                "role": "human",
-                "content": "What's the weather in SF?",
-            }
-        ]
-    }
+      messages: [
+        {
+          role: "human",
+          content: "What's the weather in SF?",
+        }
+      ]
+    };
 
     // stream debug
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      "agent",
+      assistantID,
       {
         input,
         streamMode: "debug"
       }
     );
+
     for await (const chunk of streamResponse) {
-      console.log(f"Receiving new event of type: {chunk.event}...")
-      console.log(chunk.data)
-      console.log("\n\n")
+      console.log(`Receiving new event of type: ${chunk.event}...`);
+      console.log(chunk.data);
+      console.log("\n\n");
     }
     ```
+
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/stream \
+     --header 'Content-Type: application/json' \
+     --data "{
+       \"assistant_id\": \"agent\",
+       \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"What's the weather in SF?\"}]},
+       \"stream_mode\": [
+         \"debug\"
+       ]
+     }" | \
+     sed 's/\r$//' | \
+     awk '
+     /^event:/ {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+         sub(/^event: /, "Receiving event of type: ", $0)
+         printf "%s...\n", $0
+         data_content = ""
+     }
+     /^data:/ {
+         sub(/^data: /, "", $0)
+         data_content = $0
+     }
+     END {
+         if (data_content != "") {
+             print data_content "\n"
+         }
+     }
+     ' 
+    ```
+
 
 Output:
 

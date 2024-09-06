@@ -1,5 +1,17 @@
+import dataclasses
 import json
-from typing import Annotated, Any, Callable, Dict, List, Optional, Sequence, Type, Union
+from typing import (
+    Annotated,
+    Any,
+    Callable,
+    Dict,
+    List,
+    Optional,
+    Sequence,
+    Type,
+    TypeVar,
+    Union,
+)
 
 import pytest
 from langchain_core.callbacks import CallbackManagerForLLMRun
@@ -14,16 +26,24 @@ from langchain_core.messages import (
     ToolMessage,
 )
 from langchain_core.outputs import ChatGeneration, ChatResult
-from langchain_core.pydantic_v1 import BaseModel
 from langchain_core.runnables import Runnable, RunnableLambda
 from langchain_core.tools import BaseTool
 from langchain_core.tools import tool as dec_tool
-from pydantic import BaseModel as BaseModelV2
+from pydantic import BaseModel
+from pydantic.v1 import BaseModel as BaseModelV1
+from typing_extensions import TypedDict
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.prebuilt import ToolNode, ValidationNode, create_react_agent
 from langgraph.prebuilt.tool_node import InjectedState
+from tests.conftest import (
+    ALL_CHECKPOINTERS_ASYNC,
+    ALL_CHECKPOINTERS_SYNC,
+    awith_checkpointer,
+)
 from tests.messages import _AnyIdHumanMessage
+
+pytestmark = pytest.mark.anyio
 
 
 class FakeToolCallingModel(BaseChatModel):
@@ -53,10 +73,7 @@ class FakeToolCallingModel(BaseChatModel):
         return self
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite", "postgres", "postgres_pipe"],
-)
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_SYNC)
 def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> None:
     checkpointer: BaseCheckpointSaver = request.getfixturevalue(
         "checkpointer_" + checkpointer_name
@@ -89,43 +106,35 @@ def test_no_modifier(request: pytest.FixtureRequest, checkpointer_name: str) -> 
         assert saved.pending_writes == []
 
 
-@pytest.mark.parametrize(
-    "checkpointer_name",
-    ["memory", "sqlite_aio", "postgres_aio", "postgres_aio_pipe"],
-)
-async def test_no_modifier_async(
-    request: pytest.FixtureRequest, checkpointer_name: str
-) -> None:
-    checkpointer: BaseCheckpointSaver = request.getfixturevalue(
-        f"checkpointer_{checkpointer_name}"
-    )
+@pytest.mark.parametrize("checkpointer_name", ALL_CHECKPOINTERS_ASYNC)
+async def test_no_modifier_async(checkpointer_name: str) -> None:
+    async with awith_checkpointer(checkpointer_name) as checkpointer:
+        model = FakeToolCallingModel()
 
-    model = FakeToolCallingModel()
+        agent = create_react_agent(model, [], checkpointer=checkpointer)
+        inputs = [HumanMessage("hi?")]
+        thread = {"configurable": {"thread_id": "123"}}
+        response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
+        expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
+        assert response == expected_response
 
-    agent = create_react_agent(model, [], checkpointer=checkpointer)
-    inputs = [HumanMessage("hi?")]
-    thread = {"configurable": {"thread_id": "123"}}
-    response = await agent.ainvoke({"messages": inputs}, thread, debug=True)
-    expected_response = {"messages": inputs + [AIMessage(content="hi?", id="0")]}
-    assert response == expected_response
-
-    if checkpointer:
-        saved = await checkpointer.aget_tuple(thread)
-        assert saved is not None
-        assert saved.checkpoint["channel_values"] == {
-            "messages": [
-                _AnyIdHumanMessage(content="hi?"),
-                AIMessage(content="hi?", id="0"),
-            ],
-            "agent": "agent",
-        }
-        assert saved.metadata == {
-            "parents": {},
-            "source": "loop",
-            "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
-            "step": 1,
-        }
-        assert saved.pending_writes == []
+        if checkpointer:
+            saved = await checkpointer.aget_tuple(thread)
+            assert saved is not None
+            assert saved.checkpoint["channel_values"] == {
+                "messages": [
+                    _AnyIdHumanMessage(content="hi?"),
+                    AIMessage(content="hi?", id="0"),
+                ],
+                "agent": "agent",
+            }
+            assert saved.metadata == {
+                "parents": {},
+                "source": "loop",
+                "writes": {"agent": {"messages": [AIMessage(content="hi?", id="0")]}},
+                "step": 1,
+            }
+            assert saved.pending_writes == []
 
 
 def test_passing_two_modifiers():
@@ -383,7 +392,7 @@ class MyModel(BaseModel):
     some_other_val: str
 
 
-class MyModelV2(BaseModelV2):
+class MyModelV1(BaseModelV1):
     some_val: int
     some_other_val: str
 
@@ -399,7 +408,7 @@ def my_tool(some_val: int, some_other_val: str) -> str:
     [
         my_function,
         MyModel,
-        MyModelV2,
+        MyModelV1,
         my_tool,
     ],
 )
@@ -444,14 +453,53 @@ async def test_validation_node(tool_schema: Any, use_message_key: bool):
     check_results(result_sync)
 
 
-def test_tool_node_inject_state() -> None:
-    def tool1(some_val: int, state: Annotated[dict, InjectedState]) -> str:
-        """Tool 1 docstring."""
-        return state["foo"]
+class _InjectStateSchema(TypedDict):
+    messages: list
+    foo: str
 
-    def tool2(some_val: int, state: Annotated[dict, InjectedState()]) -> str:
+
+class _InjectedStatePydanticSchema(BaseModelV1):
+    messages: list
+    foo: str
+
+
+class _InjectedStatePydanticV2Schema(BaseModel):
+    messages: list
+    foo: str
+
+
+@dataclasses.dataclass
+class _InjectedStateDataclassSchema:
+    messages: list
+    foo: str
+
+
+T = TypeVar("T")
+
+
+@pytest.mark.parametrize(
+    "schema_",
+    [
+        _InjectStateSchema,
+        _InjectedStatePydanticSchema,
+        _InjectedStatePydanticV2Schema,
+        _InjectedStateDataclassSchema,
+    ],
+)
+def test_tool_node_inject_state(schema_: Type[T]) -> None:
+    def tool1(some_val: int, state: Annotated[T, InjectedState]) -> str:
         """Tool 1 docstring."""
-        return state["foo"]
+        if isinstance(state, dict):
+            return state["foo"]
+        else:
+            return getattr(state, "foo")
+
+    def tool2(some_val: int, state: Annotated[T, InjectedState()]) -> str:
+        """Tool 2 docstring."""
+        if isinstance(state, dict):
+            return state["foo"]
+        else:
+            return getattr(state, "foo")
 
     def tool3(
         some_val: int,
@@ -476,23 +524,36 @@ def test_tool_node_inject_state() -> None:
             "type": "tool_call",
         }
         msg = AIMessage("hi?", tool_calls=[tool_call])
-        result = node.invoke({"messages": [msg], "foo": "bar"})
+        result = node.invoke(schema_(**{"messages": [msg], "foo": "bar"}))
         tool_message = result["messages"][-1]
-        assert tool_message.content == "bar"
+        assert tool_message.content == "bar", f"Failed for tool={tool_name}"
 
         if tool_name == "tool3":
-            with pytest.raises(KeyError):
-                node.invoke({"messages": [msg], "notfoo": "bar"})
+            failure_input = None
+            try:
+                failure_input = schema_(**{"messages": [msg], "notfoo": "bar"})
+            except Exception:
+                pass
+            if failure_input is not None:
+                with pytest.raises(KeyError):
+                    node.invoke(failure_input)
 
-            with pytest.raises(ValueError):
-                node.invoke([msg])
+                with pytest.raises(ValueError):
+                    node.invoke([msg])
         else:
-            tool_message = node.invoke({"messages": [msg], "notfoo": "bar"})[
-                "messages"
-            ][-1]
-            assert "KeyError" in tool_message.content
-            tool_message = node.invoke([msg])[-1]
-            assert "KeyError" in tool_message.content
+            failure_input = None
+            try:
+                failure_input = schema_(**{"messages": [msg], "notfoo": "bar"})
+            except Exception:
+                # We'd get a validation error from pydantic state and wouldn't make it to the node
+                # anyway
+                pass
+            if failure_input is not None:
+                messages_ = node.invoke(failure_input)
+                tool_message = messages_["messages"][-1]
+                assert "KeyError" in tool_message.content
+                tool_message = node.invoke([msg])[-1]
+                assert "KeyError" in tool_message.content
 
     tool_call = {
         "name": "tool4",
@@ -501,7 +562,7 @@ def test_tool_node_inject_state() -> None:
         "type": "tool_call",
     }
     msg = AIMessage("hi?", tool_calls=[tool_call])
-    result = node.invoke({"messages": [msg]})
+    result = node.invoke(schema_(**{"messages": [msg], "foo": ""}))
     tool_message = result["messages"][-1]
     assert tool_message.content == "hi?"
 

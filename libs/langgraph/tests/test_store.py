@@ -1,10 +1,13 @@
 import asyncio
 from typing import Any, Optional
 
+import pytest
 from pytest_mock import MockerFixture
 
 from langgraph.store.base import BaseStore
 from langgraph.store.batch import AsyncBatchedStore
+
+pytestmark = pytest.mark.anyio
 
 
 async def test_async_batch_store(mocker: MockerFixture) -> None:

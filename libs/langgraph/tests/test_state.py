@@ -1,5 +1,6 @@
 import inspect
 from dataclasses import dataclass, field
+import warnings
 from typing import Annotated as Annotated2
 from typing import Any, Optional
 
@@ -47,7 +48,8 @@ def test_warns_invalid_schema(schema: Any):
 )
 def test_doesnt_warn_valid_schema(schema: Any):
     # Assert the function does not raise a warning
-    with pytest.warns(None):
+    with warnings.catch_warnings():
+        warnings.simplefilter("error")
         _warn_invalid_state_schema(schema)
 
 
@@ -122,7 +124,7 @@ def test_state_schema_optional_values(total_: bool):
 
         expected_optional = {"val2"}
 
-    # The others shoud always have precedence based on the required annotation
+    # The others should always have precedence based on the required annotation
     expected_required |= {"val0a", "val3", "val5"}
     expected_optional |= {"val0b", "val4", "val6"}
 

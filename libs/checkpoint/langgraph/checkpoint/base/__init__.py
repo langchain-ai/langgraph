@@ -22,6 +22,7 @@ from langgraph.checkpoint.serde.base import SerializerProtocol, maybe_add_typed_
 from langgraph.checkpoint.serde.jsonplus import JsonPlusSerializer
 from langgraph.checkpoint.serde.types import (
     ERROR,
+    SCHEDULED,
     ChannelProtocol,
     SendProtocol,
 )
@@ -440,8 +441,7 @@ def get_checkpoint_id(config: RunnableConfig) -> Optional[str]:
 Mapping from error type to error index.
 Regular writes just map to their index in the list of writes being saved.
 Special writes (e.g. errors) map to negative indices, to avoid those writes from
-saving regular writes.
+conflicting with regular writes.
 Each Checkpointer implementation should use this mapping in put_writes.
 """
-WRITES_IDX_MAP = {ERROR: -1}
-# TODO To store scheduled status of tasks, add a special channel here
+WRITES_IDX_MAP = {ERROR: -1, SCHEDULED: -2}

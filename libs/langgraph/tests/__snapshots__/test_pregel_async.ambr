@@ -36,6 +36,191 @@
                 +---------+                
   '''
 # ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[memory]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[postgres_aio]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[postgres_aio_pipe]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[postgres_aio_pool]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class[sqlite_aio]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2
   '''
   graph TD;
@@ -157,7 +342,797 @@
     'type': 'object',
   })
 # ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[memory].2
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_aio]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_aio].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_aio].2
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_aio_pipe]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_aio_pipe].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_aio_pipe].2
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_aio_pool]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_aio_pool].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[postgres_aio_pool].2
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[sqlite_aio]
+  '''
+  graph TD;
+  	__start__ --> rewrite_query;
+  	analyzer_one --> retriever_one;
+  	qa --> __end__;
+  	retriever_one --> qa;
+  	retriever_two --> qa;
+  	rewrite_query --> analyzer_one;
+  	rewrite_query -.-> retriever_two;
+  
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[sqlite_aio].1
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_custom_state_class_pydantic2[sqlite_aio].2
+  dict({
+    '$defs': dict({
+      'InnerObject': dict({
+        'properties': dict({
+          'yo': dict({
+            'title': 'Yo',
+            'type': 'integer',
+          }),
+        }),
+        'required': list([
+          'yo',
+        ]),
+        'title': 'InnerObject',
+        'type': 'object',
+      }),
+    }),
+    'properties': dict({
+      'answer': dict({
+        'anyOf': list([
+          dict({
+            'type': 'string',
+          }),
+          dict({
+            'type': 'null',
+          }),
+        ]),
+        'default': None,
+        'title': 'Answer',
+      }),
+      'docs': dict({
+        'items': dict({
+          'type': 'string',
+        }),
+        'title': 'Docs',
+        'type': 'array',
+      }),
+      'inner': dict({
+        '$ref': '#/$defs/InnerObject',
+      }),
+      'query': dict({
+        'title': 'Query',
+        'type': 'string',
+      }),
+    }),
+    'required': list([
+      'query',
+      'inner',
+      'docs',
+    ]),
+    'title': 'State',
+    'type': 'object',
+  })
+# ---
 # name: test_in_one_fan_out_state_graph_waiting_edge_via_branch
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[memory]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[postgres_aio]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[postgres_aio_pipe]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[postgres_aio_pool]
+  '''
+                +-----------+              
+                | __start__ |              
+                +-----------+              
+                      *                    
+                      *                    
+                      *                    
+              +---------------+            
+              | rewrite_query |            
+              +---------------+            
+               ***         ...             
+              *               .            
+            **                 ...         
+  +--------------+                .        
+  | analyzer_one |                .        
+  +--------------+                .        
+          *                       .        
+          *                       .        
+          *                       .        
+  +---------------+      +---------------+ 
+  | retriever_one |      | retriever_two | 
+  +---------------+      +---------------+ 
+               ***         ***             
+                  *       *                
+                   **   **                 
+                   +----+                  
+                   | qa |                  
+                   +----+                  
+                      *                    
+                      *                    
+                      *                    
+                +---------+                
+                | __end__ |                
+                +---------+                
+  '''
+# ---
+# name: test_in_one_fan_out_state_graph_waiting_edge_via_branch[sqlite_aio]
   '''
                 +-----------+              
                 | __start__ |              
@@ -217,5 +1192,130 @@
    +---------+   
    | __end__ |   
    +---------+   
+  '''
+# ---
+# name: test_weather_subgraph[memory]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_weather_subgraph[postgres_aio]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_weather_subgraph[postgres_aio_pipe]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_weather_subgraph[postgres_aio_pool]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
+  '''
+# ---
+# name: test_weather_subgraph[sqlite_aio]
+  '''
+  %%{init: {'flowchart': {'curve': 'linear'}}}%%
+  graph TD;
+  	__start__([__start__]):::first
+  	router_node(router_node)
+  	normal_llm_node(normal_llm_node)
+  	weather_graph_model_node(model_node)
+  	weather_graph_weather_node(weather_node<hr/><small><em>__interrupt = before</em></small>)
+  	__end__([__end__]):::last
+  	__start__ --> router_node;
+  	normal_llm_node --> __end__;
+  	weather_graph_weather_node --> __end__;
+  	router_node -.-> normal_llm_node;
+  	router_node -.-> weather_graph_model_node;
+  	router_node -.-> __end__;
+  	subgraph weather_graph
+  	weather_graph_model_node --> weather_graph_weather_node;
+  	end
+  	classDef default fill:#f2f0ff,line-height:1.2
+  	classDef first fill-opacity:0
+  	classDef last fill:#bfb6fc
+  
   '''
 # ---

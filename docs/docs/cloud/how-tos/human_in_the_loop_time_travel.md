@@ -15,6 +15,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```python
     from langgraph_sdk import get_client
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -25,7 +26,8 @@ First, we need to setup our client so that we can communicate with our hosted gr
     import { Client } from "@langchain/langgraph-sdk";
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
-    const assistantId = agent;
+    // Using the graph deployed with the name "agent"
+    const assistantId = "agent";
     const thread = await client.threads.create();
     ```
 
@@ -35,7 +37,7 @@ First, we need to setup our client so that we can communicate with our hosted gr
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
       --header 'Content-Type: application/json' \
-      --data {}
+      --data '{}'
     ```
 
 ## Replay a state
@@ -51,7 +53,7 @@ Before replaying a state - we need to create states to replay from! In order to 
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant_id, # graph_id
+        assistant_id,
         input=input,
         stream_mode="updates",
     ):
@@ -308,7 +310,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
     ```python
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        assistant["assistant_id"], # graph_id
+        assistant_id,
         input=None,
         stream_mode="updates",
         checkpoint_id=config['checkpoint_id']
@@ -322,7 +324,7 @@ Now we can rerun our graph with this new config, starting from the `new_state`, 
     ```js
     const streamResponse = client.runs.stream(
       thread["thread_id"],
-      assistant["assistant_id"],
+      assistantId,
       {
         input: null,
         streamMode: "updates",

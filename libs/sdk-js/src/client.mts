@@ -133,6 +133,7 @@ export class CronsClient extends BaseClient {
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
+      multitask_strategy: payload?.multitaskStrategy,
     };
     return this.fetch<Run>(`/threads/${threadId}/runs/crons`, {
       method: "POST",
@@ -159,6 +160,7 @@ export class CronsClient extends BaseClient {
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
+      multitask_strategy: payload?.multitaskStrategy,
     };
     return this.fetch<Run>(`/runs/crons`, {
       method: "POST",
@@ -237,6 +239,8 @@ export class AssistantsClient extends BaseClient {
     graphId: string;
     config?: Config;
     metadata?: Metadata;
+    assistantId?: string;
+    ifExists?: OnConflictBehavior;
   }): Promise<Assistant> {
     return this.fetch<Assistant>("/assistants", {
       method: "POST",
@@ -244,6 +248,8 @@ export class AssistantsClient extends BaseClient {
         graph_id: payload.graphId,
         config: payload.config,
         metadata: payload.metadata,
+        assistant_id: payload.assistantId,
+        if_exists: payload.ifExists,
       },
     });
   }
@@ -257,7 +263,7 @@ export class AssistantsClient extends BaseClient {
   async update(
     assistantId: string,
     payload: {
-      graphId: string;
+      graphId?: string;
       config?: Config;
       metadata?: Metadata;
     },
@@ -518,7 +524,7 @@ export class RunsClient extends BaseClient {
   stream(
     threadId: null,
     assistantId: string,
-    payload?: Omit<RunsStreamPayload, "multitaskStrategy">,
+    payload?: Omit<RunsStreamPayload, "multitaskStrategy" | "onCompletion">,
   ): AsyncGenerator<{
     event: StreamEvent;
     data: any;
@@ -546,8 +552,6 @@ export class RunsClient extends BaseClient {
     payload?: RunsStreamPayload,
   ): AsyncGenerator<{
     event: StreamEvent;
-    // TODO: figure out a better way to
-    // type this without any
     data: any;
   }> {
     const json: Record<string, any> = {
@@ -560,10 +564,11 @@ export class RunsClient extends BaseClient {
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
       checkpoint_id: payload?.checkpointId,
+      webhook: payload?.webhook,
+      multitask_strategy: payload?.multitaskStrategy,
+      on_completion: payload?.onCompletion,
+      on_disconnect: payload?.onDisconnect,
     };
-    if (payload?.multitaskStrategy != null) {
-      json["multitask_strategy"] = payload?.multitaskStrategy;
-    }
 
     const endpoint =
       threadId == null ? `/runs/stream` : `/threads/${threadId}/runs/stream`;
@@ -640,10 +645,8 @@ export class RunsClient extends BaseClient {
       interrupt_after: payload?.interruptAfter,
       webhook: payload?.webhook,
       checkpoint_id: payload?.checkpointId,
+      multitask_strategy: payload?.multitaskStrategy,
     };
-    if (payload?.multitaskStrategy != null) {
-      json["multitask_strategy"] = payload?.multitaskStrategy;
-    }
     return this.fetch<Run>(`/threads/${threadId}/runs`, {
       method: "POST",
       json,
@@ -654,7 +657,7 @@ export class RunsClient extends BaseClient {
   async wait(
     threadId: null,
     assistantId: string,
-    payload?: Omit<RunsWaitPayload, "multitaskStrategy">,
+    payload?: Omit<RunsWaitPayload, "multitaskStrategy" | "onCompletion">,
   ): Promise<ThreadState["values"]>;
 
   async wait(
@@ -684,10 +687,11 @@ export class RunsClient extends BaseClient {
       interrupt_before: payload?.interruptBefore,
       interrupt_after: payload?.interruptAfter,
       checkpoint_id: payload?.checkpointId,
+      webhook: payload?.webhook,
+      multitask_strategy: payload?.multitaskStrategy,
+      on_completion: payload?.onCompletion,
+      on_disconnect: payload?.onDisconnect,
     };
-    if (payload?.multitaskStrategy != null) {
-      json["multitask_strategy"] = payload?.multitaskStrategy;
-    }
     const endpoint =
       threadId == null ? `/runs/wait` : `/threads/${threadId}/runs/wait`;
     return this.fetch<ThreadState["values"]>(endpoint, {

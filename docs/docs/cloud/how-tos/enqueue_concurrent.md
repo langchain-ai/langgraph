@@ -5,20 +5,44 @@ This guide assumes knowledge of what double-texting is, which you can learn abou
 The guide covers the `enqueue` option for double texting, which adds the interruptions to a queue and executes them in the order they are received by the client. Below is a quick example of using the `enqueue` option.
 
 
-First, we will define a quick helper function for printing out JS model outputs (you can skip this if using Python):
+First, we will define a quick helper function for printing out JS and CURL model outputs (you can skip this if using Python):
 
-```js
-function prettyPrint(m) {
-  const padded = " " + m['type'] + " ";
-  const sepLen = Math.floor((80 - padded.length) / 2);
-  const sep = "=".repeat(sepLen);
-  const secondSep = sep + (padded.length % 2 ? "=" : "");
-  
-  console.log(`${sep}${padded}${secondSep}`);
-  console.log("\n\n");
-  console.log(m.content);
-}
-```
+=== "Javascript"
+
+    ```js
+    function prettyPrint(m) {
+      const padded = " " + m['type'] + " ";
+      const sepLen = Math.floor((80 - padded.length) / 2);
+      const sep = "=".repeat(sepLen);
+      const secondSep = sep + (padded.length % 2 ? "=" : "");
+      
+      console.log(`${sep}${padded}${secondSep}`);
+      console.log("\n\n");
+      console.log(m.content);
+    }
+    ```
+
+=== "CURL"
+
+    ```bash
+    # PLACE THIS IN A FILE CALLED pretty_print.sh
+    pretty_print() {
+      local type="$1"
+      local content="$2"
+      local padded=" $type "
+      local total_width=80
+      local sep_len=$(( (total_width - ${#padded}) / 2 ))
+      local sep=$(printf '=%.0s' $(eval "echo {1.."${sep_len}"}"))
+      local second_sep=$sep
+      if (( (total_width - ${#padded}) % 2 )); then
+        second_sep="${second_sep}="
+      fi
+
+      echo "${sep}${padded}${second_sep}"
+      echo
+      echo "$content"
+    }
+    ```
 
 Then, let's import our required packages and instantiate our client, assistant, and thread.
 
@@ -32,6 +56,7 @@ Then, let's import our required packages and instantiate our client, assistant, 
     from langgraph_sdk import get_client
 
     client = get_client(url=<DEPLOYMENT_URL>)
+    # Using the graph deployed with the name "agent"
     assistant_id = "agent"
     thread = await client.threads.create()
     ```
@@ -43,8 +68,18 @@ Then, let's import our required packages and instantiate our client, assistant, 
     
 
     const client = new Client({ apiUrl: <DEPLOYMENT_URL> });
+    // Using the graph deployed with the name "agent"
     const assistantId = "agent";
     const thread = await client.threads.create();
+    ```
+  
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+      --url <DEPLOYMENT_URL>/threads \
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 Now let's start two runs, with the second interrupting the first one with a multitask strategy of "enqueue":
@@ -82,6 +117,25 @@ Now let's start two runs, with the second interrupting the first one with a mult
     )
     ```
 
+=== "CURL"
+
+    ```bash
+    curl --request POST \
+    --url <DEPLOY<ENT_URL>>/threads/<THREAD_ID>/runs \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\",
+      \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what\'s the weather in sf?\"}]},
+    }" && curl --request POST \
+    --url <DEPLOY<ENT_URL>>/threads/<THREAD_ID>/runs \
+    --header 'Content-Type: application/json' \
+    --data "{
+      \"assistant_id\": \"agent\",
+      \"input\": {\"messages\": [{\"role\": \"human\", \"content\": \"what\'s the weather in nyc?\"}]},
+      \"multitask_strategy\": \"enqueue\"
+    }"
+    ```
+
 Verify that the thread has data from both runs:
 
 === "Python"
@@ -108,12 +162,25 @@ Verify that the thread has data from both runs:
     }
     ```
 
+=== "CURL"
+
+    ```bash
+    source pretty_print.sh && curl --request GET \
+    --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/<RUN_ID>/join && \
+    curl --request GET --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/state | \
+    jq -c '.values.messages[]' | while read -r element; do
+        type=$(echo "$element" | jq -r '.type')
+        content=$(echo "$element" | jq -r '.content | if type == "array" then tostring else . end')
+        pretty_print "$type" "$content"
+    done
+    ```
+
 Output:
 
-    ================================[1m Human Message [0m=================================
+    ================================ Human Message =================================
     
     what's the weather in sf?
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     [{'id': 'toolu_01Dez1sJre4oA2Y7NsKJV6VT', 'input': {'query': 'weather in san francisco'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}]
     Tool Calls:
@@ -121,11 +188,11 @@ Output:
      Call ID: toolu_01Dez1sJre4oA2Y7NsKJV6VT
       Args:
         query: weather in san francisco
-    =================================[1m Tool Message [0m=================================
+    ================================= Tool Message =================================
     Name: tavily_search_results_json
     
     [{"url": "https://www.accuweather.com/en/us/san-francisco/94103/weather-forecast/347629", "content": "Get the current and future weather conditions for San Francisco, CA, including temperature, precipitation, wind, air quality and more. See the hourly and 10-day outlook, radar maps, alerts and allergy information."}]
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     According to AccuWeather, the current weather conditions in San Francisco are:
     
@@ -145,10 +212,10 @@ Output:
     Sunday: Partly sunny, high of 61°F (16°C)
     
     So in summary, expect seasonable spring weather in San Francisco over the next several days, with a mix of sun and clouds and temperatures ranging from the upper 40s at night to the low 60s during the days. Typical dry conditions with no rain in the forecast.
-    ================================[1m Human Message [0m=================================
+    ================================ Human Message =================================
     
     what's the weather in nyc?
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     [{'text': 'Here are the current weather conditions and forecast for New York City:', 'type': 'text'}, {'id': 'toolu_01FFft5Sx9oS6AdVJuRWWcGp', 'input': {'query': 'weather in new york city'}, 'name': 'tavily_search_results_json', 'type': 'tool_use'}]
     Tool Calls:
@@ -156,11 +223,11 @@ Output:
      Call ID: toolu_01FFft5Sx9oS6AdVJuRWWcGp
       Args:
         query: weather in new york city
-    =================================[1m Tool Message [0m=================================
+    ================================= Tool Message =================================
     Name: tavily_search_results_json
     
     [{"url": "https://www.weatherapi.com/", "content": "{'location': {'name': 'New York', 'region': 'New York', 'country': 'United States of America', 'lat': 40.71, 'lon': -74.01, 'tz_id': 'America/New_York', 'localtime_epoch': 1718734479, 'localtime': '2024-06-18 14:14'}, 'current': {'last_updated_epoch': 1718733600, 'last_updated': '2024-06-18 14:00', 'temp_c': 29.4, 'temp_f': 84.9, 'is_day': 1, 'condition': {'text': 'Sunny', 'icon': '//cdn.weatherapi.com/weather/64x64/day/113.png', 'code': 1000}, 'wind_mph': 2.2, 'wind_kph': 3.6, 'wind_degree': 158, 'wind_dir': 'SSE', 'pressure_mb': 1025.0, 'pressure_in': 30.26, 'precip_mm': 0.0, 'precip_in': 0.0, 'humidity': 63, 'cloud': 0, 'feelslike_c': 31.3, 'feelslike_f': 88.3, 'windchill_c': 28.3, 'windchill_f': 82.9, 'heatindex_c': 29.6, 'heatindex_f': 85.3, 'dewpoint_c': 18.4, 'dewpoint_f': 65.2, 'vis_km': 16.0, 'vis_miles': 9.0, 'uv': 7.0, 'gust_mph': 16.5, 'gust_kph': 26.5}}"}]
-    ==================================[1m Ai Message [0m==================================
+    ================================== Ai Message ==================================
     
     According to the weather data from WeatherAPI:
     

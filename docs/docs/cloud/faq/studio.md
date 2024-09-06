@@ -43,23 +43,31 @@ If you don't define your conditional edges carefully, you might notice extra edg
 
 ### Solution 1: Include a path map
 
-The first way to solve this is to add path maps to your conditional edges. A path map is just a dictionary that maps the possible outputs of your router function with the names of the nodes that each output corresponds to. The path map is passed as the third argument to the `add_conditional_edges` function like so:
+The first way to solve this is to add path maps to your conditional edges. A path map is just a dictionary or array that maps the possible outputs of your router function with the names of the nodes that each output corresponds to. The path map is passed as the third argument to the `add_conditional_edges` function like so:
 
-```python
-graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
-```
+=== "Python"
+
+    ```python
+    graph.add_conditional_edges("node_a", routing_function, {True: "node_b", False: "node_c"})
+    ```
+
+=== "Javascript"
+
+    ```ts
+    graph.addConditionalEdges("node_a", routingFunction, { true: "node_b", false: "node_c" });
+    ```
 
 In this case, the routing function returns either True or False, which map to `node_b` and `node_c` respectively.
 
-### Solution 2: Update the typing of the router
+### Solution 2: Update the typing of the router (Python only)
 
 Instead of passing a path map, you can also be explicit about the typing of your routing function by specifying the nodes it can map to using the `Literal` python definition. Here is an example of how to define a routing function in that way:
 
 ```python
 def routing_function(state: GraphState) -> Literal["node_b","node_c"]:
     if state['some_condition'] == True:
-        return "node_a"
-    else:
         return "node_b"
+    else:
+        return "node_c"
 ```
 
