@@ -143,7 +143,9 @@ class ToolNode(RunnableCallable):
             if not self.handle_tool_errors:
                 raise e
             content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
-            return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
+            return ToolMessage(
+                content, name=call["name"], tool_call_id=call["id"], status="error"
+            )
 
     async def _arun_one(self, call: ToolCall, config: RunnableConfig) -> ToolMessage:
         if invalid_tool_message := self._validate_tool_call(call):
@@ -160,7 +162,9 @@ class ToolNode(RunnableCallable):
             if not self.handle_tool_errors:
                 raise e
             content = TOOL_CALL_ERROR_TEMPLATE.format(error=repr(e))
-            return ToolMessage(content, name=call["name"], tool_call_id=call["id"])
+            return ToolMessage(
+                content, name=call["name"], tool_call_id=call["id"], status="error"
+            )
 
     def _parse_input(
         self,
@@ -198,7 +202,9 @@ class ToolNode(RunnableCallable):
                 requested_tool=requested_tool,
                 available_tools=", ".join(self.tools_by_name.keys()),
             )
-            return ToolMessage(content, name=requested_tool, tool_call_id=call["id"])
+            return ToolMessage(
+                content, name=requested_tool, tool_call_id=call["id"], status="error"
+            )
         else:
             return None
 
