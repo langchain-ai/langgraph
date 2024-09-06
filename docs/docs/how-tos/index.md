@@ -86,7 +86,7 @@ These guides show how to use different streaming modes.
 - [How to use a context object in state](state-context-key.ipynb)
 - [How to add node retries](node-retries.ipynb)
 - [How to force function calling agent to structure output](react-agent-structured-output.ipynb)
-- [How to view your graph runs in LangSmith](run-id-langsmith.ipynb)
+- [How to pass custom LangSmith run ID for graph runs](run-id-langsmith.ipynb)
 
 ## Prebuilt ReAct Agent
 
