@@ -177,10 +177,10 @@ nav:
           - How to return structured output from a ReAct agent: how-tos/react-agent-structured-output.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
-          - Create prebuilt ReAct agent from scratch: how-tos/react-agent-from-scratch.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
           - Add a system prompt to a ReAct agent: how-tos/create-react-agent-system-prompt.ipynb
           - Add Human-in-the-loop to a ReAct agent: how-tos/create-react-agent-hitl.ipynb
+          - Create prebuilt ReAct agent from scratch: how-tos/react-agent-from-scratch.ipynb
   - "Conceptual Guides":
       - "concepts/index.md"
       - LangGraph for Agentic Applications: concepts/high_level.md
