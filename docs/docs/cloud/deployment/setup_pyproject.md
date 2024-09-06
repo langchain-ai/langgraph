@@ -5,7 +5,7 @@ A LangGraph application must be configured with a [LangGraph API configuration f
 This walkthrough is based on [this repository](https://github.com/langchain-ai/langgraph-example-pyproject), which you can play around with to learn more about how to setup your LangGraph application for deployment.
 
 !!! tip "Setup with requirements.txt"
-  If you prefer using `requirements.txt` for dependency management, check out [this how-to guide](./setup.md).
+    If you prefer using `requirements.txt` for dependency management, check out [this how-to guide](./setup.md).
 
 !!! tip "Setup with a Monorepo"
     If you are interested in deploying a graph located inside a monorepo, take a look at [this](https://github.com/langchain-ai/langgraph-example-monorepo) repository for an example of how to do so.
