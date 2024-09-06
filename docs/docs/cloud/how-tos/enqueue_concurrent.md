@@ -78,7 +78,8 @@ Then, let's import our required packages and instantiate our client, assistant, 
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 Now let's start two runs, with the second interrupting the first one with a multitask strategy of "enqueue":

@@ -76,7 +76,8 @@ Now, let's import our required packages and instantiate our client, assistant, a
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 Now let's run a thread with the multitask parameter set to "rollback":
