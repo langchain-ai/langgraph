@@ -46,7 +46,8 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 ## Waiting for user input

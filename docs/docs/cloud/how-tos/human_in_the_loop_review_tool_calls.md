@@ -50,7 +50,8 @@ First, we need to setup our client so that we can communicate with our hosted gr
     ```bash
     curl --request POST \
       --url <DEPLOYMENT_URL>/threads \
-      --header 'Content-Type: application/json'
+      --header 'Content-Type: application/json' \
+      --data '{}'
     ```
 
 ## Example with no review
@@ -177,7 +178,7 @@ Let's now look at what it looks like to approve a tool call. Note that we don't 
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        "agent",
+        assistant_id,
         input=input,
     ):
         if chunk.data and chunk.event != "metadata": 
@@ -278,7 +279,7 @@ To approve the tool call, we can just continue the thread with no edits. To do t
     ```python
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        "agent",
+        assistant_id,
         input=None,
         stream_mode="values",
     ):
@@ -352,7 +353,7 @@ Let's now say we want to edit the tool call. E.g. change some of the parameters 
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        "agent",
+        assistant_id,
         input=input,
         stream_mode="values",
     ):
@@ -465,7 +466,7 @@ To do this, we first need to update the state. We can do this by passing a messa
     # Let's now continue executing from here
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        "agent",
+        assistant_id,
         input=None,
     ):
         if chunk.data and chunk.event != "metadata": 
@@ -608,7 +609,7 @@ For this example we will just add a single tool call representing the feedback. 
 
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        "agent",
+        assistant_id,
         input=input,
     ):
         if chunk.data and chunk.event != "metadata": 
@@ -708,7 +709,7 @@ To do this, we first need to update the state. We can do this by passing a messa
     # Let's now continue executing from here
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        "agent",
+        assistant_id,
         input=None,
         stream_mode="values",
     ):
@@ -827,7 +828,7 @@ We can see that we now get to another breakpoint - because it went back to the m
     ```python
     async for chunk in client.runs.stream(
         thread["thread_id"],
-        "agent",
+        assistant_id,
         input=None,
     ):
         if chunk.data and chunk.event != "metadata": 
