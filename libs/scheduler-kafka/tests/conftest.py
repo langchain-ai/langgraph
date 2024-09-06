@@ -4,6 +4,7 @@ from uuid import uuid4
 import kafka.admin
 import pytest
 from psycopg import AsyncConnection
+from psycopg_pool import AsyncConnectionPool
 
 from langgraph.checkpoint.postgres.aio import AsyncPostgresSaver
 from langgraph.scheduler.kafka.types import Topics
@@ -45,9 +46,10 @@ async def checkpointer() -> AsyncIterator[AsyncPostgresSaver]:
         await conn.execute(f"CREATE DATABASE {database}")
     try:
         # yield checkpointer
-        async with AsyncPostgresSaver.from_conn_string(
-            DEFAULT_POSTGRES_URI + database
-        ) as checkpointer:
+        async with AsyncConnectionPool(
+            DEFAULT_POSTGRES_URI + database, max_size=10, kwargs={"autocommit": True}
+        ) as pool:
+            checkpointer = AsyncPostgresSaver(pool)
             await checkpointer.setup()
             yield checkpointer
     finally:
