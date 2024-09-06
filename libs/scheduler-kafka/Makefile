@@ -5,10 +5,10 @@
 ######################
 
 start-services:
-	docker compose -f testss/compose.yml up -V --force-recreate --wait --remove-orphans
+	docker compose -f tests/compose.yml up -V --force-recreate --wait --remove-orphans
 
 stop-services:
-	docker compose -f testss/compose.yml down
+	docker compose -f tests/compose.yml down
 
 test:
 	make start-services && poetry run pytest; \
