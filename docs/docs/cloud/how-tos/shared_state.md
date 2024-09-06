@@ -157,7 +157,7 @@ Output:
 
 
 
-Let's stay on the same thread and provide some additional information. Note that we are not redifining the config since we want to continue the conversation on the same thread with the same user.
+Let's stay on the same thread and provide some additional information. Note that we are not redefining the config since we want to continue the conversation on the same thread with the same user.
 
 === "Python"
 
