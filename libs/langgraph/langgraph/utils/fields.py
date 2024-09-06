@@ -1,13 +1,7 @@
 import dataclasses
 from typing import Any, Optional, Type, Union
 
-from typing_extensions import (
-    Annotated,
-    NotRequired,
-    ReadOnly,
-    Required,
-    get_origin,
-)
+from typing_extensions import Annotated, NotRequired, ReadOnly, Required, get_origin
 
 
 def _is_optional_type(type_: Any) -> bool:
