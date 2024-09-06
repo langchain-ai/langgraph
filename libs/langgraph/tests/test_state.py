@@ -1,15 +1,14 @@
 import inspect
-from dataclasses import dataclass, field
 import warnings
+from dataclasses import dataclass, field
 from typing import Annotated as Annotated2
 from typing import Any, Optional
 
 import pytest
 from langchain_core.runnables import RunnableConfig
+from langgraph.graph.state import StateGraph, _warn_invalid_state_schema
 from pydantic.v1 import BaseModel
 from typing_extensions import Annotated, NotRequired, Required, TypedDict
-
-from langgraph.graph.state import StateGraph, _warn_invalid_state_schema
 
 
 class State(BaseModel):
