@@ -67,6 +67,7 @@ _MANUAL = {
         "node-retries.ipynb",
         "react_diagrams.png",
         "react-agent-structured-output.ipynb",
+        "react-agent-from-scratch.ipynb"
     ],
     "tutorials": [
         "introduction.ipynb",
