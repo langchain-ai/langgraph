@@ -242,6 +242,14 @@ class PregelLoop:
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
         Returns True if more iterations are needed."""
+        print(
+            "tick",
+            self.config.get("configurable", {}).get("checkpoint_ns"),
+            self.step,
+            self.status,
+            self.input is INPUT_RESUMING,
+            self.input is INPUT_DONE,
+        )
 
         if self.status != "pending":
             raise RuntimeError("Cannot tick when status is no longer 'pending'")
@@ -345,7 +353,13 @@ class PregelLoop:
                     continue
                 if task := self.tasks.get(tid):
                     if k == SCHEDULED:
-                        self.tasks[tid] = task._replace(scheduled=True)
+                        if v == max(
+                            self.checkpoint["versions_seen"]
+                            .get(INTERRUPT, {})
+                            .values(),
+                            default=None,
+                        ):
+                            self.tasks[tid] = task._replace(scheduled=True)
                     else:
                         task.writes.append((k, v))
             # print output for any tasks we applied previous writes to

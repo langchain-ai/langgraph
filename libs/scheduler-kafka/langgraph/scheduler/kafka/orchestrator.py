@@ -6,7 +6,7 @@ import aiokafka
 from langchain_core.runnables import ensure_config
 
 import langgraph.scheduler.kafka.serde as serde
-from langgraph.constants import CONFIG_KEY_DEDUPE_TASKS, SCHEDULED
+from langgraph.constants import CONFIG_KEY_DEDUPE_TASKS, INTERRUPT, SCHEDULED
 from langgraph.pregel import Pregel
 from langgraph.pregel.loop import INPUT_RESUMING, AsyncPregelLoop
 from langgraph.pregel.types import RetryPolicy
@@ -145,4 +145,19 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
                     await asyncio.gather(*futures)
                     # mark as scheduled
                     for task in new_tasks:
-                        loop.put_writes(task.id, [(SCHEDULED, None)])
+                        loop.put_writes(
+                            task.id,
+                            [
+                                (
+                                    SCHEDULED,
+                                    max(
+                                        loop.checkpoint["versions_seen"]
+                                        .get(INTERRUPT, {})
+                                        .values(),
+                                        default=None,
+                                    ),
+                                )
+                            ],
+                        )
+            else:
+                pass

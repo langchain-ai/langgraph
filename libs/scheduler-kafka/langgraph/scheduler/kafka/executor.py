@@ -147,4 +147,5 @@ class KafkaExecutor(AbstractAsyncContextManager):
         task_id: str,
         writes: list[tuple[str, Any]],
     ) -> None:
+        print("put_writes", task_id, writes)
         return submit(self.graph.checkpointer.aput_writes, config, writes, task_id)
