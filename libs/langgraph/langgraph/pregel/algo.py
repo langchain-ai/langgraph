@@ -361,6 +361,7 @@ def prepare_single_task(
             cache_key = proc.cache_policy.cache_key
             task_id = _uuid5_str(
                 b"",
+                packet.node,
                 cache_key,
             )
         else:
@@ -478,6 +479,7 @@ def prepare_single_task(
                 cache_key = proc.cache_policy.cache_key
                 task_id = _uuid5_str(
                     b"",
+                    name,
                     cache_key,
                 )
             else:
