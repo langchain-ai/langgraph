@@ -736,6 +736,7 @@ async def test_invoke_single_process_in_out_dict(mocker: MockerFixture) -> None:
         output_channels=["output"],
     )
 
+
     if SHOULD_CHECK_SNAPSHOTS:
         assert app.input_schema.model_json_schema() == {
             "title": "LangGraphInput",
