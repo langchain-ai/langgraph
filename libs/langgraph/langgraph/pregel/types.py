@@ -69,7 +69,7 @@ class CachePolicy(NamedTuple):
     # cache_ttl: Optional[float] = None
     # """
     # Time-to-live for the cached value, in seconds. If not provided, the value will be cached indefinitely.
-    # We'd probably want to store this in a bucket way intead of a TTL timeline.
+    # We'd probably want to store this in a bucket way instead of a TTL timeline.
     # """
 
 
