@@ -252,24 +252,22 @@ class PostgresSaver(BasePostgresSaver):
                 )
 
     def get_writes_by_cache_key(self, cache_key: str) -> List[Any]:
-        """Get checkpoint tuples from the database based on a cache key.
+        """Get checkpoint writes from the database based on a cache key.
 
-        This method retrieves checkpoint tuples from the Postgres database based on the
+        This method retrieves checkpoint writes from the Postgres database based on the
         provided cache key.
 
         Args:
             cache_key (str): The cache key to use for retrieving the checkpoints.
 
         Returns:
-            List[CheckpointTuple]: A list of retrieved checkpoint tuples. Empty list if none found.
+            List[Any]: A list of retrieved checkpoint writes. Empty list if none found.
 
         Examples:
             >>> cache_key = "some_unique_cache_key"
-            >>> checkpoint_tuples = memory.get_writes_by_cache_key(cache_key)
-            >>> for tuple in checkpoint_tuples:
-            ...     print(tuple)
-            CheckpointTuple(...)
-            CheckpointTuple(...)
+            >>> checkpoint_writes = memory.get_writes_by_cache_key(cache_key)
+            >>> for write in checkpoint_writes:
+            ...     print(write)
         """
         results = []
         try:

@@ -424,25 +424,25 @@ class BaseCheckpointSaver:
 
     def aget_writes_by_cache_key(
         self, cache_key: str
-    ) -> Optional[List[CheckpointTuple]]:
-        """Get a checkpoint tuple from the database based on a cache key.
+    ) -> Optional[List[Any]]:
+        """Get a checkpoint writes from the database based on a cache key.
 
         Args:
             cache_key (str): The cache key to use for retrieving the checkpoint.
 
         Returns:
-            List[CheckpointTuple]: A list of retrieved checkpoint tuples. Empty list if none found.
+            List[Any]: A list of retrieved checkpoint writes. Empty list if none found.
         """
         raise NotImplementedError
 
     def get_writes_by_cache_key(self, cache_key: str) -> Optional[List[Any]]:
-        """Get a checkpoint tuple from the database based on a cache key.
+        """Get a checkpoint writes from the database based on a cache key.
 
         Args:
             cache_key (str): The cache key to use for retrieving the checkpoint.
 
         Returns:
-            List[CheckpointTuple]: A list of retrieved checkpoint tuples. Empty list if none found.
+            List[Any]: A list of retrieved checkpoint writes. Empty list if none found.
         """
         pass
 

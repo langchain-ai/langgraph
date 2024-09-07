@@ -50,10 +50,8 @@ def custom_cache_key(input: Any, config: Optional[RunnableConfig] = None) -> str
             "metadata": config.get("metadata", {}),
         }
         config_str = json.dumps(relevant_config, sort_keys=True)
-    print()
     # Combine input and config strings
     combined_str = f"{input_str}|{config_str}"
-    print("combined_str", combined_str)
     # Generate a hash of the combined string
     return hashlib.md5(combined_str.encode("utf-8")).hexdigest()
 
@@ -92,7 +90,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
     def retriever_one(data: State) -> State:
         nonlocal call_count
         call_count += 1
-        print("increasing count", call_count)
         return {"docs": ["doc1", "doc2"]}
 
     def retriever_two(data: State) -> State:
@@ -100,7 +97,6 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
         return {"docs": ["doc3", "doc4"]}
 
     def qa(data: State) -> State:
-        print("qaaaa", data["docs"])
         return {"answer": ",".join(data["docs"])}
 
     def rewrite_query_then(data: State) -> Literal["retriever_two"]:
