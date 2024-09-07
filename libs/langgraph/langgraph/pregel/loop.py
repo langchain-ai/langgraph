@@ -344,15 +344,16 @@ class PregelLoop:
             task_cached_writes = self.checkpointer.get_writes_by_task_ids(
                 [task.id for task in tasks_with_cache_policy]
             )
-            for task_id, cached_writes in task_cached_writes.items():
-                # if there are cached writes and task doesn't have any writes yet, apply them
-                if cached_writes and not self.tasks[task_id].writes:
-                    task = self.tasks[task_id]
-                    # Extract only the channel and value from cached_writes
-                    task.writes.extend(
-                        [(channel, value) for _, channel, value in cached_writes]
-                    )
-                    self._output_writes(task_id, task.writes, cached=True)
+            if task_cached_writes:
+                for task_id, cached_writes in task_cached_writes.items():
+                    # if there are cached writes and task doesn't have any writes yet, apply them
+                    if cached_writes and not self.tasks[task_id].writes:
+                        task = self.tasks[task_id]
+                        # Extract only the channel and value from cached_writes
+                        task.writes.extend(
+                            [(channel, value) for _, channel, value in cached_writes]
+                        )
+                        self._output_writes(task_id, task.writes, cached=True)
 
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:

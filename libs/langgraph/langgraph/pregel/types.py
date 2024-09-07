@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Any, Callable, Literal, NamedTuple, Optional, Tuple, Type, Union
+from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 

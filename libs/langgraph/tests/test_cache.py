@@ -2,7 +2,6 @@ import hashlib
 import json
 import operator
 import time
-
 from typing import (
     Annotated,
     Any,
@@ -12,13 +11,13 @@ from typing import (
     Union,
 )
 
-from langgraph.checkpoint.base import BaseCheckpointSaver
 import pytest
 from langchain_core.runnables import (
     RunnableConfig,
 )
-
 from syrupy import SnapshotAssertion
+
+from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import StateGraph
 from langgraph.pregel.types import CachePolicy
 
@@ -137,8 +136,9 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},  # This item is extra
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
+    # first time calling retriever_one()
     assert call_count == 1
     config = RunnableConfig(configurable={"thread_id": "2"})
 
@@ -149,6 +149,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
         )
     ]
 
+    # retriever_one should be cached
     assert stream_results == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
@@ -157,27 +158,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
 
-    # Should not increase count because of cache
-    assert call_count == 1
-
-    config = RunnableConfig(configurable={"thread_id": "3"})
-
-    stream_results = [
-        c
-        for c in app_with_checkpointer.stream(
-            {"query": "what is weather in sf"}, config
-        )
-    ]
-
-    assert stream_results == [
-        {"rewrite_query": {"query": "query: what is weather in sf"}},
-        {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
-        {"retriever_two": {"docs": ["doc3", "doc4"]}},
-        {"retriever_one": {"docs": ["doc1", "doc2"]}, "__metadata__": {"cached": True}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
-    ]
-
-    # Should not increase count because of cache
+    # retriever_one call_count should not increase count because of cache
     assert call_count == 1
 
     # Cache is not used when checkpointer is not provided
@@ -192,6 +173,8 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
             {"query": "what is weather in sf"}, config
         )
     ]
+
+    # retriever_one should not be cached
     assert interrupt_results == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
@@ -199,6 +182,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
         {"qa": {"answer": "doc1,doc2,doc3,doc4"}},  # This item is extra
     ]
+    # retriever_one should not be cached, and call_count should increase
     assert call_count == 2
 
     # Test a new workflow with the same cache key
@@ -232,13 +216,15 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
             {"query": "what is weather in sf"}, config
         )
     ]
+    # retriever_one should be cached as long as the cache key is the same
     assert interrupt_results == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}, "__metadata__": {"cached": True}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},  # This item is extra
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
+    # retriever_one call_count should not increase count because of cache
     assert call_count == 2
 
     # Test a new workflow with a different cache key
@@ -272,11 +258,13 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
             {"query": "what is weather in sf"}, config
         )
     ]
+    # retriever_one should not be cached because the user_id is different
     assert interrupt_results == [
         {"rewrite_query": {"query": "query: what is weather in sf"}},
         {"analyzer_one": {"query": "analyzed: query: what is weather in sf"}},
         {"retriever_two": {"docs": ["doc3", "doc4"]}},
         {"retriever_one": {"docs": ["doc1", "doc2"]}},
-        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},  # This item is extra
+        {"qa": {"answer": "doc1,doc2,doc3,doc4"}},
     ]
+    # retriever_one call_count should increase count because of cache miss
     assert call_count == 3

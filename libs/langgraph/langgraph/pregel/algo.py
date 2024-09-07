@@ -356,6 +356,7 @@ def prepare_single_task(
         checkpoint_ns = (
             f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
+        proc = processes[packet.node]
 
         if proc.cache_policy:
             cache_key = proc.cache_policy.cache_key
@@ -377,7 +378,6 @@ def prepare_single_task(
         if task_id_checksum is not None:
             assert task_id == task_id_checksum
         if for_execution:
-            proc = processes[packet.node]
             if node := proc.node:
                 managed.replace_runtime_placeholders(step, packet.arg)
                 writes = deque()
