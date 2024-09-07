@@ -1,12 +1,7 @@
+import dataclasses
 from typing import Any, Optional, Type, Union
 
-from typing_extensions import (
-    Annotated,
-    NotRequired,
-    ReadOnly,
-    Required,
-    get_origin,
-)
+from typing_extensions import Annotated, NotRequired, ReadOnly, Required, get_origin
 
 
 def _is_optional_type(type_: Any) -> bool:
@@ -92,6 +87,18 @@ def get_field_default(name: str, type_: Any, schema: Type[Any]) -> Any:
             return ...
         # Handle NotRequired[<type>] for earlier versions of python
         return None
+    if dataclasses.is_dataclass(schema):
+        field_info = next(
+            (f for f in dataclasses.fields(schema) if f.name == name), None
+        )
+        if field_info:
+            if (
+                field_info.default is not dataclasses.MISSING
+                and field_info.default is not ...
+            ):
+                return field_info.default
+            elif field_info.default_factory is not dataclasses.MISSING:
+                return field_info.default_factory()
     # Note, we ignore ReadOnly attributes,
     # as they don't make much sense. (we don't care if you mutate the state in your node)
     # and mutating state in your node has no effect on our graph state.

@@ -38,6 +38,8 @@ class PregelRunner:
         timeout: Optional[float] = None,
         retry_policy: Optional[RetryPolicy] = None,
     ) -> Iterator[None]:
+        # give control back to the caller
+        yield
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
@@ -92,6 +94,8 @@ class PregelRunner:
         retry_policy: Optional[RetryPolicy] = None,
     ) -> AsyncIterator[None]:
         loop = asyncio.get_event_loop()
+        # give control back to the caller
+        yield
         # execute tasks, and wait for one to fail or all to finish.
         # each task is independent from all other concurrent tasks
         # yield updates/debug output as each task finishes
