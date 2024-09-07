@@ -201,6 +201,7 @@ async def test_fanout_graph_w_interrupt(
         for tp in consumer.assignment():
             assert await consumer.position(tp) == 0
 
+    # check interrupted state
     state = await graph.aget_state(config)
     assert n_orch_msgs == 12
     assert n_exec_msgs == 11
@@ -232,6 +233,7 @@ async def test_fanout_graph_w_interrupt(
         for tp in consumer.assignment():
             assert await consumer.position(tp) == 0
 
+    # check final state
     state = await graph.aget_state(config)
     assert n_orch_msgs == 14
     assert n_exec_msgs == 12
