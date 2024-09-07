@@ -1,3 +1,4 @@
+name: scheduler-kafka-tests
 services:
   broker:
     image: apache/kafka:latest
