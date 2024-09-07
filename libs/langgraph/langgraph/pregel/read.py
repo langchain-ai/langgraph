@@ -23,6 +23,7 @@ from langchain_core.runnables.utils import ConfigurableFieldSpec
 
 from langgraph.constants import CONFIG_KEY_READ
 from langgraph.pregel.retry import RetryPolicy
+from langgraph.pregel.types import CachePolicy
 from langgraph.pregel.write import ChannelWrite
 from langgraph.utils.config import merge_configs
 from langgraph.utils.runnable import RunnableCallable, RunnableSeq
@@ -122,6 +123,8 @@ class PregelNode(Runnable):
 
     config: RunnableConfig
 
+    cache_policy: Optional[CachePolicy]
+
     def __init__(
         self,
         *,
@@ -134,6 +137,7 @@ class PregelNode(Runnable):
         bound: Optional[Runnable[Any, Any]] = None,
         retry_policy: Optional[RetryPolicy] = None,
         config: Optional[RunnableConfig] = None,
+        cache_policy: Optional[CachePolicy] = None,
     ) -> None:
         self.channels = channels
         self.triggers = list(triggers)
@@ -144,6 +148,7 @@ class PregelNode(Runnable):
         self.config = merge_configs(
             config, {"tags": tags or [], "metadata": metadata or {}}
         )
+        self.cache_policy = cache_policy
 
     def copy(self, update: dict[str, Any]) -> PregelNode:
         attrs = {**self.__dict__, **update}

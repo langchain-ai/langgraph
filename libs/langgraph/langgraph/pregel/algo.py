@@ -334,7 +334,6 @@ def prepare_single_task(
     checkpoint_id = UUID(checkpoint["id"]).bytes
     configurable = config.get("configurable", {})
     parent_ns = configurable.get("checkpoint_ns", "")
-
     if task_path[0] == TASKS:
         idx = int(task_path[1])
         packet = checkpoint["pending_sends"][idx]
@@ -357,14 +356,23 @@ def prepare_single_task(
         checkpoint_ns = (
             f"{parent_ns}{NS_SEP}{packet.node}" if parent_ns else packet.node
         )
-        task_id = _uuid5_str(
-            checkpoint_id,
-            checkpoint_ns,
-            str(step),
-            packet.node,
-            TASKS,
-            str(idx),
-        )
+
+        if proc.cache_policy:
+            cache_key = proc.cache_policy.cache_key
+            task_id = _uuid5_str(
+                b"",
+                cache_key,
+            )
+        else:
+            task_id = _uuid5_str(
+                checkpoint_id,
+                checkpoint_ns,
+                str(step),
+                packet.node,
+                TASKS,
+                str(idx),
+            )
+
         if task_id_checksum is not None:
             assert task_id == task_id_checksum
         if for_execution:
@@ -423,7 +431,7 @@ def prepare_single_task(
                     ),
                     triggers,
                     proc.retry_policy,
-                    None,
+                    proc.cache_policy,
                     task_id,
                     task_path,
                 )
@@ -465,14 +473,22 @@ def prepare_single_task(
                 "langgraph_path": task_path,
             }
             checkpoint_ns = f"{parent_ns}{NS_SEP}{name}" if parent_ns else name
-            task_id = _uuid5_str(
-                checkpoint_id,
-                checkpoint_ns,
-                str(step),
-                name,
-                SUBSCRIPTIONS,
-                *triggers,
-            )
+
+            if proc.cache_policy:
+                cache_key = proc.cache_policy.cache_key
+                task_id = _uuid5_str(
+                    b"",
+                    cache_key,
+                )
+            else:
+                task_id = _uuid5_str(
+                    checkpoint_id,
+                    checkpoint_ns,
+                    str(step),
+                    name,
+                    SUBSCRIPTIONS,
+                    *triggers,
+                )
             if task_id_checksum is not None:
                 assert task_id == task_id_checksum
 
@@ -531,7 +547,7 @@ def prepare_single_task(
                         ),
                         triggers,
                         proc.retry_policy,
-                        None,
+                        proc.cache_policy,
                         task_id,
                         task_path,
                     )

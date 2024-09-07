@@ -334,6 +334,17 @@ class PregelLoop:
             self.status = "done"
             return False
 
+        if self.checkpointer:
+            for task in self.tasks.values():
+                # if there are cached writes, apply them
+                cached_writes = self.checkpointer.get_writes_by_cache_key(task.id)
+                if cached_writes and not task.writes:
+                    # Extract only the last two items from each write tuple
+                    task.writes.extend(
+                        [(channel, value) for _, channel, value in cached_writes]
+                    )
+                    self._output_writes(task.id, task.writes, cached=True)
+
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
             for tid, k, v in self.checkpoint_pending_writes:

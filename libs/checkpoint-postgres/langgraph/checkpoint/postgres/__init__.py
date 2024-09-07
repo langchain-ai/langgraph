@@ -3,7 +3,7 @@ from contextlib import contextmanager
 from typing import Any, Iterator, List, Optional, Union
 
 from langchain_core.runnables import RunnableConfig
-from psycopg import Connection, Cursor, Pipeline
+from psycopg import Connection, Cursor, DatabaseError, Pipeline
 from psycopg.errors import UndefinedTable
 from psycopg.rows import dict_row
 from psycopg.types.json import Jsonb
@@ -250,6 +250,56 @@ class PostgresSaver(BasePostgresSaver):
                     else None,
                     self._load_writes(value["pending_writes"]),
                 )
+
+    def get_writes_by_cache_key(self, cache_key: str) -> List[Any]:
+        """Get checkpoint tuples from the database based on a cache key.
+
+        This method retrieves checkpoint tuples from the Postgres database based on the
+        provided cache key.
+
+        Args:
+            cache_key (str): The cache key to use for retrieving the checkpoints.
+
+        Returns:
+            List[CheckpointTuple]: A list of retrieved checkpoint tuples. Empty list if none found.
+
+        Examples:
+            >>> cache_key = "some_unique_cache_key"
+            >>> checkpoint_tuples = memory.get_writes_by_cache_key(cache_key)
+            >>> for tuple in checkpoint_tuples:
+            ...     print(tuple)
+            CheckpointTuple(...)
+            CheckpointTuple(...)
+        """
+        results = []
+        try:
+            with self._cursor() as cur:
+                cur.execute(
+                    """
+                    SELECT task_id, channel, type, blob
+                    FROM checkpoint_writes
+                    WHERE task_id = %s
+                    ORDER BY idx ASC
+                    """,
+                    (cache_key,),
+                    binary=True,
+                )
+
+                for row in cur:
+                    results.append((
+                        row['task_id'],
+                        row['channel'],
+                        row['type'],
+                        row['blob']
+                    ))
+        except DatabaseError as e:
+            # Log the error or handle it as appropriate for your application
+            # Optionally re-raise the error if you want it to propagate
+            # raise
+            raise RuntimeError(
+                f"Exception occurred while fetching writes from the database: {e}"
+            )
+        return self._load_writes(results)
 
     def put(
         self,

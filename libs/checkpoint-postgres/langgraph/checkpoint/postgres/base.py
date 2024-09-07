@@ -1,5 +1,5 @@
 from hashlib import md5
-from typing import Any, List, Optional, Tuple
+from typing import Any, List, Optional, Tuple, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg.types.json import Jsonb
@@ -177,14 +177,24 @@ class BasePostgresSaver(BaseCheckpointSaver):
         ]
 
     def _load_writes(
-        self, writes: list[tuple[bytes, bytes, bytes, bytes]]
+        self,
+        writes: list[
+            tuple[
+                Union[str, bytes],
+                Union[str, bytes],
+                Union[str, bytes],
+                Union[str, bytes],
+            ]
+        ],
     ) -> list[tuple[str, str, Any]]:
         return (
             [
                 (
-                    tid.decode(),
-                    channel.decode(),
-                    self.serde.loads_typed((t.decode(), v)),
+                    tid.decode() if isinstance(tid, bytes) else tid,
+                    channel.decode() if isinstance(channel, bytes) else channel,
+                    self.serde.loads_typed(
+                        (t.decode() if isinstance(t, bytes) else t, v)
+                    ),
                 )
                 for tid, channel, t, v in writes
             ]

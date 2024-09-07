@@ -42,7 +42,7 @@ from langgraph.managed.base import (
     is_writable_managed_value,
 )
 from langgraph.pregel.read import ChannelRead, PregelNode
-from langgraph.pregel.types import All, RetryPolicy
+from langgraph.pregel.types import All, CachePolicy, RetryPolicy
 from langgraph.pregel.write import SKIP_WRITE, ChannelWrite, ChannelWriteEntry
 from langgraph.store.base import BaseStore
 from langgraph.utils.fields import get_field_default
@@ -68,6 +68,7 @@ class StateNodeSpec(NamedTuple):
     metadata: dict[str, Any]
     input: Type[Any]
     retry_policy: Optional[RetryPolicy]
+    cache_policy: Optional[CachePolicy]
 
 
 class StateGraph(Graph):
@@ -202,6 +203,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache: Optional[CachePolicy] = None,
     ) -> None:
         """Adds a new node to the state graph.
         Will take the name of the function/runnable as the node name.
@@ -249,6 +251,7 @@ class StateGraph(Graph):
         metadata: Optional[dict[str, Any]] = None,
         input: Optional[Type[Any]] = None,
         retry: Optional[RetryPolicy] = None,
+        cache: Optional[CachePolicy] = None,
     ) -> None:
         """Adds a new node to the state graph.
 
@@ -343,6 +346,7 @@ class StateGraph(Graph):
             metadata,
             input=input or self.schema,
             retry_policy=retry,
+            cache_policy=cache,
         )
 
     def add_edge(self, start_key: Union[str, list[str]], end_key: str) -> None:
@@ -571,6 +575,7 @@ class CompiledStateGraph(CompiledGraph):
                 ],
                 metadata=node.metadata,
                 retry_policy=node.retry_policy,
+                cache_policy=node.cache_policy,
                 bound=node.runnable,
             )
 

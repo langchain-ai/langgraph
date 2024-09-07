@@ -1,5 +1,5 @@
 from collections import deque
-from typing import Any, Callable, Literal, NamedTuple, Optional, Type, Union
+from typing import Any, Callable, Literal, NamedTuple, Optional, Tuple, Type, Union
 
 from langchain_core.runnables import Runnable, RunnableConfig
 
@@ -60,7 +60,17 @@ class RetryPolicy(NamedTuple):
 class CachePolicy(NamedTuple):
     """Configuration for caching nodes."""
 
-    pass
+    cache_key: Optional[Callable[[Any, Optional[RunnableConfig]], str]]
+    """
+    A function that takes in the input and config, and returns a string key 
+    under which the output should be cached.
+    """
+    # TODO: implement cache_ttl
+    # cache_ttl: Optional[float] = None
+    # """
+    # Time-to-live for the cached value, in seconds. If not provided, the value will be cached indefinitely.
+    # We'd probably want to store this in a bucket way intead of a TTL timeline.
+    # """
 
 
 class PregelTask(NamedTuple):
