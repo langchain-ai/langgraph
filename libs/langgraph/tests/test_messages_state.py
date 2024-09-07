@@ -145,17 +145,19 @@ def test_delete_all():
     assert result == expected_result
 
 
-class MessagesStatePydanticV1(BaseModelV1):
-    messages: Annotated[list[AnyMessage], add_messages]
-
-
-class MessagesStatePydantic(BaseModel):
-    messages: Annotated[list[AnyMessage], add_messages]
-
-
-MESSAGES_STATE_SCHEMAS = [MessagesState, MessagesStatePydanticV1]
+MESSAGES_STATE_SCHEMAS = [MessagesState]
 if IS_LANGCHAIN_CORE_030_OR_GREATER:
+
+    class MessagesStatePydantic(BaseModel):
+        messages: Annotated[list[AnyMessage], add_messages]
+
     MESSAGES_STATE_SCHEMAS.append(MessagesStatePydantic)
+else:
+
+    class MessagesStatePydanticV1(BaseModelV1):
+        messages: Annotated[list[AnyMessage], add_messages]
+
+    MESSAGES_STATE_SCHEMAS.append(MessagesStatePydanticV1)
 
 
 @pytest.mark.parametrize("state_schema", MESSAGES_STATE_SCHEMAS)
