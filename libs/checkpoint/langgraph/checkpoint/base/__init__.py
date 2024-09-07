@@ -422,24 +422,22 @@ class BaseCheckpointSaver:
         """
         return current + 1 if current is not None else 1
 
-    def aget_writes_by_cache_key(
-        self, cache_key: str
-    ) -> Optional[List[Any]]:
+    def get_writes_by_task_ids(self, task_id: List[str]) -> Optional[Dict[str, List[Any]]]:
         """Get a checkpoint writes from the database based on a cache key.
 
         Args:
-            cache_key (str): The cache key to use for retrieving the checkpoint.
+            task_ids (str): The task id is serving as the cache key to retrieve writes.
 
         Returns:
             List[Any]: A list of retrieved checkpoint writes. Empty list if none found.
         """
         raise NotImplementedError
 
-    def get_writes_by_cache_key(self, cache_key: str) -> Optional[List[Any]]:
+    def get_writes_by_task_ids(self, task_id: List[str]) -> Optional[Dict[str, List[Any]]]:
         """Get a checkpoint writes from the database based on a cache key.
 
         Args:
-            cache_key (str): The cache key to use for retrieving the checkpoint.
+            task_ids (str): The task id is serving as the cache key to retrieve writes.
 
         Returns:
             List[Any]: A list of retrieved checkpoint writes. Empty list if none found.

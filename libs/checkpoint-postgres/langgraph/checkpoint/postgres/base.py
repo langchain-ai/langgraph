@@ -178,6 +178,7 @@ class BasePostgresSaver(BaseCheckpointSaver):
 
     def _load_writes(
         self,
+        # We want to support both bytes and strings here
         writes: list[
             tuple[
                 Union[str, bytes],

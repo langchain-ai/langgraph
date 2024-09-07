@@ -1,6 +1,6 @@
 import threading
 from contextlib import contextmanager
-from typing import Any, Iterator, List, Optional, Union
+from typing import Any, Dict, Iterator, List, Optional, Union
 
 from langchain_core.runnables import RunnableConfig
 from psycopg import Connection, Cursor, DatabaseError, Pipeline
@@ -251,40 +251,46 @@ class PostgresSaver(BasePostgresSaver):
                     self._load_writes(value["pending_writes"]),
                 )
 
-    def get_writes_by_cache_key(self, cache_key: str) -> List[Any]:
+    def get_writes_by_task_ids(self, task_ids: List[str]) -> Optional[Dict[str, List[Any]]]:
         """Get checkpoint writes from the database based on a cache key.
 
         This method retrieves checkpoint writes from the Postgres database based on the
         provided cache key.
 
         Args:
-            cache_key (str): The cache key to use for retrieving the checkpoints.
+            task_ids (str): The task id is serving as the cache key to retrieve writes.
 
         Returns:
             List[Any]: A list of retrieved checkpoint writes. Empty list if none found.
 
         Examples:
-            >>> cache_key = "some_unique_cache_key"
-            >>> checkpoint_writes = memory.get_writes_by_cache_key(cache_key)
-            >>> for write in checkpoint_writes:
-            ...     print(write)
-        """
-        results = []
+            >>> task_ids = ["task1", "task2", "task3"]
+            >>> checkpoint_writes = memory.get_writes_by_task_ids(task_ids)
+            >>> for task_id, writes in checkpoint_writes.items():
+            ...     print(f"Task ID: {task_id}")
+            ...     for write in writes:
+            ...         print(f"  {write}")
+         """
+        results = {}
         try:
             with self._cursor() as cur:
                 cur.execute(
                     """
                     SELECT task_id, channel, type, blob
                     FROM checkpoint_writes
-                    WHERE task_id = %s
+                    WHERE task_id = ANY(%s)
                     ORDER BY idx ASC
                     """,
-                    (cache_key,),
+                    (task_ids,),
                     binary=True,
                 )
 
                 for row in cur:
-                    results.append((
+                    task_id = row['task_id']
+                    if task_id not in results:
+                        results[task_id] = []
+                    # Appending all the writes to the mapping task_id
+                    results[task_id].append((
                         row['task_id'],
                         row['channel'],
                         row['type'],
@@ -297,7 +303,11 @@ class PostgresSaver(BasePostgresSaver):
             raise RuntimeError(
                 f"Exception occurred while fetching writes from the database: {e}"
             )
-        return self._load_writes(results)
+
+        for task_id, writes in results.items():
+            # check writes are loaded correctly
+            results[task_id] = self._load_writes(writes)
+        return results
 
     def put(
         self,

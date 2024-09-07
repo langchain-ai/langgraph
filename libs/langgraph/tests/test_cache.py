@@ -124,6 +124,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
     app_with_checkpointer = workflow.compile(
         checkpointer=checkpointer,
     )
+    assert app_with_checkpointer.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     interrupt_results = [
         c
@@ -181,6 +182,10 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
 
     # Cache is not used when checkpointer is not provided
     app_without_checkpointer = workflow.compile()
+    assert (
+        app_without_checkpointer.get_graph().draw_mermaid(with_styles=False) == snapshot
+    )
+
     interrupt_results = [
         c
         for c in app_without_checkpointer.stream(
@@ -219,6 +224,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
     app_with_checkpointer = new_workflow.compile(
         checkpointer=checkpointer,
     )
+    assert app_with_checkpointer.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     interrupt_results = [
         c
@@ -258,6 +264,7 @@ def test_in_one_fan_out_state_graph_waiting_edge_via_branch_with_cache(
     app_with_checkpointer = another_new_workflow.compile(
         checkpointer=checkpointer,
     )
+    assert app_with_checkpointer.get_graph().draw_mermaid(with_styles=False) == snapshot
 
     interrupt_results = [
         c
