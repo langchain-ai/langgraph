@@ -68,6 +68,9 @@ _MANUAL = {
         "human_in_the_loop/review-tool-calls.ipynb",
         "node-retries.ipynb",
         "react_diagrams.png",
+        "langsmith_filter_run_id.png",
+        "langsmith_graph_trace.png",
+        "run-id-langsmith.ipynb",
         "react-agent-structured-output.ipynb",
     ],
     "tutorials": [

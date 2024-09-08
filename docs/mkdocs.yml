@@ -176,7 +176,8 @@ nav:
           - Visualize your graph: how-tos/visualization.ipynb
           - Add runtime configuration: how-tos/configuration.ipynb
           - Add node retries: how-tos/node-retries.ipynb
-          - How to return structured output from a ReAct agent: how-tos/react-agent-structured-output.ipynb
+          - Return structured output from a ReAct agent: how-tos/react-agent-structured-output.ipynb
+          - Pass custom LangSmith run ID for graph runs: how-tos/run-id-langsmith.ipynb
       - Prebuilt ReAct Agent:
           - Create a ReAct agent: how-tos/create-react-agent.ipynb
           - Add memory to a ReAct agent: how-tos/create-react-agent-memory.ipynb
@@ -204,6 +205,7 @@ nav:
               - Setup App (pyproject.toml): "cloud/deployment/setup_pyproject.md"
               - Setup App (JavaScript): "cloud/deployment/setup_javascript.md"
               - Rebuild Graph at Runtime: "cloud/deployment/graph_rebuild.md"
+              - Customize Dockerfile: "cloud/deployment/custom_docker.md"
               - Test App Locally: "cloud/deployment/test_locally.md"
           - Deployment:
               - Deploy to Cloud: "cloud/deployment/cloud.md"
