@@ -98,3 +98,4 @@ Please note that here will we use a **prebuilt agent**. One of the big benefits 
 - [How to add memory to a ReAct agent](create-react-agent-memory.ipynb)
 - [How to add a custom system prompt to a ReAct agent](create-react-agent-system-prompt.ipynb)
 - [How to add human-in-the-loop processes to a ReAct agent](create-react-agent-hitl.ipynb)
+- [How to create prebuilt ReAct agent from scratch](react-agent-from-scratch.ipynb)

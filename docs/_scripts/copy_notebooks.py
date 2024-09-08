@@ -72,6 +72,7 @@ _MANUAL = {
         "langsmith_graph_trace.png",
         "run-id-langsmith.ipynb",
         "react-agent-structured-output.ipynb",
+        "react-agent-from-scratch.ipynb"
     ],
     "tutorials": [
         "introduction.ipynb",
