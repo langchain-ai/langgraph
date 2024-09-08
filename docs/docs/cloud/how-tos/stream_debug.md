@@ -6,6 +6,8 @@ This guide covers how to stream debug events from your graph (`stream_mode="debu
 - `task`: These events will get streamed before each super-step, and will contain information about a single task. Each super-step works by executing a list of tasks, where each task is scoped to a specific node and input. Below we will discuss the format of these tasks in more detail. 
 - `task_result`: After each `task` event, you will see a corresponding `task_result` event which as the name suggests contains information on the results of the task executed in the super-step. Scroll more to learn about the exact structure of these events.
 
+## Setup
+
 First let's set up our client and thread:
 
 === "Python"
@@ -56,7 +58,7 @@ Output:
         'values': None
     }
 
-
+## Stream graph in debug mode
 
 === "Python"
 
@@ -65,7 +67,7 @@ Output:
     input = {
         "messages": [
             {
-                "role": "human",
+                "role": "user",
                 "content": "What's the weather in SF?",
             }
         ]

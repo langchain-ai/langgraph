@@ -14,7 +14,11 @@ The following endpoints accept `webhook` as a parameter:
 - Stream Run Stateless -> POST /runs/stream
 - Wait Run Stateless -> POST /runs/wait
 
-In this example, we will show calling a webhook after streaming a run. First, let's setup our assistant and thread:
+In this example, we will show calling a webhook after streaming a run. 
+
+## Setup
+
+First, let's setup our assistant and thread:
 
 === "Python"
 
@@ -70,13 +74,15 @@ Output:
         'values': None
     }
 
+## Use graph with a webhook
+
 Now we can invoke a run with a webhook:
 
 === "Python"
 
     ```python
     # create input
-    input = { "messages": [{ "role": "human", "content": "Hello!" }] }
+    input = { "messages": [{ "role": "user", "content": "Hello!" }] }
 
     async for chunk in client.runs.stream(
         thread_id=thread["thread_id"],

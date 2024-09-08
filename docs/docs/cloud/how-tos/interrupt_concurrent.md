@@ -1,8 +1,10 @@
-## Interrupt
+# Interrupt
 
 This guide assumes knowledge of what double-texting is, which you can learn about in the [double-texting conceptual guide](../concepts/api.md#double-texting).
 
 The guide covers the `interrupt` option for double texting, which interrupts the prior run of the graph and starts a new one with the double-text. This option does not delete the first run, but rather keeps it in the database but sets its status to `interrupted`. Below is a quick example of using the `interrupt` option.
+
+## Setup
 
 First, we will define a quick helper function for printing out JS and CURL model outputs (you can skip this if using Python):
 
@@ -79,6 +81,8 @@ Now, let's import our required packages and instantiate our client, assistant, a
       --data '{}'
     ```
 
+## Create runs
+
 Now we can start our two runs and join the second on euntil it has completed:
 
 === "Python"
@@ -88,13 +92,13 @@ Now we can start our two runs and join the second on euntil it has completed:
     interrupted_run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in sf?"}]},
+        input={"messages": [{"role": "user", "content": "what's the weather in sf?"}]},
     )
     await asyncio.sleep(2)
     run = await client.runs.create(
         thread["thread_id"],
         assistant_id,
-        input={"messages": [{"role": "human", "content": "what's the weather in nyc?"}]},
+        input={"messages": [{"role": "user", "content": "what's the weather in nyc?"}]},
         multitask_strategy="interrupt",
     )
     # wait until the second run completes
@@ -144,6 +148,8 @@ Now we can start our two runs and join the second on euntil it has completed:
     }" && curl --request GET \
     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/<RUN_ID>/join
     ```
+
+## View run results
 
 We can see that the thread has partial data from the first run + data from the second run
 

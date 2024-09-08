@@ -219,7 +219,7 @@ We can verify the config is indeed taking effect:
             "input": {
                 "messages": [
                     {
-                        "role": "human",
+                        "role": "user",
                         "content": "who made you?"
                     }
                 ]
