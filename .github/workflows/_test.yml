@@ -22,7 +22,7 @@ jobs:
           - "3.11"
           - "3.12"
         core-version:
-          - ">=0.3.0.dev1,<0.4.0"
+          - ">=0.3.0.dev4,<0.4.0"
           - "latest"
 
     name: "test #${{ matrix.python-version }} (langchain-core: ${{ matrix.core-version }})"
