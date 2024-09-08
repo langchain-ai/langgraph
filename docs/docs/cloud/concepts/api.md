@@ -14,7 +14,7 @@ The LangGraph Cloud API provides several endpoints for creating and managing ass
 
 #### Configuring Assistants
 
-You can save custom assistants from the same graph to set different default prompts, models, and other configurations without changing a line of code in your graph. This allows you the ability to quickly test out different configurations without having to rewrite your graph every time, and also give users the flexibility to select different configurations when using your LangGraph application. See [this how-to](../how-tos/configuration_cloud)for information on how to configure a deployed graph. 
+You can save custom assistants from the same graph to set different default prompts, models, and other configurations without changing a line of code in your graph. This allows you the ability to quickly test out different configurations without having to rewrite your graph every time, and also give users the flexibility to select different configurations when using your LangGraph application. See [this how-to](../how-tos/configuration_cloud.md) for information on how to configure a deployed graph.
 
 ### Threads
 
