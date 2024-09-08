@@ -149,7 +149,7 @@ Now we can start our two runs and join the second on euntil it has completed:
     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/<RUN_ID>/join
     ```
 
-## Check run status
+## View run results
 
 We can see that the thread has partial data from the first run + data from the second run
 

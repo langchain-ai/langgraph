@@ -139,7 +139,7 @@ Now let's start two runs, with the second interrupting the first one with a mult
     }"
     ```
 
-## Check run status
+## View run results
 
 Verify that the thread has data from both runs:
 

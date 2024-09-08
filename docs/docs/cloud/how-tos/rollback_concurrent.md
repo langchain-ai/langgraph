@@ -150,7 +150,7 @@ Now let's run a thread with the multitask parameter set to "rollback":
     --url <DEPLOYMENT_URL>/threads/<THREAD_ID>/runs/<RUN_ID>/join
     ```
 
-## Check run status
+## View run results
 
 We can see that the thread has data only from the second run
 

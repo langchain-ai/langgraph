@@ -153,7 +153,7 @@ Output:
     Failed to start concurrent run Client error '409 Conflict' for url 'http://localhost:8123/threads/f9e7088b-8028-4e5c-88d2-9cc9a2870e50/runs'
     For more information check: https://developer.mozilla.org/en-US/docs/Web/HTTP/Status/409
 
-## Check run status
+## View run results
 
 We can verify that the original thread finished executing:
 
