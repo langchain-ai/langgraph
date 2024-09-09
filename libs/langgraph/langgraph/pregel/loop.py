@@ -336,6 +336,13 @@ class PregelLoop:
             self.status = "done"
             return False
 
+        print(
+            self.step,
+            self.skip_done_tasks,
+            [(t.id, t.name) for t in self.tasks.values()],
+            self.checkpoint_pending_writes,
+        )
+
         # if there are pending writes from a previous loop, apply them
         if self.skip_done_tasks and self.checkpoint_pending_writes:
             for tid, k, v in self.checkpoint_pending_writes:
@@ -343,7 +350,7 @@ class PregelLoop:
                     continue
                 if task := self.tasks.get(tid):
                     if k == SCHEDULED:
-                        if v == max(
+                        if True or v == max(
                             self.checkpoint["versions_seen"]
                             .get(INTERRUPT, {})
                             .values(),

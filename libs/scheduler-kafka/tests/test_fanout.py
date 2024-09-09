@@ -1,35 +1,24 @@
 import asyncio
-import functools
 import operator
-from typing import Annotated, Callable, ParamSpec, Sequence, TypedDict, TypeVar, Union
+from typing import (
+    Annotated,
+    Sequence,
+    TypedDict,
+    Union,
+)
 
-import anyio
 import pytest
-from aiokafka import AIOKafkaConsumer, AIOKafkaProducer
+from aiokafka import AIOKafkaProducer
 
 from langgraph.checkpoint.base import BaseCheckpointSaver
 from langgraph.graph.state import StateGraph
 from langgraph.pregel import Pregel
 from langgraph.scheduler.kafka import serde
-from langgraph.scheduler.kafka.executor import KafkaExecutor
-from langgraph.scheduler.kafka.orchestrator import KafkaOrchestrator
 from langgraph.scheduler.kafka.types import MessageToOrchestrator, Topics
+from tests.any import AnyDict
+from tests.run import drain_topics
 
 pytestmark = pytest.mark.anyio
-C = ParamSpec("C")
-R = TypeVar("R")
-
-
-def timeout(delay: int):
-    def decorator(func: Callable[C, R]) -> Callable[C, R]:
-        @functools.wraps(func)
-        async def new_func(*args: C.args, **kwargs: C.kwargs) -> R:
-            async with asyncio.timeout(delay):
-                return await func(*args, **kwargs)
-
-        return new_func
-
-    return decorator
 
 
 def mk_fanout_graph(
@@ -97,31 +86,10 @@ def mk_fanout_graph(
     return builder.compile(checkpointer, interrupt_before=interrupt_before)
 
 
-@timeout(10)
 async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -> None:
     input = {"query": "what is weather in sf"}
     config = {"configurable": {"thread_id": "1"}}
     graph = mk_fanout_graph(checkpointer)
-    n_orch_msgs = 0
-    n_exec_msgs = 0
-
-    async def orchestrator(expected: int) -> None:
-        nonlocal n_orch_msgs
-        async with KafkaOrchestrator(graph, topics) as orch:
-            async for msgs in orch:
-                print("orch", msgs)
-                n_orch_msgs += len(msgs)
-                if n_orch_msgs == expected:
-                    break
-
-    async def executor(expected: int) -> None:
-        nonlocal n_exec_msgs
-        async with KafkaExecutor(graph, topics) as exec:
-            async for msgs in exec:
-                print("exec", msgs)
-                n_exec_msgs += len(msgs)
-                if n_exec_msgs == expected:
-                    break
 
     # start a new run
     async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
@@ -130,20 +98,14 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
             MessageToOrchestrator(input=input, config=config),
         )
 
-    # run the orchestrator and executor
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(orchestrator, 13, name="orchestrator")
-        tg.start_soon(executor, 12, name="executor")
+    # drain topics
+    orch_msgs, exec_msgs = await drain_topics(
+        topics, graph, config, until=lambda s: s.values and s.next == ()
+    )
 
-    # check no errors
-    async with AIOKafkaConsumer(topics.error) as consumer:
-        assert len(consumer.assignment()) > 0
-        for tp in consumer.assignment():
-            assert await consumer.position(tp) == 0
-
+    # check state
     state = await graph.aget_state(config)
-    assert n_orch_msgs == 13
-    assert n_exec_msgs == 12
+    assert state.next == ()
     assert (
         state.values
         == await graph.ainvoke(input, {"configurable": {"thread_id": "2"}})
@@ -154,34 +116,62 @@ async def test_fanout_graph(topics: Topics, checkpointer: BaseCheckpointSaver) -
         }
     )
 
+    # check history
+    history = [c async for c in graph.aget_state_history(config)]
+    assert len(history) == 11
 
-@timeout(10)
+    # check messages
+    assert orch_msgs == [MessageToOrchestrator(input=input, config=config)] + [
+        {
+            "config": {
+                "callbacks": None,
+                "configurable": {
+                    "__pregel_dedupe_tasks": True,
+                    "__pregel_resuming": False,
+                    "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                    "checkpoint_ns": "",
+                    "thread_id": "1",
+                },
+                "metadata": AnyDict(),
+                "recursion_limit": 25,
+                "tags": [],
+            },
+            "input": None,
+        }
+        for c in reversed(history)
+        for _ in c.tasks
+    ]
+    assert exec_msgs == [
+        {
+            "config": {
+                "callbacks": None,
+                "configurable": {
+                    "__pregel_dedupe_tasks": True,
+                    "__pregel_resuming": False,
+                    "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                    "checkpoint_ns": "",
+                    "thread_id": "1",
+                },
+                "metadata": AnyDict(),
+                "recursion_limit": 25,
+                "tags": [],
+            },
+            "task": {
+                "id": t.id,
+                "path": list(t.path),
+            },
+        }
+        for c in reversed(history)
+        for t in c.tasks
+    ]
+
+
 async def test_fanout_graph_w_interrupt(
     topics: Topics, checkpointer: BaseCheckpointSaver
 ) -> None:
     input = {"query": "what is weather in sf"}
     config = {"configurable": {"thread_id": "1"}}
     graph = mk_fanout_graph(checkpointer, interrupt_before=["qa"])
-    n_orch_msgs = 0
-    n_exec_msgs = 0
-
-    async def orchestrator(expected: int) -> None:
-        nonlocal n_orch_msgs
-        async with KafkaOrchestrator(graph, topics) as orch:
-            async for msgs in orch:
-                print("orch", msgs)
-                n_orch_msgs += len(msgs)
-                if n_orch_msgs == expected:
-                    break
-
-    async def executor(expected: int) -> None:
-        nonlocal n_exec_msgs
-        async with KafkaExecutor(graph, topics) as exec:
-            async for msgs in exec:
-                print("exec", msgs)
-                n_exec_msgs += len(msgs)
-                if n_exec_msgs == expected:
-                    break
 
     # start a new run
     async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
@@ -190,21 +180,12 @@ async def test_fanout_graph_w_interrupt(
             MessageToOrchestrator(input=input, config=config),
         )
 
-    # run the orchestrator and executor
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(orchestrator, 12, name="orchestrator")
-        tg.start_soon(executor, 11, name="executor")
-
-    # check no errors
-    async with AIOKafkaConsumer(topics.error) as consumer:
-        assert len(consumer.assignment()) > 0
-        for tp in consumer.assignment():
-            assert await consumer.position(tp) == 0
+    orch_msgs, exec_msgs = await drain_topics(
+        topics, graph, config, until=lambda s: s.values and s.next == ("qa",)
+    )
 
     # check interrupted state
     state = await graph.aget_state(config)
-    assert n_orch_msgs == 12
-    assert n_exec_msgs == 11
     assert state.next == ("qa",)
     assert (
         state.values
@@ -215,6 +196,55 @@ async def test_fanout_graph_w_interrupt(
         }
     )
 
+    # check history
+    history = [c async for c in graph.aget_state_history(config)]
+    assert len(history) == 10
+
+    # check messages
+    assert orch_msgs == [MessageToOrchestrator(input=input, config=config)] + [
+        {
+            "config": {
+                "callbacks": None,
+                "configurable": {
+                    "__pregel_dedupe_tasks": True,
+                    "__pregel_resuming": False,
+                    "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                    "checkpoint_ns": "",
+                    "thread_id": "1",
+                },
+                "metadata": AnyDict(),
+                "recursion_limit": 25,
+                "tags": [],
+            },
+            "input": None,
+        }
+        for c in reversed(history[1:])  # the last one wasn't executed
+        for _ in c.tasks
+    ]
+    assert exec_msgs == [
+        {
+            "config": {
+                "callbacks": None,
+                "configurable": {
+                    "__pregel_dedupe_tasks": True,
+                    "__pregel_resuming": False,
+                    "checkpoint_id": c.config["configurable"]["checkpoint_id"],
+                    "checkpoint_ns": "",
+                    "thread_id": "1",
+                },
+                "metadata": AnyDict(),
+                "recursion_limit": 25,
+                "tags": [],
+            },
+            "task": {
+                "id": t.id,
+                "path": list(t.path),
+            },
+        }
+        for c in reversed(history[1:])  # the last one wasn't executed
+        for t in c.tasks
+    ]
+
     # resume the thread
     async with AIOKafkaProducer(value_serializer=serde.dumps) as producer:
         await producer.send_and_wait(
@@ -222,21 +252,12 @@ async def test_fanout_graph_w_interrupt(
             MessageToOrchestrator(input=None, config=config),
         )
 
-    # run the orchestrator and executor
-    async with anyio.create_task_group() as tg:
-        tg.start_soon(orchestrator, 14, name="orchestrator")
-        tg.start_soon(executor, 12, name="executor")
-
-    # check no errors
-    async with AIOKafkaConsumer(topics.error) as consumer:
-        assert len(consumer.assignment()) > 0
-        for tp in consumer.assignment():
-            assert await consumer.position(tp) == 0
+    orch_msgs, exec_msgs = await drain_topics(
+        topics, graph, config, until=lambda s: s.values and s.next == ()
+    )
 
     # check final state
     state = await graph.aget_state(config)
-    assert n_orch_msgs == 14
-    assert n_exec_msgs == 12
     assert state.next == ()
     assert (
         state.values

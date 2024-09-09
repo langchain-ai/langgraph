@@ -19,9 +19,9 @@ def anyio_backend():
 
 @pytest.fixture
 def topics() -> Iterator[Topics]:
-    o = f"test_{uuid4().hex[:16]}"
-    e = f"test_{uuid4().hex[:16]}"
-    z = f"test_{uuid4().hex[:16]}"
+    o = f"test_o_{uuid4().hex[:16]}"
+    e = f"test_e_{uuid4().hex[:16]}"
+    z = f"test_z_{uuid4().hex[:16]}"
     admin = kafka.admin.KafkaAdminClient()
     # create topics
     admin.create_topics(
