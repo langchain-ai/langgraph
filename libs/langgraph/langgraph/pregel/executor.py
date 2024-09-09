@@ -138,7 +138,7 @@ class AsyncBackgroundExecutor(AsyncContextManager):
     async def __aenter__(self) -> Submit:
         return self.submit
 
-    async def exit(
+    async def __aexit__(
         self,
         exc_type: Optional[type[BaseException]],
         exc_value: Optional[BaseException],
@@ -162,15 +162,3 @@ class AsyncBackgroundExecutor(AsyncContextManager):
                         raise exc
                 except asyncio.CancelledError:
                     pass
-
-    async def __aexit__(
-        self,
-        exc_type: Optional[type[BaseException]],
-        exc_value: Optional[BaseException],
-        traceback: Optional[TracebackType],
-    ) -> Optional[bool]:
-        # we cannot use `await` outside of asyncio.shield, as this code can run
-        # after owning task is cancelled, so pulling async logic to separate method
-
-        # wait for all background tasks to finish, shielded from cancellation
-        await asyncio.shield(self.exit(exc_type, exc_value, traceback))
