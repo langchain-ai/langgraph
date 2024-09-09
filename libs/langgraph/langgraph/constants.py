@@ -15,15 +15,17 @@ CONFIG_KEY_CHECKPOINT_MAP = "checkpoint_map"
 INTERRUPT = "__interrupt__"
 ERROR = "__error__"
 SCHEDULED = "__scheduled__"
-TASKS = "__pregel_tasks"
-SUBSCRIPTIONS = "__pregel_subscriptions"
+TASKS = "__pregel_tasks"  # for backwards compat, this is the original name of PUSH
+PUSH = "__pregel_push"
+PULL = "__pregel_pull"
 RUNTIME_PLACEHOLDER = "__pregel_runtime_placeholder__"
 RESERVED = {
     SCHEDULED,
     INTERRUPT,
     ERROR,
     TASKS,
-    SUBSCRIPTIONS,
+    PUSH,
+    PULL,
     CONFIG_KEY_SEND,
     CONFIG_KEY_READ,
     CONFIG_KEY_CHECKPOINTER,

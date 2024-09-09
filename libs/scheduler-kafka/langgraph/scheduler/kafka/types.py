@@ -17,8 +17,6 @@ class MessageToOrchestrator(TypedDict):
 class ExecutorTask(TypedDict):
     id: str
     path: tuple[str, ...]
-    step: int
-    resuming: bool
 
 
 class MessageToExecutor(TypedDict):

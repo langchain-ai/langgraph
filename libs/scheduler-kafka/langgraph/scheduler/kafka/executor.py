@@ -118,9 +118,8 @@ class KafkaExecutor(AbstractAsyncContextManager):
                 channels=channels,
                 managed=managed,
                 config=msg["config"],
-                step=msg["task"]["step"],
+                step=saved.metadata["step"] + 1,
                 for_execution=True,
-                is_resuming=msg["task"]["resuming"],
             ):
                 # execute task, saving writes
                 runner = PregelRunner(

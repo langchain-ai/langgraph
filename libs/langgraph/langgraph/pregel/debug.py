@@ -210,6 +210,7 @@ def tasks_w_writes(
         PregelTask(
             task.id,
             task.name,
+            task.path,
             next(
                 (
                     exc

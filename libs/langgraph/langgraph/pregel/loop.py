@@ -191,7 +191,7 @@ class PregelLoop:
             )
         if not self.is_nested and config["configurable"].get("checkpoint_ns"):
             self.config = patch_configurable(
-                config, {"checkpoint_ns": "", "checkpoint_id": None}
+                self.config, {"checkpoint_ns": "", "checkpoint_id": None}
             )
         if (
             CONFIG_KEY_CHECKPOINT_MAP in self.config["configurable"]
@@ -242,15 +242,6 @@ class PregelLoop:
     ) -> bool:
         """Execute a single iteration of the Pregel loop.
         Returns True if more iterations are needed."""
-        print(
-            "tick",
-            self.config.get("configurable", {}).get("checkpoint_ns"),
-            self.step,
-            self.status,
-            self.input is INPUT_RESUMING,
-            self.input is INPUT_DONE,
-        )
-
         if self.status != "pending":
             raise RuntimeError("Cannot tick when status is no longer 'pending'")
 
@@ -322,7 +313,6 @@ class PregelLoop:
             for_execution=True,
             manager=manager,
             checkpointer=self.checkpointer,
-            is_resuming=self.input is INPUT_RESUMING,
         )
 
         # produce debug output
@@ -402,9 +392,9 @@ class PregelLoop:
         # resuming from previous checkpoint requires
         # - finding a previous checkpoint
         # - receiving None input (outer graph) or RESUMING flag (subgraph)
+        configurable = self.config.get("configurable", {})
         is_resuming = bool(self.checkpoint["channel_versions"]) and bool(
-            self.config.get("configurable", {}).get(CONFIG_KEY_RESUMING)
-            or self.input is None
+            configurable.get(CONFIG_KEY_RESUMING, self.input is None)
         )
 
         # proceed past previous checkpoint
@@ -441,10 +431,15 @@ class PregelLoop:
             ), "Can't write to SharedValues in graph input"
             # save input checkpoint
             self._put_checkpoint({"source": "input", "writes": dict(input_writes)})
-        else:
+        elif CONFIG_KEY_RESUMING not in configurable:
             raise EmptyInputError(f"Received no input for {input_keys}")
         # done with input
         self.input = INPUT_RESUMING if is_resuming else INPUT_DONE
+        # update config
+        if not self.is_nested:
+            self.config = patch_configurable(
+                self.config, {CONFIG_KEY_RESUMING: is_resuming}
+            )
 
     def _put_checkpoint(self, metadata: CheckpointMetadata) -> None:
         # assign step

@@ -25,13 +25,13 @@ from langgraph.constants import (
     CONFIG_KEY_CHECKPOINT_MAP,
     CONFIG_KEY_CHECKPOINTER,
     CONFIG_KEY_READ,
-    CONFIG_KEY_RESUMING,
     CONFIG_KEY_SEND,
     CONFIG_KEY_TASK_ID,
     INTERRUPT,
     NS_SEP,
+    PULL,
+    PUSH,
     RESERVED,
-    SUBSCRIPTIONS,
     TAG_HIDDEN,
     TASKS,
     Send,
@@ -242,7 +242,6 @@ def prepare_next_tasks(
     step: int,
     *,
     for_execution: Literal[False],
-    is_resuming: bool = False,
     checkpointer: Literal[None] = None,
     manager: Literal[None] = None,
 ) -> dict[str, PregelTask]: ...
@@ -258,7 +257,6 @@ def prepare_next_tasks(
     step: int,
     *,
     for_execution: Literal[True],
-    is_resuming: bool,
     checkpointer: Optional[BaseCheckpointSaver],
     manager: Union[None, ParentRunManager, AsyncParentRunManager],
 ) -> dict[str, PregelExecutableTask]: ...
@@ -273,7 +271,6 @@ def prepare_next_tasks(
     step: int,
     *,
     for_execution: bool,
-    is_resuming: bool = False,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[dict[str, PregelTask], dict[str, PregelExecutableTask]]:
@@ -281,7 +278,7 @@ def prepare_next_tasks(
     # Consume pending packets
     for idx, _ in enumerate(checkpoint["pending_sends"]):
         if task := prepare_single_task(
-            (TASKS, idx),
+            (PUSH, idx),
             None,
             checkpoint=checkpoint,
             processes=processes,
@@ -290,7 +287,6 @@ def prepare_next_tasks(
             config=config,
             step=step,
             for_execution=for_execution,
-            is_resuming=is_resuming,
             checkpointer=checkpointer,
             manager=manager,
         ):
@@ -299,7 +295,7 @@ def prepare_next_tasks(
     # If so, prepare the values to be passed to them
     for name in processes:
         if task := prepare_single_task(
-            (SUBSCRIPTIONS, name),
+            (PULL, name),
             None,
             checkpoint=checkpoint,
             processes=processes,
@@ -308,7 +304,6 @@ def prepare_next_tasks(
             config=config,
             step=step,
             for_execution=for_execution,
-            is_resuming=is_resuming,
             checkpointer=checkpointer,
             manager=manager,
         ):
@@ -327,7 +322,6 @@ def prepare_single_task(
     config: RunnableConfig,
     step: int,
     for_execution: bool,
-    is_resuming: bool = False,
     checkpointer: Optional[BaseCheckpointSaver] = None,
     manager: Union[None, ParentRunManager, AsyncParentRunManager] = None,
 ) -> Union[None, PregelTask, PregelExecutableTask]:
@@ -335,7 +329,7 @@ def prepare_single_task(
     configurable = config.get("configurable", {})
     parent_ns = configurable.get("checkpoint_ns", "")
 
-    if task_path[0] == TASKS:
+    if task_path[0] == PUSH:
         idx = int(task_path[1])
         packet = checkpoint["pending_sends"][idx]
         if not isinstance(packet, Send):
@@ -347,7 +341,7 @@ def prepare_single_task(
             logger.warning(f"Ignoring unknown node name {packet.node} in pending sends")
             return
         # create task id
-        triggers = [TASKS]
+        triggers = [PUSH]
         metadata = {
             "langgraph_step": step,
             "langgraph_node": packet.node,
@@ -362,7 +356,7 @@ def prepare_single_task(
             checkpoint_ns,
             str(step),
             packet.node,
-            TASKS,
+            PUSH,
             str(idx),
         )
         if task_id_checksum is not None:
@@ -416,7 +410,6 @@ def prepare_single_task(
                                 **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
                                 parent_ns: checkpoint["id"],
                             },
-                            CONFIG_KEY_RESUMING: is_resuming,
                             "checkpoint_id": None,
                             "checkpoint_ns": task_checkpoint_ns,
                         },
@@ -429,8 +422,8 @@ def prepare_single_task(
                 )
 
         else:
-            return PregelTask(task_id, packet.node)
-    elif task_path[0] == SUBSCRIPTIONS:
+            return PregelTask(task_id, packet.node, task_path)
+    elif task_path[0] == PULL:
         name = str(task_path[1])
         proc = processes[name]
         version_type = type(next(iter(checkpoint["channel_versions"].values()), None))
@@ -470,7 +463,7 @@ def prepare_single_task(
                 checkpoint_ns,
                 str(step),
                 name,
-                SUBSCRIPTIONS,
+                PULL,
                 *triggers,
             )
             if task_id_checksum is not None:
@@ -525,7 +518,6 @@ def prepare_single_task(
                                     **configurable.get(CONFIG_KEY_CHECKPOINT_MAP, {}),
                                     parent_ns: checkpoint["id"],
                                 },
-                                CONFIG_KEY_RESUMING: is_resuming,
                                 "checkpoint_ns": task_checkpoint_ns,
                             },
                         ),
@@ -536,7 +528,7 @@ def prepare_single_task(
                         task_path,
                     )
             else:
-                return PregelTask(task_id, name)
+                return PregelTask(task_id, name, task_path)
 
 
 def _proc_input(

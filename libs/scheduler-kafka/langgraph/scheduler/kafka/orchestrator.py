@@ -8,7 +8,7 @@ from langchain_core.runnables import ensure_config
 import langgraph.scheduler.kafka.serde as serde
 from langgraph.constants import CONFIG_KEY_DEDUPE_TASKS, INTERRUPT, SCHEDULED
 from langgraph.pregel import Pregel
-from langgraph.pregel.loop import INPUT_RESUMING, AsyncPregelLoop
+from langgraph.pregel.loop import AsyncPregelLoop
 from langgraph.pregel.types import RetryPolicy
 from langgraph.scheduler.kafka.retry import aretry
 from langgraph.scheduler.kafka.types import (
@@ -45,7 +45,6 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
         self.consumer = await self.stack.enter_async_context(
             aiokafka.AIOKafkaConsumer(
                 self.topics.orchestrator,
-                value_deserializer=serde.loads,
                 auto_offset_reset="earliest",
                 group_id=self.group_id,
                 enable_auto_commit=False,
@@ -69,9 +68,9 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
             recs = await self.consumer.getmany(
                 timeout_ms=self.batch_max_ms, max_records=self.batch_max_n
             )
-            msgs: list[MessageToOrchestrator] = [
-                msg.value for msgs in recs.values() for msg in msgs
-            ]
+            # dedupe messages, eg. if multiple nodes finish around same time
+            uniq = set(msg.value for msgs in recs.values() for msg in msgs)
+            msgs: list[MessageToOrchestrator] = [serde.loads(msg) for msg in uniq]
         except aiokafka.ConsumerStoppedError:
             raise StopAsyncIteration from None
         # process batch
@@ -130,12 +129,7 @@ class KafkaOrchestrator(AbstractAsyncContextManager):
                                             CONFIG_KEY_DEDUPE_TASKS: True,
                                         },
                                     ),
-                                    task=ExecutorTask(
-                                        id=task.id,
-                                        path=task.path,
-                                        step=loop.step,
-                                        resuming=loop.input is INPUT_RESUMING,
-                                    ),
+                                    task=ExecutorTask(id=task.id, path=task.path),
                                 ),
                             )
                             for task in new_tasks
