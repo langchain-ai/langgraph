@@ -782,6 +782,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             last_seen_by_node = sorted(
                 (v, n)
                 for n, seen in checkpoint["versions_seen"].items()
+                if n in self.nodes
                 for v in seen.values()
             )
             # if two nodes updated the state at the same time, it's ambiguous
@@ -939,6 +940,7 @@ class Pregel(Runnable[Union[dict[str, Any], Any], Union[dict[str, Any], Any]]):
             last_seen_by_node = sorted(
                 (v, n)
                 for n, seen in checkpoint["versions_seen"].items()
+                if n in self.nodes
                 for v in seen.values()
             )
             # if two nodes updated the state at the same time, it's ambiguous
