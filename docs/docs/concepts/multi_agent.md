@@ -39,5 +39,5 @@ LangGraph provides a lot of flexibility for how to communicate within multi-agen
 LangGraph provides multiple methods to control agent communication sequence:
 
 * **Explicit control flow (graph edges)**: LangGraph allows you to define the control flow of your application (i.e. the sequence of how agents communicate) explicitly, via graph edges.
-* **Implicity control flow (tool calling)**: if the orchestrator agent treats subordinate agents as tools, the tool-calling LLM powering the orchestrator will make decisions about the order in which the tools (agents) are being called
+* **Implicitly control flow (tool calling)**: if the orchestrator agent treats subordinate agents as tools, the tool-calling LLM powering the orchestrator will make decisions about the order in which the tools (agents) are being called
 * **Dynamic control flow (conditional edges)**: LangGraph also allows you to define conditional edges, where the control flow is dependent on satisfying a given condition. In such cases, you can use an LLM to decide which subordinate agent to call next.
