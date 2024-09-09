@@ -22,7 +22,7 @@ A thread contains the accumulated state of a group of runs. If a run is executed
 
 The state of a thread at a particular point in time is called a checkpoint.
 
-For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](../../concepts/low_level.md#checkpointer).
+For more on threads and checkpoints, see this section of the [LangGraph conceptual guide](../../concepts/low_level.md#persistence).
 
 The LangGraph Cloud API provides several endpoints for creating and managing threads and thread state. See the [API reference](../reference/api/api_ref.html#tag/threadscreate) for more details.
 

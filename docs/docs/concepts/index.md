@@ -5,13 +5,13 @@ In this guide we will explore the concepts behind build agentic and multi-agent 
 There are three main parts to this concept guide. First, we'll discuss at a very high level what it means to be agentic. Next, we'll look at lower-level concepts in LangGraph that are core for understanding how to build your own agentic systems. Finally, we'll discuss common agentic patterns and how you can achieve those with LangGraph. These will be mostly conceptual guides - for more technical, hands-on guides see our [how-to guides](../how-tos/index.md)
 
 
-LangGraph for Agentic Applications
+Why LangGraph?
 
 - [What does it mean to be agentic?](high_level.md#what-does-it-mean-to-be-agentic)
-- [Why LangGraph](high_level.md#why-langgraph)
+- [LangGraph Core Principles](high_level.md#langgraph-core-principles)
 - [Deployment](high_level.md#deployment)
 
-Low Level Concepts
+LangGraph Glossary
 
 - [Graphs](low_level.md#graphs)
     - [StateGraph](low_level.md#stategraph)
@@ -30,15 +30,18 @@ Low Level Concepts
     - [Entry Point](low_level.md#entry-point)
     - [Conditional Entry Point](low_level.md#conditional-entry-point)
 - [Send](low_level.md#send)
-- [Checkpointer](low_level.md#checkpointer)
-- [Threads](low_level.md#threads)
-- [Checkpointer states](low_level.md#checkpointer-state)
-    - [Get state](low_level.md#get-state)
-    - [Get state history](low_level.md#get-state-history)
-    - [Update state](low_level.md#update-state)
 - [Configuration](low_level.md#configuration)
 - [Visualization](low_level.md#visualization)
 - [Streaming](low_level.md#streaming)
+
+Human-in-the-Loop
+# TODO: populate this
+
+Persistence
+# TODO: populate this
+
+Streaming
+# TODO: populate this
 
 Common Agentic Patterns
 

@@ -1,4 +1,4 @@
-# LangGraph for Agentic Applications
+# Why LangGraph?
 
 ## What does it mean to be agentic?
 
@@ -22,7 +22,7 @@ There are other concepts often associated with being agentic, but we would argue
 - [Memory](agentic_concepts.md#memory): reliable systems need to have knowledge of things that occurred
 - [Planning](agentic_concepts.md#planning): planning steps (either explicit or implicit) are useful for ensuring that the LLM, when making decisions, makes them in the highest fidelity way.
 
-## Why LangGraph?
+## LangGraph Core Principles
 
 LangGraph has several core principles that we believe make it the most suitable framework for building agentic applications:
 
