@@ -562,7 +562,28 @@ class AssistantsClient:
             "/assistants/search",
             json=payload,
         )
+    
+    async def get_versions(
+            self,
+            assistant_id: str
+    ) -> list[Assistant]:
+        """List all versions of an assistant.
+        
+        Args:
+            assistant_id: The assistant ID to delete.
 
+        Returns:
+            list[Assistant]: A list of assistants.
+
+        Example Usage:
+
+            assistant_versions await client.assistants.get_versions(
+                assistant_id="my_assistant_id"
+            )
+
+        """  # noqa: E501
+
+        return await self.http.get(f"/assistants/{assistant_id}/versions")
 
 class ThreadsClient:
     def __init__(self, http: HttpClient) -> None:
